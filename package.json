@@ -16,6 +16,7 @@
     "format": "prettier --write .",
     "e2e": "pnpm --filter @otp/game e2e",
     "graybox": "pnpm --filter @otp/graybox generate",
+    "preview": "pnpm --silent --filter @otp/graybox preview --",
     "sim": "pnpm --silent --filter @otp/sim sim --",
     "audit": "pnpm audit --audit-level=high"
   },

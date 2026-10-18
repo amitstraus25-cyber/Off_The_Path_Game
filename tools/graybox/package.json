@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "generate": "node src/generate.ts",
+    "preview": "node src/preview.ts",
     "typecheck": "tsc -p tsconfig.json"
   }
 }
