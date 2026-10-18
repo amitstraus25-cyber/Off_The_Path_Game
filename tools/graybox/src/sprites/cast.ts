@@ -26,6 +26,14 @@
  * the same shape wearing Grandma's bonnet and shawl. That pair IS the game's title, so the bonnet
  * stays bright (`wall`, luma 175) over fur that is nearly black, and his ear tips stay above the
  * brim where you cannot miss them.
+ *
+ * `ink` IS the wolf's, and only his (docs/PIXEL_STANDARD.md section 4). Until 2026-10-18 every
+ * painter in this file finished with outline(ink 0), which meant the one treatment reserved for the
+ * predator was shared with a rabbit, an owl and a lamplighter and so distinguished him from nobody.
+ * Each character is now ringed in its OWN dark -- `fur` 0 on the rabbit, `trunk` 0 on the owl,
+ * `roof` 0 on the keeper -- and the wolf is the only thing in the forest edged in Cyera Black.
+ * The rabbit's and the owl's pupils stay on `ink`: a pupil is a black dot on an eye, not a ring
+ * round a silhouette, and nine pixels of it take nothing away from the wolf.
  */
 import { Img, shade } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
@@ -174,7 +182,11 @@ function paintRabbit(img: Img, blink: boolean): void {
   img.px(14, 26 + b, shade('fur', 0));
   img.px(18, 26 + b, shade('fur', 0));
 
-  img.outline(shade('ink', 0));
+  // His own dark, not a key line. A Clay rim round a white animal is a quieter edge than the ink
+  // one he used to wear, which is the correct trade: the wolf keeps the hard black silhouette, and
+  // the rabbit keeps the soft one that goes with being the friendliest thing in the game. Against
+  // the grass field (luma ~117) the Clay rim still separates by about 80 levels.
+  img.outline(shade('fur', 0));
   ground(img, 16, 45, 10, 2.6);
 }
 
@@ -280,7 +292,9 @@ function paintOwl(img: Img, blink: boolean): void {
   img.rect(15, 26 + b, 2, 1, shade('gold', 0));
   img.px(16, 27 + b, shade('gold', 0));
 
-  img.outline(shade('ink', 0));
+  // Bark-dark, which is his own ramp and 60 levels under the grass field: the owl loses nothing by
+  // giving the black keyline back to the wolf.
+  img.outline(shade('trunk', 0));
   ground(img, 16, 45, 10.5, 2.4);
 }
 
@@ -294,8 +308,22 @@ function paintOwl(img: Img, blink: boolean): void {
  * Two things drive every decision here. First, the LANTERN is the skill, so the lantern is what
  * the silhouette is about -- it hangs clear of the body on a pole, out in the frame's left column
  * where nothing else in the cast puts anything, and it is the only bright object on the sprite.
- * Second, the face must not compete with it, so the badger reads by its head stripes alone and the
- * coat is the forest's night ramp rather than anything that could be mistaken for Red's purple.
+ * Second, the face must not compete with it, so the badger reads by its head stripes alone.
+ *
+ * The coat is `roof`, and the comment that used to sit here was wrong in a way worth recording.
+ * It claimed the coat was "the forest's night ramp rather than anything that could be mistaken for
+ * Red's purple". `night` 2 is #441363 and `night` 3 is #6D2D93 -- those ARE `cloak` 0 and `cloak` 1,
+ * so the rim light down his coat, his creases and his hood's lit dome were painted in Red's own two
+ * tokens, 63 pixels of Aubergine per frame. At a 26-tile camera the forest held two purple-hooded
+ * figures, which is the exact competition the rebrand exists to prevent, and docs/PIXEL_STANDARD.md
+ * section 2 does not list him among the things brand colour reaches the world through.
+ *
+ * `roof` is the one ramp in the palette no character owns -- it was added for the cottage's slate,
+ * a building he is never beside -- so it is the only place he can have an identity of his own
+ * without borrowing another cast member's. It is also a warm NEUTRAL, which is what finally makes
+ * the lantern the loudest thing on him: gold against grey is the only saturated colour in the
+ * frame, where gold against a purple coat was just one bright thing among two. `roof` 0 (luma 69)
+ * is a proper own-dark against the grass field at 117, which is what `stone` could never be.
  *
  * The lantern is up and to the left, which is exactly where the world's one light comes from
  * (section 3), so the warm pixels it throws onto the hood and the snout are consistent with every
@@ -317,16 +345,19 @@ function paintKeeper(img: Img, blink: boolean): void {
   for (let y = 23; y <= 44; y++) {
     const half = Math.round(8.5 + ((y - 23) / 21) * 2.5);
     const left = CX - half;
-    img.rect(left, y + b, half * 2, 1, shade('night', 1));
-    img.rect(left, y + b, 2, 1, shade('night', 3)); // rim towards the lantern
-    img.px(left + 2, y + b, shade('night', 2));
-    img.rect(CX + half - 3, y + b, 3, 1, shade('night', 0));
+    img.rect(left, y + b, half * 2, 1, shade('roof', 1));
+    img.rect(left, y + b, 2, 1, shade('roof', 2)); // rim towards the lantern
+    // Five pixels of flank turning away, not three. `roof` 1 is within a few levels of the grass
+    // field, so the bell only becomes a bell -- and only stays darker than the ground it stands on
+    // -- if a wide band of it has gone over into shade. Level 3 appears nowhere on the cloth: what
+    // sparkles on this sprite is the lantern, and the gold pixels it lands are the whole budget.
+    img.rect(CX + half - 5, y + b, 5, 1, shade('roof', 0));
   }
   /*
    * Two creases, falling away from the belt the way a belted bell-coat actually folds. A seam has
-   * to be a lit edge with a shadow beside it, because `night` levels 0 and 1 are twelve levels of
-   * luma apart and a fold drawn in level 0 alone simply does not exist -- but straight vertical
-   * ones every few pixels turned the coat into corduroy, so these lean and there are two.
+   * to be a lit edge with a shadow beside it, because a fold drawn in level 0 alone barely exists
+   * at this size -- but straight vertical ones every few pixels turned the coat into corduroy, so
+   * these lean and there are two.
    */
   for (const [fx0, fx1] of [
     [CX - 4, CX - 7],
@@ -334,10 +365,10 @@ function paintKeeper(img: Img, blink: boolean): void {
   ] as const)
     for (let y = 37; y <= 43; y++) {
       const x = Math.round(fx0 + ((fx1 - fx0) * (y - 37)) / 6);
-      img.px(x, y + b, shade('night', 3));
-      img.px(x + 1, y + b, shade('night', 0));
+      img.px(x, y + b, shade('roof', 2));
+      img.px(x + 1, y + b, shade('roof', 0));
     }
-  img.rect(CX - 12, 44 + b, 24, 1, shade('night', 0)); // hem
+  img.rect(CX - 12, 44 + b, 24, 1, shade('roof', 0)); // hem
 
   // Belt: a dark strap with one lit edge. The first pass made it tan and full width, and it read
   // as a plank the keeper was carrying across his middle.
@@ -347,20 +378,20 @@ function paintKeeper(img: Img, blink: boolean): void {
   img.px(CX - 1, 34 + b, shade('gold', 2));
 
   // --- the arm that holds the pole, reaching down-left out of the coat ---
-  limb(img, 14, 27 + b, 12, 34 + b, 6, 4.6, shade('night', 1));
-  limb(img, 13.2, 27 + b, 11.2, 34 + b, 2.4, 2, shade('night', 3));
+  limb(img, 14, 27 + b, 12, 34 + b, 6, 4.6, shade('roof', 1));
+  limb(img, 13.2, 27 + b, 11.2, 34 + b, 2.4, 2, shade('roof', 2));
 
   /*
    * Hood: shade dome, a rim-light dome barely larger than the body, then the body inset
-   * down-right. The rim stays about a pixel wide -- `night` level 3 is Aubergine, and a broad band
-   * of it turns the hood into a lit dome and stops being a highlight (section 2).
+   * down-right. The rim stays about a pixel wide -- level 2 is a lit edge, and a broad band of it
+   * turns the hood into a lit dome and stops being a highlight (section 2).
    */
-  img.ellipse(CX - 0.5, 25.6 + b, 8.6, 2.4, shade('night', 0)); // collar, under the hood
-  img.ellipse(CX + 0.5, 15 + b, 8.6, 7.6, shade('night', 0));
-  img.ellipse(CX - 0.1, 14.4 + b, 8.4, 7.4, shade('night', 3));
-  img.ellipse(CX + 1.1, 15.6 + b, 8.3, 7.3, shade('night', 1));
+  img.ellipse(CX - 0.5, 25.6 + b, 8.6, 2.4, shade('roof', 0)); // collar, under the hood
+  img.ellipse(CX + 0.5, 15 + b, 8.6, 7.6, shade('roof', 0));
+  img.ellipse(CX - 0.1, 14.4 + b, 8.4, 7.4, shade('roof', 2));
+  img.ellipse(CX + 1.1, 15.6 + b, 8.3, 7.3, shade('roof', 1));
   // The opening, cut low and towards the lantern, with the head set down into it.
-  img.ellipse(17.6, 20.5 + b, 6.8, 5.2, shade('night', 0));
+  img.ellipse(17.6, 20.5 + b, 6.8, 5.2, shade('roof', 0));
 
   /*
    * --- the badger, in three-quarter view, looking down towards his own lantern ---
@@ -379,11 +410,17 @@ function paintKeeper(img: Img, blink: boolean): void {
   limb(img, 20.2, 22.2 + b, 13.8, 27.6 + b, 8, 5, shade('fur', 0));
   limb(img, 19.8, 21.8 + b, 13.6, 27.1 + b, 6.6, 3.8, shade('fur', 1));
   limb(img, 19.2, 21.2 + b, 14.2, 25.8 + b, 4.4, 2.4, shade('fur', 2));
-  // The crown stripe, from the ear to just short of the nose, with the eye set into it.
-  limb(img, 20.6, 20.2 + b, 14.4, 24.8 + b, 3.6, 2, shade('ink', 0));
+  /*
+   * The crown stripe, from the ear to just short of the nose, with the eye set into it. It reads as
+   * black at this size without being Cyera Black: `roof` 0 is a dark warm charcoal 162 levels under
+   * the white of his head, it is the dark of the coat he is wearing, and it leaves `ink` to the
+   * wolf. A badger needs a near-black marking, and `fur` 0 -- the only dark his own white ramp has
+   * -- is Clay, which on a white head is no marking at all.
+   */
+  limb(img, 20.6, 20.2 + b, 14.4, 24.8 + b, 3.6, 2, shade('roof', 0));
   img.ellipse(22.6, 19.6 + b, 2.2, 2, shade('fur', 0)); // the ear the hood lets through
-  img.ellipse(22.7, 19.8 + b, 1.2, 1, shade('ink', 0));
-  img.ellipse(13.1, 27.9 + b, 2.2, 1.6, shade('ink', 0)); // nose
+  img.ellipse(22.7, 19.8 + b, 1.2, 1, shade('roof', 0));
+  img.ellipse(13.1, 27.9 + b, 2.2, 1.6, shade('roof', 0)); // nose
   img.px(12.2, 27.1 + b, shade('fur', 3));
   if (!blink) img.rect(16, 23 + b, 2, 1, shade('wall', 3));
 
@@ -425,7 +462,7 @@ function paintKeeper(img: Img, blink: boolean): void {
   ] as const)
     img.px(lx, ly + b, shade('gold', 1));
 
-  img.outline(shade('ink', 0));
+  img.outline(shade('roof', 0));
   ground(img, 19, 45, 11, 2.6);
 }
 

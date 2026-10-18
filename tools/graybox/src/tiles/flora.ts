@@ -7,7 +7,7 @@
  *
  * **Leaves are clumps, not a blob with speckle.** The 16px crown was one big ellipse with nine
  * lobes and forty speckle pixels on top; four times the speckle would just be dirt. Here the crown
- * is eleven clumps, each one painted dark-offset / base / lit-cap, in back-to-front order so the
+ * is sixteen clumps, each one painted dark-offset / base / lit-cap, in back-to-front order so the
  * dark offset of a near clump cuts a crease against the one behind it. That crease is the whole
  * reason the crown reads as foliage rather than as a green sticker, and it is structure the 16px
  * version had no room for.
@@ -17,18 +17,18 @@
  * quadrant knows it is a quadrant, so no seam can drift -- the alternative, four painters each
  * drawing their own corner, is how a crown ends up with a step in its outline.
  *
- * **Flowers grow out of something.** The concept board never puts a flower alone on grass, so each
- * flower tile is a low foliage mound with three blooms rising out of it on stems. `flower-pink`
- * and `flower-red` paint from the `cloak` ramp after the 2026-10-18 rebrand (Haze and Lilac); only
- * `flower-white` is off it.
+ * **Flowers grow out of something, and no two of them are the same plant.** The concept board never
+ * puts a flower alone on grass, so a flower tile is always blooms rising out of foliage on stems.
+ * `flower-white` and `flower-pink` are rosettes on a mound, in different arrangements;
+ * `flower-red` is a foxglove, because two tiles that differ only in tint are one tile with two
+ * gids. `flower-pink` and `flower-red` both paint from the `cloak` ramp after the 2026-10-18
+ * rebrand, at opposite ends of it (Haze and Aubergine); only `flower-white` is off it.
  *
- * NOTE for whoever wires these into the tileset: `grassBase` here is a local copy of the shipped
- * grass recipe (level-1 fill, one alpha wash, blades) at 32px, because the ground group owns the
- * real grass painter and it does not exist yet. When it lands, delete `grassBase` and call theirs,
- * or every decor tile will sit on grass that is a shade off the field around it.
+ * The grass under them is the ground group's own painter, called rather than copied: see `ground`.
  */
 import { Img, noise, shade } from '../paint.ts';
 import type { Ramp, RGBA } from '../paint.ts';
+import { GROUND_TILES } from './ground.ts';
 
 const TILE = 32;
 
@@ -36,39 +36,24 @@ type Painter = (img: Img) => void;
 
 /* ------------------------------------------------------------------ shared ground and shading */
 
-/** Shade wash per grass variant: 0 is the shaded patch, 3 the sunlit one. */
-const GRASS_WASH: readonly (readonly [0 | 1 | 2 | 3, number])[] = [
-  [0, 44],
-  [0, 15],
-  [2, 22],
-  [2, 52],
-];
-
 /**
- * The opaque grass every decor tile stands on. Blades are two and three pixels tall rather than
- * single dots -- same ink, same density, but a blade instead of a fleck -- and everything is inset
- * from the tile edge so nothing is cut in half by the boundary.
+ * The opaque grass a decor tile stands on: the shipped field grass itself.
+ *
+ * This was a local copy of the grass recipe, written while the ground group did not exist yet, and
+ * the copy had drifted. Measured, a decor tile's border came out at 109 to 117 mean luma against a
+ * field running 113 to 122, so every flower, rock and toadstool printed a faint square of its own
+ * green into the lawn. A copy is a second opinion about the floor, and the floor only gets one.
+ *
+ * Only the two middle variants are ever asked for. `grass-0..3` are four tones about nine luma
+ * apart and a decor tile does not get to choose which of them `forest-map.ts` lays beside it, so it
+ * takes one of the two nearest the middle of that ladder and is never more than a couple of levels
+ * off either neighbour. (The ladder itself is the open problem -- the four variants vary by TONE
+ * where the water variants vary by PATTERN, which is what makes a laid field read as squares -- but
+ * they are painted by `grass()` in `tiles/ground.ts`, not here.)
  */
-function grassBase(img: Img, variant: 0 | 1 | 2 | 3): void {
-  const rnd = noise(1009 + variant * 977);
-  img.rect(0, 0, TILE, TILE, shade('grass', 1));
-  const wash = GRASS_WASH[variant] ?? ([1, 0] as const);
-  if (wash[1] > 0) img.rect(0, 0, TILE, TILE, shade('grass', wash[0], wash[1]));
-  for (let i = 0; i < 34; i++) {
-    const x = 1 + Math.floor(rnd() * (TILE - 2));
-    const y = 2 + Math.floor(rnd() * (TILE - 5));
-    const level = rnd() > 0.5 ? 0 : 2;
-    img.px(x, y, shade('grass', level, 110));
-    img.px(x, y + 1, shade('grass', level, 70));
-  }
-  for (let i = 0; i < 4 + variant; i++) {
-    const x = 2 + Math.floor(rnd() * (TILE - 4));
-    const y = 4 + Math.floor(rnd() * (TILE - 10));
-    img.px(x, y, shade('grass', 3, 185));
-    img.px(x, y + 1, shade('grass', 3, 140));
-    img.px(x, y + 2, shade('grass', 2, 120));
-  }
-}
+const ground = (img: Img, variant: 1 | 2): void => {
+  GROUND_TILES[`grass-${variant}`]!(img);
+};
 
 /** Grass in shade, pooling under anything that stands on the ground and spilling down-right. */
 function contactShadow(img: Img, cx: number, cy: number, rx: number, ry: number): void {
@@ -76,7 +61,53 @@ function contactShadow(img: Img, cx: number, cy: number, rx: number, ry: number)
   img.ellipse(cx, cy, rx * 0.8, ry * 0.76, shade('shadow', 1, 120));
 }
 
-type Clump = { readonly x: number; readonly y: number; readonly r: number };
+type Clump = {
+  readonly x: number;
+  readonly y: number;
+  readonly r: number;
+  /**
+   * The clump's identity, fixed in the mass's own coordinates, for the dapple on its lit face. The
+   * four canopy tiles each repaint the whole 64x64 crown at a different origin, so a mark seeded
+   * from where the clump lands in a *tile* would fall somewhere else in each quadrant and the
+   * dapple would break at all four seams.
+   */
+  readonly seed?: number;
+};
+
+const onLeaf = (img: Img, x: number, y: number): boolean =>
+  x >= 0 && y >= 0 && x < img.w && y < img.h && img.get(x, y)[3] !== 0;
+
+/**
+ * The sunlit face of a clump, as dapple rather than as a disc.
+ *
+ * It used to be one level-3 ellipse about six pixels across, on each of the two or three clumps
+ * facing the light. On a single tree that is a highlight. On the map it is not: there is exactly
+ * one tree, and `forest-map.ts` plants it every two tiles along all four borders, so that blob
+ * appeared at the same place on every crown in the treeline and a row of them read as one stamp
+ * repeated rather than as trees. `TILE_NAMES` is frozen at 53, so there is no second tree to cut
+ * to; what can change is how self-identifying the crown's own texture is. The same ink, broken
+ * into leaf-sized marks scattered along the clump's lit arc, reads as dapple and gives the eye no
+ * shape to memorise.
+ *
+ * Marks only land on leaf already painted, which both keeps them off the grass and lets the ragged
+ * edge of the clump trim them.
+ */
+function dapple(img: Img, c: Clump, ramp: Ramp, count: number): void {
+  const rnd = noise(c.seed ?? Math.round(c.x * 73 + c.y * 131));
+  for (let i = 0; i < count; i++) {
+    // Up and to the left, give or take: one light, from the top-left, everywhere. Out towards the
+    // rim rather than round the middle -- a dapple gathered at the centre of a clump is just the
+    // old blob with holes in it, where light actually breaks along the edge of a mass of leaves.
+    const a = Math.PI * 1.25 + (rnd() - 0.5) * 2.4;
+    const d = c.r * (0.42 + rnd() * 0.44);
+    const x = Math.round(c.x + Math.cos(a) * d);
+    const y = Math.round(c.y + Math.sin(a) * d * 0.9);
+    // One, two or three pixels across: a leaf catching the sun, not a speck of dust.
+    const run = rnd() < 0.4 ? 1 : rnd() < 0.75 ? 2 : 3;
+    for (let k = 0; k < run; k++) if (onLeaf(img, x + k, y)) img.px(x + k, y, shade(ramp, 3));
+    if (rnd() < 0.45 && onLeaf(img, x, y + 1)) img.px(x, y + 1, shade(ramp, 3));
+  }
+}
 
 /**
  * One clump of leaves at one of four distances from the sun.
@@ -100,8 +131,7 @@ function clump(img: Img, c: Clump, ramp: Ramp, band: 0 | 1 | 2 | 3): void {
   // and leaves a crescent of body colour on the shaded one. A smaller, centred cap reads as a
   // bright disc stuck onto the clump -- the crown came out looking like a bowl of apples.
   if (band >= 2) img.ellipse(c.x - off, c.y - off * 1.1, c.r * 0.76, c.r * 0.68, shade(ramp, 2));
-  if (band === 3)
-    img.ellipse(c.x - off * 1.9, c.y - off * 1.9, c.r * 0.26, c.r * 0.24, shade(ramp, 3));
+  if (band === 3) dapple(img, c, ramp, 8);
 }
 
 /**
@@ -129,35 +159,55 @@ function clumps(img: Img, list: readonly Clump[], ramp: Ramp, cap: 0 | 1 | 2 | 3
  * on purpose -- a ring of equal circles gives a silhouette that is itself a circle, and a tree
  * whose outline is a circle reads as a lollipop whatever is painted inside it.
  *
- * Every body stays inside 2..61 so no leaf is cut in half by a tile edge; the bottom clump is the
- * exception that matters, reaching y 62 so the crown meets the trunk tile below it.
+ * Every body stays inside 2..61 so no leaf is cut in half by a tile edge, with one deliberate
+ * exception: `CROWN_BELLY` runs off the bottom, because down there the drawing continues into the
+ * trunk tile.
  */
 const CROWN_CX = 32;
 const CROWN_CY = 31;
 const CROWN: readonly Clump[] = [
-  { x: 31, y: 15, r: 13 },
-  { x: 15, y: 21, r: 11 },
-  { x: 47, y: 20, r: 10.5 },
-  { x: 12, y: 34, r: 10 },
-  { x: 49, y: 35, r: 9.5 },
-  { x: 18, y: 47, r: 10.5 },
-  { x: 45, y: 47, r: 10.5 },
-  { x: 31, y: 52, r: 11 },
-  { x: 31, y: 32, r: 12 },
-  { x: 21, y: 29, r: 9.5 },
-  { x: 42, y: 30, r: 9 },
-  { x: 25, y: 42, r: 8.5 },
-  { x: 38, y: 41, r: 8 },
+  { x: 31, y: 15, r: 13, seed: 311 },
+  { x: 15, y: 21, r: 11, seed: 322 },
+  { x: 47, y: 20, r: 10.5, seed: 333 },
+  { x: 12, y: 34, r: 10, seed: 344 },
+  { x: 49, y: 35, r: 9.5, seed: 355 },
+  { x: 18, y: 47, r: 10.5, seed: 366 },
+  { x: 45, y: 47, r: 10.5, seed: 377 },
+  { x: 31, y: 52, r: 11, seed: 388 },
+  { x: 31, y: 32, r: 12, seed: 399 },
+  { x: 21, y: 29, r: 9.5, seed: 410 },
+  { x: 42, y: 30, r: 9, seed: 421 },
+  { x: 25, y: 42, r: 8.5, seed: 432 },
+  { x: 38, y: 41, r: 8, seed: 443 },
 ];
+
+/**
+ * The belly of the same crown: the leaves that close over the top of the trunk.
+ *
+ * Measured, the crown used to taper to six pixels of leaf at y 61 and then stop, two rows short of
+ * the bottom edge, while `paintTrunkPair` draws a trunk sixteen pixels wide from the very first
+ * row of the tile below -- so grass showed at both of the trunk's shoulders and the tree read as a
+ * bush balanced on a stump. These three reach the edge and span 22..42, wider than the trunk on
+ * purpose: a crown that meets the trunk exactly at its own width is a lollipop on a stick.
+ *
+ * Painted before `CROWN` and forced to the shade band, because this is the underside of the mass.
+ * Ranking it by the light axis like the rest would have lit the bottom-left of it, and a crown with
+ * a bright belly reads as two bushes rather than as one tree.
+ */
+const CROWN_BELLY: readonly Clump[] = [
+  { x: 25, y: 56, r: 9, seed: 701 },
+  { x: 39, y: 56, r: 9, seed: 702 },
+  { x: 32, y: 59, r: 9.5, seed: 703 },
+];
+
+const shift = (list: readonly Clump[], ox: number, oy: number): Clump[] =>
+  list.map((c) => ({ ...c, x: c.x + ox, y: c.y + oy }));
 
 function paintCrown(img: Img, qx: 0 | 1, qy: 0 | 1): void {
   const ox = -qx * TILE;
   const oy = -qy * TILE;
-  clumps(
-    img,
-    CROWN.map((c) => ({ x: c.x + ox, y: c.y + oy, r: c.r })),
-    'canopy',
-  );
+  clumps(img, shift(CROWN_BELLY, ox, oy), 'canopy', 0);
+  clumps(img, shift(CROWN, ox, oy), 'canopy');
 
   /*
    * Leaf tips, and only on the sunlit shoulder. There was a matching pass of dark notches down the
@@ -167,16 +217,21 @@ function paintCrown(img: Img, qx: 0 | 1, qy: 0 | 1): void {
    *
    * Placed from one fixed seed in crown space and only onto leaf already painted, so the pattern
    * runs continuously across all four seams.
+   *
+   * The sunlit half now runs to the crown's own middle rather than stopping six pixels short of it.
+   * Holding the tips out at the rim concentrated every bright pixel the crown had into one corner,
+   * and a treeline of crowns each bright in the same corner is the repeat this tree is trying not
+   * to be; letting them reach the centre spreads the light over the whole lit side.
    */
   const rnd = noise(4242);
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 52; i++) {
     const a = rnd() * Math.PI * 2;
     const d = 7 + rnd() * 20;
     const x = Math.round(CROWN_CX + Math.cos(a) * d) + ox;
     const y = Math.round(CROWN_CY + Math.sin(a) * d * 0.95) + oy;
     if (x < 1 || y < 1 || x >= TILE - 1 || y >= TILE - 1) continue;
     if (img.get(x, y)[3] === 0) continue;
-    if (x - (CROWN_CX + ox) + (y - (CROWN_CY + oy)) > -6) continue;
+    if (x - (CROWN_CX + ox) + (y - (CROWN_CY + oy)) > -1) continue;
     img.px(x, y, shade('canopy', 3));
     img.px(x - 1, y, shade('canopy', 2));
   }
@@ -189,6 +244,13 @@ function paintCrown(img: Img, qx: 0 | 1, qy: 0 | 1): void {
  * that wander, lenticel dashes, a knot, and three roots flaring onto the grass.
  */
 const GROUND_Y = 28;
+
+/** The crown's lowest leaves, hanging into the top of the trunk tile. See the note at the foot. */
+const TRUNK_LEAF: readonly Clump[] = [
+  { x: 26, y: -6, r: 8.5, seed: 711 },
+  { x: 37, y: -6, r: 8.5, seed: 712 },
+  { x: 32, y: -4, r: 7.5, seed: 713 },
+];
 
 function paintTrunkPair(img: Img, half: 'left' | 'right'): void {
   const ox = half === 'left' ? 0 : -TILE;
@@ -261,12 +323,26 @@ function paintTrunkPair(img: Img, half: 'left' | 'right'): void {
     img.px(x + ox, y, shade('grass', rnd() > 0.5 ? 1 : 0));
     img.px(x + ox, y + 1, shade('grass', 0));
   }
+
+  /*
+   * The last of the crown, drawn here because the crown cannot draw it.
+   *
+   * `canopy-bl` and `canopy-br` stop at their own bottom edge, so whatever closes the gap over the
+   * trunk's shoulders has to be painted in this tile -- three clumps hanging in from above, in the
+   * shade band, narrowing from the belly's 22..42 to the trunk's own width over four rows. Drawn
+   * last so the bark goes behind them, which is what makes the trunk read as going up INTO the
+   * mass rather than stopping underneath it.
+   *
+   * Safe to draw unconditionally: `forest-map.ts` only ever plants a trunk under a canopy pair, and
+   * sweeps half trees away at the end of generation, so a bare trunk tile does not ship.
+   */
+  clumps(img, shift(TRUNK_LEAF, ox, 0), 'canopy', 0);
 }
 
 /* ---------------------------------------------------------------------------- ground cover */
 
 const bushTile: Painter = (img) => {
-  grassBase(img, 1);
+  ground(img, 2);
   contactShadow(img, 17, 27.5, 12, 3);
   clumps(
     img,
@@ -309,26 +385,26 @@ function bloom(img: Img, cx: number, cy: number, b: Bloom): void {
   img.px(Math.round(cx - 1), Math.round(cy - 1), shade('gold', 3));
 }
 
+/** A stem: two pixels wide, dark on the right and lit on the left, like everything standing up. */
+function stem(img: Img, x: number, top: number, foot: number): void {
+  img.rect(x, top, 1, foot - top, shade('canopy', 0));
+  img.rect(x - 1, top, 1, foot - top, shade('canopy', 2));
+}
+
+/** Where a rosette's heads sit: the head's x and y, and the y its stem reaches down to. */
+type Heads = readonly (readonly [number, number, number])[];
+
 /**
- * Three blooms growing out of a low mound of foliage, per the board. The stems come out of the
- * mound rather than out of bare grass, which is the detail that stops the tile reading as three
+ * Rosettes: open blooms growing out of a low mound of foliage, per the board. The stems come out of
+ * the mound rather than out of bare grass, which is the detail that stops the tile reading as three
  * stickers.
  */
-const flower = (b: Bloom): Painter =>
-  function paintFlower(img) {
-    grassBase(img, 0);
+const rosette = (b: Bloom, heads: Heads, variant: 1 | 2): Painter =>
+  function paintRosette(img) {
+    ground(img, variant);
     contactShadow(img, 17, 27.5, 11, 2.2);
-    const heads: readonly (readonly [number, number, number])[] = [
-      [10, 12, 20],
-      [17, 8, 19],
-      [23, 13, 20],
-    ];
-    // Two pixels wide: dark on the right, lit on the left, like everything else standing up in
-    // this forest. A one-pixel stem vanished against the mound the moment it was rendered.
-    for (const [x, y, foot] of heads) {
-      img.rect(x, y + 3, 1, foot - y - 2, shade('canopy', 0));
-      img.rect(x - 1, y + 3, 1, foot - y - 2, shade('canopy', 2));
-    }
+    // A one-pixel stem vanished against the mound the moment it was rendered.
+    for (const [x, y, foot] of heads) stem(img, x, y + 3, foot + 1);
     // Leaves on two of the stems, before the mound so they tuck behind the foliage.
     img.ellipse(7, 17, 2.8, 1.3, shade('canopy', 0));
     img.ellipse(6.6, 16.5, 2.4, 1, shade('canopy', 2));
@@ -345,6 +421,66 @@ const flower = (b: Bloom): Painter =>
       2,
     );
     for (const [x, y] of heads) bloom(img, x, y, b);
+  };
+
+/**
+ * One hanging bell: taller than it is wide, lit on the shoulder it turns to the sun, with its own
+ * dark a pixel proud down the shaded side and a flared lip left in shade at the mouth.
+ *
+ * Taller than wide is the whole trick. A round one is a berry, and the first pass of this tile was
+ * five berries on a stick.
+ */
+function bell(img: Img, cx: number, cy: number, b: Bloom): void {
+  img.ellipse(cx + 0.7, cy + 0.7, 2.2, 2.8, b.dark);
+  img.ellipse(cx, cy, 2.2, 2.8, b.petal);
+  img.ellipse(cx - 0.8, cy - 0.9, 1.5, 1.8, b.tip);
+  img.rect(cx - 2, cy + 3, 5, 1, b.dark);
+  // The same gold the rosettes carry in their centres, so the two still read as one forest.
+  img.px(cx, cy + 3, shade('gold', 2));
+}
+
+/**
+ * A different plant, not a different tint.
+ *
+ * `flower-pink` and `flower-red` came out of the 2026-10-18 rebrand as one drawing in two shades
+ * of the same ramp: measured, 14 per cent of their pixels differed and their silhouettes were
+ * identical to the pixel, which spends two of the 53 frozen gids on one flower. Silhouette is what
+ * separates two things at a 26-tile camera -- docs/PIXEL_STANDARD.md section 6 says it of
+ * characters and it is no less true of a tile -- so this is a foxglove: two upright spikes of
+ * drooping bells over flat strap leaves, against the rosettes' round heads on a round mound. The
+ * colour is still `cloak`, as the rebrand requires; it is the shape that tells them apart.
+ */
+const foxglove = (b: Bloom): Painter =>
+  function paintFoxglove(img) {
+    ground(img, 2);
+    contactShadow(img, 16, 27, 12, 2.2);
+    // Two spikes, a tall one and a short one, with the bells hanging off alternating sides close
+    // enough to touch the stem. A bell floating a pixel clear of its stem reads as a bug.
+    stem(img, 11, 5, 27);
+    stem(img, 22, 13, 28);
+    // Strap leaves at the foot, where the rosettes have a mound of clumps: flat, long and pointed,
+    // which is half of what makes this a different plant rather than the same one in another tint.
+    // Staggered in height on purpose -- at one height the three of them merged into a single green
+    // bar across the bottom of the tile, which reads as a hedge, not as a plant.
+    for (const [cx, cy, rx, tip] of [
+      [8, 25.5, 5, -1],
+      [22, 27, 4.5, 1],
+      [14, 28, 3, 1],
+    ] as const) {
+      img.ellipse(cx + 0.5, cy + 0.6, rx, 1.7, shade('canopy', 0));
+      img.ellipse(cx, cy, rx * 0.9, 1.1, shade('canopy', 1));
+      img.ellipse(cx - 0.8, cy - 0.6, rx * 0.66, 0.8, shade('canopy', 2));
+      // A pixel past the end, so a strap leaf comes to a point instead of a round cap.
+      img.px(cx + tip * (rx + 1), cy, shade('canopy', 0));
+    }
+    for (const [x, y] of [
+      [7, 9],
+      [14, 13],
+      [7, 18],
+      [25, 17],
+      [18, 22],
+    ] as const)
+      bell(img, x, y, b);
   };
 
 /**
@@ -381,7 +517,7 @@ const ROCK_ROWS: readonly (readonly [number, number])[] = [
 ];
 
 const rockTile: Painter = (img) => {
-  grassBase(img, 2);
+  ground(img, 1);
   contactShadow(img, 17, 26.5, 12, 3);
 
   // Its own dark, one pixel proud of the silhouette all the way round.
@@ -436,7 +572,7 @@ const rockTile: Painter = (img) => {
  * round a glade, and a cluster gives the ring a rhythm instead of a dotted line.
  */
 const toadstoolRing: Painter = (img) => {
-  grassBase(img, 1);
+  ground(img, 2);
 
   const toadstool = (cx: number, capY: number, rx: number, ry: number, foot: number): void => {
     contactShadow(img, cx + 1, foot + 1, rx * 0.9, 2);
@@ -479,25 +615,42 @@ const toadstoolRing: Painter = (img) => {
 /* --------------------------------------------------------------------------------- the tiles */
 
 export const FLORA_TILES: Record<string, (img: Img) => void> = {
-  'flower-white': flower({ petal: shade('fur', 2), dark: shade('fur', 0), tip: shade('fur', 3) }),
-  'flower-pink': flower({
-    petal: shade('cloak', 3),
-    dark: shade('cloak', 1),
-    tip: shade('fur', 3),
-  }),
-  'flower-red': flower({
-    petal: shade('cloak', 2),
+  // Three plants, three silhouettes: a tight arch of daisies, a wider sprawl of haze-coloured
+  // ones, and a foxglove. The two cloak-ramp tiles sit at opposite ends of that ramp as well --
+  // haze petals with a white tip against an aubergine bell with a lilac one.
+  'flower-white': rosette(
+    { petal: shade('fur', 2), dark: shade('fur', 0), tip: shade('fur', 3) },
+    [
+      [10, 12, 20],
+      [17, 8, 19],
+      [23, 13, 20],
+    ],
+    1,
+  ),
+  'flower-pink': rosette(
+    { petal: shade('cloak', 3), dark: shade('cloak', 1), tip: shade('fur', 3) },
+    [
+      [9, 16, 23],
+      [16, 10, 21],
+      [24, 14, 22],
+    ],
+    2,
+  ),
+  'flower-red': foxglove({
+    petal: shade('cloak', 1),
     dark: shade('cloak', 0),
-    tip: shade('cloak', 3),
+    tip: shade('cloak', 2),
   }),
   bush: bushTile,
   rock: rockTile,
+  // The two halves take different grass variants: the tone step between them falls on x = 32,
+  // which is the middle of the trunk, so the trunk covers the only place it could show.
   'trunk-l': (img) => {
-    grassBase(img, 0);
+    ground(img, 1);
     paintTrunkPair(img, 'left');
   },
   'trunk-r': (img) => {
-    grassBase(img, 0);
+    ground(img, 2);
     paintTrunkPair(img, 'right');
   },
   'canopy-tl': (img) => paintCrown(img, 0, 0),

@@ -10,12 +10,23 @@
  * raw hex and nothing here is lime. She is half her own frame in cloak, and that mass against a
  * green forest is the whole reason the eye finds her at a 26-tile camera.
  *
- * The one real trap in this ramp is called out in `paint.ts`: levels 1 and 2 are 99 levels of luma
- * apart, where no other ramp in the palette exceeds 66. The 16px sprite paid for it by painting the
- * hood in level 2 and the body in level 1, so hood and cloak read as two different garments. Here
- * level 1 is the subject everywhere; level 2 is a lit edge two pixels wide on the upper body and
- * one pixel lower down, with a dithered column bridging it; and level 3 -- unpainted at 16px -- is
- * a few pixels of specular on the crown and the brim and nothing else. One garment, one light.
+ * She is Lilac-led, which is option A of ART_PRODUCTION section 6a and the thing the first 32px
+ * pass got backwards. That pass painted the body in Aubergine and left Lilac as a two-pixel rim,
+ * so Aubergine outweighed Lilac about five to one and her median lightness landed at L*32 -- the
+ * band every cast shadow in the world sits in, and darker than the fence, the roof and the bush.
+ * She replaced a scarlet cloak that was the brightest thing on screen with one that was the
+ * darkest, which is also how tree shade reads, and how the wolf reads.
+ *
+ * So the levels are used for what they are, not for where they sit in the ramp: Lilac (level 2) is
+ * the subject everywhere, Aubergine (level 1) is the two columns turning away from the light with
+ * a dithered third bridging into it, Deep Purple (level 0) is the outline, the deep
+ * folds and the cloth gathered at the hem, and Haze (level 3) is a genuine highlight -- the crown
+ * of the hood, the lip of the brim, and a one-pixel lit rim down the hood and the upper cloak.
+ * `paint.ts` carries the role table and why level 2 holds the mass.
+ *
+ * Her outline is Deep Purple, her own dark, per PIXEL_STANDARD section 4. It used to be `ink`,
+ * which that section reserves for the wolf so that he alone reads as a silhouette; ringing the
+ * protagonist in the antagonist's black made the reservation distinguish nothing.
  *
  * Light is top-left always, which is why `left` is not `right` mirrored: mirroring would carry the
  * lit edge to the shaded side and she would read as a hole in the ground on half her frames.
@@ -53,24 +64,30 @@ const CLOAK_HW = [10, 10, 10, 10, 10, 10, 9, 9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8,
 const CLOAK_HW_SIDE = [9, 9, 9, 9, 9, 9, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
 
 /**
- * One horizontal run of cloth: lit edge, one dithered column to bridge Aubergine to Lilac, base
- * across the middle, two pixels of shaded edge. Hood, shoulder, sleeve and hem all come through
- * here, which is what keeps them reading as one garment rather than four.
+ * One horizontal run of cloth, lit from the left: an optional pixel of Haze rim, Lilac across the
+ * body, then the side turning away -- a dithered column, two of Aubergine, and the last pixel in
+ * Deep Purple so the shaded edge meets the outline as one dark lip. Hood, shoulder, sleeve and hem
+ * all come through here, which is what keeps them reading as one garment rather than four.
+ *
+ * The shaded band is sized off the run, not fixed: three pixels of a twenty-pixel hem is a side in
+ * shadow, three pixels of a four-pixel sleeve is a sleeve with the lights off.
  */
 function clothRun(
   img: Img,
   y: number,
   x0: number,
   w: number,
-  litW: number,
+  rim: boolean,
   skip?: (i: number) => boolean,
 ): void {
+  const shaded = Math.min(w >= 10 ? 3 : 2, Math.max(1, w - 2));
   for (let i = 0; i < w; i++) {
     if (skip?.(i)) continue;
-    let level: 0 | 1 | 2 = 1;
-    if (litW > 0 && i < litW) level = 2;
-    else if (litW > 0 && i === litW && (y & 1) === 0) level = 2;
-    else if (i >= w - 2) level = 0;
+    let level: 0 | 1 | 2 | 3 = 2;
+    if (rim && i === 0) level = 3;
+    else if (i === w - 1) level = 0;
+    else if (i >= w - shaded) level = 1;
+    else if (i === w - shaded - 1 && (y & 1) === 1) level = 1;
     img.px(x0 + i, y, shade('cloak', level));
   }
 }
@@ -81,19 +98,21 @@ function paintHood(img: Img, t: number, facing: Facing, dir: number): void {
   const hoodCx = CX + dir;
   HOOD_HW.forEach((raw, i) => {
     const hw = raw - (side ? 1 : 0);
-    clothRun(img, t + i, hoodCx - hw, hw * 2, i < 10 ? 2 : 1);
+    clothRun(img, t + i, hoodCx - hw, hw * 2, true);
   });
 
-  // Crown. The top light lands here first, so this and the brim are the only level 3 on her.
-  img.rect(hoodCx - 3, t, 4, 1, shade('cloak', 2));
-  img.rect(hoodCx - 2, t, 2, 1, shade('cloak', 3));
-  img.rect(hoodCx - 5, t + 1, 4, 1, shade('cloak', 2));
-  img.px(hoodCx - 4, t + 1, shade('cloak', 3));
-  img.rect(hoodCx - 6, t + 2, 3, 1, shade('cloak', 2));
+  // Crown: the top light lands here first, so Haze steps down the dome's lit shoulder and stops.
+  // Each row starts at the dome's own left edge -- one pixel further in on the side facings -- so
+  // the highlight tucks into the rim clothRun laid there instead of hanging a pixel off it.
+  [5, 4, 3, 1].forEach((len, i) => {
+    const hw = HOOD_HW[i]! - (side ? 1 : 0);
+    img.rect(hoodCx - hw, t + i, len, 1, shade('cloak', 3));
+  });
 
   if (facing === 'up') {
     // Turned away: no opening, so the seam down the back and the hair at the nape carry the frame.
-    img.line(hoodCx, t + 4, hoodCx, t + 12, shade('cloak', 0));
+    // The seam is a crease, so it takes Aubergine; Deep Purple on a Lilac back reads as a slot.
+    img.line(hoodCx, t + 4, hoodCx, t + 12, shade('cloak', 1));
     // Hair spilling out of the hood and widening onto the shoulders. Tried as a band (a letterbox)
     // and as a point-down taper (a bib); it only reads as hair when it falls the way hair falls.
     [2, 3, 4, 5, 5].forEach((hw, j) => {
@@ -119,13 +138,15 @@ function paintHood(img: Img, t: number, facing: Facing, dir: number): void {
     if (j === profile.length - 1) img.rect(fx - hw, y, hw * 2, 1, shade('skin', 0));
   });
 
-  // Brim: one row of lit lip following the opening, three pixels of specular on its lit end only.
-  // Two rows of it, or a full row of level 3, and the hood reads as a white headband.
+  // Brim: one row of lit lip following the opening. It has to be brighter than the hood behind it
+  // or it disappears, and the hood is Lilac now, so the lip is Haze -- fourteen levels up, where
+  // the old Aubergine hood needed fifty-two and turned the brim into a white headband. It still
+  // gets one row and no more, and it darkens into the shaded end like any other cloth.
   const brimHw = profile[0]! + 1;
-  img.rect(fx - brimHw, t + 4, brimHw * 2, 1, shade('cloak', 2));
-  img.rect(fx - brimHw, t + 4, 3, 1, shade('cloak', 3));
+  img.rect(fx - brimHw, t + 4, brimHw * 2, 1, shade('cloak', 3));
+  img.rect(fx + brimHw - 3, t + 4, 2, 1, shade('cloak', 1));
   img.px(fx + brimHw - 1, t + 4, shade('cloak', 0));
-  img.px(fx - brimHw - 1, t + 5, shade('cloak', 2));
+  img.px(fx - brimHw - 1, t + 5, shade('cloak', 3));
   // ...and what it casts on the forehead. Without this the hood sits on her face like a wig.
   img.rect(fx - profile[0]!, t + 5, profile[0]! * 2, 1, shade('skin', 0));
 
@@ -159,12 +180,18 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, swa
     const hw = profile[Math.min(fromHem, profile.length - 1)]!;
     // Shallow scallops on the last row, phased by the stride so the hem swings as she walks.
     const skip = (i: number): boolean => fromHem === 0 && (i + sway) % 5 === 2;
-    clothRun(img, y, cx - hw, hw * 2, fromHem > 12 ? 2 : 1, skip);
+    // The rim light stops partway down: the shoulder and the upper fall catch the top-left light,
+    // the skirt below has turned out of it. Carried to the hem it stops being a highlight and
+    // becomes a second outline in the wrong colour.
+    clothRun(img, y, cx - hw, hw * 2, fromHem > 12, skip);
   }
   for (let y = shoulder + 5; y <= HEM - 1; y++) {
     const spread = Math.floor((y - shoulder) / 7);
-    img.px(cx - 3 - spread, y, shade('cloak', 0));
-    img.px(cx + 3 + spread, y, shade('cloak', 0));
+    // Folds are Aubergine against a Lilac body -- thirty-eight levels, plenty at this size -- and
+    // deepen to Deep Purple over the last few rows, where the cloth gathers onto the hem.
+    const level = y >= HEM - 4 ? 0 : 1;
+    img.px(cx - 3 - spread, y, shade('cloak', level));
+    img.px(cx + 3 + spread, y, shade('cloak', level));
   }
   if (facing !== 'up') {
     img.rect(cx - 1, shoulder + 1, 2, 1, shade('gold', 2));
@@ -234,7 +261,7 @@ function paintArm(img: Img, shoulder: number, cx: number, sign: number, handY: n
     const y = shoulder + 2 + i;
     const outer = 7 + Math.floor(i / 3);
     const x0 = sign > 0 ? cx + outer - 3 : cx - outer;
-    clothRun(img, y, x0, 4, sign > 0 ? 0 : 2);
+    clothRun(img, y, x0, 4, sign < 0);
     if (sign > 0) img.px(x0, y, shade('cloak', 0)); // crease where the arm meets the body
   }
   const hx = sign > 0 ? cx + 8 : cx - 10;
@@ -262,7 +289,9 @@ function paintFrame(img: Img, facing: Facing, phase: 0 | 1 | 2 | 3): void {
   paintArm(body, shoulder, CX + dir, onRight ? 1 : -1, by - 1);
 
   paintHood(body, t, facing, dir);
-  body.outline(shade('ink', 0));
+  // Her own dark, per PIXEL_STANDARD section 4. `ink` is the wolf's, so that he alone is a
+  // silhouette; at Deep Purple the rim still sits thirty-nine levels under the grass it crosses.
+  body.outline(shade('cloak', 0));
 
   // Contact shadow last and underneath, so `outline` never rings it: an outlined shadow is a hole.
   img.ellipse(CX + 0.5, FOOT + 1.5, 8, 2.2, shade('shadow', 2));

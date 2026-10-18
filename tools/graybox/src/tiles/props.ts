@@ -70,40 +70,149 @@ const contactShadow = (img: Img, cx: number, cy: number, rx: number, ry: number)
 /* ------------------------------------------------------------------ the stall */
 
 /*
- * Awning canvas. Section 6a of docs/ART_PRODUCTION.md takes it off red and onto Haze and Offwhite
- * stripes, so the pale panel is the palette's neutral white (`fur`) and the coloured one is Haze
- * (`cloak` level 3). Haze, not Lilac: Lilac is Red's own lit body tone and a market awning in it
- * would be exactly the false positive the rebrand exists to prevent.
+ * Awning canvas. Section 6a of docs/ART_PRODUCTION.md takes it off red and onto Haze and Offwhite,
+ * so the wide panel is the palette's neutral white (`fur`) and the accent stripe is the top of
+ * `cloak`. Nothing here is red, and nothing here is Lime.
  *
- * Panels are eight pixels wide, which is the 16px tile's four-pixel stripe at the new scale -- four
- * panels per tile, sixteen across the finished stall, and a seam that lands on the tile boundary so
- * `l, m, m, r` carries the rhythm straight across all four tiles.
+ * Redrawn after the first 32px pass was measured. That pass painted the whole sheet flat at level 3
+ * -- 44 to 52 per cent of each tile, against the one-fifth ceiling in PIXEL_STANDARD section 2, and
+ * by a wide margin the worst offender in the tileset. The consequence was not a rule violation but
+ * a story one: across the four tiles it carried 1,151 purple pixels to Red's 525, at a median L* of
+ * 84 to her 32. One tile off her route, at the Rabbit, the awning was the most findable thing on
+ * screen and the protagonist was not, which is the single outcome the whole rebrand exists to
+ * prevent. The awning has to furnish the stall, not lead the frame.
+ *
+ * Two changes. Both leave the stripes Haze and Offwhite in family.
+ *
+ * The purple is now a narrow accent on a wide Offwhite panel -- twelve pale pixels to four --
+ * rather than half the cloth. That is what a market awning looks like, it is the brand's own
+ * proportion (offwhite ground, purple accent), and it is what brings the purple area back under
+ * Red's. The repeat is sixteen, so it still divides the tile and the `l, m, m, r` rhythm still
+ * carries straight across all four tiles with a stripe boundary landing on every seam.
+ *
+ * And the cloth is shaded down its section instead of being flat: the rail's line of shade along
+ * the top, a lit crown where the sheet turns up into the light, then a long fall through base into
+ * the turn under the hem, a darker bound edge, and the scallops hanging below it darker again. Each
+ * panel is a fold, lit down its left side and shaded down its right. Level 3 is now the crown of
+ * the accent stripe and nothing else: measured, 3 per cent of the painted shape, against 48.
+ *
+ * The body of the stripe therefore sits on Lilac, which the first pass ruled out because Lilac is
+ * Red's lit body tone. That ruling was right about a stripe half the cloth wide and flat. It is not
+ * right about four pixels with a Haze crown over them and three bands of shade under them: nothing
+ * four pixels wide reads as a 32x48 character, and the alternative -- holding the entire stripe at
+ * Haze -- is exactly what made the awning the brightest mass in the forest.
  */
-const paleStripe = (x: number): boolean => Math.floor(x / 8) % 2 === 0;
+const STRIPE_REPEAT = 16;
+const HAZE_WIDTH = 4;
 
-const canvasTone = (x: number, step: 'field' | 'fold' | 'edge'): RGBA =>
-  paleStripe(x)
-    ? shade('fur', step === 'field' ? 3 : step === 'fold' ? 1 : 0)
-    : shade('cloak', step === 'field' ? 3 : step === 'fold' ? 2 : 1);
+type Level = 0 | 1 | 2 | 3;
+const LEVELS = [0, 1, 2, 3] as const;
+/** A ramp level moved by `by` and held inside its ramp, without a cast at the call site. */
+const step = (level: number, by: number, ceiling: number): Level =>
+  LEVELS[Math.max(0, Math.min(ceiling, level + by))]!;
+
+/** Where a column falls in the stripe pattern: which panel it is in, and how far into it. */
+const stripeAt = (x: number): { haze: boolean; offset: number; width: number } => {
+  const i = ((x % STRIPE_REPEAT) + STRIPE_REPEAT) % STRIPE_REPEAT;
+  const pale = STRIPE_REPEAT - HAZE_WIDTH;
+  return i < pale
+    ? { haze: false, offset: i, width: pale }
+    : { haze: true, offset: i - pale, width: HAZE_WIDTH };
+};
+
+/*
+ * The cloth in section, row by row from the rail to the hem: the ramp level for the Offwhite panel
+ * and the ramp level for the Haze stripe. The Offwhite panel stops at level 2 on purpose -- `fur`
+ * level 3 is pure white, and nothing in a forest at a 26-tile camera should be pure white.
+ */
+const CLOTH_TOP = 7;
+const CLOTH_SECTION: readonly (readonly [number, number])[] = [
+  [0, 2], // the rail's shade on the cloth, which the shade line below drops
+  [2, 3], // the crown, where the sheet turns up into the light
+  [1, 3],
+  [1, 3],
+  [1, 3],
+  [1, 2], // past the crown, and falling -- the shade bands below carry it the rest of the way
+  [0, 2],
+  [0, 2],
+  [0, 2],
+  [0, 2],
+  [0, 2],
+  [0, 2],
+  [0, 2],
+  [0, 2],
+  [0, 2], // the hem, which the scallops hang from
+  [0, 2], // and the edge it turns under on, darkened by the hem line
+];
+
+/*
+ * The cloth's tone at a pixel: the row's level, lifted one step on the lit edge of each fold.
+ *
+ * The lift may not invent a brighter level than the row already uses. `fur` level 3 is pure white,
+ * and on the Haze stripe an unbounded lift would run a line of level 3 from the crown all the way
+ * to the hem, which is how the first pass ended up with half a tile of highlight.
+ *
+ * The shaded side of a fold is a wash laid on afterwards rather than a step down this ramp:
+ * `cloak` falls from 175 to 76 between levels 2 and 1, and a column of that down a four-pixel
+ * stripe reads as a black strap buckled over the awning rather than as cloth turning away.
+ */
+const canvasTone = (x: number, row: number): RGBA => {
+  const { haze, offset } = stripeAt(x);
+  const section = CLOTH_SECTION[row]!;
+  const level = haze ? section[1] : section[0];
+  const fold = offset === 0 ? 1 : 0;
+  return haze
+    ? shade('cloak', step(level, fold, Math.max(level, 2)))
+    : shade('fur', step(level, fold, 2));
+};
+
+/*
+ * The scalloped hem, as a depth per column rather than as a row of ellipses. The stripes have to
+ * carry straight down into the scallops and an ellipse can only be one colour, so the same circular
+ * profile the ellipses had is sampled per column instead: two deep at each join, five at the belly.
+ * Taking the join to zero instead turns the hem into a row of triangular teeth at this size.
+ */
+const SCALLOP = 8;
+const scallopDepth = (x: number): number => {
+  const u = ((((x % SCALLOP) + SCALLOP) % SCALLOP) + 0.5) / (SCALLOP / 2) - 1;
+  return Math.round(5 * Math.sqrt(Math.max(0, 1 - u * u)));
+};
 
 const stallAwning =
   (kind: 'left' | 'middle' | 'right'): Painter =>
   (img) => {
-    // The scalloped hem first: the straight run of canvas is painted over the tops of the curves,
-    // so only the part that hangs below the hem survives.
-    for (let p = 0; p < 4; p++) {
-      const cx = p * 8 + 4;
-      img.ellipse(cx, 21, 4, 6.5, canvasTone(p * 8, 'edge'));
-      img.ellipse(cx, 20.4, 3.2, 5.6, canvasTone(p * 8, 'fold'));
-    }
+    // The cloth, row by row down its section.
+    for (let row = 0; row < CLOTH_SECTION.length; row++)
+      for (let x = 0; x < TILE; x++) img.px(x, CLOTH_TOP + row, canvasTone(x, row));
 
-    // The cloth itself, panel by panel.
+    // The shaded side of every fold, down the last column of each panel.
     for (let x = 0; x < TILE; x++) {
-      img.rect(x, 7, 1, 16, canvasTone(x, 'field'));
-      // The seam where two panels are stitched together, and the hem the cloth turns under on.
-      if (x % 8 === 0) img.rect(x, 7, 1, 16, canvasTone(x, 'fold'));
-      img.px(x, 7, canvasTone(x, 'fold')); // the rail's shadow on the cloth
-      img.rect(x, 21, 1, 2, canvasTone(x, 'fold'));
+      const { offset, width } = stripeAt(x);
+      if (offset === width - 1)
+        img.rect(x, CLOTH_TOP, 1, CLOTH_SECTION.length, shade('shadow', 1, 78));
+    }
+    // The line of shade the rail throws across the cloth it is tacked to.
+    img.rect(0, CLOTH_TOP, TILE, 1, shade('shadow', 1, 90));
+
+    /*
+     * The sheet falling away from the light as it turns under, in three bands. Alpha, but over the
+     * cloth, which is opaque right across the tile from the rail to the hem: PIXEL_STANDARD section
+     * 4 forbids partial alpha against transparency, not shade laid over opaque pixels.
+     */
+    const HEM = CLOTH_TOP + CLOTH_SECTION.length;
+    img.rect(0, CLOTH_TOP + 5, TILE, 4, shade('shadow', 1, 26));
+    img.rect(0, CLOTH_TOP + 9, TILE, 3, shade('shadow', 1, 44));
+    img.rect(0, CLOTH_TOP + 12, TILE, 4, shade('shadow', 1, 62));
+    // The bound edge the cloth turns under on, one line darker than the sheet above it.
+    img.rect(0, HEM - 1, TILE, 1, shade('shadow', 1, 70));
+
+    // The scallops hanging off it, in the same stripes, and deepest right at the lip.
+    for (let x = 0; x < TILE; x++) {
+      const depth = scallopDepth(x);
+      for (let i = 0; i < depth; i++) {
+        img.px(x, HEM + i, canvasTone(x, CLOTH_SECTION.length - 2));
+        img.px(x, HEM + i, shade('shadow', 1, i === depth - 1 ? 100 : 76));
+      }
     }
 
     // The front rail the canvas is tacked to.

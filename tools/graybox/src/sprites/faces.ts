@@ -38,8 +38,14 @@
  * a `night` 2 field at 33 levels of luma and the same hue, which is mud. Against `night` 1 it is 40
  * levels and the dome's edge does the separating.
  *
- * Items are transparent-backed and finish with outline(ink 0); portraits never call `outline`,
- * because the backdrop is opaque and there is nothing for it to bite on.
+ * Items and the interact prompt are transparent-backed and finish with an outline in THEIR OWN
+ * DARK -- `gold` 0 round the compass and the key, `stone` 0 round the silver horn, `wood` 0 round
+ * the lantern's bronze, `wall` 0 round the letter and the speech bubble. All six used to finish
+ * with outline(ink 0), which is the treatment docs/PIXEL_STANDARD.md section 4 reserves for the
+ * wolf; shared with half the art it told you nothing about him. On the near-black panels these
+ * items sit on (`--cyera-black`) the old black ring was invisible anyway, so nothing is lost.
+ * Portraits never call `outline`, because the backdrop is opaque and there is nothing for it to
+ * bite on.
  */
 import { Img, shade } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
@@ -359,27 +365,28 @@ const portraitKeeper: Painter = (img) => {
   backdrop(img);
 
   /*
-   * His coat IS the backdrop ramp, which is the one collision in this set: `night` 1 cloth sitting
-   * on a `night` 1 niche has no edge at all, and the first pass came back as a floating badger
-   * head. Two fixes, both of them things the frame wanted anyway. Every mass gets an `ink` 0
-   * under-shape a pixel larger, which is the dark edge the standard asks for and is 21 levels off
-   * the niche. And the hood's lit side goes up to `night` 3 rather than 2 -- motivated, because the
-   * lantern is hanging at his shoulder and that is exactly the side it would light.
+   * His coat is `roof`, the same slate the cast sprite wears, and for the same reason: `night` 2
+   * and 3 are #441363 and #6D2D93, which are `cloak` 0 and 1 exactly, so a coat lit in them was a
+   * second character wearing Red's two tokens. See the note on `paintKeeper` in cast.ts.
+   *
+   * It also retires the one collision this set had. His coat used to BE the backdrop ramp -- a
+   * `night` 1 cloth on a `night` 1 niche has no edge at all -- and the fix was an `ink` 0
+   * under-shape a pixel larger round every mass, a black key line on a character the standard
+   * reserves that treatment away from. Slate on a purple niche needs no such trick: `roof` 0 sits
+   * 37 levels off the niche and flips hue against it, so each mass is its own dark again.
    */
-  img.ellipse(32, 74, 32, 27, shade('ink', 0));
-  img.ellipse(32, 74, 31, 26, shade('night', 0));
-  img.ellipse(30.4, 72.6, 30.2, 25.2, shade('night', 3));
-  img.ellipse(33.4, 75, 28.6, 24, shade('night', 1));
+  img.ellipse(32, 74, 32, 27, shade('roof', 0));
+  img.ellipse(30.4, 72.6, 30.2, 25.2, shade('roof', 2));
+  img.ellipse(33.4, 75, 28.6, 24, shade('roof', 1));
 
   // --- the hood ---
-  img.ellipse(32, 30, 22.6, 21.6, shade('ink', 0));
-  img.ellipse(32, 30, 21.6, 20.6, shade('night', 0));
-  img.ellipse(30.4, 28.4, 20.8, 19.8, shade('night', 3));
-  img.ellipse(33.6, 31, 18.4, 17.8, shade('night', 1));
+  img.ellipse(32, 30, 22.6, 21.6, shade('roof', 0));
+  img.ellipse(30.4, 28.4, 20.8, 19.8, shade('roof', 2));
+  img.ellipse(33.6, 31, 18.4, 17.8, shade('roof', 1));
   // The peak at the back of the hood, and the brim rolled round the opening.
-  img.ellipse(46, 17, 7, 5.4, shade('night', 0));
-  img.ellipse(45.4, 16, 5.6, 4, shade('night', 1));
-  img.ellipse(32, 25, 16, 6.4, shade('night', 0));
+  img.ellipse(46, 17, 7, 5.4, shade('roof', 0));
+  img.ellipse(45.4, 16, 5.6, 4, shade('roof', 1));
+  img.ellipse(32, 25, 16, 6.4, shade('roof', 0));
 
   /*
    * The badger, and the two things that kept going wrong with him. Wide stripes beside two plain
@@ -396,26 +403,28 @@ const portraitKeeper: Painter = (img) => {
 
   // The stripes: narrow, well inside the white, and running on past the face onto the hood. Drawn
   // at the face's edge they merged into the hood's own dark and the whole head read as a void.
+  // `roof` 0 is the dark of his own coat and reads black against his white at 162 levels, which is
+  // all a badger stripe needs; Cyera Black stays with the wolf.
   for (const [sx, lean] of [
     [24, -0.12],
     [40, 0.1],
   ] as const) {
-    leanEllipse(img, sx, 35.5, 2.4, 10, lean, shade('ink', 0));
-    leanEllipse(img, sx - lean * 14, 25, 1.7, 5, lean, shade('ink', 0));
+    leanEllipse(img, sx, 35.5, 2.4, 10, lean, shade('roof', 0));
+    leanEllipse(img, sx - lean * 14, 25, 1.7, 5, lean, shade('roof', 0));
   }
 
   // Snout, out of the bottom of the face and down-left.
   limb(img, 32, 40, 28, 47, 13, 9, shade('fur', 0));
   limb(img, 31.4, 39.4, 27.6, 46.2, 10, 6, shade('fur', 1));
   limb(img, 30.6, 38.4, 27, 45, 5.4, 3.2, shade('fur', 2));
-  img.ellipse(27.6, 47.6, 4.4, 3.2, shade('ink', 0));
+  img.ellipse(27.6, 47.6, 4.4, 3.2, shade('roof', 0));
   img.px(25.4, 46.2, shade('fur', 3));
-  img.line(28, 51, 32.5, 52, shade('ink', 0)); // the lip, which is what gives him a mouth
-  img.line(32.5, 52, 36, 50.6, shade('ink', 0));
+  img.line(28, 51, 32.5, 52, shade('roof', 0)); // the lip, which is what gives him a mouth
+  img.line(32.5, 52, 36, 50.6, shade('roof', 0));
 
   // Eyes: plain, dark, on the white, and set just inboard of the stripes.
   for (const ex of [28, 36]) {
-    img.ellipse(ex, 34.5, 2.4, 2.4, shade('ink', 0));
+    img.ellipse(ex, 34.5, 2.4, 2.4, shade('roof', 0));
     img.px(ex - 1, 33.3, shade('fur', 3));
   }
 
@@ -641,7 +650,8 @@ const compass: Painter = (img) => {
   img.line(22, 31, 28, 25, shade('wall', 3));
   img.line(19, 33, 22, 30, shade('wall', 3));
 
-  img.outline(shade('ink', 0));
+  // Its own dark: a gold case is ringed in gold's own shade, not in the wolf's black.
+  img.outline(shade('gold', 0));
 };
 
 /**
@@ -706,7 +716,7 @@ const translator: Painter = (img) => {
   ring(img, 46, 19, 12, 16, 1.6, shade('gold', 1));
   ring(img, 45, 18, 11, 15, 1, shade('gold', 2));
 
-  img.outline(shade('ink', 0));
+  img.outline(shade('stone', 0)); // silver's own dark
 };
 
 /**
@@ -758,7 +768,7 @@ const lantern: Painter = (img) => {
   img.rect(19, 55, 4, 3, shade('wood', 0));
   img.rect(41, 55, 4, 3, shade('wood', 0));
 
-  img.outline(shade('ink', 0));
+  img.outline(shade('wood', 0)); // the bronze frame's own dark
 };
 
 /**
@@ -798,7 +808,7 @@ const key: Painter = (img) => {
   img.rect(27, 59, 10, 3, shade('gold', 0));
   img.rect(27, 59, 10, 1, shade('gold', 1));
 
-  img.outline(shade('ink', 0));
+  img.outline(shade('gold', 0)); // the key's own dark
 };
 
 /**
@@ -854,7 +864,7 @@ const letter: Painter = (img) => {
   img.px(34.6, 37.6, shade('night', 3));
   img.px(33.6, 39, shade('night', 3));
 
-  img.outline(shade('ink', 0));
+  img.outline(shade('wall', 0)); // the paper's own dark
 };
 
 // ----------------------------------------------------------------------------- effects
@@ -901,7 +911,19 @@ export function paintDustFrame(img: Img, frame: 0 | 1 | 2): void {
   for (let i = 0; i < 3 - frame; i++) img.px(grit[i]![0], grit[i]![1] - rise, shade('path', 0));
 }
 
-/** The bobbing "A" over an NPC you can talk to. 32 x 32 x 2 frames. */
+/**
+ * The bobbing "..." over an NPC you can talk to. 32 x 32 x 2 frames.
+ *
+ * It used to draw a capital A, which was a wrong key twice over. The interact keys are Space,
+ * Enter and KeyE (`INTERACT_KEYS` in apps/game/src/world/input.ts), and KeyA in the same file is
+ * bound to MOVE LEFT -- so the one thing a player who obeyed the prompt could not do was talk, and
+ * what they did instead was walk west. The Title screen teaches "Space to talk", so naming a key
+ * here would have to name that one, and a keyboard glyph is wrong on a touch device anyway.
+ *
+ * An ellipsis names nothing. It is the oldest "this one has something to say" mark there is, it
+ * holds at 32px where a letter inside a bubble starts to smear, and it stays true whichever of the
+ * three keys the player reaches for.
+ */
 export function paintInteractPromptFrame(img: Img, frame: 0 | 1): void {
   const y = frame;
   // Bubble: dark edge, lit crescent up-left, base inset back over it.
@@ -913,15 +935,13 @@ export function paintInteractPromptFrame(img: Img, frame: 0 | 1): void {
     img.rect(13 - Math.round(i * 0.4), 20 + i + y, Math.max(1, 6 - i), 1, shade('wall', 2));
     img.px(13 - Math.round(i * 0.4) + Math.max(0, 5 - i), 20 + i + y, shade('wall', 0));
   }
-  // The letter. Two legs and a bar, in Deep Purple on cream.
-  for (let i = 0; i < 11; i++) {
-    img.px(16 - i * 0.46, 8 + i + y, shade('night', 2));
-    img.px(15.4 - i * 0.46, 8 + i + y, shade('night', 2));
-    img.px(16 + i * 0.46, 8 + i + y, shade('night', 2));
-    img.px(16.6 + i * 0.46, 8 + i + y, shade('night', 2));
+  // The three dots, in Deep Purple on cream, each with its own seat so it sits in the bubble
+  // rather than on it.
+  for (const dx of [-6, 0, 6]) {
+    img.ellipse(17 + dx, 14 + y, 2.2, 2.2, shade('wall', 0));
+    img.ellipse(17 + dx, 13.6 + y, 1.9, 1.9, shade('night', 2));
   }
-  img.rect(13, 15 + y, 7, 2, shade('night', 2));
-  img.outline(shade('ink', 0));
+  img.outline(shade('wall', 0)); // the bubble's own dark
 }
 
 /**

@@ -79,15 +79,42 @@ export const PALETTE = {
   wood: ['#6b4522', '#9a6a36', '#c08f55', '#dcb882'],
   /*
    * Red herself, option A from section 6a: Lilac-led, so she is findable at a 26-tile camera.
-   * Deep Purple in the folds, Aubergine as the body midtone, Lilac across the lit body, Haze as
-   * the highlight -- the four Cyera tokens, in the roles the spec names, unchanged.
+   * ART_PRODUCTION section 6a names three stops for the cloak -- Deep Purple, Lilac, Haze -- and
+   * Aubergine is the midtone this table added between the first two. That addition is what went
+   * wrong at 16px and again in the first 32px pass, so the roles are written down here as the
+   * painter must use them, not as the ramp index would suggest:
    *
-   * Her mass improves on the scarlet: `red` paints the body rows and the hood in level 1, which
-   * now sits 41 levels off the grass field where the old red sat 21 off it, with a hue flip on top.
-   * The cost is internal: levels 1 and 2 are 99 levels apart, where no other ramp here exceeds 66,
-   * so the 2px lit edge and the hood brim rim-light hard off the body instead of shading into it.
-   * That is inherent to the two tokens the spec picked and is left as specified rather than quietly
-   * regraded; level 3 is unpainted today and is the obvious place to fix it in the 32px redraw.
+   *   0 Deep Purple #441363  her outline, the deep folds and the cloth gathered at the hem
+   *   1 Aubergine   #6d2d93  the shaded side only -- the two or three columns turning away
+   *   2 Lilac       #d28eff  the lit body, and most of every frame
+   *   3 Haze        #e8c6ff  a real highlight: the crown, the brim lip and the lit rim
+   *
+   * Level 2 carrying the mass is a deliberate departure from PIXEL_STANDARD section 2's "most of
+   * any object is level 1", and it is confined to Red. The spec picked four tokens for a four-step
+   * ramp with two of them at the dark end, so a Lilac-led cloak cannot also be a level-1-led one.
+   * Reordering the ramp instead would silently restyle the toadstool cap, flower-red, the stall
+   * awning and the Red portrait, which paint from these same stops in their own roles.
+   *
+   * Measured after the 2026-10-18 fix, per frame across all sixteen: Lilac 333 px (37.4%),
+   * Aubergine 103 px (11.5%), Deep Purple 184 px (20.7%, three quarters of it the one-pixel
+   * outline), Haze 39 px (4.4%). Lilac now leads Aubergine 3.2 to 1, where Aubergine led Lilac
+   * between 4.6 and 6 to 1 in every frame.
+   *
+   * Her lightness is the point, and it is worth being careful about which number says so. The
+   * median is brittle on a sprite this bimodal -- half of her is cloth and most of the rest is rim,
+   * boots and basket -- so it swings between L*34 and L*70 by frame, having sat at exactly L*32 on
+   * all sixteen before, pinned there by the Aubergine mass. The stable measures: her mean moves
+   * from L*33 to L*49, and the share of her that is at least as light as the grass she stands on
+   * (L*57) moves from 17 per cent to about 50. She is no longer in the cast-shadow band with the
+   * tree shade and the wolf; she is a pale figure inside a Deep Purple rim at L*18, which is what
+   * finds her at a 20-tile camera -- by value, not by hue alone.
+   *
+   * Two hexes in this table are shared, and both are specified rather than accidental. Level 0 is
+   * also `wolf` level 1 and `night` level 2; level 1 is also `night` level 3. Section 6a gives Deep
+   * Purple to Red's dark and to the wolf in the same breath, and the pair never collide because the
+   * roles differ by an order of magnitude in area: on Red it is a one-pixel rim around an L*70 body,
+   * on the wolf it is the body itself at L*18. `night` only ever appears behind a portrait, in the
+   * DOM, where Red is not standing on it. Left alone on purpose; see the note on `night` below.
    */
   cloak: ['#441363', '#6d2d93', '#d28eff', '#e8c6ff'],
   skin: ['#c98f63', '#f0c9a0', '#ffe0c0', '#fff0e0'],

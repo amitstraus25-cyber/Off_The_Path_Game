@@ -25,10 +25,16 @@
  * up, the cat's are short cones leaning out, and the cat's tail crosses in front of her feet.
  *
  * Colour, per the rebrand (docs/ART_PRODUCTION.md section 6a):
- *   - the toadstool's cap is Aubergine with Offwhite spots, painted from `night` (levels 2 and 3
- *     ARE Deep Purple and Aubergine) so that `cloak` stays Red's alone. The cap is nearly half this
- *     sprite and a mass that size in Red's own ramp is exactly the competition the rebrand exists
- *     to prevent.
+ *   - the toadstool's cap is `cloak`, because THE TILE IS THE REFERENCE. `toadstoolRing` in
+ *     tiles/flora.ts paints its three caps dark/base/lit straight off `cloak`, and the map scatters
+ *     that tile round a glade, so there are many more tile toadstools in the world than there are
+ *     of him. He was built on `night` instead -- a dark plum two steps below the tile -- and the
+ *     result was one species in two colours standing next to each other, which reads as a bug
+ *     rather than as variety. (The old note here argued `night` kept `cloak` to Red alone; it did
+ *     not, because the tile was already on `cloak`, and docs/PIXEL_STANDARD.md section 2 names the
+ *     toadstools as one of the six things brand colour reaches the world through.) The stems agreed
+ *     all along: both are the cottage's cream `wall`, and the tile's `fur` is only in its spots, so
+ *     the spots here are `fur` too now.
  *   - the snail's shell is Clay with a Haze whorl: `fur` is the palette's warm pale neutral and the
  *     closest it holds to Clay, and the whorl is `cloak` level 3, which IS Haze. One line of it.
  *   - the magpie is black and white: `ink` and `fur`.
@@ -37,8 +43,12 @@
  *     be her own outline, which `stone` (luma 96, against a grass field at 117) is not.
  *
  * Outlines follow section 4: each one is drawn in its own ramp's dark, not in a shared key line --
- * `night` for the toadstool, `ink` for the magpie (who really is painted in black, so it is his own
- * dark rather than a borrowed one), `stone` for the snail, `wood` for the cat.
+ * `cloak` for the toadstool, `stone` for the snail, `wood` for the cat, and `ink` for the magpie.
+ * The magpie is the one place `ink` survives outside the wolf, and it is not a borrowed key line:
+ * he is painted in `ink` 0 through 3 from bill to tail, so `ink` 0 IS his own dark, which is
+ * exactly what section 4 asks for. There is no second near-black in this palette to move him to --
+ * `night` 2 and 3 are Red's purple and `wolf` is the wolf's -- and he never reads as a flat
+ * silhouette the way the wolf's frames 2 and 3 do, so the reservation keeps its point.
  *
  * Suffix -0 is open-eyed and -1 is the blink. The rooted things do not bob: the toadstool stands
  * perfectly still, which is the whole joke, and the snail's shell does not move either. On the two
@@ -183,33 +193,41 @@ function paintToadstool(img: Img, blink: boolean): void {
     img.rect(right - 1, y, 1, 1, shade('wall', 0));
   }
 
-  // --- cap: full mass in shade, body inset up-left, Aubergine kept to the lit quarter ---
-  dome(img, 16, 25, 14, 15, shade('night', 1));
-  dome(img, 15.2, 24.2, 13.2, 14.2, shade('night', 2)); // Deep Purple, the cap proper
-  dome(img, 12.8, 20.4, 8.8, 9.6, shade('night', 3)); // Aubergine, the lit quarter only
+  /*
+   * --- cap: full mass in shade, body inset up-left, Lilac kept to the lit quarter ---
+   *
+   * The three levels are the tile's three levels, in the tile's order: `cloak` 0 for the dark a
+   * pixel proud of everything, `cloak` 1 for the cap proper, `cloak` 2 for the quarter facing the
+   * light. He and `toadstoolRing` are now the same mushroom at two sizes.
+   */
+  dome(img, 16, 25, 14, 15, shade('cloak', 0));
+  dome(img, 15.2, 24.2, 13.2, 14.2, shade('cloak', 1)); // the cap proper
+  dome(img, 12.8, 20.4, 8.8, 9.6, shade('cloak', 2)); // the lit quarter only
   // The shaded flank: a crescent down the low right, where the dome turns away from the light.
   for (let y = 12; y <= 22; y++) {
     const dy = (y + 0.5 - 24.2) / 14.2;
     const half = 13.2 * Math.sqrt(Math.max(0, 1 - dy * dy));
     const edge = Math.round(15.2 + half);
-    img.rect(edge - 2, y, 2, 1, shade('night', 1));
+    img.rect(edge - 2, y, 2, 1, shade('cloak', 0));
   }
-  // Rim light along the very top of the dome, one pixel thick and no more.
+  // Rim light along the very top of the dome, one pixel thick and no more. The tile is too small
+  // to carry a rim, so this is the one place the sprite says more than the tile does.
   for (let x = 6; x <= 19; x++) {
     const dx = (x + 0.5 - 15.2) / 13.2;
     const y = Math.round(24.2 - 14.2 * Math.sqrt(Math.max(0, 1 - dx * dx)));
-    img.px(x, y + 1, shade('night', 3));
+    img.px(x, y + 1, shade('cloak', 3));
   }
 
   // Gills: short radial ticks under the brim, deepest in the middle where the brim is widest.
   for (let x = 3; x <= 29; x += 2) {
     const dx = (x + 0.5 - 16) / 14;
     const depth = Math.round(3 * (1 - dx * dx));
-    for (let d = 0; d < depth; d++) img.px(x, 23 + d, shade('night', 0));
+    for (let d = 0; d < depth; d++) img.px(x, 23 + d, shade('cloak', 0));
   }
-  img.line(2, 23, 29, 23, shade('night', 0));
+  img.line(2, 23, 29, 23, shade('cloak', 0));
 
   // Spots: a dark seat, a mid face, an Offwhite core inset up-left, so each one sits on the curve.
+  // Offwhite is `fur`, which is what the tile spots this cap with.
   for (const [sx, sy, r] of [
     [10, 14, 3.3],
     [21, 12, 2.9],
@@ -217,9 +235,9 @@ function paintToadstool(img: Img, blink: boolean): void {
     [14, 20, 2.2],
     [6, 20, 1.9],
   ] as const) {
-    img.ellipse(sx, sy, r, r * 0.9, shade('night', 0));
-    img.ellipse(sx - 0.3, sy - 0.4, r - 0.5, (r - 0.5) * 0.9, shade('wall', 1));
-    img.ellipse(sx - 0.7, sy - 0.8, r - 1.2, (r - 1.2) * 0.9, shade('wall', 3));
+    img.ellipse(sx, sy, r, r * 0.9, shade('cloak', 0));
+    img.ellipse(sx - 0.3, sy - 0.4, r - 0.5, (r - 0.5) * 0.9, shade('fur', 2));
+    img.ellipse(sx - 0.7, sy - 0.8, r - 1.2, (r - 1.2) * 0.9, shade('fur', 3));
   }
 
   /*
@@ -230,10 +248,10 @@ function paintToadstool(img: Img, blink: boolean): void {
   for (const ex of [12, 18]) {
     img.rect(ex - 1, 31, 5, 1, shade('wall', 0));
     if (!blink) {
-      img.rect(ex, 33, 3, 3, shade('night', 0));
+      img.rect(ex, 33, 3, 3, shade('cloak', 0));
       img.px(ex, 33, shade('wall', 3));
     } else {
-      img.rect(ex, 35, 3, 1, shade('night', 0));
+      img.rect(ex, 35, 3, 1, shade('cloak', 0));
       img.px(ex, 36, shade('wall', 0));
       img.px(ex + 2, 36, shade('wall', 0));
     }
@@ -254,11 +272,11 @@ function paintToadstool(img: Img, blink: boolean): void {
   // --- a sprout at the foot, so the silhouette is not symmetrical ---
   img.rect(4, 41, 3, 5, shade('wall', 1));
   img.rect(4, 41, 1, 5, shade('wall', 2));
-  dome(img, 5.5, 41, 4.4, 3.8, shade('night', 1));
-  dome(img, 5, 40.4, 3.8, 3.2, shade('night', 2));
+  dome(img, 5.5, 41, 4.4, 3.8, shade('cloak', 0));
+  dome(img, 5, 40.4, 3.8, 3.2, shade('cloak', 1));
   img.ellipse(4, 38.6, 1.2, 1, shade('wall', 3));
 
-  img.outline(shade('night', 0));
+  img.outline(shade('cloak', 0));
   ground(img, 17, 46.5, 11.5, 2.4);
 }
 
