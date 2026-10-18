@@ -6,9 +6,15 @@
 
 .otp-ui {
   --otp-ui: 1;
-  /* Whole-number zoom for 32px pixel-art sources (BRAND_AND_UI section 2: pixel art stays crisp). */
-  --otp-px: 4;
-  --otp-slot-px: 2;
+  /*
+   * CSS pixels per SOURCE pixel for the pixel-art images, which are 64px square since the 32px
+   * remaster. Whole numbers only when magnifying, and exact halves and quarters when reducing:
+   * with image-rendering: pixelated a 1.5x scale draws every other source column two CSS pixels
+   * wide, which is the same uneven-pixel artefact world/logic.ts refuses on the canvas. These were
+   * 4 and 2 against a 32px source; halving them keeps every rendered size identical.
+   */
+  --otp-px: 2;
+  --otp-slot-px: 1;
   /* Panels match the world's width, so they sit over the canvas rather than over the window. */
   --otp-panel-w: min(var(--otp-canvas-w, 92vw), 748px);
   font-family: var(--cyera-font-sans);
@@ -18,15 +24,15 @@
 @media (max-width: 640px) {
   .otp-ui {
     --otp-ui: 0.78;
-    --otp-px: 3;
+    --otp-px: 1;
   }
 }
 
 @media (max-width: 380px) {
   .otp-ui {
     --otp-ui: 0.7;
-    --otp-px: 3;
-    --otp-slot-px: 1;
+    --otp-px: 1;
+    --otp-slot-px: 0.5;
   }
 }
 
@@ -39,15 +45,15 @@
 @media (max-height: 780px) {
   .otp-ui {
     --otp-ui: 0.82;
-    --otp-px: 3;
+    --otp-px: 1;
   }
 }
 
 @media (max-height: 580px) {
   .otp-ui {
     --otp-ui: 0.7;
-    --otp-px: 3;
-    --otp-slot-px: 1;
+    --otp-px: 1;
+    --otp-slot-px: 0.5;
   }
 }
 
@@ -322,8 +328,9 @@
 }
 
 .otp-hud-slot img {
-  width: calc(22px * var(--otp-ui));
-  height: auto;
+  /* Exactly a quarter of the 64px source: a clean reduction lands on whole source pixels. */
+  width: 16px;
+  height: 16px;
   image-rendering: pixelated;
 }
 
@@ -408,9 +415,9 @@
 }
 
 .otp-portrait {
-  /* Square, so the 32px source is never stretched; the mock's 100x104 distorts it. */
-  width: calc(32px * var(--otp-px));
-  height: calc(32px * var(--otp-px));
+  /* Square, so the 64px source is never stretched; the mock's 100x104 distorts it. */
+  width: calc(64px * var(--otp-px));
+  height: calc(64px * var(--otp-px));
   flex: none;
   border: 3px solid var(--cyera-deep-purple);
   border-radius: var(--otp-r-inset);
@@ -589,9 +596,9 @@
 }
 
 .otp-card__icon img {
-  /* 32px source at a whole-number zoom, never 3.5x. */
-  width: calc(32px * var(--otp-px));
-  height: calc(32px * var(--otp-px));
+  /* 64px source at a whole-number zoom, never 1.5x. */
+  width: calc(64px * var(--otp-px));
+  height: calc(64px * var(--otp-px));
   image-rendering: pixelated;
 }
 
@@ -780,8 +787,8 @@
 }
 
 .otp-slot img {
-  width: calc(32px * var(--otp-slot-px));
-  height: calc(32px * var(--otp-slot-px));
+  width: calc(64px * var(--otp-slot-px));
+  height: calc(64px * var(--otp-slot-px));
   image-rendering: pixelated;
 }
 
