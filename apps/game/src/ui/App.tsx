@@ -143,6 +143,8 @@ export function App({
             index={content.skills.findIndex((sk) => sk.id === skill.id) + 1}
             total={content.skills.length}
             onVerdict={(v: Verdict) => void store.dispatch({ type: 'VERDICT', s: skill.id, v })}
+            onBack={() => void store.dispatch({ type: 'BACK' })}
+            firstOpened={state.inspected[0] === skill.id}
           />
         ) : null;
 

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { devices, expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { probe, startGame } from './helpers';
 
@@ -117,6 +117,126 @@ test('the skill card shows provenance, two neutral rows and three identical verd
   await expect(verdicts).toHaveCount(3);
   await expect(verdicts.nth(0)).toHaveText('Allow');
   await expect(verdicts.nth(2)).toHaveText('Reject');
+});
+
+test('all three cards are the same shape, so the honest one cannot be spotted by its outline', async ({
+  page,
+}) => {
+  /*
+   * Night Light asks for nothing, which used to mean its card rendered one row where the other
+   * two rendered two. That taught a player to count rows instead of reading them, and the whole
+   * point of the card is that you cannot tell what a skill does without reading what it asks for.
+   */
+  await page.goto('/');
+  await startGame(page);
+
+  const cards: { rows: number; eyebrows: string[]; asks: string }[] = [];
+  for (const pair of [
+    { c: 'rabbit', s: 'cottage-finder' },
+    { c: 'owl', s: 'word-weaver' },
+    { c: 'lantern-keeper', s: 'night-light' },
+  ]) {
+    await page.evaluate(({ c, s }) => {
+      const { store } = window.__otp!;
+      store.dispatch({ type: 'MEET', c });
+      store.dispatch({ type: 'INSPECT', s });
+    }, pair);
+    await expect(page.locator('.otp-card')).toBeVisible();
+
+    const rows = page.locator('.otp-card__main .otp-row');
+    cards.push({
+      rows: await rows.count(),
+      eyebrows: await page
+        .locator('.otp-card__main .otp-row__eyebrow')
+        .evaluateAll((els) => els.map((e) => e.textContent!.trim())),
+      asks: (await rows.nth(1).locator('.otp-row__heading').textContent())!.trim(),
+    });
+
+    await page.locator('.otp-card__back').click();
+    await page.keyboard.press('Escape');
+  }
+
+  expect(
+    cards.map((c) => c.rows),
+    'every card is two rows',
+  ).toEqual([2, 2, 2]);
+  for (const c of cards) expect(c.eyebrows).toEqual(['What it does', 'What it asks for']);
+
+  // The honest card still says it asks for nothing — you just have to read it to find that out.
+  expect(cards[2]!.asks).toContain('no fine print');
+  expect(cards[2]!.asks).not.toBe(cards[0]!.asks);
+});
+
+test('a card can be left without recording a verdict, on desktop and on a phone', async ({
+  browser,
+}) => {
+  /*
+   * Enumerating the controls on this card at phone size returned exactly Allow, Restrict, Reject
+   * and the world's A button: a player who opened a card had to commit to one of three answers
+   * that cannot be taken back. Esc dispatched BACK the whole time, but nothing said so and a
+   * phone has no Esc key.
+   */
+  for (const options of [{ viewport: { width: 1280, height: 800 } }, devices['iPhone 13']]) {
+    const context = await browser.newContext(options);
+    const page = await context.newPage();
+    await page.goto('/');
+    await startGame(page);
+    await page.evaluate(() => {
+      const { store } = window.__otp!;
+      store.dispatch({ type: 'MEET', c: 'rabbit' });
+      store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
+    });
+    await expect(page.locator('.otp-card')).toBeVisible();
+
+    const back = page.locator('.otp-card__back');
+    await expect(back).toBeVisible();
+    const box = (await back.boundingBox())!;
+    expect(box.height, 'the way out must be a thumb-sized target').toBeGreaterThanOrEqual(44);
+    await back.click();
+
+    await expect(page.locator('.otp-dialogue')).toBeVisible();
+    const state = await probe(page);
+    expect(state.phase).toBe('dialogue');
+    expect(state.verdicts, 'leaving a card records no verdict').toEqual({});
+
+    // Leaving does not un-read it: the run log still says this card was opened, which is what
+    // the "took it on trust" scoring turns on.
+    const inspected = await page.evaluate(() => window.__otp!.store.getState().inspected);
+    expect(inspected).toEqual(['cottage-finder']);
+
+    await context.close();
+  }
+});
+
+test('the verb primer lands on the first card opened, whoever Red meets first', async ({
+  page,
+}) => {
+  /*
+   * The primer is the only place the game says what Restrict means, and GAME_DESIGN section 4
+   * requires the right answer to be discoverable. It used to render on `index === 1`, the skill's
+   * position in the content file, so meeting the Owl first opened "Skill 2 of 3" and the rules
+   * never appeared.
+   */
+  await page.goto('/');
+  await startGame(page);
+  await page.evaluate(() => {
+    const { store } = window.__otp!;
+    store.dispatch({ type: 'MEET', c: 'owl' });
+    store.dispatch({ type: 'INSPECT', s: 'word-weaver' });
+  });
+  await expect(page.locator('.otp-chip')).toContainText('Skill 2 of 3');
+  await expect(page.locator('.otp-card__primer')).toContainText('Restrict:');
+
+  // And only once: the second card opened is a card, not a rulebook.
+  await page.locator('.otp-card__back').click();
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    const { store } = window.__otp!;
+    store.dispatch({ type: 'MEET', c: 'rabbit' });
+    store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
+  });
+  await expect(page.locator('.otp-card__title')).toHaveText('Cottage Finder');
+  await expect(page.locator('.otp-card__primer')).toHaveCount(0);
 });
 
 test('a verdict updates the basket and returns to the world', async ({ page }) => {

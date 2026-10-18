@@ -172,19 +172,19 @@ stops being the one thing your eye catches.
 enters through Red, the wolf, the night, the notice and the UI. Lime appears nowhere in the world: it
 is one call to action per screen, per `UI_FOUNDATIONS`.
 
-| Element | Today | Becomes |
-| --- | --- | --- |
-| Red's cloak | Scarlet | Deep Purple → Lilac → Haze |
-| Cottage roof, 4 tiles | Red | Slate with Clay highlights |
-| Well roof | Red | Slate |
-| Stall awning, 3 tiles | Red and white stripes | Haze and Offwhite stripes |
-| Toadstool cap and ring tile | Red, white spots | Aubergine, Offwhite spots |
-| Snail shell | Red | Clay with a Haze swirl |
-| flower-red / flower-pink | Red / pink | Lilac / Haze |
-| The wolf | Grey-brown | Black and Deep Purple |
-| Lantern flame | Warm gold | Unchanged. It is a light source and it is the skill |
-| Wax seal on the letter | Red | Deep Purple |
-| Grass, water, wood, stone, sand | Natural | Unchanged |
+| Element                         | Today                 | Becomes                                             |
+| ------------------------------- | --------------------- | --------------------------------------------------- |
+| Red's cloak                     | Scarlet               | Deep Purple → Lilac → Haze                          |
+| Cottage roof, 4 tiles           | Red                   | Slate with Clay highlights                          |
+| Well roof                       | Red                   | Slate                                               |
+| Stall awning, 3 tiles           | Red and white stripes | Haze and Offwhite stripes                           |
+| Toadstool cap and ring tile     | Red, white spots      | Aubergine, Offwhite spots                           |
+| Snail shell                     | Red                   | Clay with a Haze swirl                              |
+| flower-red / flower-pink        | Red / pink            | Lilac / Haze                                        |
+| The wolf                        | Grey-brown            | Black and Deep Purple                               |
+| Lantern flame                   | Warm gold             | Unchanged. It is a light source and it is the skill |
+| Wax seal on the letter          | Red                   | Deep Purple                                         |
+| Grass, water, wood, stone, sand | Natural               | Unchanged                                           |
 
 **Two cloak options**, both produced by recolouring the real sprite with a luminance-preserving ramp:
 **A, Lilac-led** (recommended — easiest to find at a 26-tile camera) and **B, Deep Purple-led** (more

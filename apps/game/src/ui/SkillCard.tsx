@@ -68,6 +68,20 @@ const RejectGlyph = () => (
   </svg>
 );
 
+/* Drawn for the same reason as the verdict glyphs: Haffer does not carry U+2190. */
+const BackGlyph = () => (
+  <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
+    <path
+      d="M12.5 4.5L7 10l5.5 5.5"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+);
+
 /* Three identical pills; the glyph is what distinguishes them, never a fill (UI_FOUNDATIONS §2). */
 const VERDICTS: { id: Verdict; label: string; Glyph: () => JSX.Element }[] = [
   { id: 'allow', label: 'Allow', Glyph: AllowGlyph },
@@ -84,6 +98,14 @@ export interface SkillCardProps {
   index: number;
   total: number;
   onVerdict(verdict: Verdict): void;
+  /** Leaves the card without recording a verdict, back to the conversation. */
+  onBack(): void;
+  /**
+   * True on the first card this run actually opens, which is where the verb primer goes. Not the
+   * same as `index === 1`: that is the skill's position in the content file, so meeting the Owl
+   * first opened "Skill 2 of 3" and the primer never rendered at all.
+   */
+  firstOpened: boolean;
 }
 
 /*
@@ -91,7 +113,16 @@ export interface SkillCardProps {
  * visible through the dim, so the card is one object instead of three stacked panels that
  * overflowed the world on desktop and ran off the bottom of a phone.
  */
-export function SkillCard({ content, skill, offeredBy, index, total, onVerdict }: SkillCardProps) {
+export function SkillCard({
+  content,
+  skill,
+  offeredBy,
+  index,
+  total,
+  onVerdict,
+  onBack,
+  firstOpened,
+}: SkillCardProps) {
   const trapRef = useFocusTrap();
 
   return (
@@ -111,6 +142,21 @@ export function SkillCard({ content, skill, offeredBy, index, total, onVerdict }
       >
         {/* Focus lands on the card, not on Allow: no verdict is ever pre-selected. */}
         <div class="otp-card" tabIndex={-1} data-autofocus>
+          {/*
+            The only way off this card that is not a verdict. Esc has always dispatched BACK, but
+            nothing on the card said so and a touch player has no Esc key, so opening a card meant
+            committing to one of three irreversible answers. It is deliberately not a fourth pill:
+            subordinate chrome, Ash on Shell, at the top where a close control belongs.
+          */}
+          <div class="otp-card__nav">
+            <button type="button" class="otp-card__back" onClick={onBack}>
+              <span class="otp-card__back-glyph" aria-hidden="true">
+                <BackGlyph />
+              </span>
+              {content.strings['cardBack'] ?? 'Go back'}
+            </button>
+          </div>
+
           <div class="otp-card__top">
             <div class="otp-card__icon">
               <img src={assetUrl(`${skill.icon}.png`)} alt="" />
@@ -132,18 +178,24 @@ export function SkillCard({ content, skill, offeredBy, index, total, onVerdict }
               {/*
                 What it asks for is stated plainly and in the SAME neutral style as what it does.
                 The card does not warn; the player has to weigh the ask themselves.
+
+                This row is ALWAYS rendered, including for a skill that asks for nothing. Gating it
+                on `finePrint` left the honest card one row shorter than the other two, so Night
+                Light could be picked out by the card's shape from across the screen without reading
+                a word — the exact habit this card exists to break. It still asks for nothing
+                (UI_FOUNDATIONS section 7, change 8); you now have to read the row to learn that.
               */}
-              {skill.finePrint && (
-                <div class="otp-row">
-                  <span class="otp-row__badge">
-                    <KeyIcon />
-                  </span>
-                  <div>
-                    <p class="otp-row__eyebrow">What it asks for</p>
-                    <p class="otp-row__heading">{skill.finePrint.detail}</p>
-                  </div>
+              <div class="otp-row">
+                <span class="otp-row__badge">
+                  <KeyIcon />
+                </span>
+                <div>
+                  <p class="otp-row__eyebrow">What it asks for</p>
+                  <p class="otp-row__heading">
+                    {skill.finePrint?.detail ?? content.strings['noFinePrint'] ?? ''}
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
@@ -167,14 +219,17 @@ export function SkillCard({ content, skill, offeredBy, index, total, onVerdict }
             ))}
           </div>
 
+          {/* States the asymmetry the back control depends on: leaving is free, deciding is not. */}
+          <p class="otp-card__final">{content.strings['cardBackHint'] ?? ''}</p>
+
           {/*
-            The three verbs are defined once, on the first card only. Cutting the per-verdict
-            "leaves B" microcopy removes the answer key, but nothing else in the game ever says
-            what Restrict does, and GAME_DESIGN section 4 requires the right answer to be
+            The three verbs are defined once, on the first card the player opens. Cutting the
+            per-verdict "leaves B" microcopy removes the answer key, but nothing else in the game
+            ever says what Restrict does, and GAME_DESIGN section 4 requires the right answer to be
             discoverable. This is a rulebook: it defines the verbs without naming what any
             particular skill asks for.
           */}
-          {index === 1 && <p class="otp-card__primer">{content.strings['verdictPrimer'] ?? ''}</p>}
+          {firstOpened && <p class="otp-card__primer">{content.strings['verdictPrimer'] ?? ''}</p>}
         </div>
       </Panel>
     </div>

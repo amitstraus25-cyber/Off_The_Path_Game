@@ -537,6 +537,41 @@
   box-shadow: var(--otp-ring);
 }
 
+/*
+ * The way off the card that is not a verdict. Deliberately NOT a fourth pill: it sits above the
+ * card body as subordinate chrome so it can never be read as a way of answering the question.
+ * Ash on Shell is 6.9:1 (UI_FOUNDATIONS section 6); no Lime anywhere on Inspect (section 2).
+ */
+.otp-card__nav {
+  display: flex;
+  margin-bottom: calc(4px * var(--otp-ui));
+}
+
+.otp-card__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* 44px minimum touch target, which the type size alone does not reach. */
+  min-height: 44px;
+  padding: 0 calc(10px * var(--otp-ui)) 0 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: 500 max(12px, calc(13px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
+  color: var(--cyera-ash);
+}
+
+.otp-card__back:hover,
+.otp-card__back:focus-visible {
+  color: var(--cyera-deep-purple);
+  text-decoration: underline;
+}
+
+.otp-card__back-glyph {
+  display: grid;
+  place-items: center;
+}
+
 .otp-card__top {
   display: flex;
   gap: calc(16px * var(--otp-ui));
@@ -968,6 +1003,14 @@
 .otp-verdict__label {
   font-size: calc(20px * var(--otp-ui));
   font-weight: 500;
+}
+
+/* Leaving is free, deciding is not. Shown under the verdicts on every card, not just the first. */
+.otp-card__final {
+  margin: calc(10px * var(--otp-ui)) 0 0;
+  font-size: max(11px, calc(12.5px * var(--otp-ui)));
+  line-height: 1.4;
+  color: var(--cyera-ash);
 }
 
 /* The one-time definition of the three verbs, on the first card only. Ash, not Stone: this is

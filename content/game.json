@@ -405,6 +405,7 @@
     "errandHeading": "Grandma asked for",
     "basketLabel": "Basket",
     "verdictPrimer": "Allow: it gets everything it asks for. Restrict: it gets the job, not the extras, and only when you point it at something. Reject: you walk on without it.",
+    "noFinePrint": "Nothing beyond what it does. There is no fine print on this card.",
     "verdictAllowed": "Allowed",
     "verdictRestricted": "Restricted",
     "verdictRejected": "Rejected",
@@ -424,6 +425,8 @@
     "takeAsOfferedHint": "You will not see the card.",
     "tookOnTrustToast": "You take it as offered and walk on.",
     "cardNotOpened": "You never opened this card.",
+    "cardBack": "Go back",
+    "cardBackHint": "Going back costs nothing. A verdict is final.",
     "trustHeld": "You took an offer on their word, and arrived with everything.",
     "trustLost": "You took an offer on their word.",
     "trustBreakdown": "for taking one on their word"
