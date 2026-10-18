@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Off the Path: That's Not My Grandma</title>
+    <!-- Placeholder: suppresses the /favicon.ico request browsers make unasked, which 404s on every
+         load. A real mark is a brand asset and has to come from Brand Kit (see docs/ASSETS.md);
+         inventing one here would break the "never invent brand assets" rule. -->
+    <link rel="icon" href="data:," />
+    <link rel="preload" as="font" type="font/ttf" crossorigin href="/fonts/HafferUprightsVF.ttf" />
+    <link
+      rel="preload"
+      as="font"
+      type="font/ttf"
+      crossorigin
+      href="/fonts/SeasonMixUprightsVF.ttf"
+    />
+    <link rel="stylesheet" href="/src/ui/tokens.css" />
+  </head>
+  <body>
+    <div id="game" class="otp-stage" aria-label="Game world"></div>
+    <div id="ui" class="otp-ui"></div>
+    <noscript>This game needs JavaScript.</noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "@otp/game",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@otp/core": "workspace:*",
+    "phaser": "3.90.0",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "vite": "7.3.6"
+  }
+}

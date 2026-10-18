@@ -1,0 +1,589 @@
+/*
+ * Title, Arrive and Results screens. Values follow reference/mocks/results-leaderboard.html
+ * (UI_FOUNDATIONS section 3). Season Mix highlights exactly one word per heading, always upright.
+ */
+
+.otp-screen {
+  position: fixed;
+  inset: 0;
+  /* The UI root is click-through by default so the world stays playable; a full screen is not. */
+  pointer-events: auto;
+  overflow-y: auto;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding: calc(16px * var(--otp-ui)) calc(14px * var(--otp-ui))
+    calc(24px * var(--otp-ui) + env(safe-area-inset-bottom));
+  background: var(--cyera-black);
+}
+
+.otp-screen__inner {
+  width: min(94vw, 760px);
+  margin: auto;
+}
+
+.otp-screen__body {
+  background: var(--cyera-shell);
+  color: var(--cyera-black);
+  border-radius: 0 0 var(--otp-r-panel) var(--otp-r-panel);
+  padding: calc(26px * var(--otp-ui)) calc(30px * var(--otp-ui));
+}
+
+/*
+ * A single Season Mix word, never more, and NEVER italic.
+ * UI_FOUNDATIONS section 3: "Season Mix is never set in italic - the brand book states this
+ * directly." The approved mocks set it in italic throughout and are superseded.
+ */
+.otp-serif {
+  font-family: var(--cyera-font-serif);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.otp-heading {
+  font-size: calc(48px * var(--otp-ui));
+  font-weight: 600;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  color: var(--cyera-deep-purple);
+  margin: 0;
+}
+
+.otp-subheading {
+  font-size: calc(17px * var(--otp-ui));
+  color: var(--cyera-ash);
+  margin: calc(10px * var(--otp-ui)) 0 calc(24px * var(--otp-ui));
+}
+
+.otp-section-label {
+  font-size: calc(15px * var(--otp-ui));
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyera-ash);
+  font-weight: 500;
+  margin: calc(24px * var(--otp-ui)) 0 calc(10px * var(--otp-ui));
+}
+
+/* ---------------------------------------------------------------- title */
+
+.otp-title__mark {
+  font-size: calc(64px * var(--otp-ui));
+  font-weight: 600;
+  letter-spacing: -2px;
+  line-height: 1;
+  color: var(--cyera-deep-purple);
+  margin: 0;
+}
+
+.otp-title__sub {
+  font-size: calc(22px * var(--otp-ui));
+  color: var(--cyera-ash);
+  margin: calc(6px * var(--otp-ui)) 0 calc(22px * var(--otp-ui));
+}
+
+/* Grandma's note, the thing that starts the walk. */
+.otp-note {
+  background: var(--cyera-natural);
+  border: 2px solid var(--cyera-clay);
+  border-radius: var(--otp-r-panel);
+  padding: calc(16px * var(--otp-ui)) calc(18px * var(--otp-ui));
+  font-size: calc(19px * var(--otp-ui));
+  line-height: 1.35;
+}
+
+.otp-note__from {
+  display: block;
+  margin-top: calc(8px * var(--otp-ui));
+  font-size: calc(15px * var(--otp-ui));
+  color: var(--cyera-ash);
+}
+
+.otp-body-text {
+  font-size: calc(18px * var(--otp-ui));
+  line-height: 1.4;
+  margin: calc(18px * var(--otp-ui)) 0;
+}
+
+.otp-hint {
+  font-size: calc(14px * var(--otp-ui));
+  color: var(--cyera-ash);
+  margin: calc(10px * var(--otp-ui)) 0 0;
+}
+
+/* The one Lime on the Title and Results screens. */
+.otp-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--cyera-lime);
+  color: var(--cyera-black);
+  border: 3px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-pill);
+  padding: calc(14px * var(--otp-ui)) calc(26px * var(--otp-ui));
+  font: 600 calc(22px * var(--otp-ui)) / 1.1 var(--cyera-font-sans);
+  min-height: var(--otp-touch-min);
+  cursor: pointer;
+}
+
+.otp-cta__disc {
+  background: var(--cyera-black);
+  color: var(--cyera-lime);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  flex: none;
+}
+
+/* Secondary action: purple, never a second Lime. */
+.otp-button {
+  background: var(--cyera-deep-purple);
+  color: var(--cyera-offwhite);
+  border: 3px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-pill);
+  padding: calc(10px * var(--otp-ui)) calc(24px * var(--otp-ui));
+  font: 500 calc(19px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
+  min-height: var(--otp-touch-min);
+  cursor: pointer;
+}
+
+.otp-button--quiet {
+  background: transparent;
+  color: var(--cyera-deep-purple);
+}
+
+/* ---------------------------------------------------------------- arrive */
+
+/*
+ * Arrive is a dialogue box docked over the cottage, not a page of its own. The layer carries no
+ * scrim: the world behind it IS the scene, and the box is opaque Shell, so the lines stay legible
+ * without dimming the thing the player walked across the map to reach.
+ */
+.otp-layer--arrive {
+  align-content: end;
+}
+
+.otp-arrive {
+  align-items: center;
+  position: relative;
+  padding-right: calc(56px * var(--otp-ui));
+}
+
+.otp-arrive__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The advance control, bottom right of the box, as in the deck. */
+.otp-advance {
+  position: absolute;
+  right: calc(14px * var(--otp-ui));
+  bottom: calc(12px * var(--otp-ui));
+  width: calc(34px * var(--otp-ui));
+  height: calc(34px * var(--otp-ui));
+  min-width: var(--otp-touch-min);
+  min-height: var(--otp-touch-min);
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--cyera-deep-purple);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cyera-deep-purple);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .otp-advance:hover {
+    background: var(--cyera-haze);
+  }
+}
+
+.otp-advance:active {
+  background: var(--cyera-haze);
+}
+
+.otp-arrive__finish {
+  position: absolute;
+  right: calc(14px * var(--otp-ui));
+  bottom: calc(12px * var(--otp-ui));
+}
+
+.otp-arrive__line {
+  font-size: calc(21px * var(--otp-ui));
+  line-height: 1.35;
+  margin: 0 0 calc(10px * var(--otp-ui));
+}
+
+/* The wolf reveal: a slow fade and a held beat, never a shake (BRAND_AND_UI section 7). */
+.otp-arrive__line--reveal {
+  color: var(--cyera-deep-purple);
+  font-weight: 600;
+  animation: otp-fade-in 900ms ease-out both;
+}
+
+@keyframes otp-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.otp-ending__title {
+  font-size: calc(34px * var(--otp-ui));
+  font-weight: 600;
+  letter-spacing: -1px;
+  color: var(--cyera-deep-purple);
+  margin: 0 0 calc(10px * var(--otp-ui));
+}
+
+/* ---------------------------------------------------------------- results */
+
+.otp-hero {
+  display: flex;
+  gap: calc(18px * var(--otp-ui));
+  align-items: center;
+}
+
+.otp-hero__score {
+  font-size: calc(80px * var(--otp-ui));
+  font-weight: 600;
+  letter-spacing: -3px;
+  color: var(--cyera-deep-purple);
+  line-height: 0.95;
+  margin: calc(4px * var(--otp-ui)) 0 calc(6px * var(--otp-ui));
+}
+
+.otp-hero__score small {
+  font-size: calc(26px * var(--otp-ui));
+  font-weight: 400;
+  color: var(--cyera-ash);
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+
+.otp-hero__breakdown {
+  margin: calc(2px * var(--otp-ui)) 0 0;
+  font-size: max(12px, calc(15px * var(--otp-ui)));
+  color: var(--cyera-ash);
+  line-height: 1.35;
+}
+
+.otp-recap {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.otp-recap__row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: calc(11px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  border-radius: var(--otp-r-panel);
+  margin-bottom: 8px;
+  background: var(--cyera-natural);
+}
+
+.otp-recap__row--missed {
+  background: var(--cyera-haze);
+  border-left: 5px solid var(--cyera-deep-purple);
+}
+
+.otp-recap__badge {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 15px;
+  margin-top: 1px;
+  background: var(--cyera-deep-purple);
+  color: var(--cyera-offwhite);
+}
+
+.otp-recap__row--missed .otp-recap__badge {
+  background: var(--cyera-black);
+  color: var(--cyera-lilac);
+}
+
+.otp-recap__heading {
+  font-size: calc(19px * var(--otp-ui));
+  font-weight: 600;
+  color: var(--cyera-deep-purple);
+  margin: 0;
+}
+
+.otp-recap__heading span {
+  font-weight: 400;
+  color: var(--cyera-ash);
+  font-size: calc(16px * var(--otp-ui));
+}
+
+.otp-recap__detail {
+  font-size: calc(15px * var(--otp-ui));
+  line-height: 1.3;
+  margin: 2px 0 0;
+}
+
+.otp-post {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.otp-field {
+  flex: 1 1 200px;
+  background: var(--cyera-offwhite);
+  /* Clay on Shell is 1.39:1; the boundary of an input has to clear 3:1. */
+  border: 2px solid var(--cyera-ash);
+  border-radius: var(--otp-r-pill);
+  padding: calc(11px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  font: 400 calc(18px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
+  color: var(--cyera-black);
+  min-height: var(--otp-touch-min);
+}
+
+.otp-field[aria-invalid='true'] {
+  border-color: var(--cyera-deep-purple);
+  border-width: 3px;
+}
+
+.otp-fine {
+  font-size: calc(13px * var(--otp-ui));
+  color: var(--cyera-ash);
+  margin: calc(7px * var(--otp-ui)) 0 0;
+}
+
+.otp-error {
+  font-size: calc(14px * var(--otp-ui));
+  color: var(--cyera-deep-purple);
+  font-weight: 500;
+  margin: calc(7px * var(--otp-ui)) 0 0;
+}
+
+/* The Read the Research band: this screen's one Lime lives on its button. */
+.otp-band {
+  margin-top: calc(26px * var(--otp-ui));
+  background: var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: calc(20px * var(--otp-ui)) calc(22px * var(--otp-ui));
+  display: flex;
+  align-items: center;
+  gap: calc(20px * var(--otp-ui));
+  flex-wrap: wrap;
+}
+
+.otp-band__question {
+  flex: 1 1 240px;
+  color: var(--cyera-offwhite);
+  font-size: calc(21px * var(--otp-ui));
+  line-height: 1.25;
+  font-weight: 500;
+  margin: 0;
+}
+
+.otp-band__question .otp-serif {
+  color: var(--cyera-lilac);
+  font-size: calc(23px * var(--otp-ui));
+}
+
+.otp-band .otp-cta {
+  border-color: var(--cyera-black);
+}
+
+.otp-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: calc(22px * var(--otp-ui));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-arrive__line--reveal {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------- results: the reveal, at last */
+
+/*
+ * The fine print itself. The section is headed "What was hiding" and never showed it: the recap
+ * row printed the outcome narrative while outcomes.ts had hiddenAction computed and unused. This
+ * is the Haze reveal row from BRAND_AND_UI section 3, and the only place it appears.
+ */
+.otp-recap__hidden {
+  margin: calc(8px * var(--otp-ui)) 0 0;
+  padding: calc(8px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  border-left: 4px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  background: var(--cyera-haze);
+  font-size: calc(14.5px * var(--otp-ui));
+  line-height: 1.35;
+  color: var(--cyera-black);
+}
+
+.otp-recap__hidden-title {
+  display: block;
+  font-weight: 500;
+  color: var(--cyera-deep-purple);
+}
+
+/* Status in words beside the glyph: a glyph alone is not a text equivalent, and the brand
+   forbids carrying status in colour. */
+.otp-recap__status {
+  margin-left: calc(8px * var(--otp-ui));
+  font-size: calc(12px * var(--otp-ui));
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyera-ash);
+}
+
+/* One Season Mix word inside a section heading: upright, sentence case, never italic. */
+.otp-section-label .otp-serif {
+  font-family: var(--cyera-font-serif);
+  font-style: normal;
+  font-size: calc(16px * var(--otp-ui));
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--cyera-deep-purple);
+}
+
+/* These carry their own type, so they must not inherit the document's h1/h2 sizing or margins. */
+h1.otp-hero__score,
+h2.otp-section-label {
+  margin: 0 0 calc(10px * var(--otp-ui));
+}
+
+/* The breakdown ran straight into the next section heading. */
+.otp-hero__breakdown {
+  margin-bottom: calc(22px * var(--otp-ui));
+}
+
+/* A Haze reveal inside an already-Haze missed row is invisible, so it takes the light ground
+   there instead. The left bar and the words still carry the status. */
+.otp-recap__row--missed .otp-recap__hidden {
+  background: var(--cyera-offwhite);
+}
+
+/* ---------------------------------------------------------------------------
+   00 Title: the cold open.
+
+   The world is already running when the title renders, so instead of covering it
+   the copy sits in a column docked inside the same frame the rest of the game
+   uses. Anchored to the canvas box ui/stage.ts publishes, exactly as the Arrive
+   layer is, so it tracks the world through every resize and zoom step.
+   --------------------------------------------------------------------------- */
+.otp-title-dock {
+  position: fixed;
+  left: var(--otp-canvas-x, 0px);
+  top: var(--otp-canvas-y, 0px);
+  width: var(--otp-canvas-w, 0px);
+  height: var(--otp-canvas-h, 0px);
+  pointer-events: none;
+}
+.otp-title-dock > * {
+  pointer-events: auto;
+}
+.otp-title-panel {
+  box-sizing: border-box;
+  width: min(calc(430px * var(--otp-ui)), 62%);
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  /* Centred as one block rather than pinned top-and-bottom: the column is as tall as the world,
+     and on a desktop that left a few hundred pixels of void between the intro and the button. */
+  justify-content: center;
+  padding: calc(22px * var(--otp-ui)) calc(24px * var(--otp-ui));
+  /* Opaque enough to hold 4.5:1 text on any frame of the forest, with the blur as a bonus for
+     browsers that have it rather than something the contrast depends on. */
+  background: color-mix(in srgb, var(--cyera-black) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom-left-radius: calc(var(--otp-r-panel) - var(--otp-panel-border));
+}
+.otp-title-panel .otp-title__mark {
+  font-size: clamp(34px, calc(48px * var(--otp-ui)), 56px);
+  color: var(--cyera-offwhite);
+}
+.otp-title-panel .otp-title__sub {
+  font-size: calc(18px * var(--otp-ui));
+  color: var(--cyera-lilac);
+  margin: calc(6px * var(--otp-ui)) 0 calc(16px * var(--otp-ui));
+}
+/* On the dark column the beige card would be a second panel inside a panel; the note keeps its
+   voice with a rule instead, which is also how the pinned line reads in the design. */
+.otp-title-panel .otp-note {
+  background: none;
+  border: none;
+  border-left: 3px solid var(--cyera-lilac);
+  border-radius: 0;
+  padding: calc(2px * var(--otp-ui)) 0 calc(2px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  font-size: calc(16px * var(--otp-ui));
+  color: var(--cyera-offwhite);
+}
+.otp-title-panel .otp-note__from {
+  color: var(--cyera-haze);
+  font-size: calc(13px * var(--otp-ui));
+}
+.otp-title-panel .otp-body-text {
+  font-size: calc(16px * var(--otp-ui));
+  color: var(--cyera-haze);
+}
+.otp-title-panel .otp-hint {
+  color: var(--cyera-haze);
+}
+.otp-title__foot {
+  padding-top: calc(16px * var(--otp-ui));
+}
+.otp-title__standing {
+  position: absolute;
+  right: calc(14px * var(--otp-ui));
+  bottom: calc(14px * var(--otp-ui));
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: calc(7px * var(--otp-ui)) calc(16px * var(--otp-ui));
+  border-radius: var(--otp-r-pill);
+  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  color: var(--cyera-offwhite);
+  font-size: calc(13px * var(--otp-ui));
+}
+
+/* Portrait docks the column under the world rather than beside it, so Red stays visible above it
+   (decision D5: canvas on top, panels below, never require rotation).
+
+   It docks to the viewport, not to the canvas box, because the world is capped at 400 logical
+   pixels tall: on a 812px-high phone that leaves ~365px below the frame, which is exactly the
+   strip every other panel docks into. Keeping the title inside the frame instead both wasted that
+   space and squeezed the world to an 88px sliver. */
+@media (orientation: portrait) {
+  .otp-title-dock {
+    inset: 0;
+    width: auto;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: calc(10px * var(--otp-ui));
+    padding-bottom: calc(10px * var(--otp-ui) + env(safe-area-inset-bottom));
+  }
+  .otp-title-panel {
+    width: 100%;
+    height: auto;
+    max-height: 64vh;
+    border: var(--otp-panel-border) solid var(--cyera-deep-purple);
+    border-radius: var(--otp-r-panel);
+    background: color-mix(in srgb, var(--cyera-black) 94%, transparent);
+  }
+  .otp-title__standing {
+    display: none;
+  }
+}

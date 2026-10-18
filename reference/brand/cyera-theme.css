@@ -1,0 +1,142 @@
+/* ============================================================
+   Cyera Brand Theme
+   Source of truth: Employee Brand Kit (Notion) — Color Palette,
+   marked "Current". Hex values verified against that page.
+   Drop this into any HTML deliverable: link or inline it, then
+   build with the variables below instead of hard-coding colors.
+   ============================================================ */
+
+/* --- Fonts ---------------------------------------------------
+   Haffer and Season Mix are licensed and NOT shipped with this
+   skill. With the fallback stacks below, text renders in Inter/
+   Helvetica/Georgia and still looks clean and on-brand.
+   To use the real fonts: download the .woff2 files from the
+   Brand Kit Typography page, place them next to this CSS, and
+   uncomment the @font-face blocks below — the variables already
+   point at "Haffer"/"Season Mix" first, so nothing else changes.
+
+   @font-face {
+     font-family: "Haffer";
+     src: url("fonts/Haffer-Variable.woff2") format("woff2");
+     font-weight: 100 900;  font-style: normal; font-display: swap;
+   }
+   @font-face {
+     font-family: "Season Mix";
+     src: url("fonts/SeasonMix-Variable.woff2") format("woff2");
+     font-weight: 100 900;  font-style: normal; font-display: swap;
+   }
+   ------------------------------------------------------------ */
+
+:root {
+  /* --- Purples (primary brand color) --- */
+  --cyera-deep-purple: #441363; /* primary purple: headings, fills, dark sections */
+  --cyera-black:       #160923; /* brand near-black: body text, deepest backgrounds */
+  --cyera-aubergine:   #6D2D93; /* mid purple accent — FOREGROUND ONLY, never a background */
+  --cyera-lilac:       #D28EFF; /* light purple accent */
+  --cyera-haze:        #E8C6FF; /* lighter purple tint */
+  --cyera-whisper:     #F6E8FF; /* lightest purple tint: soft section backgrounds */
+
+  /* --- Naturals (neutrals / backgrounds) --- */
+  --cyera-offwhite:    #FBFBFB; /* default page / slide background */
+  --cyera-natural:     #EEEDE7; /* soft neutral background, cards, dividers */
+  --cyera-shell:       #F6F5F1; /* warm off-white background */
+  --cyera-clay:        #D4D2C8; /* warm neutral: borders, muted fills */
+  --cyera-stone:       #787771; /* mid warm gray, secondary text — FOREGROUND ONLY */
+  --cyera-ash:         #56544E; /* dark warm gray, text — FOREGROUND ONLY */
+
+  /* --- Green (accent) --- */
+  --cyera-lime:        #BFFFA2; /* the single bright accent — use sparingly */
+
+  /* --- Semantic roles (build with these) --- */
+  --cyera-bg:          var(--cyera-offwhite);
+  --cyera-bg-warm:     var(--cyera-shell);
+  --cyera-bg-soft:     var(--cyera-whisper);
+  --cyera-surface:     var(--cyera-natural);
+  --cyera-border:      var(--cyera-clay);
+  --cyera-heading:     var(--cyera-deep-purple);
+  --cyera-text:        var(--cyera-black);
+  --cyera-text-muted:  var(--cyera-ash);
+  --cyera-accent:      var(--cyera-lime);
+
+  /* --- Type --- */
+  --cyera-font-sans:  "Haffer", "Inter", "Helvetica Neue", Arial, sans-serif;
+  --cyera-font-serif: "Season Mix", "Georgia", "Times New Roman", serif;
+}
+
+body {
+  margin: 0;
+  background: var(--cyera-bg);
+  color: var(--cyera-text);
+  font-family: var(--cyera-font-sans);
+  font-weight: 400;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--cyera-heading);
+  font-family: var(--cyera-font-sans);
+  font-weight: 500;
+  line-height: 1.15;
+  margin: 0 0 0.5em;
+}
+
+h1 { font-size: 2.5rem; }
+h2 { font-size: 1.875rem; }
+h3 { font-size: 1.375rem; }
+
+p { margin: 0 0 1em; }
+
+a { color: var(--cyera-deep-purple); }
+
+.cyera-serif { font-family: var(--cyera-font-serif); }
+
+.cyera-card {
+  background: var(--cyera-surface);
+  border: 1px solid var(--cyera-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.cyera-section-soft { background: var(--cyera-bg-soft); }
+.cyera-section-warm { background: var(--cyera-bg-warm); }
+
+.cyera-dark {
+  background: var(--cyera-deep-purple);
+  color: var(--cyera-offwhite);
+}
+.cyera-dark h1, .cyera-dark h2, .cyera-dark h3 { color: var(--cyera-offwhite); }
+.cyera-darkest { background: var(--cyera-black); color: var(--cyera-offwhite); }
+
+.cyera-accent {
+  background: var(--cyera-lime);
+  color: var(--cyera-black);
+}
+.cyera-accent-bar {
+  border-left: 4px solid var(--cyera-lime);
+  padding-left: 1rem;
+}
+
+.cyera-muted { color: var(--cyera-text-muted); }
+
+.cyera-logo {
+  height: 32px;
+  width: auto;
+  display: inline-block;
+}
+.cyera-logo--on-dark {
+  filter: brightness(0) invert(1);
+}
+
+.cyera-table { border-collapse: collapse; width: 100%; }
+.cyera-table th {
+  background: var(--cyera-natural);
+  color: var(--cyera-black);
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 2px solid var(--cyera-clay);
+}
+.cyera-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--cyera-natural);
+}

@@ -1,0 +1,237 @@
+@import '../../../../reference/brand/cyera-theme.css';
+
+/*
+ * Brand webfonts, self-hosted. Both files are the variable uprights shipped by the Cyera Brand
+ * Design System; `docs/PHASE0_REQUESTS.md` records that they are licensed for self-hosting on a
+ * cyera.com subdomain. Season Mix has no italic cut by design: the brand book forbids italic, so
+ * never set `font-style: italic` on it (docs/UI_FOUNDATIONS.md section 7, change 1).
+ * The brand theme's --cyera-font-sans / --cyera-font-serif already name these families first,
+ * so defining them here is what makes every screen render in them.
+ */
+@font-face {
+  font-family: 'Haffer';
+  src: url('/fonts/HafferUprightsVF.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  /* `block`, not `swap`: the Title screen paints a panel of text as its first frame, and with no
+     metric-matched fallback declared a swap makes it reflow from Helvetica. Revisit once the
+     fallback metrics are measured from the real file. */
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Season Mix';
+  src: url('/fonts/SeasonMixUprightsVF.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
+/*
+ * Game-specific tokens. Colours always come from the brand theme.
+ * Shape follows the brand set and nothing else (docs/UI_FOUNDATIONS.md section 4):
+ * three radii only, and no drop shadows anywhere. A panel separates from the world by fill
+ * contrast and a 2px inset Haze ring, never by elevation.
+ */
+:root {
+  /* The only three radii in the UI. */
+  --otp-r-panel: 20px; /* panels, cards, rows */
+  --otp-r-pill: 9999px; /* buttons, chips */
+  --otp-r-inset: 10px; /* portraits, slots, icon wells */
+
+  --otp-panel-border: 3px;
+  --otp-ring: inset 0 0 0 2px var(--cyera-haze);
+  --otp-header-h: 44px;
+  /*
+   * The world frame's header does NOT scale with --otp-ui: ui/stage.ts reserves exactly this many
+   * pixels when it sizes the canvas, and the two must stay in step or the frame will not line up
+   * with the world it is drawn around.
+   */
+  --otp-world-header: 44px;
+  --otp-slot-w: 84px;
+  --otp-slot-h: 68px;
+  --otp-touch-min: 44px;
+  --otp-motion-fast: 120ms;
+  --otp-motion-slow: 180ms;
+  /* Basket motion. Must stay in step with LEAVE_MS / ARRIVE_MS in ui/components.tsx, which hold
+     the previous row on screen for exactly as long as the departure takes to play. */
+  --otp-leave-ms: 340ms;
+  --otp-arrive-ms: 300ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --otp-motion-fast: 0ms;
+    --otp-motion-slow: 0ms;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--cyera-black);
+  color: var(--cyera-offwhite);
+  font-family: var(--cyera-font-sans);
+}
+
+.otp-stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.otp-stage canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  /*
+   * Leaves exactly the frame's header and border above the canvas, so .otp-world-frame can be
+   * positioned from the canvas box and line up. The stage centres the canvas plus this margin as
+   * one block, which is what keeps the whole frame on screen.
+   */
+  margin-top: calc(var(--otp-world-header) + var(--otp-panel-border));
+  /* Square corners would poke through the frame's rounded bottom. */
+  border-radius: 0 0 calc(var(--otp-r-panel) - var(--otp-panel-border))
+    calc(var(--otp-r-panel) - var(--otp-panel-border));
+}
+
+.otp-ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* --- Stage and touch controls (geometry final, skinning in Phase 3) -------- */
+.otp-stage {
+  align-items: center;
+}
+
+.otp-stage[data-orientation='portrait'] {
+  align-items: start;
+  padding-top: env(safe-area-inset-top);
+}
+
+.otp-touch {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px calc(16px + env(safe-area-inset-left)) calc(16px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-right));
+  pointer-events: none;
+  touch-action: none;
+}
+
+.otp-touch[hidden] {
+  display: none;
+}
+
+.otp-stick,
+.otp-a-button {
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.otp-stick {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--cyera-deep-purple);
+  border: 3px solid var(--cyera-lilac);
+  display: grid;
+  place-items: center;
+}
+
+.otp-stick-knob {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--cyera-lilac);
+  border: 3px solid var(--cyera-offwhite);
+}
+
+.otp-stick-arrow {
+  position: absolute;
+  color: var(--cyera-haze);
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.otp-stick-arrow--up {
+  top: 6px;
+}
+.otp-stick-arrow--down {
+  bottom: 6px;
+}
+.otp-stick-arrow--left {
+  left: 8px;
+}
+.otp-stick-arrow--right {
+  right: 8px;
+}
+
+.otp-a-button {
+  width: 72px;
+  height: 72px;
+  min-width: var(--otp-touch-min);
+  min-height: var(--otp-touch-min);
+  border-radius: 50%;
+  background: var(--cyera-lilac);
+  border: 4px solid var(--cyera-deep-purple);
+  box-shadow: 0 0 0 3px var(--cyera-haze);
+  color: var(--cyera-black);
+  font: 700 30px/1 var(--cyera-font-sans);
+}
+
+.otp-stick:focus-visible,
+.otp-a-button:focus-visible {
+  outline: 3px solid var(--cyera-lilac);
+  outline-offset: 3px;
+}
+
+.otp-toast {
+  margin: 0 0 140px;
+  max-width: min(90vw, 560px);
+  padding: 10px 14px;
+  border-radius: var(--otp-r-panel);
+  border: 3px solid var(--cyera-deep-purple);
+  background: var(--cyera-shell);
+  color: var(--cyera-black);
+  font: 400 16px/1.4 var(--cyera-font-sans);
+  pointer-events: none;
+}
+
+.otp-toast[hidden] {
+  display: none;
+}
+
+@media (pointer: fine) and (hover: hover) {
+  .otp-touch {
+    display: none;
+  }
+}
+
+/* Visible to screen readers only; used for announcing a finished dialogue line once. */
+.otp-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

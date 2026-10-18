@@ -1,0 +1,34 @@
+{
+  "name": "off-the-path",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @otp/game dev",
+    "build": "pnpm --filter @otp/game build",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "e2e": "pnpm --filter @otp/game e2e",
+    "graybox": "pnpm --filter @otp/graybox generate",
+    "sim": "pnpm --silent --filter @otp/sim sim --",
+    "audit": "pnpm audit --audit-level=high"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.0",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
+    "vitest": "4.1.11",
+    "@vitest/coverage-v8": "4.1.11"
+  }
+}

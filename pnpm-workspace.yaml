@@ -1,0 +1,15 @@
+packages:
+  - packages/*
+  - apps/*
+  - tools/*
+
+# Dependency build scripts must be allow-listed, and the key differs by pnpm major:
+# pnpm 11 reads allowBuilds, pnpm 10 and earlier read onlyBuiltDependencies. Vercel chooses the
+# pnpm version from the lockfile (lockfileVersion 9.0 -> pnpm 9 or 10), not from packageManager,
+# so both keys are declared. Without the second one pnpm 10 skips esbuild's postinstall on the
+# build server, which is the kind of thing that only fails in CI.
+allowBuilds:
+  esbuild: true
+
+onlyBuiltDependencies:
+  - esbuild

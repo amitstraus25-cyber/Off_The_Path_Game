@@ -1,0 +1,1073 @@
+/*
+ * Panels, dialogue, skill card and basket. Values come straight from reference/mocks/*.html
+ * (BRAND_AND_UI section 3). The mock is a fixed 1536px board; here the same proportions scale with
+ * --otp-ui, so the panels stay readable from 375px to 1280px without changing their look.
+ */
+
+.otp-ui {
+  --otp-ui: 1;
+  /* Whole-number zoom for 32px pixel-art sources (BRAND_AND_UI section 2: pixel art stays crisp). */
+  --otp-px: 4;
+  --otp-slot-px: 2;
+  /* Panels match the world's width, so they sit over the canvas rather than over the window. */
+  --otp-panel-w: min(var(--otp-canvas-w, 92vw), 748px);
+  font-family: var(--cyera-font-sans);
+}
+
+/* One scale step down on phones so a full skill card still fits above the controls. */
+@media (max-width: 640px) {
+  .otp-ui {
+    --otp-ui: 0.78;
+    --otp-px: 3;
+  }
+}
+
+@media (max-width: 380px) {
+  .otp-ui {
+    --otp-ui: 0.7;
+    --otp-px: 3;
+    --otp-slot-px: 1;
+  }
+}
+
+/*
+ * Height matters as much as width here: the Inspect group is the tallest thing in the game, and a
+ * 1366x768 laptop window or any landscape phone has far less vertical room than a 1280x800 one.
+ * Without these the only breakpoints were width-based, so a landscape phone got the full desktop
+ * scale and the verdict pills fell off the screen.
+ */
+@media (max-height: 780px) {
+  .otp-ui {
+    --otp-ui: 0.82;
+    --otp-px: 3;
+  }
+}
+
+@media (max-height: 580px) {
+  .otp-ui {
+    --otp-ui: 0.7;
+    --otp-px: 3;
+    --otp-slot-px: 1;
+  }
+}
+
+.otp-layer {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  gap: calc(10px * var(--otp-ui));
+  padding: calc(14px * var(--otp-ui));
+  padding-bottom: calc(14px * var(--otp-ui) + env(safe-area-inset-bottom));
+  pointer-events: none;
+  /*
+   * A fixed box never produces a scrollbar, so without this anything taller than the viewport is
+   * painted outside it and cannot be reached by scroll, wheel or focus. The Inspect group is about
+   * 735px tall, which is taller than a 1366x768 window's viewport and far taller than a landscape
+   * phone -- so the verdict pills were simply unreachable and the run could not be finished.
+   */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.otp-layer > * {
+  pointer-events: auto;
+}
+
+.otp-layer--modal > * {
+  animation: otp-panel-in var(--otp-motion-slow) ease-out both;
+}
+
+@keyframes otp-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Modal layers dim the world so the panel is clearly the thing to read. */
+.otp-layer--modal {
+  pointer-events: auto;
+  /* `safe` falls back to start-alignment when the content is taller than the box, instead of
+     overflowing equally off both ends where the top half can never be scrolled back to. */
+  align-content: safe center;
+  background: color-mix(in srgb, var(--cyera-black) 55%, transparent);
+}
+
+/* Portrait keeps the canvas at the top and docks panels to the bottom third (decision D5). */
+@media (orientation: portrait) {
+  .otp-layer--modal {
+    align-content: safe end;
+  }
+}
+
+/* ---------------------------------------------------------------- panel frame */
+
+.otp-panel {
+  width: var(--otp-panel-w);
+  background: var(--cyera-black);
+  border: var(--otp-panel-border) solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: 0 3px 3px;
+  overflow: hidden;
+}
+
+.otp-panel__header {
+  height: calc(var(--otp-header-h) * var(--otp-ui));
+  display: flex;
+  align-items: center;
+  gap: calc(14px * var(--otp-ui));
+  padding: 0 calc(14px * var(--otp-ui)) 0 calc(10px * var(--otp-ui));
+  color: var(--cyera-offwhite);
+}
+
+.otp-panel__number {
+  font-size: calc(26px * var(--otp-ui));
+  font-weight: 600;
+  color: var(--cyera-lilac);
+  letter-spacing: -0.5px;
+}
+
+.otp-panel__title {
+  font-size: calc(18px * var(--otp-ui));
+  font-weight: 500;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+.otp-panel__aside {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------------------------------------------------------------- notation chip */
+
+/* Header right, on dark: Lilac dot, label, then a muted count. */
+.otp-chip {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(5px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  border-radius: var(--otp-r-pill);
+  background: var(--cyera-deep-purple);
+  font-size: max(12px, calc(15px * var(--otp-ui)));
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.otp-chip__dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--cyera-lilac);
+}
+
+.otp-chip__label {
+  color: var(--cyera-offwhite);
+}
+
+.otp-chip__count {
+  color: var(--cyera-haze);
+}
+
+.otp-sound {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--cyera-deep-purple);
+  background: transparent;
+  color: var(--cyera-offwhite);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.otp-panel__body {
+  border-radius: 0 0 var(--otp-r-panel) var(--otp-r-panel);
+  overflow: hidden;
+}
+
+/*
+ * The HUD now lives inside the world frame's header rather than floating in the window's corner,
+ * so this is just the layout of that corner's contents.
+ */
+.otp-hud {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--otp-ui));
+}
+
+/* ------------------------------------------------- the frame around the world */
+
+/*
+ * Drawn in the UI layer and anchored to the canvas box that ui/stage.ts publishes as
+ * --otp-canvas-x/y/w/h. The frame itself takes no pointer events, so clicks still reach the
+ * world; its header does, so the chip and any control in it stay usable.
+ */
+.otp-world-frame {
+  position: fixed;
+  box-sizing: border-box;
+  left: calc(var(--otp-canvas-x, 0px) - var(--otp-panel-border));
+  top: calc(var(--otp-canvas-y, 0px) - var(--otp-world-header) - var(--otp-panel-border));
+  width: calc(var(--otp-canvas-w, 0px) + var(--otp-panel-border) * 2);
+  height: calc(var(--otp-canvas-h, 0px) + var(--otp-world-header) + var(--otp-panel-border) * 2);
+  border: var(--otp-panel-border) solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  pointer-events: none;
+}
+
+.otp-world-frame > * {
+  pointer-events: auto;
+}
+
+.otp-world-frame__header {
+  height: var(--otp-world-header);
+  background: var(--cyera-black);
+  border-radius: calc(var(--otp-r-panel) - var(--otp-panel-border))
+    calc(var(--otp-r-panel) - var(--otp-panel-border)) 0 0;
+}
+
+/* The controls line sits over the world, bottom left, where the joystick would be on touch. */
+/* Top of the world, because the bottom corners now belong to the errand goals and the basket,
+   which are both permanent. This line is onboarding and can sit out of the way. */
+.otp-world-hint {
+  position: absolute;
+  left: calc(14px * var(--otp-ui));
+  top: calc(var(--otp-world-header) + 14px * var(--otp-ui));
+  margin: 0;
+  max-width: calc(100% - 28px * var(--otp-ui));
+  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  border-radius: var(--otp-r-pill);
+  padding: calc(7px * var(--otp-ui)) calc(16px * var(--otp-ui));
+  font-size: calc(12.5px * var(--otp-ui));
+  line-height: 1.3;
+  color: var(--cyera-haze);
+  pointer-events: none;
+}
+
+/* Touch devices get the joystick and the A button instead of a keyboard line. */
+@media (hover: none) {
+  .otp-world-hint {
+    display: none;
+  }
+}
+
+/* -------------------------------------------------------- the basket, in the HUD */
+
+/* Spans the world box, so anything inside it can be placed against the canvas rather than the
+   window, and survives a panel opening over the top. */
+.otp-world-anchor {
+  position: fixed;
+  left: var(--otp-canvas-x, 0px);
+  top: var(--otp-canvas-y, 0px);
+  width: var(--otp-canvas-w, 0px);
+  height: var(--otp-canvas-h, 0px);
+  pointer-events: none;
+}
+
+.otp-hud-basket {
+  position: absolute;
+  right: calc(14px * var(--otp-ui));
+  bottom: calc(14px * var(--otp-ui));
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--otp-ui));
+  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  border-radius: var(--otp-r-pill);
+  padding: calc(6px * var(--otp-ui)) calc(8px * var(--otp-ui)) calc(6px * var(--otp-ui))
+    calc(16px * var(--otp-ui));
+  pointer-events: none;
+}
+
+.otp-hud-basket__label {
+  font-size: calc(12.5px * var(--otp-ui));
+  color: var(--cyera-haze);
+}
+
+.otp-hud-basket__slots {
+  display: flex;
+  gap: calc(5px * var(--otp-ui));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.otp-hud-slot {
+  width: calc(34px * var(--otp-ui));
+  height: calc(28px * var(--otp-ui));
+  border-radius: var(--otp-r-inset);
+  background: color-mix(in srgb, var(--cyera-shell) 14%, transparent);
+  display: grid;
+  place-items: center;
+}
+
+.otp-hud-slot--empty {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cyera-haze) 40%, transparent);
+}
+
+.otp-hud-slot img {
+  width: calc(22px * var(--otp-ui));
+  height: auto;
+  image-rendering: pixelated;
+}
+
+/* Arriving: the item grows into its slot behind a single beat of Haze ring. */
+.otp-hud-slot--arriving {
+  animation: otp-slot-ring var(--otp-arrive-ms) ease-out both;
+}
+
+.otp-hud-slot--arriving img {
+  animation: otp-item-in var(--otp-arrive-ms) ease-out both;
+}
+
+/* Leaving: the item lifts out and fades, so what remains is a visibly empty well. */
+.otp-hud-slot--leaving img {
+  animation: otp-item-out var(--otp-leave-ms) ease-in both;
+}
+
+/* And the basket flinches once. No colour and no words: the shape change is the message. */
+.otp-hud-basket--jolt {
+  animation: otp-basket-jolt var(--otp-leave-ms) ease-out;
+}
+
+@keyframes otp-item-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+@keyframes otp-item-out {
+  to {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+}
+
+@keyframes otp-slot-ring {
+  from {
+    box-shadow: 0 0 0 2px var(--cyera-haze);
+  }
+  to {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
+@keyframes otp-basket-jolt {
+  25% {
+    transform: translateX(-2px);
+  }
+  75% {
+    transform: translateX(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-hud-slot--arriving,
+  .otp-hud-slot--arriving img,
+  .otp-hud-slot--leaving img,
+  .otp-hud-basket--jolt {
+    animation: none;
+  }
+}
+
+/* Empty but still in the DOM, so the live region keeps announcing (see App.tsx). */
+.otp-toast:empty {
+  opacity: 0;
+}
+
+/* ---------------------------------------------------------------- dialogue */
+
+.otp-dialogue {
+  position: relative;
+  width: 100%;
+  background: var(--cyera-shell);
+  border: 3px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: calc(10px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  display: flex;
+  gap: calc(18px * var(--otp-ui));
+  align-items: flex-start;
+  box-shadow: var(--otp-ring);
+}
+
+.otp-portrait {
+  /* Square, so the 32px source is never stretched; the mock's 100x104 distorts it. */
+  width: calc(32px * var(--otp-px));
+  height: calc(32px * var(--otp-px));
+  flex: none;
+  border: 3px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-inset);
+  background-color: var(--cyera-deep-purple);
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+
+.otp-dialogue__text {
+  flex: 1;
+  min-width: 0;
+  font-size: calc(20px * var(--otp-ui));
+  line-height: 1.2;
+  color: var(--cyera-black);
+  padding-top: 6px;
+}
+
+/* Speaker-name eyebrow: 10 caps / +14% tracking / Medium, Ash. */
+.otp-dialogue__speaker {
+  margin: 0 0 calc(4px * var(--otp-ui));
+  font-size: max(10px, calc(10px * var(--otp-ui)));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--cyera-ash);
+}
+
+.otp-dialogue__line {
+  margin: 0 0 calc(3px * var(--otp-ui));
+  font-weight: 500;
+}
+
+/* The caret that says "there is more to read". */
+.otp-dialogue__more {
+  position: absolute;
+  right: calc(20px * var(--otp-ui));
+  bottom: calc(14px * var(--otp-ui));
+  color: var(--cyera-deep-purple);
+  font-size: calc(22px * var(--otp-ui));
+  animation: otp-caret 900ms steps(2, end) infinite;
+}
+
+@keyframes otp-caret {
+  50% {
+    transform: translateY(2px);
+  }
+}
+
+.otp-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.otp-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--cyera-black);
+  background: none;
+  border: 0;
+  padding: 2px 8px;
+  border-radius: var(--otp-r-pill);
+  margin: 0 -4px;
+  cursor: pointer;
+}
+
+.otp-option__tri {
+  display: inline-block;
+  width: 22px;
+  color: var(--cyera-deep-purple);
+  font-size: calc(15px * var(--otp-ui));
+}
+
+.otp-option[aria-selected='true'] {
+  background: var(--cyera-haze);
+  color: var(--cyera-deep-purple);
+  font-weight: 500;
+}
+
+.otp-option--done {
+  color: var(--cyera-ash);
+}
+
+/* Below a Clay hairline: the inspect action at the left, questions left at the right. */
+.otp-dialogue__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: calc(10px * var(--otp-ui));
+  padding-top: calc(9px * var(--otp-ui));
+  border-top: 1px solid var(--cyera-clay);
+}
+
+.otp-dialogue__show {
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font: 500 max(13px, calc(17px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
+  color: var(--cyera-deep-purple);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.otp-dialogue__left {
+  font-size: max(11px, calc(14px * var(--otp-ui)));
+  color: var(--cyera-ash);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- skill card */
+
+.otp-card {
+  /* Inside a panel body the card already has the panel's width. */
+  width: 100%;
+  color: var(--cyera-black);
+  background: var(--cyera-shell);
+  border: 3px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: calc(14px * var(--otp-ui));
+  box-shadow: var(--otp-ring);
+}
+
+.otp-card__top {
+  display: flex;
+  gap: calc(16px * var(--otp-ui));
+}
+
+.otp-card__icon {
+  width: calc(142px * var(--otp-ui));
+  height: calc(168px * var(--otp-ui));
+  flex: none;
+  background: var(--cyera-natural);
+  border: 2px solid var(--cyera-clay);
+  border-radius: var(--otp-r-inset);
+  display: grid;
+  place-items: center;
+}
+
+.otp-card__icon img {
+  /* 32px source at a whole-number zoom, never 3.5x. */
+  width: calc(32px * var(--otp-px));
+  height: calc(32px * var(--otp-px));
+  image-rendering: pixelated;
+}
+
+.otp-card__main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Provenance: who handed this over. 10 caps / +14% tracking / Medium, Ash. */
+.otp-card__eyebrow {
+  margin: 0 0 2px;
+  font-size: max(10px, calc(10px * var(--otp-ui)));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--cyera-ash);
+}
+
+.otp-card__title {
+  font-size: calc(27px * var(--otp-ui));
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  color: var(--cyera-deep-purple);
+  margin: 2px 0 calc(8px * var(--otp-ui));
+}
+
+/*
+ * Both skill-card rows share ONE neutral style. UI_FOUNDATIONS binding change 3: the card never
+ * signals danger; the Haze-and-"!" reveal belongs to the Results recap only. On the card the player
+ * is reading a permission request, not a warning, and that is the whole point of the lesson.
+ */
+.otp-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: calc(9px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  border-radius: var(--otp-r-panel);
+  margin-bottom: 8px;
+  background: var(--cyera-natural);
+}
+
+/* Outline icon, not a filled status badge: it labels the row, it does not rate it. */
+.otp-row__badge {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  border: 2px solid var(--cyera-deep-purple);
+  color: var(--cyera-deep-purple);
+}
+
+.otp-row__badge svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* Row eyebrow: 10 caps / +14% tracking / Medium (UI_FOUNDATIONS section 3). */
+.otp-row__eyebrow {
+  margin: 0 0 2px;
+  font-size: max(10px, calc(10px * var(--otp-ui)));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--cyera-ash);
+}
+
+.otp-row__heading {
+  margin: 0;
+  font-size: max(12px, calc(14.5px * var(--otp-ui)));
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--cyera-black);
+}
+
+.otp-verdicts {
+  display: flex;
+  gap: 10px;
+  margin-top: calc(12px * var(--otp-ui));
+}
+
+/*
+ * On a phone the three pills stack full width, as the portrait artboard has them. Side by side at
+ * 390px each pill is about 105px, which crowds the glyph against the label and leaves a target
+ * narrower than a thumb; stacked they are full width and comfortably over the 44px minimum.
+ */
+@media (max-width: 420px) {
+  .otp-verdicts {
+    flex-direction: column;
+  }
+}
+
+/*
+ * Three IDENTICAL outline pills, and no Lime anywhere on this screen.
+ * UI_FOUNDATIONS section 2: "A verdict is not a call to action. Lime on Allow makes the unsafe
+ * answer the brightest thing on the screen, so the three verdicts carry no fill at all."
+ * The glyph, not the colour, is what tells them apart.
+ */
+.otp-verdict {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  font: 500 calc(20px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
+  padding: calc(8px * var(--otp-ui)) calc(10px * var(--otp-ui));
+  min-height: var(--otp-touch-min);
+  border-radius: var(--otp-r-pill);
+  border: 3px solid var(--cyera-deep-purple);
+  background: transparent;
+  color: var(--cyera-deep-purple);
+  cursor: pointer;
+}
+
+.otp-verdict__glyph {
+  font-size: calc(17px * var(--otp-ui));
+  line-height: 1;
+}
+
+/*
+ * Hover and press apply the same treatment to whichever pill is under the pointer, so the three
+ * stay identical at rest (UI_FOUNDATIONS section 2) while still answering the input. Shell to
+ * Natural was a 1.03:1 change and read as no feedback at all; Haze is unmistakable and on-brand.
+ * `@media (hover: hover)` keeps the fill from sticking after a tap on a touch screen.
+ */
+@media (hover: hover) {
+  .otp-verdict:hover {
+    background: var(--cyera-haze);
+  }
+}
+
+.otp-verdict:active {
+  background: var(--cyera-haze);
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-verdict:active {
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- basket */
+
+.otp-basket {
+  /* Full width of whatever holds it: its own layer on Inspect, the panel body on Results. */
+  width: 100%;
+  max-width: var(--otp-panel-w);
+  color: var(--cyera-black);
+  background: var(--cyera-shell);
+  border: 3px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: calc(8px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  box-shadow: var(--otp-ring);
+}
+
+.otp-basket__label {
+  font-size: calc(17px * var(--otp-ui));
+  margin: 0 0 calc(7px * var(--otp-ui));
+  font-weight: 500;
+  color: var(--cyera-deep-purple);
+  margin: 0 0 calc(7px * var(--otp-ui));
+}
+
+.otp-slots {
+  display: flex;
+  gap: calc(9px * var(--otp-ui));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.otp-slot {
+  flex: none;
+  width: calc(var(--otp-slot-w) * var(--otp-ui));
+  height: calc(var(--otp-slot-h) * var(--otp-ui));
+  border-radius: var(--otp-r-inset);
+  background: var(--cyera-natural);
+  border: 2px solid var(--cyera-clay);
+  display: grid;
+  place-items: center;
+}
+
+.otp-slot img {
+  width: calc(32px * var(--otp-slot-px));
+  height: calc(32px * var(--otp-slot-px));
+  image-rendering: pixelated;
+}
+
+/* ---------------------------------------------------------------- focus */
+
+.otp-ui :focus-visible {
+  /* Two-tone so the ring clears 3:1 on both the dark panel frame and the Shell panel bodies:
+     Deep Purple reads on light (12.7:1), the Lilac halo reads on Black (8.3:1). */
+  outline: 3px solid var(--cyera-deep-purple);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--cyera-lilac);
+}
+
+.otp-panel__header :focus-visible {
+  outline-color: var(--cyera-lilac);
+  box-shadow: 0 0 0 6px var(--cyera-deep-purple);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-dialogue__more {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- trifecta */
+
+/*
+ * The three legs. State is carried by fill, by the mark, and by text, never by colour alone.
+ * "All three at once" is the thing the player should feel, so it gets its own line of words.
+ */
+.otp-trifecta__label {
+  margin: 0 0 calc(6px * var(--otp-ui));
+  font-size: calc(13px * var(--otp-ui));
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--cyera-ash);
+  font-weight: 500;
+}
+
+.otp-trifecta__legs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: calc(5px * var(--otp-ui));
+}
+
+.otp-trifecta--compact .otp-trifecta__legs {
+  grid-auto-flow: column;
+  justify-content: start;
+  gap: 5px;
+}
+
+.otp-leg {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: calc(4px * var(--otp-ui)) calc(7px * var(--otp-ui));
+  border-radius: var(--otp-r-panel);
+  background: var(--cyera-natural);
+  border: 2px solid var(--cyera-clay);
+}
+
+.otp-leg--on {
+  background: var(--cyera-haze);
+  border-color: var(--cyera-deep-purple);
+}
+
+.otp-leg__mark {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 600 12px/1 var(--cyera-font-sans);
+  background: var(--cyera-clay);
+  color: var(--cyera-ash);
+}
+
+.otp-leg--on .otp-leg__mark {
+  background: var(--cyera-deep-purple);
+  color: var(--cyera-offwhite);
+}
+
+.otp-leg__text {
+  display: grid;
+  min-width: 0;
+}
+
+.otp-leg__name {
+  font-size: calc(14px * var(--otp-ui));
+  font-weight: 500;
+  color: var(--cyera-black);
+}
+
+.otp-leg__detail {
+  font-size: max(11px, calc(12px * var(--otp-ui)));
+  color: var(--cyera-ash);
+  line-height: 1.25;
+}
+
+.otp-trifecta__warning {
+  margin: calc(7px * var(--otp-ui)) 0 0;
+  padding: calc(6px * var(--otp-ui)) calc(9px * var(--otp-ui));
+  border-left: 5px solid var(--cyera-lilac);
+  background: var(--cyera-black);
+  color: var(--cyera-offwhite);
+  border-radius: var(--otp-r-panel);
+  font-size: max(12px, calc(13px * var(--otp-ui)));
+  font-weight: 500;
+}
+
+.otp-trifecta--compact .otp-trifecta__warning {
+  max-width: 220px;
+}
+
+/* The HUD floats over the world, so its chip needs the dark panel ground behind it. */
+.otp-hud .otp-chip {
+  background: var(--cyera-black);
+  border: 2px solid var(--cyera-deep-purple);
+}
+
+/* On the dark HUD the unlit legs need the dark treatment. */
+.otp-hud .otp-leg {
+  background: var(--cyera-black);
+  border-color: var(--cyera-deep-purple);
+}
+
+.otp-hud .otp-leg--on {
+  background: var(--cyera-lilac);
+}
+
+.otp-hud .otp-leg--on .otp-leg__mark {
+  background: var(--cyera-black);
+  color: var(--cyera-lilac);
+}
+
+.otp-verdict__label {
+  font-size: calc(20px * var(--otp-ui));
+  font-weight: 500;
+}
+
+/* The one-time definition of the three verbs, on the first card only. Ash, not Stone: this is
+   below 24px (docs/UI_FOUNDATIONS.md section 7, change 4). */
+.otp-card__primer {
+  margin: calc(12px * var(--otp-ui)) 0 0;
+  font-size: calc(13px * var(--otp-ui));
+  line-height: 1.45;
+  color: var(--cyera-ash);
+}
+
+/* All three verdict pills share one surface now, so the marks need no per-button inversion. */
+
+.otp-grants--none {
+  font-style: normal;
+}
+
+/* ---------------------------------------------------------------- notice */
+
+.otp-notice {
+  background: var(--cyera-shell);
+  color: var(--cyera-black);
+  border: 3px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: calc(14px * var(--otp-ui));
+  box-shadow: var(--otp-ring);
+}
+
+.otp-notice__visible {
+  margin: 0;
+  font-size: calc(19px * var(--otp-ui));
+  line-height: 1.35;
+}
+
+/* The line that was never on any card. */
+.otp-notice__hidden {
+  margin: calc(12px * var(--otp-ui)) 0 0;
+  padding: calc(10px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  background: var(--cyera-haze);
+  border-left: 5px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  font-size: calc(18px * var(--otp-ui));
+  font-weight: 600;
+  color: var(--cyera-deep-purple);
+  line-height: 1.3;
+  animation: otp-fade-in 900ms ease-out both;
+}
+
+.otp-notice__effect {
+  margin: calc(10px * var(--otp-ui)) 0 0;
+  font-size: calc(15px * var(--otp-ui));
+  line-height: 1.35;
+}
+
+.otp-notice__quiet {
+  margin: calc(10px * var(--otp-ui)) 0 0;
+  font-size: calc(15px * var(--otp-ui));
+  color: var(--cyera-ash);
+}
+
+@keyframes otp-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-notice__hidden {
+    animation: none;
+  }
+}
+
+/* What Grandma asked for, opposite the basket: the trade the whole game scores is capability
+   against risk, and until this existed the player was being scored on goals they never saw. */
+.otp-hud-goals {
+  position: absolute;
+  left: calc(14px * var(--otp-ui));
+  bottom: calc(14px * var(--otp-ui));
+  max-width: 46%;
+  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  border-radius: var(--otp-r-panel);
+  padding: calc(8px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  pointer-events: none;
+}
+.otp-hud-goals__label {
+  display: block;
+  font-size: calc(11px * var(--otp-ui));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyera-haze);
+}
+.otp-hud-goals__list {
+  margin: calc(5px * var(--otp-ui)) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(2px * var(--otp-ui));
+}
+.otp-hud-goal {
+  display: flex;
+  align-items: baseline;
+  gap: calc(8px * var(--otp-ui));
+  font-size: calc(13px * var(--otp-ui));
+  /* Not done is stated by the dot and by "not yet" in the accessible name, never by colour. */
+  color: var(--cyera-haze);
+}
+.otp-hud-goal__mark {
+  flex: none;
+  width: 1em;
+  color: var(--cyera-lilac);
+}
+.otp-hud-goal--met {
+  color: var(--cyera-offwhite);
+}
+
+/* The official Cyera wordmark in the frame header. Used as-is from the Brand Kit: height is the
+   only thing styled, never colour, proportion or form (reference/brand/logos/README.md). */
+.otp-mark {
+  flex: none;
+  height: calc(15px * var(--otp-ui));
+  width: auto;
+  display: block;
+  margin-left: auto;
+}
+/* When a status chip is present it already claims the free space, so the mark just follows it. */
+.otp-panel__aside + .otp-mark {
+  margin-left: 0;
+}
+/* On a phone the header belongs to the step and the chip the player is actually reading. */
+@media (max-width: 560px) {
+  .otp-world-frame__header .otp-mark {
+    display: none;
+  }
+}
+
+/* Portrait: the goals move out of the world and into the strip below it.
+   Inside the world they ran into the basket in the opposite corner -- three goal labels need real
+   width -- while ~350px under the frame sat empty. This is the same strip the docked panels use
+   (decision D5: canvas on top, panels below, never require rotation). */
+@media (orientation: portrait) {
+  .otp-hud-goals {
+    position: fixed;
+    left: calc(10px * var(--otp-ui));
+    right: calc(10px * var(--otp-ui));
+    top: calc(var(--otp-canvas-y, 0px) + var(--otp-canvas-h, 0px) + 12px * var(--otp-ui));
+    bottom: auto;
+    max-width: none;
+  }
+  .otp-hud-goals__list {
+    gap: calc(4px * var(--otp-ui));
+  }
+}
+
+/* Landscape on a touch device: the joystick and the A button own the bottom corners, which is
+   where the goals and the basket live. The controls hint is dead weight there -- it names Arrows
+   and WASD to someone holding a phone -- so it goes, and the goals take the top-left instead. */
+@media (pointer: coarse) and (orientation: landscape) {
+  .otp-world-hint {
+    display: none;
+  }
+  .otp-hud-goals {
+    top: calc(var(--otp-world-header) + 10px * var(--otp-ui));
+    bottom: auto;
+    max-width: 52%;
+  }
+}
+
+/* The trifecta warning, in the world rather than in the 44px frame header where it used to push
+   the three capability discs out through the top of the frame. */
+.otp-world-warning {
+  position: absolute;
+  left: calc(14px * var(--otp-ui));
+  right: calc(14px * var(--otp-ui));
+  top: calc(var(--otp-world-header) + 52px * var(--otp-ui));
+  margin: 0;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--cyera-black) 88%, transparent);
+  border-left: 3px solid var(--cyera-lilac);
+  border-radius: var(--otp-r-inset);
+  padding: calc(8px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  font-size: calc(13px * var(--otp-ui));
+  line-height: 1.35;
+  color: var(--cyera-offwhite);
+  pointer-events: none;
+}
+@media (pointer: coarse) and (orientation: landscape) {
+  /* The hint is hidden there, so the warning takes its place at the top. */
+  .otp-world-warning {
+    top: calc(var(--otp-world-header) + 10px * var(--otp-ui));
+  }
+}

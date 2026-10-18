@@ -1,0 +1,34 @@
+/** Hand-written typed event bus (~20 lines) so the world and the UI never import each other. */
+export interface GameEvents {
+  /** The player pressed A next to a character. */
+  interact: { characterId: string };
+  /** The player stepped on the cottage trigger. */
+  enteredCottage: void;
+  /** The player walked up to a notice post. */
+  reachedNotice: { noticeId: string };
+  /** A replay began: the world must put Red back at the spawn. */
+  restartRun: void;
+  /** The cottage is still locked; show the hint line. */
+  cottageLocked: void;
+  /** Phaser finished booting the forest. */
+  worldReady: void;
+}
+
+type Handler<T> = (payload: T) => void;
+
+export function createBus() {
+  const handlers = new Map<keyof GameEvents, Set<Handler<never>>>();
+  return {
+    on<K extends keyof GameEvents>(event: K, handler: Handler<GameEvents[K]>): () => void {
+      const set = handlers.get(event) ?? new Set();
+      handlers.set(event, set);
+      set.add(handler as Handler<never>);
+      return () => void set.delete(handler as Handler<never>);
+    },
+    emit<K extends keyof GameEvents>(event: K, payload: GameEvents[K]): void {
+      for (const h of handlers.get(event) ?? []) (h as Handler<GameEvents[K]>)(payload);
+    },
+  };
+}
+
+export type Bus = ReturnType<typeof createBus>;

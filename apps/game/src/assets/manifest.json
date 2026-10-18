@@ -1,0 +1,64 @@
+{
+  "placeholder": true,
+  "tilesets": [
+    "tileset-forest.png"
+  ],
+  "maps": [
+    "map-forest.json"
+  ],
+  "atlases": [
+    {
+      "image": "red.png",
+      "data": "red.json"
+    }
+  ],
+  "spritesheets": [
+    {
+      "key": "npc-rabbit",
+      "frameWidth": 16,
+      "frameHeight": 24
+    },
+    {
+      "key": "npc-owl",
+      "frameWidth": 16,
+      "frameHeight": 24
+    },
+    {
+      "key": "npc-lantern-keeper",
+      "frameWidth": 16,
+      "frameHeight": 24
+    },
+    {
+      "key": "npc-wolf",
+      "frameWidth": 16,
+      "frameHeight": 24
+    },
+    {
+      "key": "fx-dust",
+      "frameWidth": 8,
+      "frameHeight": 8
+    },
+    {
+      "key": "fx-interact-prompt",
+      "frameWidth": 16,
+      "frameHeight": 16
+    },
+    {
+      "key": "fx-pawprints",
+      "frameWidth": 16,
+      "frameHeight": 16
+    }
+  ],
+  "images": [
+    "portrait-red.png",
+    "portrait-rabbit.png",
+    "portrait-owl.png",
+    "portrait-keeper.png",
+    "portrait-wolf-grandma.png",
+    "item-compass.png",
+    "item-translator.png",
+    "item-lantern.png",
+    "item-key.png",
+    "item-letter.png"
+  ]
+}

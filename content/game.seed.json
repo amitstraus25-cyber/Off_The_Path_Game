@@ -1,0 +1,222 @@
+{
+  "version": "0.1.0-draft",
+  "status": "PLACEHOLDER copy except Cottage Finder; research team must review every string before launch",
+  "scoring": { "questionBonus": 100, "maxPerSkill": 300 },
+  "characters": [
+    {
+      "id": "rabbit",
+      "name": "Rabbit",
+      "portrait": "portrait-rabbit",
+      "skillId": "cottage-finder",
+      "spawn": "npc-rabbit",
+      "greet": "This compass will help you find Grandma.",
+      "asks": [
+        {
+          "id": "needs",
+          "label": "What does it need?",
+          "reply": "Oh, hardly anything. It just needs to look around a bit to find the way."
+        },
+        {
+          "id": "who",
+          "label": "Who made it?",
+          "reply": "It came in the same crate as the lanterns. The label says it is very popular."
+        },
+        { "id": "show", "label": "Show me.", "reply": "Of course. Have a look at the card." }
+      ]
+    },
+    {
+      "id": "owl",
+      "name": "Owl",
+      "portrait": "portrait-owl",
+      "skillId": "word-weaver",
+      "spawn": "npc-owl",
+      "greet": "A traveler left this with me. It understands every creature in the forest.",
+      "asks": [
+        {
+          "id": "needs",
+          "label": "What does it need?",
+          "reply": "Only to listen while you talk. How else could it translate?"
+        },
+        {
+          "id": "who",
+          "label": "Who made it?",
+          "reply": "I never caught the traveler's name. They were kind, though. Very kind."
+        },
+        {
+          "id": "show",
+          "label": "Show me.",
+          "reply": "Take a look. I have not read the small print myself."
+        }
+      ]
+    },
+    {
+      "id": "lantern-keeper",
+      "name": "Lantern Keeper",
+      "portrait": "portrait-keeper",
+      "skillId": "night-light",
+      "spawn": "npc-lantern-keeper",
+      "greet": "The pines get dark fast. This lantern will light your way.",
+      "asks": [
+        {
+          "id": "needs",
+          "label": "What does it need?",
+          "reply": "Just a little of the dark to shine into."
+        },
+        {
+          "id": "who",
+          "label": "Who made it?",
+          "reply": "I trimmed the wick myself. The glass came from the village."
+        },
+        {
+          "id": "show",
+          "label": "Show me.",
+          "reply": "Here is the card. Read it as closely as you like."
+        }
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "cottage-finder",
+      "name": "Cottage Finder",
+      "icon": "item-compass",
+      "promise": {
+        "title": "Finds the route",
+        "detail": "Shows a path to Grandma's cottage on your map."
+      },
+      "finePrint": {
+        "title": "Also copies your cottage key",
+        "detail": "Requests access to your key so it can keep a backup.",
+        "flag": "keyStolen"
+      },
+      "bestVerdict": "restrict",
+      "outcomes": {
+        "allow": {
+          "points": 0,
+          "basketAdds": ["route"],
+          "basketRemoves": ["key"],
+          "flagsSet": ["keyStolen"],
+          "recap": "It also copied your cottage key, and the wolf now has it."
+        },
+        "restrict": {
+          "points": 300,
+          "basketAdds": ["route"],
+          "basketRemoves": [],
+          "flagsSet": [],
+          "recap": "You took the route and refused the key. The key stayed in your basket."
+        },
+        "reject": {
+          "points": 150,
+          "basketAdds": [],
+          "basketRemoves": [],
+          "flagsSet": [],
+          "recap": "Safe, but you walked without a map and lost time."
+        }
+      }
+    },
+    {
+      "id": "word-weaver",
+      "name": "Word Weaver",
+      "icon": "item-translator",
+      "promise": {
+        "title": "Translates the forest",
+        "detail": "Understands what the creatures say."
+      },
+      "finePrint": {
+        "title": "Also forwards everything you say",
+        "detail": "Sends what Red says to a helper address so it can improve.",
+        "flag": "messagesLeaked"
+      },
+      "bestVerdict": "reject",
+      "outcomes": {
+        "allow": {
+          "points": 0,
+          "basketAdds": ["translator"],
+          "basketRemoves": [],
+          "flagsSet": ["messagesLeaked"],
+          "recap": "It forwarded everything Red said to the wolf."
+        },
+        "restrict": {
+          "points": 150,
+          "basketAdds": ["translator"],
+          "basketRemoves": [],
+          "flagsSet": [],
+          "recap": "Stripping the forwarding left a translator that barely works."
+        },
+        "reject": {
+          "points": 300,
+          "basketAdds": [],
+          "basketRemoves": [],
+          "flagsSet": [],
+          "recap": "Nothing useful was left once the hidden part was removed, so rejecting it was right."
+        }
+      }
+    },
+    {
+      "id": "night-light",
+      "name": "Night Light",
+      "icon": "item-lantern",
+      "promise": {
+        "title": "Lights the path",
+        "detail": "Shines a lantern through the dark pines."
+      },
+      "bestVerdict": "allow",
+      "outcomes": {
+        "allow": {
+          "points": 300,
+          "basketAdds": ["lantern"],
+          "basketRemoves": [],
+          "flagsSet": [],
+          "recap": "Nothing hidden here. Trusting it was right."
+        },
+        "restrict": {
+          "points": 300,
+          "basketAdds": ["lantern"],
+          "basketRemoves": [],
+          "flagsSet": [],
+          "recap": "It had nothing extra to restrict, but being careful cost nothing."
+        },
+        "reject": {
+          "points": 150,
+          "basketAdds": [],
+          "basketRemoves": [],
+          "flagsSet": [],
+          "recap": "Safe, but the pines were dark and slow going."
+        }
+      }
+    }
+  ],
+  "endings": [
+    {
+      "id": "clean",
+      "when": { "minFlags": 0, "maxFlags": 0 },
+      "title": "Clean arrival",
+      "lines": [
+        "The door opens. Grandma waves from her chair. Somewhere behind the trees, the wolf sighs."
+      ]
+    },
+    {
+      "id": "close",
+      "when": { "minFlags": 1, "maxFlags": 1 },
+      "title": "A close call",
+      "lines": [
+        "Grandma, why do you need my key?",
+        "The wolf is at the door, holding something it should not have."
+      ]
+    },
+    {
+      "id": "wolfhouse",
+      "when": { "minFlags": 2 },
+      "title": "The wolf's house",
+      "lines": ["Someone wrote those instructions. It wasn't you."]
+    }
+  ],
+  "strings": {
+    "quest": "Find Grandma",
+    "cottageHint": "I should talk to everyone first.",
+    "cta": "Read the Research",
+    "ctaPrompt": "Who wrote the instructions your agent follows?",
+    "leaderboardTitle": "Wolf Spotters",
+    "leaderboardDown": "Leaderboard unavailable right now."
+  }
+}
