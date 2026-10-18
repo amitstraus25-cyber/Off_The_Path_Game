@@ -461,10 +461,12 @@ const well: Painter = (img, seed) => {
 };
 
 /*
- * A fountain in a glade. The one piece of the forest that is deliberately Cyera's: the water
- * catches Lilac (#D28EFF, straight from the brand theme) where it falls, and the glade around it
- * is planted with the Lilac flowers. No mark is redrawn and nothing is branded; it is the colour
- * turning up in the world rather than stamped on top of it.
+ * A fountain in a glade. Scenery, and nothing more.
+ *
+ * It had two pixels of Cyera Lilac in the falling water, which docs/ASSETS.md forbids in one
+ * line about this exact thing: "Palette: keep the approved board's greens, browns, water blues,
+ * Red's cloak red... Do not recolor to Cyera purple." The art palette and the UI palette are
+ * deliberately separate, and identity colour belongs in the chrome.
  */
 const fountain: Painter = (img, seed) => {
   grass(2)(img, seed);
@@ -485,10 +487,27 @@ const fountain: Painter = (img, seed) => {
   img.px(9, 4, shade('water', 2));
   img.px(6, 5, shade('water', 2));
   img.px(10, 5, shade('water', 2));
-  // Where it catches the light, it catches Lilac.
-  img.px(6, 6, [210, 142, 255, 255]);
-  img.px(10, 6, [210, 142, 255, 255]);
-  img.px(5, 12, [210, 142, 255, 200]);
+  // Where it catches the light, it catches the sky.
+  img.px(6, 6, shade('water', 3));
+  img.px(10, 6, shade('water', 3));
+  img.px(5, 12, shade('water', 2, 200));
+};
+
+/*
+ * A small toadstool, laid in a ring round the glade. A fairy ring is folklore this forest would
+ * have anyway, and that is the whole of why it is here.
+ */
+const toadstoolRing: Painter = (img, seed) => {
+  grass(1)(img, seed);
+  // Alpha, like every other decor shadow in this file. At full opacity a 1px ellipse is a bar.
+  img.ellipse(8, 14, 3.2, 0.8, shade('shadow', 1, 110));
+  img.rect(7, 10, 2, 4, shade('wall', 2));
+  img.rect(7, 10, 1, 4, shade('wall', 3));
+  img.ellipse(8, 9, 4, 2.6, shade('roof', 1));
+  img.ellipse(8, 8, 3.2, 1.8, shade('roof', 2));
+  img.px(6, 8, shade('wall', 3));
+  img.px(10, 9, shade('wall', 3));
+  img.px(8, 7, shade('wall', 3));
 };
 
 const signpost: Painter = (img, seed) => {
@@ -540,13 +559,6 @@ export const TILE_PAINTERS: Record<string, Painter> = {
   waterfall: waterfall,
   'flower-white': flower([250, 250, 245, 255]),
   'flower-pink': flower([240, 150, 190, 255]),
-  /*
-   * Cyera Lilac, #D28EFF, straight from reference/brand/cyera-theme.css. The flower painter
-   * already draws four petals around a lit centre, which is the mark's own geometry, so a handful
-   * of these in the meadow is the brand sitting in the world rather than stamped on top of it.
-   * Not a logo: no mark is redrawn, only the colour and the count are deliberate.
-   */
-  'flower-lilac': flower([210, 142, 255, 255]),
   'flower-red': flower([214, 75, 70, 255]),
   bush: bush,
   rock: rock,
@@ -575,6 +587,7 @@ export const TILE_PAINTERS: Record<string, Painter> = {
   'stall-counter': stallCounter,
   'lantern-post': lanternPost,
   fountain,
+  'toadstool-ring': toadstoolRing,
   well: well,
   signpost: signpost,
 };

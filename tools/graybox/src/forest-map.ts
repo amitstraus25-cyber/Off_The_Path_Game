@@ -271,8 +271,6 @@ export function generateForestMap(): GeneratedMap {
   scatter('flower-white', 40);
   scatter('flower-pink', 30);
   scatter('flower-red', 24);
-  // Rare on purpose: often enough to be found, seldom enough to be noticed as a choice.
-  scatter('flower-lilac', 9);
   scatter('bush', 30, true);
   scatter('rock', 22, true);
 
@@ -314,14 +312,21 @@ export function generateForestMap(): GeneratedMap {
    */
   clearArea(17, 11, 5, 5);
   place('fountain', 19, 13, 'fountain');
-  for (const [fx, fy] of [
-    [18, 12],
-    [20, 12],
-    [17, 14],
-    [21, 14],
-    [19, 15],
-  ] as const)
-    set(below, fx, fy, gid('flower-lilac'));
+  /*
+   * A fairy ring round it, and an actual ring: the twelve tiles two out from the fountain with
+   * the four corners left off, which is as round as a tile grid gets. The first attempt filled
+   * every tile at a Chebyshev radius of one, which is a 3x3 BOX -- it looked like a crate of
+   * mushrooms rather than a ring, and no amount of calling it a ring in a comment fixed that.
+   *
+   * None of them is solid, so you walk into the ring and up to the fountain rather than being
+   * fenced out of it.
+   */
+  for (let dy = -2; dy <= 2; dy++)
+    for (let dx = -2; dx <= 2; dx++) {
+      const onPerimeter = Math.max(Math.abs(dx), Math.abs(dy)) === 2;
+      const isCorner = Math.abs(dx) === 2 && Math.abs(dy) === 2;
+      if (onPerimeter && !isCorner) set(below, 19 + dx, 13 + dy, gid('toadstool-ring'));
+    }
   place('lantern-post', 36, 32, 'lantern-post');
 
   // Grandma's cottage at the east end, behind a fence with one gate.
