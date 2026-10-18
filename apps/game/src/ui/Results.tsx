@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { exposedNotices, recap, score } from '@otp/core';
 import type { Content, GameState, Verdict } from '@otp/core';
-import { Highlighted, Panel } from './components';
+import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
 
 /** Matches the server rule in ARCHITECTURE section 8, so a handle never fails only on the server. */
@@ -73,7 +73,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
   return (
     <div class="otp-screen">
       <div class="otp-screen__inner">
-        <Panel number="05" title={s('resultsTitle')}>
+        <Panel number="05" title={s('resultsTitle')} aside={<CyeraMark />}>
           <div class="otp-screen__body">
             <div class="otp-hero">
               <div>
@@ -228,6 +228,17 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                 {s('replay')}
               </button>
             </div>
+
+            {/*
+              docs/UI_FOUNDATIONS.md section 8 puts this footer under 06 Leaderboard, whose rows
+              are Black -- hence "white Cyera logo" there. That screen does not exist yet, and
+              Results is where a run actually ends, so it lives here for now. Results' body is
+              Shell, so the mark is the black one: a white mark would be invisible on it.
+            */}
+            <p class="otp-foot">
+              {s('researchFooter')}
+              <CyeraMark on="light" />
+            </p>
           </div>
         </Panel>
       </div>

@@ -90,14 +90,22 @@ function pathEdge(sides: ('n' | 's' | 'e' | 'w')[]): Painter {
 function waterFill(img: Img, seed: number, frame: number): void {
   const rnd = noise(seed);
   img.rect(0, 0, TILE, TILE, shade('water', 1));
+  // Depth, at low contrast: three ruled lines across a flat blue read as a painted road, so the
+  // surface gets a soft field first and the crests sit on top of it.
   for (let y = 0; y < TILE; y++)
-    for (let x = 0; x < TILE; x++) if (rnd() > 0.82) img.px(x, y, shade('water', 0));
-  // Horizontal wave crests, offset per frame so two water tiles feel alive side by side.
-  for (const row of [2, 7, 12]) {
-    const y = (row + frame * 2) % TILE;
-    const start = Math.floor(rnd() * 6);
-    img.line(start, y, start + 4 + Math.floor(rnd() * 4), y, shade('water', 2));
-    img.px(start + 1, y - 1, shade('water', 3, 180));
+    for (let x = 0; x < TILE; x++) {
+      const r = rnd();
+      if (r > 0.88) img.px(x, y, shade('water', 0, 130));
+      else if (r > 0.82) img.px(x, y, shade('water', 2, 80));
+    }
+  // Sparkle dashes rather than full-width crests, phase-shifted per frame so two tiles side by
+  // side never pulse together.
+  for (const row of [3, 11]) {
+    const y = (row + frame * 4) % TILE;
+    const start = Math.floor(rnd() * 10);
+    const len = 2 + Math.floor(rnd() * 2);
+    img.line(start, y, start + len, y, shade('water', 3, 200));
+    img.px(start + 1, y + 1, shade('water', 2, 140));
   }
 }
 
@@ -118,11 +126,17 @@ function shore(sides: ('n' | 's' | 'e' | 'w')[]): Painter {
                 : side === 'w'
                   ? [j, i]
                   : [TILE - 1 - j, i];
-          // Grass above, a thin wet-sand lip where it meets the water.
+          // Grass above, a thin wet-sand lip, then a bright foam line against the water.
           img.px(
             x,
             y,
-            j === d - 1 ? shade('path', 0) : j === d - 2 ? shade('path', 1) : shade('grass', 1),
+            j === d - 1
+              ? shade('water', 3, 230)
+              : j === d - 2
+                ? shade('path', 0)
+                : j === d - 3
+                  ? shade('path', 1)
+                  : shade('grass', 1),
           );
         }
       }
@@ -309,10 +323,15 @@ const cottageWall: Painter = (img, seed) => {
 const cottageWindow: Painter = (img, seed) => {
   cottageWall(img, seed);
   img.rect(3, 4, 10, 9, shade('wood', 0));
-  img.rect(4, 5, 8, 7, shade('water', 2));
-  img.rect(4, 5, 4, 3, shade('water', 3));
+  // Lit from inside: warm amber, brightest at the top where the lamp hangs. Cold blue glass read
+  // as an empty house, which is the wrong note for the one door Red is walking towards.
+  img.rect(4, 5, 8, 7, shade('gold', 1));
+  img.rect(4, 5, 8, 3, shade('gold', 2));
+  img.rect(5, 5, 5, 2, shade('gold', 3));
   img.rect(7, 5, 2, 7, shade('wood', 0));
   img.rect(4, 8, 8, 1, shade('wood', 0));
+  // The light falling onto the wall under the sill.
+  img.rect(3, 13, 10, 1, shade('gold', 2, 70));
   // Window box with flowers.
   img.rect(2, 12, 12, 3, shade('wood', 1));
   img.px(4, 12, shade('cloak', 2));
@@ -333,26 +352,31 @@ const cottageDoor: Painter = (img, seed) => {
 function roof(kind: 'left' | 'middle' | 'right' | 'peak'): Painter {
   return (img) => {
     img.rect(0, 0, TILE, TILE, shade('roof', 1));
-    // Shingle rows.
-    for (let y = 0; y < TILE; y += 4) {
+    // Overlapping scalloped shingles rather than a running-bond grid: the grid read as brickwork
+    // laid on a slope, which is why the cottage looked like a box rather than a roof.
+    for (let row = 0; row < 4; row++) {
+      const y = row * 4;
+      const offset = row % 2 === 0 ? 0 : 3;
+      for (let x = offset - 5; x < TILE + 5; x += 5) {
+        img.ellipse(x + 2.5, y + 2.6, 2.2, 2.3, shade('roof', 2));
+        img.ellipse(x + 2.5, y + 2.1, 1.8, 1.7, shade('roof', 3));
+        // The groove between two shingles, which is what makes them read as separate tiles.
+        img.line(x + 5, y + 1, x + 5, y + 3, shade('roof', 0));
+      }
+      // The line that closes the row is the shadow the course above casts on this one.
       img.line(0, y, TILE - 1, y, shade('roof', 0));
-      for (let x = (y / 4) % 2 === 0 ? 0 : 4; x < TILE; x += 8)
-        img.line(x, y, x, Math.min(y + 3, TILE - 1), shade('roof', 0));
     }
-    img.rect(0, 0, TILE, 1, shade('roof', 2));
     if (kind === 'peak') {
       img.rect(0, 0, TILE, 3, shade('roof', 2));
       img.rect(0, 0, TILE, 1, shade('roof', 3));
     }
-    if (kind === 'left') {
-      img.rect(0, 0, 2, TILE, shade('roof', 0));
+    // The eave: a dark roof line with the wall's own shadow directly under it.
+    if (kind !== 'peak') {
+      img.rect(0, TILE - 3, TILE, 1, shade('roof', 0));
       img.rect(0, TILE - 2, TILE, 2, shade('wall', 0));
     }
-    if (kind === 'right') {
-      img.rect(TILE - 2, 0, 2, TILE, shade('roof', 0));
-      img.rect(0, TILE - 2, TILE, 2, shade('wall', 0));
-    }
-    if (kind === 'middle') img.rect(0, TILE - 2, TILE, 2, shade('wall', 0));
+    if (kind === 'left') img.rect(0, 0, 2, TILE - 2, shade('roof', 0));
+    if (kind === 'right') img.rect(TILE - 2, 0, 2, TILE - 2, shade('roof', 0));
   };
 }
 

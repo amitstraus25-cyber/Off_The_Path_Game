@@ -33,12 +33,24 @@ export function Panel({ number, title, children, aside }: PanelProps) {
  *
  * The file is a byte-for-byte copy of reference/brand/logos/cyera-logo-white.svg from the Brand
  * Kit, served from the app's own origin so the strict CSP needs nothing beyond `img-src 'self'`.
- * It is an <img>, not inline SVG, so it cannot be accidentally recoloured or redrawn and no SVG
- * in the document can carry script. White is the primary mark for dark grounds; the frame header
- * is Black, so this is the correct one. Never restyle it beyond height.
+ * docs/UI_FOUNDATIONS.md, which is now binding, does not restate how the mark is embedded; the
+ * superseded BRAND_AND_UI.md section 5 said "inline SVG". This is an <img> at the same vector
+ * file instead, which keeps the original proportions and crispness the spec is asking for while
+ * avoiding a real bug: the Brand Kit files carry ids (clip0_2322_2323) that go document-global
+ * when inlined, so a second mark on the same screen -- the frame header plus the results footer --
+ * would resolve its clip-path against the first and render wrong. An <img> also cannot be
+ * accidentally recoloured, and no SVG in the document can carry script.
+ *
+ * White on dark grounds, black on light, per the logo README. Never restyle it beyond height.
  */
-export function CyeraMark() {
-  return <img class="otp-mark" src="/brand/cyera-logo-white.svg" alt="Cyera" />;
+export function CyeraMark({ on = 'dark' }: { on?: 'dark' | 'light' }) {
+  return (
+    <img
+      class="otp-mark"
+      src={on === 'dark' ? '/brand/cyera-logo-white.svg' : '/brand/cyera-logo-black.svg'}
+      alt="Cyera"
+    />
+  );
 }
 
 export interface WorldFrameProps {
