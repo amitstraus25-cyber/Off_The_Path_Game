@@ -23,6 +23,8 @@ export interface AppProps {
   content: Content;
   /** A line to show over the world: the locked-cottage hint, or a verdict confirmation. */
   hint: string | null;
+  /** What a bystander just said. Flavour only; nothing in the run depends on it. */
+  say: { name: string; line: string } | null;
   onStart(): void;
   onReplay(): void;
   onReadResearch(): void;
@@ -43,6 +45,7 @@ export function App({
   store,
   content,
   hint,
+  say,
   onStart,
   onReplay,
   onReadResearch,
@@ -178,6 +181,12 @@ export function App({
             reached nobody. Empty is hidden by CSS rather than by unmounting.
           */}
             <div class="otp-layer">
+              {say && (
+                <p class="otp-say">
+                  <span class="otp-say__who">{say.name}</span>
+                  {say.line}
+                </p>
+              )}
               <p class="otp-toast" role="status" aria-live="polite">
                 {hint ?? ''}
               </p>

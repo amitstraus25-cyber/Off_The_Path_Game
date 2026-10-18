@@ -52,6 +52,20 @@ export function readForestMap(raw: unknown): ForestMap {
 export const findObject = (map: ForestMap, name: string): MapObject | undefined =>
   map.objects.find((o) => o.name === name);
 
+/** Objects named `bystander-<id>`: people who talk but offer nothing. */
+export function bystanderSpawns(
+  map: ForestMap,
+): { id: string; spawnName: string; x: number; y: number }[] {
+  return map.objects
+    .filter((o) => o.name.startsWith('bystander-'))
+    .map((o) => ({
+      id: o.name.slice('bystander-'.length),
+      spawnName: o.name,
+      x: o.x + o.width / 2,
+      y: o.y + o.height / 2,
+    }));
+}
+
 /** Objects named `npc-<id>`, keyed by the character id the content uses. */
 export function npcSpawns(
   map: ForestMap,

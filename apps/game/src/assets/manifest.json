@@ -34,6 +34,21 @@
       "frameHeight": 24
     },
     {
+      "key": "bystander-toadstool",
+      "frameWidth": 16,
+      "frameHeight": 24
+    },
+    {
+      "key": "bystander-magpie",
+      "frameWidth": 16,
+      "frameHeight": 24
+    },
+    {
+      "key": "bystander-snail",
+      "frameWidth": 16,
+      "frameHeight": 24
+    },
+    {
       "key": "fx-dust",
       "frameWidth": 8,
       "frameHeight": 8

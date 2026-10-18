@@ -100,7 +100,7 @@ test('the cottage gate stays locked until all three skills have a verdict', asyn
       },
       { timeout: 15_000 },
     )
-    .toMatch(/talk to everyone first/i);
+    .toMatch(/all three travellers first/i);
 
   await page.evaluate(() => {
     const { store } = window.__otp!;

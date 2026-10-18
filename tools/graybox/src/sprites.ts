@@ -233,10 +233,121 @@ function paintWolf(frame: 0 | 1 | 2 | 3): Img {
   return img;
 }
 
+/*
+ * Bystanders. They offer no skill and carry no capability, so they are drawn to read as scenery
+ * that happens to talk: no basket, no lantern, nothing held out towards Red. Each one is built
+ * from a single strong silhouette so it is still legible at 16px beside a tree.
+ */
+
+/**
+ * Convinced he is a signpost. Everything above the stem is cap, so the silhouette is a toadstool
+ * before the face is read at all; the face and the pointing twig are what turn it into a person.
+ */
+const toadstool: NpcPainter = (img, blink) => {
+  // Rooted, so he never bobs: standing perfectly still is the whole joke.
+  img.ellipse(8, 23, 5, 1.5, shade('shadow', 1));
+  // Stem, wide enough that the eyes are not swallowed by the outline at its edges.
+  img.rect(4, 13, 8, 10, shade('wall', 1));
+  img.rect(4, 13, 4, 10, shade('wall', 2));
+  // Cap.
+  img.ellipse(8, 11, 7.5, 5, shade('roof', 1));
+  img.ellipse(8, 9, 6.5, 3.5, shade('roof', 2));
+  img.line(1, 13, 14, 13, shade('roof', 0));
+  for (const [sx, sy, r] of [
+    [4, 10, 1.4],
+    [11, 9, 1.6],
+    [8, 7, 1.1],
+  ] as const)
+    img.ellipse(sx, sy, r, r * 0.85, shade('wall', 3));
+  // Face, well inside the stem.
+  if (!blink) {
+    img.px(6, 17, shade('ink', 0));
+    img.px(9, 17, shade('ink', 0));
+  } else {
+    img.line(5, 17, 6, 17, shade('ink', 0));
+    img.line(9, 17, 10, 17, shade('ink', 0));
+  }
+  img.line(7, 19, 8, 19, shade('ink', 2));
+  // The twig arm, held out with great authority, pointing at nothing in particular.
+  img.line(12, 16, 15, 14, shade('wood', 1));
+  img.px(15, 13, shade('wood', 2));
+  img.px(14, 12, shade('wood', 2));
+  img.outline(shade('ink', 0));
+};
+
+/**
+ * Repeats whatever she last overheard. Perched and facing left, with the long wedge tail that
+ * separates a magpie from every other black-and-white bird at this size.
+ */
+const magpie: NpcPainter = (img, blink) => {
+  const y = blink ? 1 : 0;
+  // Tail first, so the body laps over where it joins.
+  for (const [i, dy] of [0, 1, 2].entries())
+    img.line(10, 16 + dy + y, 15, 20 + dy + y, shade('ink', i === 1 ? 2 : 1));
+  // Body, small and round; a perched bird is mostly chest.
+  img.ellipse(7, 15 + y, 4, 4.5, shade('ink', 1));
+  img.ellipse(6, 16 + y, 2.4, 3, shade('fur', 2));
+  // Folded wing, with the white bar and the green sheen magpies actually have.
+  img.ellipse(9, 15 + y, 2, 4, shade('ink', 0));
+  img.line(9, 13 + y, 9, 16 + y, shade('fur', 1));
+  img.px(10, 14 + y, shade('water', 0));
+  // Head, clearly separate from the body.
+  img.ellipse(6, 9 + y, 3, 3, shade('ink', 1));
+  img.line(3, 10 + y, 1, 11 + y, shade('gold', 1));
+  img.px(2, 11 + y, shade('gold', 0));
+  // The bead she is not going to give back.
+  img.px(1, 12 + y, shade('gold', 3));
+  if (!blink) {
+    img.ellipse(5, 9 + y, 1.4, 1.4, shade('fur', 3));
+    img.px(5, 9 + y, shade('ink', 0));
+  } else {
+    img.line(4, 9 + y, 6, 9 + y, shade('fur', 2));
+  }
+  img.rect(5, 19 + y, 1, 3, shade('gold', 1));
+  img.rect(7, 19 + y, 1, 3, shade('gold', 1));
+  img.outline(shade('ink', 0));
+};
+
+/** A snail delivering a parcel. He set out on Tuesday. It is going very well. */
+const snail: NpcPainter = (img, blink) => {
+  const y = blink ? 1 : 0;
+  // Foot, kept low and narrow so the shell stays the loudest shape.
+  img.ellipse(8, 22 + y, 6.5, 2, shade('stone', 2));
+  img.ellipse(8, 21 + y, 5.5, 1.2, shade('stone', 3));
+  img.ellipse(4, 19 + y, 2.2, 3, shade('stone', 2));
+  // Shell, wound the right way round.
+  img.ellipse(10, 17 + y, 5, 5, shade('wood', 1));
+  img.ellipse(10, 17 + y, 3.4, 3.4, shade('wood', 2));
+  img.ellipse(10.8, 17.6 + y, 1.8, 1.8, shade('wood', 0));
+  img.px(11, 18 + y, shade('wood', 3));
+  // The parcel, tied on top and going nowhere fast.
+  img.rect(8, 9 + y, 5, 4, shade('cloak', 1));
+  img.rect(8, 9 + y, 5, 1, shade('cloak', 2));
+  img.line(8, 11 + y, 12, 11 + y, shade('gold', 2));
+  img.line(10, 9 + y, 10, 12 + y, shade('gold', 2));
+  // Eye stalks, high and clear of the shell.
+  img.line(3, 18 + y, 2, 12 + y, shade('stone', 2));
+  img.line(5, 18 + y, 6, 12 + y, shade('stone', 2));
+  img.ellipse(2, 11 + y, 1.5, 1.5, shade('fur', 3));
+  img.ellipse(6, 11 + y, 1.5, 1.5, shade('fur', 3));
+  if (!blink) {
+    img.px(2, 11 + y, shade('ink', 0));
+    img.px(6, 11 + y, shade('ink', 0));
+  } else {
+    img.line(1, 11 + y, 3, 11 + y, shade('ink', 0));
+    img.line(5, 11 + y, 7, 11 + y, shade('ink', 0));
+  }
+  img.outline(shade('ink', 0));
+};
+
+/** Keyed by the map object name, which is also the texture key the scene looks up. */
 export const NPC_PAINTERS: Record<string, NpcPainter> = {
   'npc-rabbit': rabbit,
   'npc-owl': owl,
   'npc-lantern-keeper': lanternKeeper,
+  'bystander-toadstool': toadstool,
+  'bystander-magpie': magpie,
+  'bystander-snail': snail,
 };
 
 export function paintNpcSheet(name: string): Img {

@@ -217,6 +217,32 @@ body {
   display: none;
 }
 
+/*
+ * What a bystander just said. It shares the toast's slot in .otp-layer but inverts it -- dark
+ * panel, light type -- so a passing remark never reads as the game telling the player something.
+ */
+.otp-say {
+  margin: 0 0 6px;
+  max-width: min(90vw, 560px);
+  padding: 10px 14px;
+  border-radius: var(--otp-r-panel);
+  border: 3px solid var(--cyera-lilac);
+  background: var(--cyera-deep-purple);
+  color: var(--cyera-offwhite);
+  font: 400 16px/1.4 var(--cyera-font-sans);
+  pointer-events: none;
+}
+
+.otp-say__who {
+  display: block;
+  /* Below 24px the brand's Stone is too light on this ground, so names sit in Haze. */
+  color: var(--cyera-haze);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 @media (pointer: fine) and (hover: hover) {
   .otp-touch {
     display: none;

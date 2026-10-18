@@ -4,6 +4,8 @@ export interface GameEvents {
   interact: { characterId: string };
   /** The player stepped on the cottage trigger. */
   enteredCottage: void;
+  /** The player talked to someone who offers nothing. Changes no game state. */
+  greetBystander: { bystanderId: string };
   /** The player walked up to a notice post. */
   reachedNotice: { noticeId: string };
   /** A replay began: the world must put Red back at the spawn. */

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { h, render } from 'preact';
-import { canEnterCottage, ending, loadContent, score } from '@otp/core';
+import { canEnterCottage, ending, loadContent, score, trifectaLive } from '@otp/core';
 import type { Verdict } from '@otp/core';
 import gameContent from '../../../content/game.json';
 import { createBus } from './bus';
@@ -25,6 +25,8 @@ const VERDICT_STRING: Record<Verdict, string> = {
   reject: 'verdictRejected',
 };
 const HINT_MS = 2600;
+/** Long enough to read a line of dialogue without stopping the walk. */
+const SAY_MS = 4200;
 
 const cssColor = (name: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -54,6 +56,11 @@ async function start(): Promise<void> {
   uiRoot.prepend(panels);
 
   let hint: string | null = null;
+  /** The last thing a bystander said, and who said it. Pure flavour; no game state moves. */
+  let say: { name: string; line: string } | null = null;
+  let sayTimer: ReturnType<typeof setTimeout> | undefined;
+  /** How many times each bystander has been greeted, so they cycle instead of repeating. */
+  const greeted = new Map<string, number>();
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
   // The notice Red is currently standing at, and the ones she has already walked away from.
   let noticeId: string | null = null;
@@ -71,13 +78,17 @@ async function start(): Promise<void> {
         store,
         content,
         hint,
+        say,
         onStart: beginRun,
         onReplay: () => {
           // The store is only half the run: the notices Red walked past and where she is standing
           // both live outside it, and a replay has to forget them too.
           dismissed.clear();
+          greeted.clear();
           noticeId = null;
           hint = null;
+          say = null;
+          clearTimeout(sayTimer);
           clearTimeout(hintTimer);
           store.dispatch({ type: 'RESET' });
           bus.emit('restartRun', undefined);
@@ -101,6 +112,16 @@ async function start(): Promise<void> {
       panels,
     );
 
+  const showSay = (name: string, line: string): void => {
+    say = { name, line };
+    draw();
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(() => {
+      say = null;
+      draw();
+    }, SAY_MS);
+  };
+
   const showHint = (message: string): void => {
     hint = message;
     draw();
@@ -110,6 +131,22 @@ async function start(): Promise<void> {
       draw();
     }, HINT_MS);
   };
+
+  bus.on('greetBystander', ({ bystanderId }) => {
+    if (store.getState().phase !== 'explore') return;
+    const who = content.bystanders.find((b) => b.id === bystanderId);
+    if (!who) return;
+    // Once all three legs are live the forest has a different thing to say, if this one has a
+    // line for it. Read-only: greeting changes nothing.
+    const exposed = trifectaLive(store.getState().verdicts, content);
+    if (exposed && who.whenExposed) {
+      showSay(who.name, who.whenExposed);
+      return;
+    }
+    const seen = greeted.get(who.id) ?? 0;
+    greeted.set(who.id, seen + 1);
+    showSay(who.name, who.lines[seen % who.lines.length]!);
+  });
 
   bus.on('interact', ({ characterId }) => {
     const reason = store.dispatch({ type: 'MEET', c: characterId });

@@ -351,6 +351,23 @@ export function generateForestMap(): GeneratedMap {
     };
   };
 
+  /*
+   * Bystanders stand one tile off the track rather than on it, so they decorate the walk instead
+   * of interrupting it. The assertion is the point: a bystander carved out of the middle of a
+   * tree cluster is unreachable and would simply never be met, which is a bug nobody would see.
+   */
+  const bystander = (name: string, x: number, y: number) => {
+    const touchesTrack = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ].some(([dx, dy]) => isPath(x + dx!, y + dy!));
+    if (!touchesTrack) throw new Error(`${name} at ${x},${y} does not touch the track`);
+    clearArea(x, y, 1, 1);
+    return { name, x: x * TILE, y: y * TILE, width: TILE, height: TILE };
+  };
+
   const spawnX = 5;
   const spawnY = 20;
   clearArea(spawnX, spawnY, 2, 2);
@@ -364,6 +381,10 @@ export function generateForestMap(): GeneratedMap {
     npc('npc-rabbit', 13, 19),
     npc('npc-owl', 17, 11),
     npc('npc-lantern-keeper', 37, 33),
+    // One per stretch of the walk: the start, the far side of the bridge, and the gate approach.
+    bystander('bystander-toadstool', 10, 21),
+    bystander('bystander-magpie', 22, 22),
+    bystander('bystander-snail', 41, 21),
     { name: 'trigger-cottage', x: fenceX * TILE, y: 20 * TILE, width: TILE, height: TILE * 2 },
     {
       // Spans the whole gate approach (x 42 to 45, both path rows). The gate at x 46 is only

@@ -18,12 +18,18 @@ import {
   overlaps,
 } from './logic';
 import type { Facing, Interactable, Vec } from './logic';
-import { findObject, npcSpawns, readForestMap } from './map';
+import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
 
 const NPC_SPRITE = { width: 16, height: 24 };
 
+/**
+ * Anyone Red can walk up to. `character` offers a skill and opens the real encounter;
+ * `bystander` offers nothing and only says a line. They share the prompt and the proximity
+ * test so that one person is highlighted at a time, and differ only in what interacting emits.
+ */
 interface Npc extends Interactable {
+  kind: 'character' | 'bystander';
   sprite: Phaser.GameObjects.Sprite;
   prompt: Phaser.GameObjects.Sprite;
 }
@@ -141,7 +147,25 @@ export class ForestScene extends Phaser.Scene {
         .setOrigin(0.5, 1)
         .setDepth(9000)
         .setVisible(false);
-      this.npcs.push({ id: spawn.id, x: spawn.x, y: sprite.y, sprite, prompt });
+      this.npcs.push({ kind: 'character', id: spawn.id, x: spawn.x, y: sprite.y, sprite, prompt });
+    }
+    this.createBystanders();
+  }
+
+  private createBystanders(): void {
+    for (const spawn of bystanderSpawns(this.map)) {
+      const key = spawn.spawnName;
+      if (!this.textures.exists(key)) throw new Error(`Missing bystander sprite "${key}"`);
+      const sprite = this.add
+        .sprite(spawn.x, spawn.y + NPC_SPRITE.height / 2, key, 0)
+        .setOrigin(0.5, 1);
+      sprite.setDepth(sprite.y);
+      const prompt = this.add
+        .sprite(spawn.x, sprite.y - NPC_SPRITE.height - 6, 'fx-interact-prompt', 0)
+        .setOrigin(0.5, 1)
+        .setDepth(9000)
+        .setVisible(false);
+      this.npcs.push({ kind: 'bystander', id: spawn.id, x: spawn.x, y: sprite.y, sprite, prompt });
     }
   }
 
@@ -248,11 +272,15 @@ export class ForestScene extends Phaser.Scene {
     this.red.setFrame(`red-idle-${this.facing}-0`);
   }
 
-  /** Characters whose skill already has a verdict are done talking. */
+  /**
+   * Who will still talk. A character whose skill has a verdict is done; a bystander never is,
+   * because they are scenery and repeating themselves is in character.
+   */
   private available(): Npc[] {
     const { verdicts } = this.store.getState();
     const { content } = this.store;
     return this.npcs.filter((npc) => {
+      if (npc.kind === 'bystander') return true;
       const character = content.characters.find((c) => c.id === npc.id);
       return character !== undefined && verdicts[character.skillId] === undefined;
     });
@@ -270,7 +298,9 @@ export class ForestScene extends Phaser.Scene {
 
   private interact(): void {
     const target = nearest(this.position, this.available(), INTERACT_RADIUS);
-    if (target) this.bus.emit('interact', { characterId: target.id });
+    if (!target) return;
+    if (target.kind === 'bystander') this.bus.emit('greetBystander', { bystanderId: target.id });
+    else this.bus.emit('interact', { characterId: target.id });
   }
 
   private checkNotices(): void {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import content from '../../../content/game.json';
 import map from '../src/assets/map-forest.json';
 import gids from '../src/assets/tileset-forest.gids.json';
+import manifest from '../src/assets/manifest.json';
 import { readForestMap } from '../src/world/map';
 import { TILE } from '../src/world/logic';
 import type { ForestMap, MapObject } from '../src/world/map';
@@ -228,5 +229,59 @@ describe('errand goals are reachable in the world', () => {
     for (let tx = box.x0; tx <= box.x1; tx++)
       for (let ty = box.y0; ty <= box.y1; ty++) if (seen.has(`${tx},${ty}`)) reachable = true;
     expect(reachable).toBe(true);
+  });
+});
+
+describe('bystanders stand where they can be met', () => {
+  const open = reachable();
+  const names = content.bystanders.map((b) => b.name);
+
+  it('names at least one bystander, or these tests are vacuous', () => {
+    expect(names.length).toBeGreaterThan(0);
+  });
+
+  it.each(content.bystanders.map((b) => [b.name, b.spawn] as const))(
+    '%s has a spawn object on the map',
+    (_name, spawn) => {
+      expect(forest.objects.map((o) => o.name)).toContain(spawn);
+    },
+  );
+
+  /*
+   * A bystander carved out of the middle of a tree cluster is unreachable, so the player simply
+   * never meets them and nothing says so. The generator asserts this too; this catches a map
+   * committed from an older generator.
+   */
+  it.each(content.bystanders.map((b) => [b.name, b.spawn] as const))(
+    'Red can walk to %s',
+    (_name, spawn) => {
+      expect(touches(open, object(spawn))).toBe(true);
+    },
+  );
+
+  it.each(content.bystanders.map((b) => [b.name, b.spawn] as const))(
+    '%s does not block the gate approach',
+    (_name, spawn) => {
+      const at = tiles(object(spawn));
+      const notice = tiles(object('notice-forest-post'));
+      const clash =
+        at.x0 <= notice.x1 && at.x1 >= notice.x0 && at.y0 <= notice.y1 && at.y1 >= notice.y0;
+      expect(clash).toBe(false);
+    },
+  );
+
+  /*
+   * The scene throws on a missing texture, which turns a forgotten sprite into a black screen
+   * rather than a missing bystander. The manifest is what the loader reads.
+   */
+  it.each(content.bystanders.map((b) => [b.name, b.sprite] as const))(
+    "%s's sprite sheet is in the manifest",
+    (_name, sprite) => {
+      expect(manifest.spritesheets.map((s) => s.key)).toContain(sprite);
+    },
+  );
+
+  it('every bystander spawn is named after its content id', () => {
+    for (const b of content.bystanders) expect(b.spawn).toBe(`bystander-${b.id}`);
   });
 });

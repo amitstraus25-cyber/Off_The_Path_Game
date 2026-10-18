@@ -9,6 +9,7 @@ import { TILE_NAMES, paintTileset } from './tiles.ts';
 import { generateForestMap } from './forest-map.ts';
 import {
   ITEM_PAINTERS,
+  NPC_PAINTERS,
   PORTRAIT_PAINTERS,
   paintDust,
   paintInteractPrompt,
@@ -53,8 +54,10 @@ write(
   }),
 );
 
+// The wolf has no painter in the map because he is never spawned there; he appears at the cottage.
 const NPCS = ['npc-rabbit', 'npc-owl', 'npc-lantern-keeper', 'npc-wolf'];
-for (const name of NPCS) write(`${name}.png`, paintNpcSheet(name).png());
+const BYSTANDERS = Object.keys(NPC_PAINTERS).filter((name) => name.startsWith('bystander-'));
+for (const name of [...NPCS, ...BYSTANDERS]) write(`${name}.png`, paintNpcSheet(name).png());
 
 for (const [name, painter] of Object.entries(PORTRAIT_PAINTERS)) {
   const img = new Img(32, 32);
@@ -82,7 +85,11 @@ write(
       maps: ['map-forest.json'],
       atlases: [{ image: 'red.png', data: 'red.json' }],
       spritesheets: [
-        ...NPCS.map((key) => ({ key, frameWidth: RED_W, frameHeight: RED_H })),
+        ...[...NPCS, ...BYSTANDERS].map((key) => ({
+          key,
+          frameWidth: RED_W,
+          frameHeight: RED_H,
+        })),
         { key: 'fx-dust', frameWidth: 8, frameHeight: 8 },
         { key: 'fx-interact-prompt', frameWidth: 16, frameHeight: 16 },
         { key: 'fx-pawprints', frameWidth: 16, frameHeight: 16 },
