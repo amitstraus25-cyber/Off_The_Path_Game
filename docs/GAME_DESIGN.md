@@ -47,6 +47,36 @@ research / product marketing team before launch. Items marked **[DECISION]** app
 | Lantern keeper [art TBD, suggest hedgehog or badger] | Lantern post at the bridge | **Lantern: "Night Light"** [PLACEHOLDER]             | Honest on inspection: nothing is hidden. Its stated purpose _is_ the risk, so trusting it wholesale is the mistake. Rewards the player who inspects and then **bounds** it. |
 | Wolf, as "Grandma"                                   | The cottage                | Nothing; reveals outcomes                            | Appears only at the end: silhouette in the window, paw prints on the path (both in the board).                                                                              |
 
+## 5a. Bystanders (added 2026-10-18)
+
+Three people in the forest who are not characters. They offer nothing, grant nothing and are never
+scored: no skill, no capability, no verdict, no log entry. Greeting one shows a named bubble for a
+few seconds and the run is exactly where it was. They exist so the walk between decisions has
+something in it, and so that "someone is talking to me" stops meaning "a decision is coming".
+
+They live outside the rules on purpose. `packages/core` knows about them only through the content
+schema and four lint rules, all of which exist to keep a bystander from being mistaken for one of
+the three characters.
+
+| Bystander | Where                            | The joke                                                                 | What it rhymes with                                              |
+| --------- | -------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Toadstool | Beside the signpost at the start | Gives directions with total authority, from a traveller, never checked   | Supply chain: he is passing on something he never looked at      |
+| Magpie    | At the well, before the bridge   | Keeps a tally of how many have taken one, with no idea what it is        | Popularity as a trust signal; primes the Rabbit's "very popular" |
+| Snail     | The gate approach                | A courier who does not open parcels and never checks whose name is on it | The honest intermediary, and the one who declined a faster way   |
+
+Each also has a `whenExposed` line that replaces the others once all three capabilities are live.
+These are dread rather than warning: in character, about the speaker's own cheerful fault, never
+about the player's decision. They are the only places in the forest that remark on the trifecta at
+all, and none of them knows what it is remarking on.
+
+**Rules for anything added here.** A bystander must never name a skill, a verdict or a mistake,
+must never point the player at a character, and must never give directions a player could act on
+and get lost by. The nonsense has to be unfollowable, not plausibly wrong.
+
+Because the forest now contains people who are not characters, `strings.cottageHint` says "I should
+hear all three travellers first." rather than "talk to everyone": a player held at the gate must
+not go back looking for a decision that was never there.
+
 ## 6. Skills (draft content, data-driven)
 
 | Skill                                  | Promise (shows on card)                                         | Fine print / hidden action                                                                          | Best verdict | Why                                                                              |

@@ -91,11 +91,19 @@ Checked in this folder before the initial commit:
 
 - `pnpm install --frozen-lockfile` clean
 - 0 type errors, lint clean
-- 140 core + 43 game unit tests, **100% branch coverage** on `packages/core`
-- 47 Playwright tests
+- 144 core + 65 game unit tests, **100% branch coverage** on `packages/core`
+- 50 Playwright tests
 - Production build from the service root
 - Built bundle under the real CSP: no violations, no external requests, logo and both brand fonts
   self-hosted
+
+## The cast
+
+Three **characters** offer skills and are judged: Rabbit, Owl, Lantern Keeper. Three
+**bystanders** offer nothing and are never scored: Toadstool, Magpie, Snail. The split is
+load-bearing, not decoration, and `docs/GAME_DESIGN.md` section 5a has the rules for adding to it.
+A bystander that could be mistaken for a decision is a bug, and four lint rules in
+`packages/core/src/content.ts` exist to catch the ways that happens.
 
 ## Where the design truth lives
 
