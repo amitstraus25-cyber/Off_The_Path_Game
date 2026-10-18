@@ -190,8 +190,17 @@ test('a card can be left without recording a verdict, on desktop and on a phone'
 
     const back = page.locator('.otp-card__back');
     await expect(back).toBeVisible();
+    /*
+     * Rounded, because a laid-out box is a float and this assertion is about a thumb, not a
+     * floating-point value: on the iPhone 13 context the engine returns 43.99998474121094 for the
+     * element CSS declares as min-height: 44px, so comparing the raw number failed about half the
+     * time. A flaky test is worse than no test.
+     */
     const box = (await back.boundingBox())!;
-    expect(box.height, 'the way out must be a thumb-sized target').toBeGreaterThanOrEqual(44);
+    expect(
+      Math.round(box.height),
+      'the way out must be a thumb-sized target',
+    ).toBeGreaterThanOrEqual(44);
     await back.click();
 
     await expect(page.locator('.otp-dialogue')).toBeVisible();
