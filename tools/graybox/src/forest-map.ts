@@ -308,12 +308,9 @@ export function generateForestMap(): GeneratedMap {
   place('well', 23, 24, 'well');
   /*
    * A glade off the owl's fork, cleared of trees so the fountain is the only thing in it, and
-   * planted with the Lilac flowers. Nothing happens here. It is somewhere to find.
+   * with a few toadstools under the trees. Nothing happens here. It is somewhere to find.
    */
   clearArea(17, 11, 5, 5);
-  // Flagstone under the mark, three by three, so the inlay has something to be inlaid in.
-  for (let dy = -1; dy <= 1; dy++)
-    for (let dx = -1; dx <= 1; dx++) set(ground, 19 + dx, 13 + dy, gid('paving'));
   place('fountain', 19, 13, 'fountain');
   /*
    * A few toadstools about the glade. They were a ring of twelve, evenly spaced, which read as

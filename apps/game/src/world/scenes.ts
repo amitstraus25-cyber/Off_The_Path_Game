@@ -18,22 +18,6 @@ export class BootScene extends Phaser.Scene {
         frameHeight: s.frameHeight,
       });
     for (const i of m.images) this.load.image(keyOf(i), assetUrl(i));
-    /*
-     * The Cyera symbol, from the official symbol-only file in the brand team's Logo Package, used
-     * as-is. It is NOT generated art and does not come from tools/graybox, so it is served from
-     * /brand alongside the wordmark rather than from the assets manifest.
-     *
-     * `load.image`, NOT `load.svg`. Phaser's SVG loader rasterises through a `blob:` URL, and the
-     * CSP in vercel.json is `img-src 'self' data:` with no blob allowance -- main.ts already sets
-     * `imageLoadType: 'HTMLImageElement'` for exactly this reason. The smoke test caught it: a
-     * blob showed up in the "no third-party requests" assertion. Relaxing a strict CSP on a data
-     * security company's own research asset, to place a decoration, is the wrong trade.
-     *
-     * So it loads as an ordinary same-origin image at its natural size and is scaled down where
-     * it is placed. The brand rules allow the official file scaled uniformly and forbid redrawing
-     * it, which is what this is.
-     */
-    this.load.image('cyera-symbol', '/brand/cyera-symbol-black.svg');
     this.load.on('loaderror', (f: Phaser.Loader.File) => {
       throw new Error(`Asset failed to load: ${f.key}`);
     });

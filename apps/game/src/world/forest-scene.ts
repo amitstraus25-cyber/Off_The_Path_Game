@@ -22,8 +22,6 @@ import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
 
 const NPC_SPRITE = { width: 16, height: 24 };
-/** Just under three tiles, so the inlay sits inside its flagstone with a margin of stone. */
-const SYMBOL_PX = 44;
 
 /**
  * Anyone Red can walk up to. `character` offers a skill and opens the real encounter;
@@ -87,7 +85,6 @@ export class ForestScene extends Phaser.Scene {
     // The canopy layer always draws over Red, so she walks behind tree tops.
     phaserMap.createLayer('decor-above', tiles)?.setDepth(10_000);
 
-    this.placeSymbol();
     this.createNpcs();
 
     const spawn = findObject(this.map, 'spawn-red');
@@ -120,26 +117,6 @@ export class ForestScene extends Phaser.Scene {
       }
     }
     this.bus.emit('worldReady', undefined);
-  }
-
-  /**
-   * The Cyera mark, laid flat in the glade with the fountain rising out of its centre.
-   *
-   * It is the official symbol-only file scaled uniformly and nothing else: not redrawn, not
-   * recoloured, not stretched, which is what CLAUDE.md rule 5 and the brand kit require. It sits
-   * just above the ground layer so Red walks over it rather than round it, because a mark you
-   * cannot step on reads as signage and a mark you can reads as something the forest has had for
-   * a long time.
-   */
-  private placeSymbol(): void {
-    const at = findObject(this.map, 'prop-fountain');
-    if (!at) return;
-    this.add
-      .image(at.x + TILE / 2, at.y + TILE / 2, 'cyera-symbol')
-      .setOrigin(0.5, 0.5)
-      // Uniform, so the artwork is scaled and never stretched. No alpha, no tint, no filter.
-      .setDisplaySize(SYMBOL_PX, SYMBOL_PX)
-      .setDepth(2);
   }
 
   /** Puts Red back where she started, facing down, with every prompt cleared. */
