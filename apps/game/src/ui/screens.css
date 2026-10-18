@@ -522,9 +522,10 @@ h2.otp-section-label {
 .otp-title-panel .otp-note {
   background: none;
   border: none;
-  border-left: 3px solid var(--cyera-lilac);
   border-radius: 0;
-  padding: calc(2px * var(--otp-ui)) 0 calc(2px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  /* No rule down the side. A bright Lilac stripe beside Grandma's note made the quiet thing on
+     the screen the loud one; the indent and the caption under it already say it is a quote. */
+  padding: calc(2px * var(--otp-ui)) 0 calc(2px * var(--otp-ui)) calc(2px * var(--otp-ui));
   font-size: calc(16px * var(--otp-ui));
   color: var(--cyera-offwhite);
 }

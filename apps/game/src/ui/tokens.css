@@ -40,7 +40,15 @@
   --otp-r-inset: 10px; /* portraits, slots, icon wells */
 
   --otp-panel-border: 3px;
-  --otp-ring: inset 0 0 0 2px var(--cyera-haze);
+  /*
+   * The inset ring UI_FOUNDATIONS asks for, in Whisper rather than Haze.
+   *
+   * Every surface that carries it in this build is Shell, a warm cream, and Haze is a tint of
+   * purple: at 2px on cream it does not read as an inset edge, it reads as a lilac band drawn
+   * round the card, which is what it was mistaken for twice. Haze belongs on the dark panels of
+   * the design deck. Whisper keeps the 2px inset the spec asks for and lets it behave like depth.
+   */
+  --otp-ring: inset 0 0 0 2px var(--cyera-whisper);
   --otp-header-h: 44px;
   /*
    * The world frame's header does NOT scale with --otp-ui: ui/stage.ts reserves exactly this many

@@ -765,6 +765,24 @@
   box-shadow: 0 0 0 6px var(--cyera-deep-purple);
 }
 
+/*
+ * Panels move focus to their own body on mount so a screen reader announces them, which is what
+ * `tabIndex={-1} data-autofocus` on .otp-dialogue__text and .otp-card is for. Chromium then treats
+ * that programmatic focus as keyboard focus, because the player did arrive by pressing Space, and
+ * paints the full control ring round the whole text block: a 3px Deep Purple outline with a 6px
+ * Lilac halo. It reads as a purple band drawn round the panel that then disappears, and it was
+ * reported as a rendering fault twice.
+ *
+ * These two are containers, not controls. The player never navigated to them and cannot do
+ * anything with them, so there is nothing for a focus indicator to indicate. Every real control
+ * keeps its ring: the selector is deliberately narrow, matching only an element that is both
+ * unreachable by tab and explicitly focused on mount.
+ */
+.otp-ui [tabindex='-1'][data-autofocus]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .otp-dialogue__more {
     animation: none;

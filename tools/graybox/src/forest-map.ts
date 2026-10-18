@@ -197,6 +197,19 @@ export function generateForestMap(): GeneratedMap {
     }
 
   // --- forest border and tree clusters ---------------------------------------
+  /*
+   * Red's clearing, reserved BEFORE anything is planted in it.
+   *
+   * The first attempt cleared the decor layers in a square around the spawn after the fact, which
+   * cut trees in half: a tree is a 2x1 trunk on `below` plus a 2x2 canopy two rows above it on
+   * `above`, so a square that caught one and not the other left canopies floating in the air with
+   * nothing under them and trunks standing bare. Refusing to plant inside the clearing in the
+   * first place cannot produce a half tree.
+   */
+  const SPAWN = { x: 5, y: 20 };
+  const inClearing = (x: number, y: number): boolean =>
+    Math.abs(x - SPAWN.x) <= 3 && Math.abs(y - SPAWN.y) <= 3;
+
   const plantTree = (x: number, y: number): boolean => {
     // A tree needs its trunk tile plus a clear 2x2 canopy above, and must not sit on a path.
     for (let dy = -2; dy <= 0; dy++)
@@ -204,6 +217,7 @@ export function generateForestMap(): GeneratedMap {
         const tx = x + dx;
         const ty = y + dy;
         if (!inside(tx, ty) || isPath(tx, ty) || isWater(tx, ty)) return false;
+        if (inClearing(tx, ty)) return false;
         if (at(below, tx, ty) !== 0 || at(above, tx, ty) !== 0) return false;
       }
     set(below, x, y, gid('trunk-l'));
@@ -249,6 +263,7 @@ export function generateForestMap(): GeneratedMap {
       const x = 2 + Math.floor(rnd() * (MAP_W - 4));
       const y = 3 + Math.floor(rnd() * (MAP_H - 6));
       if (isPath(x, y) || isWater(x, y) || at(below, x, y) !== 0 || at(above, x, y) !== 0) continue;
+      if (inClearing(x, y)) continue;
       set(below, x, y, gid(tile));
       if (makeSolid) solid(x, y);
     }
@@ -388,19 +403,8 @@ export function generateForestMap(): GeneratedMap {
     return { name, x: x * TILE, y: y * TILE, width: TILE, height: TILE };
   };
 
-  const spawnX = 5;
-  const spawnY = 20;
-  /*
-   * Four tiles square, and the decor-below layer with it. `clearArea` only clears collision and
-   * the canopy above, so a trunk drawn below stayed exactly where Red spawns and sat behind her
-   * head: she started the game with her face against a tree.
-   */
-  for (let dy = -2; dy < 3; dy++)
-    for (let dx = -2; dx < 3; dx++) {
-      set(below, spawnX + dx, spawnY + dy, 0);
-      set(above, spawnX + dx, spawnY + dy, 0);
-      clear(spawnX + dx, spawnY + dy);
-    }
+  const spawnX = SPAWN.x;
+  const spawnY = SPAWN.y;
   clearArea(spawnX, spawnY, 2, 2);
   for (const y of [spawnY, spawnY + 1]) {
     set(ground, spawnX, y, gid('path'));
@@ -503,6 +507,37 @@ export function generateForestMap(): GeneratedMap {
   });
 
   const rows = Math.ceil(TILE_NAMES.length / COLUMNS);
+  /*
+   * Tidy pass: no half trees.
+   *
+   * A tree is a 2x1 trunk on `below` with a 2x2 canopy two rows above it on `above`, and every
+   * `clearArea` call wipes BOTH layers over a rectangle, so any clearing is free to take one half
+   * of a tree and leave the other. The garden clear at the cottage did exactly that: it took a
+   * trunk and left its canopy hanging in the air over the fence, and Red's own clearing used to
+   * do it at the spawn. Rather than teach every caller about trees, sweep once at the end.
+   *
+   * A trunk left behind is worse than it looks: it is still solid, so it would be an invisible
+   * wall. Its collision goes with it.
+   */
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++)
+      if (at(above, x, y) === gid('canopy-bl') && at(below, x, y + 1) !== gid('trunk-l'))
+        for (const [dx, dy] of [
+          [0, -1],
+          [1, -1],
+          [0, 0],
+          [1, 0],
+        ] as const)
+          set(above, x + dx, y + dy, 0);
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++)
+      if (at(below, x, y) === gid('trunk-l') && at(above, x, y - 1) !== gid('canopy-bl')) {
+        set(below, x, y, 0);
+        set(below, x + 1, y, 0);
+        clear(x, y);
+        clear(x + 1, y);
+      }
+
   const json = JSON.stringify({
     compressionlevel: -1,
     type: 'map',
