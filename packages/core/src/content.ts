@@ -81,6 +81,27 @@ const notice = z.strictObject({
     .optional(),
 });
 
+/**
+ * Someone Red can talk to who is not offering anything.
+ *
+ * Deliberately outside the rules: no skill, no capability, no verdict, nothing logged and nothing
+ * scored. The game stays three decisions long. They exist because the walk between the three real
+ * encounters was empty, and because the forest should contain people who are unhelpful in the
+ * ordinary way rather than the dangerous way.
+ */
+const bystander = z.strictObject({
+  id: slug,
+  name: text,
+  /** Object name in the map, e.g. `bystander-toad`. */
+  spawn: slug,
+  /** Sprite sheet key. */
+  sprite: slug,
+  /** Said the first time, then cycled through on repeat visits. */
+  lines: z.array(text).min(1),
+  /** Replaces `lines` once all three capabilities are live. The forest notices. */
+  whenExposed: text.optional(),
+});
+
 const ending = z.strictObject({
   id: slug,
   title: text,
@@ -134,6 +155,8 @@ export const contentSchema = z.strictObject({
   /** Basket item id to sprite asset key, so adding an item needs no code change. */
   items: z.record(slug, slug),
   characters: z.array(character).min(1),
+  /** Optional: people in the forest who offer nothing. See the `bystander` schema. */
+  bystanders: z.array(bystander).default([]),
   skills: z.array(skill).min(1),
   endings: z.array(ending).min(1),
   strings: z.record(z.string(), text),
@@ -144,6 +167,7 @@ export type Skill = Content['skills'][number];
 export type Character = Content['characters'][number];
 export type Outcome = Skill['outcomes'][Verdict];
 export type Ending = Content['endings'][number];
+export type Bystander = Content['bystanders'][number];
 export type Notice = Content['notices'][number];
 
 export const findSkill = (content: Content, id: SkillId): Skill | undefined =>
@@ -197,6 +221,18 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
     ['spawn', content.characters.map((c) => c.spawn)],
   ] as const)
     for (const d of duplicates([...ids])) add(`duplicate ${kind} id "${d}"`);
+
+  for (const d of duplicates(content.bystanders.map((b) => b.id)))
+    add(`duplicate bystander id "${d}"`);
+  const characterIds = new Set(content.characters.map((c) => c.id));
+  for (const b of content.bystanders) {
+    if (characterIds.has(b.id))
+      add(`bystander "${b.id}" shares an id with a character; they are different kinds of thing`);
+    const occupant = content.characters.find((c) => c.spawn === b.spawn);
+    if (occupant) add(`bystander "${b.id}" spawns where character "${occupant.id}" already stands`);
+  }
+  for (const d of duplicates(content.bystanders.map((b) => b.spawn)))
+    add(`two bystanders share the spawn "${d}"`);
 
   const skillIds = new Set(content.skills.map((s) => s.id));
   for (const c of content.characters) {

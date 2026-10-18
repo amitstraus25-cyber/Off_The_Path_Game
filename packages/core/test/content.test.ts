@@ -225,6 +225,32 @@ describe('lint rules', () => {
       (c) => void (c.characters[0]!.greet = 'Made by OpenAI.'),
       /banned vendor word "OpenAI"/,
     ],
+    /*
+     * Bystanders are deliberately outside the rules -- no skill, no verdict, nothing scored -- so
+     * the only thing lint can protect is that they stay distinguishable from the three characters
+     * the player actually judges. An id or a spawn shared with a character is the one way a
+     * bystander could be mistaken for a decision.
+     */
+    [
+      'duplicate bystander id',
+      (c) => void (c.bystanders[1]!.id = c.bystanders[0]!.id),
+      /duplicate bystander id "toadstool"/,
+    ],
+    [
+      'a bystander wearing a character id',
+      (c) => void (c.bystanders[0]!.id = c.characters[0]!.id),
+      /shares an id with a character/,
+    ],
+    [
+      'a bystander standing on a character spawn',
+      (c) => void (c.bystanders[0]!.spawn = c.characters[0]!.spawn),
+      /spawns where character "rabbit" already stands/,
+    ],
+    [
+      'two bystanders on one spawn',
+      (c) => void (c.bystanders[1]!.spawn = c.bystanders[0]!.spawn),
+      /two bystanders share the spawn/,
+    ],
   ];
   it.each(cases)('flags: %s', (_name, mutate, pattern) => {
     const c = clone();

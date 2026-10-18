@@ -131,6 +131,45 @@
       ]
     }
   ],
+  "bystanders": [
+    {
+      "id": "toadstool",
+      "name": "Toadstool",
+      "spawn": "bystander-toadstool",
+      "sprite": "bystander-toadstool",
+      "lines": [
+        "Grandma's cottage? Easy. Straight on, past the big one, then left where the old one used to be.",
+        "A traveller told me the way, years back. Very kind, he was. I have passed it on ever since.",
+        "Me? No, I have never been. Someone has to stay and give the directions."
+      ],
+      "whenExposed": "Someone came by asking which way you had gone. I told him. Helpful wood, this."
+    },
+    {
+      "id": "magpie",
+      "name": "Magpie",
+      "spawn": "bystander-magpie",
+      "sprite": "bystander-magpie",
+      "lines": [
+        "Four hundred and twelve travellers have taken one. I keep the tally on the well here.",
+        "What is it? Couldn't tell you. I only do the counting.",
+        "Three more since you stopped to ask. Fastest tally I ever kept."
+      ],
+      "whenExposed": "You have all three. Hardly anyone takes all three. I shall need a longer tally."
+    },
+    {
+      "id": "snail",
+      "name": "Snail",
+      "spawn": "bystander-snail",
+      "sprite": "bystander-snail",
+      "lines": [
+        "Parcel for Grandma. I set out on Tuesday. It is going very well.",
+        "I do not open them. Nobody has ever paid me to open one.",
+        "They offered me a faster way. I said no. I like to see what I am passing.",
+        "No, press on without me. I will catch you up. Around autumn."
+      ],
+      "whenExposed": "Funny thing. There is a message on the road tonight that I never carried."
+    }
+  ],
   "skills": [
     {
       "id": "cottage-finder",
@@ -318,7 +357,7 @@
   ],
   "strings": {
     "quest": "Find Grandma",
-    "cottageHint": "I should talk to everyone first.",
+    "cottageHint": "I should hear all three travellers first.",
     "cta": "Read the Research",
     "ctaPrompt": "Who wrote the instructions your agent follows?",
     "leaderboardTitle": "Wolf Spotters",
