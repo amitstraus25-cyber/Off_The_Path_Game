@@ -94,14 +94,20 @@ export function generateForestMap(): GeneratedMap {
     }
   };
 
-  // Main east-west track, plus a north fork to the owl and a south fork to the lantern.
+  /*
+   * Main east-west track, plus a north fork to the owl and a south fork to the lantern.
+   * The track meanders a row for looks, but it must be FLAT where it crosses the river: the
+   * bridge is two rows tall, and a track that is mid-meander there meets it one row high and
+   * leaves a visible step in the sand. The river sits around x 25 to 29, so the bends live
+   * well clear of it.
+   */
   layPath([
     [4, 20],
-    [14, 20],
-    [20, 19],
-    [30, 20],
-    [40, 20],
-    [48, 19],
+    [12, 19],
+    [18, 20],
+    [34, 20],
+    [42, 19],
+    [48, 20],
     [52, 20],
   ]);
   layPath([
@@ -150,10 +156,21 @@ export function generateForestMap(): GeneratedMap {
     set(ground, x, y, gid(name));
   }
 
-  // --- the bridge, where the main track meets the river ----------------------
-  const bridgeY = 20;
-  const bridgeCentre = Math.round(riverCentre(bridgeY));
-  for (const y of [bridgeY, bridgeY + 1])
+  /*
+   * The bridge, where the main track meets the river.
+   *
+   * Its rows are read off the track rather than hard-coded. Hard-coding them is what put the
+   * deck a row below the sand: the waypoints moved, the constant did not, and the crossing
+   * gained a step that no test could see. Measuring the approach means the two can never
+   * disagree, whatever the waypoints do later.
+   */
+  const bridgeCentre = Math.round(riverCentre(20));
+  const approachX = bridgeCentre - 3; // dry land, just west of the water
+  const bridgeRows: number[] = [];
+  for (let y = 0; y < MAP_H; y++) if (isPath(approachX, y)) bridgeRows.push(y);
+  if (bridgeRows.length === 0) throw new Error('the main track does not reach the river crossing');
+
+  for (const y of bridgeRows)
     for (let x = bridgeCentre - 2; x <= bridgeCentre + 2; x++) {
       const kind =
         x === bridgeCentre - 2 ? 'bridge-l' : x === bridgeCentre + 2 ? 'bridge-r' : 'bridge-m';
@@ -357,6 +374,22 @@ export function generateForestMap(): GeneratedMap {
       y: 20 * TILE,
       width: TILE * 4,
       height: TILE * 2,
+    },
+    {
+      /*
+       * The note on Grandma's door, which the `sign` errand goal needs. It sits on the row
+       * directly below the door, inside the garden and reachable from the gate path, so a player
+       * who walked all the way to the door passes it.
+       *
+       * This belongs HERE, in the generator, and not in the generated map-forest.json: a previous
+       * pass added it by hand to the JSON and every later `pnpm graybox` silently wiped it, which
+       * left the goal advertised in the HUD and impossible to complete.
+       */
+      name: 'notice-cottage-door',
+      x: (cx + 2) * TILE,
+      y: 19 * TILE,
+      width: TILE * 2,
+      height: TILE,
     },
     { name: 'prop-signpost', ...landmarks['signpost']!, width: TILE, height: TILE },
     { name: 'prop-well', ...landmarks['well']!, width: TILE, height: TILE },

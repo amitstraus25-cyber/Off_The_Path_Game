@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import content from '../../../content/game.json';
 import map from '../src/assets/map-forest.json';
+import gids from '../src/assets/tileset-forest.gids.json';
 import { readForestMap } from '../src/world/map';
 import { TILE } from '../src/world/logic';
 import type { ForestMap, MapObject } from '../src/world/map';
 
 const forest: ForestMap = readForestMap(map);
+/** gid -> tile name, so a test can tell sand from grass from bridge deck. */
+const nameOfGid = new Map<number, string>(
+  Object.entries(gids as Record<string, number>).map(([name, gid]) => [gid, name]),
+);
 const object = (name: string): MapObject => {
   const found = forest.objects.find((o) => o.name === name);
   if (!found) throw new Error(`map has no "${name}"`);
@@ -108,5 +114,119 @@ describe('the notice post cannot be walked around', () => {
     expect(notice.y0).toBeLessThanOrEqual(gate.y0);
     expect(notice.y1).toBeGreaterThanOrEqual(gate.y1);
     expect(notice.x1).toBe(gate.x0 - 1);
+  });
+});
+
+describe('the river crossing lines up', () => {
+  /*
+   * The bridge is two rows tall and so is the track. When the track was mid-meander at the
+   * river it met the bridge one row high, leaving a step in the sand and a dead-end row of
+   * path running into the water.
+   *
+   * This has to read the GROUND layer, not collision: grass is walkable too, so a collision
+   * test cannot tell a track that stops at the bank from a meadow that was never a track.
+   */
+  const layers = (map as unknown as { layers: { name: string; data?: number[] }[] }).layers;
+  const ground = layers.find((l) => l.name === 'ground')?.data ?? [];
+  const width = forest.collision.width;
+  const height = forest.collision.height;
+
+  const isPathTile = (x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return false;
+    const name = nameOfGid.get(ground[y * width + x] ?? 0);
+    return name !== undefined && name.startsWith('path');
+  };
+  const isBridgeTile = (x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return false;
+    const name = nameOfGid.get(ground[y * width + x] ?? 0);
+    return name !== undefined && name.startsWith('bridge');
+  };
+
+  /** Every row carrying bridge deck, and the column span it covers. */
+  const deck = (() => {
+    const rows = new Set<number>();
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++)
+        if (isBridgeTile(x, y)) {
+          rows.add(y);
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+        }
+    return { rows: [...rows].sort((a, b) => a - b), minX, maxX };
+  })();
+
+  it('there is a bridge, at least two rows tall and contiguous', () => {
+    expect(deck.rows.length).toBeGreaterThanOrEqual(2);
+    expect(deck.rows[deck.rows.length - 1]! - deck.rows[0]!).toBe(deck.rows.length - 1);
+  });
+
+  it('the sand meets the deck squarely on both banks', () => {
+    for (const y of deck.rows) {
+      expect(isPathTile(deck.minX - 1, y), `west bank has no track on deck row ${y}`).toBe(true);
+      expect(isPathTile(deck.maxX + 1, y), `east bank has no track on deck row ${y}`).toBe(true);
+    }
+  });
+
+  it('no row of track runs into the water', () => {
+    // Any track tile touching the bank must be on a deck row. A track row that approaches the
+    // river and is not carried across is the exact bug this guards.
+    for (let y = 0; y < height; y++) {
+      if (deck.rows.includes(y)) continue;
+      expect(
+        isPathTile(deck.minX - 1, y),
+        `track on row ${y} reaches the west bank but no bridge carries it across`,
+      ).toBe(false);
+      expect(
+        isPathTile(deck.maxX + 1, y),
+        `track on row ${y} reaches the east bank but no bridge carries it across`,
+      ).toBe(false);
+    }
+  });
+});
+
+describe('errand goals are reachable in the world', () => {
+  const acts = content.scoring.errandGoals.flatMap((g) => ('act' in g && g.act ? [g.act] : []));
+
+  it('names at least one act, or this test is vacuous', () => {
+    expect(acts.length).toBeGreaterThan(0);
+  });
+
+  it.each(acts)('the notice "%s" is placed on the map', (act) => {
+    expect(forest.objects.map((o) => o.name)).toContain(`notice-${act}`);
+  });
+
+  it.each(acts)('the notice "%s" can be walked to from the spawn', (act) => {
+    const spawn = object('spawn-red');
+    const start = { x: Math.floor(spawn.x / TILE), y: Math.floor(spawn.y / TILE) };
+    const seen = new Set([`${start.x},${start.y}`]);
+    const queue = [start];
+    while (queue.length > 0) {
+      const at = queue.shift()!;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const next = { x: at.x + dx, y: at.y + dy };
+        const key = `${next.x},${next.y}`;
+        if (seen.has(key)) continue;
+        const { collision } = forest;
+        const outside =
+          next.x < 0 || next.y < 0 || next.x >= collision.width || next.y >= collision.height;
+        if (outside || collision.tiles[next.y * collision.width + next.x] !== 0) continue;
+        seen.add(key);
+        queue.push(next);
+      }
+    }
+
+    const notice = object(`notice-${act}`);
+    const box = tiles(notice);
+    let reachable = false;
+    for (let tx = box.x0; tx <= box.x1; tx++)
+      for (let ty = box.y0; ty <= box.y1; ty++) if (seen.has(`${tx},${ty}`)) reachable = true;
+    expect(reachable).toBe(true);
   });
 });

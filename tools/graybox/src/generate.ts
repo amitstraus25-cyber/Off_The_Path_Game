@@ -5,7 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Img } from './paint.ts';
-import { paintTileset } from './tiles.ts';
+import { TILE_NAMES, paintTileset } from './tiles.ts';
 import { generateForestMap } from './forest-map.ts';
 import {
   ITEM_PAINTERS,
@@ -24,6 +24,16 @@ mkdirSync(OUT, { recursive: true });
 const write = (name: string, body: Buffer | string): void => writeFileSync(join(OUT, name), body);
 
 write('tileset-forest.png', paintTileset().png());
+
+/*
+ * A name -> gid map for the tileset. The game does not need it, but it makes the map
+ * self-describing: without it nothing downstream can tell sand from grass, which is exactly the
+ * distinction a misaligned bridge shows up in.
+ */
+write(
+  'tileset-forest.gids.json',
+  JSON.stringify(Object.fromEntries(TILE_NAMES.map((name, i) => [name, i + 1])), null, 2),
+);
 
 const map = generateForestMap();
 write('map-forest.json', map.json);
