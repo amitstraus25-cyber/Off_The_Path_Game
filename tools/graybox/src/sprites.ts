@@ -197,37 +197,61 @@ const lanternKeeper: NpcPainter = (img, blink) => {
   img.outline(shade('ink', 0));
 };
 
-/** The wolf has four frames: two idle, a window silhouette, and waiting at the door. */
+/**
+ * The wolf: two idle frames, a window silhouette, and waiting at the door in Grandma's things.
+ *
+ * Built from triangles and a protruding muzzle rather than the stacked ellipses every other
+ * animal here uses. That vocabulary is why he used to read as a grey cub: at 16px a round body
+ * with small ears IS a rabbit. The silhouette has to differ before the colour does.
+ */
 function paintWolf(frame: 0 | 1 | 2 | 3): Img {
   const img = new Img(RED_W, RED_H);
-  const silhouette = frame >= 2;
-  const body = silhouette ? shade('ink', 0) : shade('stone', 0);
-  const light = silhouette ? shade('ink', 1) : shade('stone', 1);
+  const dark = frame >= 2;
+  const base = dark ? shade('ink', 0) : shade('wolf', 0);
+  const mid = dark ? shade('ink', 0) : shade('wolf', 2);
+  const lit = dark ? shade('ink', 1) : shade('wolf', 3);
   const y = frame === 1 ? 1 : 0;
 
-  img.ellipse(8, 17 + y, 6, 6.5, body);
-  img.ellipse(8, 16 + y, 5, 5, light);
-  // Head and snout.
-  img.ellipse(8, 10 + y, 4.5, 4, body);
-  img.ellipse(8, 12 + y, 2.6, 2.2, light);
-  img.px(8, 12 + y, shade('ink', 0));
-  // Ears.
-  img.ellipse(5, 6 + y, 1.8, 2.4, body);
-  img.ellipse(11, 6 + y, 1.8, 2.4, body);
-  // Eyes: amber, and the only warm thing about him.
-  if (!silhouette) {
-    img.px(6, 10 + y, shade('gold', 2));
-    img.px(10, 10 + y, shade('gold', 2));
-  } else {
-    img.px(6, 10 + y, shade('gold', 1));
-    img.px(10, 10 + y, shade('gold', 1));
+  // Tall triangular ears, leaning out. Drawn first so the skull overlaps their bases.
+  const ear = (cx: number, lean: number): void => {
+    for (let i = 0; i < 6; i++) {
+      const w = 1 + i;
+      img.rect(Math.round(cx - w / 2 + lean * i), 1 + y + i, w, 1, base);
+    }
+  };
+  ear(4, -0.22);
+  ear(11, 0.22);
+
+  // Narrow chest, not a round belly: he is lean where the rabbit is soft.
+  img.ellipse(8, 18 + y, 4.6, 5.6, base);
+  img.ellipse(8, 17 + y, 3.8, 4.6, mid);
+  // Tail, low and heavy.
+  img.ellipse(13, 19 + y, 2.2, 3.2, base);
+
+  // Skull, then the muzzle pushing down out of it.
+  img.ellipse(8, 9 + y, 4.6, 4.2, base);
+  img.ellipse(7, 8 + y, 3.4, 3, mid);
+  img.ellipse(8, 12 + y, 2.4, 2.4, mid);
+  img.ellipse(8, 13 + y, 1.8, 1.6, lit);
+  img.px(8, 11 + y, shade('ink', 0));
+
+  // Amber, the only warm thing about him, and the only colour the silhouette keeps.
+  for (const ex of [6, 10]) {
+    img.px(ex, 9 + y, shade('gold', dark ? 1 : 3));
+    img.px(ex, 10 + y, shade('gold', 0));
   }
-  // Tail.
-  img.ellipse(13, 18 + y, 2.4, 3.4, body);
+
   if (frame === 3) {
-    // At the door: wearing Grandma's shawl.
-    img.rect(3, 14 + y, 11, 3, shade('cloak', 2));
-    img.rect(3, 14 + y, 11, 1, shade('cloak', 3));
+    // At the door: Grandma's shawl over the shoulders and her bonnet on his head.
+    // A shawl drapes from the shoulders; it does not pool at his feet. Keep it narrow and cool
+    // so the warm fur still reads above and below it.
+    img.ellipse(8, 16 + y, 5.4, 2.6, shade('stone', 1));
+    img.ellipse(8, 15 + y, 4.6, 1.8, shade('stone', 2));
+    for (let i = 0; i < 4; i++) img.px(5 + i * 2, 18 + y, shade('stone', 0));
+    // Her bonnet, small enough that his ears still show on both sides.
+    img.ellipse(8, 4 + y, 4.2, 1.8, shade('wall', 1));
+    img.ellipse(8, 3 + y, 3.4, 1.3, shade('wall', 3));
+    for (let i = 0; i < 4; i++) img.px(5 + i * 2, 6 + y, shade('wall', 0));
   }
   img.outline(shade('ink', 0));
   return img;
@@ -457,27 +481,67 @@ const portraitKeeper: PortraitPainter = (img) => {
 
 const portraitWolfGrandma: PortraitPainter = (img) => {
   img.rect(0, 0, 32, 32, shade('night', 1));
-  // Grandma's shawl and cap, with the wrong face inside.
-  img.ellipse(16, 30, 16, 12, shade('cloak', 2));
-  img.ellipse(16, 20, 12, 12, shade('stone', 0));
-  img.ellipse(16, 19, 10, 10, shade('stone', 1));
-  img.ellipse(16, 24, 5, 4, shade('stone', 2));
-  img.px(16, 24, shade('ink', 0));
-  img.ellipse(7, 9, 4, 5, shade('stone', 0));
-  img.ellipse(25, 9, 4, 5, shade('stone', 0));
-  // Amber eyes and a glimpse of teeth.
-  img.ellipse(11, 18, 2.2, 2, shade('gold', 2));
-  img.ellipse(21, 18, 2.2, 2, shade('gold', 2));
-  img.px(11, 18, shade('ink', 0));
-  img.px(21, 18, shade('ink', 0));
-  for (const tx of [14, 16, 18]) {
-    img.px(tx, 27, shade('wall', 3));
-    img.px(tx, 28, shade('wall', 2));
+
+  /*
+   * The reveal. It works on one contrast: the SILHOUETTE has to say Grandma while the FACE says
+   * wolf. So the bonnet is drawn last and sits properly on the skull, the shawl is cool grey
+   * against warm fur, and his ears push out from under the brim where a grandmother has none.
+   *
+   * The previous version was a flat cat face: no muzzle, round eyes, and a row of white squares
+   * for teeth that read as a grin rather than a mouth.
+   */
+
+  // Grandma's shawl. Cool grey, never Red's red -- the cloak ramp belongs to Red alone.
+  img.ellipse(16, 33, 17, 11, shade('stone', 0));
+  img.ellipse(16, 34, 15, 9, shade('stone', 1));
+
+  // Ears first: tall triangles, leaning outward, so the brim can cut across their bases.
+  const ear = (cx: number, lean: number): void => {
+    for (let i = 0; i < 9; i++) {
+      const w = 1 + i;
+      img.rect(Math.round(cx - w / 2 + lean * i), 2 + i, w, 1, shade('wolf', 0));
+    }
+    for (let i = 3; i < 8; i++) {
+      const w = Math.max(1, i - 3);
+      img.rect(Math.round(cx - w / 2 + lean * i), 4 + i, w, 1, shade('wolf', 2));
+    }
+  };
+  ear(5, -0.2);
+  ear(27, 0.2);
+
+  // Skull, lit from the upper left like everything else in this forest.
+  img.ellipse(16, 19, 10.5, 9.5, shade('wolf', 0));
+  img.ellipse(16, 18, 9.5, 8.5, shade('wolf', 2));
+  img.ellipse(14, 16, 7, 5.5, shade('wolf', 3));
+
+  // The muzzle: it has to break the circle of the head, or he reads as a cat.
+  img.ellipse(16, 25, 6, 5.5, shade('wolf', 1));
+  img.ellipse(16, 26, 5, 4.5, shade('wolf', 3));
+  img.ellipse(16, 28, 3.6, 2.8, shade('wall', 0));
+  img.ellipse(16, 23, 2.4, 1.6, shade('ink', 0));
+  img.px(15, 22, shade('wall', 2));
+
+  // Two fangs, not a row of squares. A mouth you notice a second late.
+  for (const fx of [13, 19]) {
+    img.px(fx, 29, shade('wall', 3));
+    img.px(fx, 30, shade('wall', 2));
   }
-  // The cap she was wearing.
-  img.ellipse(16, 8, 11, 5, shade('wall', 2));
-  img.ellipse(16, 6, 9, 4, shade('wall', 1));
-  for (let i = 0; i < 20; i++) img.px(7 + i, 11, shade('wall', 0));
+
+  // Amber, and narrowed. Round eyes read friendly; these do not.
+  for (const ex of [11, 21]) {
+    img.ellipse(ex, 17, 3, 2.1, shade('gold', 1));
+    img.ellipse(ex, 17, 2.4, 1.6, shade('gold', 3));
+    img.ellipse(ex, 17, 1, 1.2, shade('ink', 0));
+    img.px(ex - 1, 16, shade('wall', 3));
+  }
+
+  // The bonnet, over the skull and under the ears. Its scalloped brim is the Grandma tell.
+  img.ellipse(16, 6, 8.5, 3.6, shade('wall', 1));
+  img.ellipse(16, 5, 7.5, 3, shade('wall', 2));
+  img.ellipse(14, 4, 5, 1.8, shade('wall', 3));
+  for (let i = 0; i < 7; i++) img.ellipse(6 + i * 3.4, 9, 2, 1.8, shade('wall', 2));
+  for (let i = 0; i < 7; i++) img.px(Math.round(6 + i * 3.4), 10, shade('wall', 0));
+  img.line(6, 8, 26, 8, shade('wall', 0));
 };
 
 export const PORTRAIT_PAINTERS: Record<string, PortraitPainter> = {

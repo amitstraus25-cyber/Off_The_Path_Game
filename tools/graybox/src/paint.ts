@@ -32,6 +32,12 @@ export const PALETTE = {
   // (#1d6b52), which at 16px reads as a hard ink outline round every tree rather than shade.
   canopy: ['#21713c', '#2f9a4a', '#51bb4b', '#86d65c'],
   stone: ['#5f5f66', '#8f8f93', '#b4b4b8', '#d2d2d6'],
+  /*
+   * The wolf, and only the wolf. He was drawn in `stone` -- the ramp the rocks use -- which is why
+   * he read as a grey teddy rather than a predator. Warm dark grey-brown, so that when he is
+   * wearing Grandma's cool grey shawl the fur above it reads as the wrong animal.
+   */
+  wolf: ['#2a2521', '#403931', '#5a5048', '#786c60'],
   roof: ['#a8322c', '#e04a42', '#fc695b', '#ff9a86'],
   wall: ['#c4ab8c', '#f3d9c1', '#faeada', '#fffaf0'],
   wood: ['#6b4522', '#9a6a36', '#c08f55', '#dcb882'],
