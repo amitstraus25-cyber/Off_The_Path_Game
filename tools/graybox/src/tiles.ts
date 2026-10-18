@@ -17,11 +17,13 @@
  * upscaled 16px art.
  */
 import { Img } from './paint.ts';
-import { GROUND_TILES } from './tiles/ground.ts';
-import { WATER_TILES } from './tiles/water.ts';
-import { FLORA_TILES } from './tiles/flora.ts';
-import { BUILT_TILES } from './tiles/built.ts';
-import { PROP_TILES } from './tiles/props.ts';
+import { GROUND_TILES } from './tiles/w-ground.ts';
+import { WATER_TILES } from './tiles/w-water.ts';
+import { TREE_TILES } from './tiles/w-trees.ts';
+import { UNDERGROWTH_TILES } from './tiles/w-undergrowth.ts';
+import { COTTAGE_TILES } from './tiles/s-cottage.ts';
+import { OUTDOOR_TILES } from './tiles/s-outdoor.ts';
+import { PROP_TILES } from './tiles/s-props.ts';
 
 /** 32 since the remaster. One tile is one square of ground, everywhere. */
 export const TILE = 32;
@@ -35,8 +37,10 @@ type Painter = (img: Img) => void;
 export const TILE_PAINTERS: Record<string, Painter> = {
   ...GROUND_TILES,
   ...WATER_TILES,
-  ...FLORA_TILES,
-  ...BUILT_TILES,
+  ...TREE_TILES,
+  ...UNDERGROWTH_TILES,
+  ...COTTAGE_TILES,
+  ...OUTDOOR_TILES,
   ...PROP_TILES,
 };
 
