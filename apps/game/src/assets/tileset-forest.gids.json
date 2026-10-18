@@ -49,6 +49,7 @@
   "stall-awning-r": 48,
   "stall-counter": 49,
   "lantern-post": 50,
-  "well": 51,
-  "signpost": 52
+  "fountain": 51,
+  "well": 52,
+  "signpost": 53
 }

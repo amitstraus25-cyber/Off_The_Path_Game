@@ -460,6 +460,37 @@ const well: Painter = (img, seed) => {
   img.px(9, 13, shade('water', 0));
 };
 
+/*
+ * A fountain in a glade. The one piece of the forest that is deliberately Cyera's: the water
+ * catches Lilac (#D28EFF, straight from the brand theme) where it falls, and the glade around it
+ * is planted with the Lilac flowers. No mark is redrawn and nothing is branded; it is the colour
+ * turning up in the world rather than stamped on top of it.
+ */
+const fountain: Painter = (img, seed) => {
+  grass(2)(img, seed);
+  // Lower basin.
+  img.ellipse(8, 12, 7, 4, shade('stone', 0));
+  img.ellipse(8, 12, 6, 3.2, shade('stone', 2));
+  img.ellipse(8, 12.2, 4.6, 2.2, shade('water', 1));
+  img.ellipse(6.6, 11.6, 2.2, 1, shade('water', 2));
+  // Pedestal and upper bowl.
+  img.rect(7, 7, 2, 5, shade('stone', 1));
+  img.rect(7, 7, 1, 5, shade('stone', 2));
+  img.ellipse(8, 7, 3.6, 1.5, shade('stone', 0));
+  img.ellipse(8, 6.8, 2.6, 1, shade('water', 2));
+  // The spout, and the fall on either side.
+  img.px(8, 2, shade('water', 3));
+  img.px(8, 3, shade('water', 3));
+  img.px(7, 4, shade('water', 2));
+  img.px(9, 4, shade('water', 2));
+  img.px(6, 5, shade('water', 2));
+  img.px(10, 5, shade('water', 2));
+  // Where it catches the light, it catches Lilac.
+  img.px(6, 6, [210, 142, 255, 255]);
+  img.px(10, 6, [210, 142, 255, 255]);
+  img.px(5, 12, [210, 142, 255, 200]);
+};
+
 const signpost: Painter = (img, seed) => {
   grass(2)(img, seed);
   img.rect(7, 4, 2, 12, shade('wood', 0));
@@ -543,6 +574,7 @@ export const TILE_PAINTERS: Record<string, Painter> = {
   'stall-awning-r': stallAwning('right'),
   'stall-counter': stallCounter,
   'lantern-post': lanternPost,
+  fountain,
   well: well,
   signpost: signpost,
 };

@@ -308,6 +308,20 @@ export function generateForestMap(): GeneratedMap {
   // The notice post stands on the main track, so every route to the cottage passes it.
   place('notice-post', 43, 19, 'signpost');
   place('well', 23, 24, 'well');
+  /*
+   * A glade off the owl's fork, cleared of trees so the fountain is the only thing in it, and
+   * planted with the Lilac flowers. Nothing happens here. It is somewhere to find.
+   */
+  clearArea(17, 11, 5, 5);
+  place('fountain', 19, 13, 'fountain');
+  for (const [fx, fy] of [
+    [18, 12],
+    [20, 12],
+    [17, 14],
+    [21, 14],
+    [19, 15],
+  ] as const)
+    set(below, fx, fy, gid('flower-lilac'));
   place('lantern-post', 36, 32, 'lantern-post');
 
   // Grandma's cottage at the east end, behind a fence with one gate.
@@ -485,6 +499,7 @@ export function generateForestMap(): GeneratedMap {
     },
     { name: 'prop-signpost', ...landmarks['signpost']!, width: TILE, height: TILE },
     { name: 'prop-well', ...landmarks['well']!, width: TILE, height: TILE },
+    { name: 'prop-fountain', ...landmarks['fountain']!, width: TILE, height: TILE },
     { name: 'prop-lantern-post', ...landmarks['lantern-post']!, width: TILE, height: TILE },
     { name: 'prop-cottage', ...landmarks['cottage']!, width: TILE * 6, height: TILE * 5 },
     { name: 'prop-stall', ...landmarks['stall']!, width: TILE * 4, height: TILE },
