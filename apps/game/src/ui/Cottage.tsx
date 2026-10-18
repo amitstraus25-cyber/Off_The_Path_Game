@@ -67,7 +67,7 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
               )}")`,
             }}
             role="img"
-            aria-label={revealed ? 'At the cottage door' : 'Red at the gate'}
+            aria-label={revealed ? 'At the cottage door' : 'Red on the doorstep'}
           />
           <div class="otp-dialogue__text otp-arrive__text">
             {done && <h2 class="otp-ending__title">{chosen.title}</h2>}

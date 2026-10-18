@@ -431,17 +431,33 @@ const lanternPost: Painter = (img, seed) => {
   img.ellipse(8, 8, 7, 6, shade('gold', 3, 40));
 };
 
+/*
+ * A well, which took two goes. The first had a flat 14x3 red bar floating at the top with a gap
+ * under it, over a near-black mouth with a bright blue slot in it -- which at 16px read as a block
+ * of plastic explosive with an LED timer rather than as a well. The roof is now a stepped gable
+ * sitting ON its posts, and the water is a dark glint rather than a lit panel.
+ */
 const well: Painter = (img, seed) => {
   grass(1)(img, seed);
-  img.ellipse(8, 11, 7, 4.5, shade('stone', 0));
-  img.ellipse(8, 11, 6, 3.5, shade('stone', 1));
-  img.ellipse(8, 11, 4, 2.2, shade('night', 0));
-  img.ellipse(6.5, 10, 2, 1, shade('water', 1));
-  img.rect(2, 8, 2, 7, shade('wood', 0));
-  img.rect(12, 8, 2, 7, shade('wood', 0));
-  img.rect(1, 1, 14, 3, shade('roof', 1));
-  img.rect(1, 1, 14, 1, shade('roof', 2));
-  img.rect(7, 4, 2, 3, shade('wood', 1));
+  // Posts first, so the roof and the rim lap over them.
+  img.rect(3, 5, 2, 7, shade('wood', 0));
+  img.rect(11, 5, 2, 7, shade('wood', 0));
+  img.rect(3, 5, 1, 7, shade('wood', 1));
+  img.rect(11, 5, 1, 7, shade('wood', 1));
+  // Stepped gable.
+  img.rect(6, 1, 4, 1, shade('roof', 2));
+  img.rect(4, 2, 8, 1, shade('roof', 1));
+  img.rect(2, 3, 12, 1, shade('roof', 1));
+  img.rect(1, 4, 14, 1, shade('roof', 0));
+  // Winch bar and rope.
+  img.rect(5, 7, 6, 1, shade('wood', 1));
+  img.rect(8, 8, 1, 3, shade('wood', 2));
+  // Stone rim, then the dark water well inside it.
+  img.ellipse(8, 12, 6, 3.2, shade('stone', 0));
+  img.ellipse(8, 12, 5, 2.4, shade('stone', 2));
+  img.ellipse(8, 12.5, 3.2, 1.5, shade('night', 0));
+  img.px(7, 12, shade('water', 0));
+  img.px(9, 13, shade('water', 0));
 };
 
 const signpost: Painter = (img, seed) => {
@@ -493,6 +509,13 @@ export const TILE_PAINTERS: Record<string, Painter> = {
   waterfall: waterfall,
   'flower-white': flower([250, 250, 245, 255]),
   'flower-pink': flower([240, 150, 190, 255]),
+  /*
+   * Cyera Lilac, #D28EFF, straight from reference/brand/cyera-theme.css. The flower painter
+   * already draws four petals around a lit centre, which is the mark's own geometry, so a handful
+   * of these in the meadow is the brand sitting in the world rather than stamped on top of it.
+   * Not a logo: no mark is redrawn, only the colour and the count are deliberate.
+   */
+  'flower-lilac': flower([210, 142, 255, 255]),
   'flower-red': flower([214, 75, 70, 255]),
   bush: bush,
   rock: rock,

@@ -15,6 +15,14 @@ export interface GeneratedMap {
   landmarks: Record<string, { x: number; y: number }>;
 }
 
+/** Standard 4x4 ordered-dither matrix, used to scatter the grass variant boundaries. */
+const BAYER_4 = [
+  [0, 8, 2, 10],
+  [12, 4, 14, 6],
+  [3, 11, 1, 9],
+  [15, 7, 13, 5],
+] as const;
+
 export function generateForestMap(): GeneratedMap {
   const rnd = noise(20261016);
   const ground = blank();
@@ -44,7 +52,17 @@ export function generateForestMap(): GeneratedMap {
     for (let x = 0; x < MAP_W; x++) {
       // A second, finer octave keeps the patch edges from looking like contour lines.
       const v = sun(x / PATCH, y / PATCH) * 0.78 + sun(x / 2.2, y / 2.2) * 0.22;
-      const step = v < 0.36 ? 0 : v < 0.52 ? 1 : v < 0.7 ? 2 : 3;
+      /*
+       * Ordered dither on the threshold. Each grass tile carries a flat wash across its whole
+       * 16x16, so wherever two variants meet the boundary is a straight tile edge and the eye
+       * reads the field as rectangles of slightly different green -- the tile grid showing
+       * through the very thing meant to hide it. Nudging the threshold by a Bayer matrix only
+       * flips tiles already within a hair of a boundary, so the straight edge scatters into a
+       * dotted transition and the patches read as light rather than as blocks.
+       */
+      const dither = (BAYER_4[y % 4]![x % 4]! / 16 - 0.47) * 0.09;
+      const v2 = v + dither;
+      const step = v2 < 0.36 ? 0 : v2 < 0.52 ? 1 : v2 < 0.7 ? 2 : 3;
       set(ground, x, y, grassTiles[step]!);
     }
 
@@ -238,6 +256,8 @@ export function generateForestMap(): GeneratedMap {
   scatter('flower-white', 40);
   scatter('flower-pink', 30);
   scatter('flower-red', 24);
+  // Rare on purpose: often enough to be found, seldom enough to be noticed as a choice.
+  scatter('flower-lilac', 9);
   scatter('bush', 30, true);
   scatter('rock', 22, true);
 
@@ -370,6 +390,17 @@ export function generateForestMap(): GeneratedMap {
 
   const spawnX = 5;
   const spawnY = 20;
+  /*
+   * Four tiles square, and the decor-below layer with it. `clearArea` only clears collision and
+   * the canopy above, so a trunk drawn below stayed exactly where Red spawns and sat behind her
+   * head: she started the game with her face against a tree.
+   */
+  for (let dy = -2; dy < 3; dy++)
+    for (let dx = -2; dx < 3; dx++) {
+      set(below, spawnX + dx, spawnY + dy, 0);
+      set(above, spawnX + dx, spawnY + dy, 0);
+      clear(spawnX + dx, spawnY + dy);
+    }
   clearArea(spawnX, spawnY, 2, 2);
   for (const y of [spawnY, spawnY + 1]) {
     set(ground, spawnX, y, gid('path'));
@@ -385,7 +416,41 @@ export function generateForestMap(): GeneratedMap {
     bystander('bystander-toadstool', 10, 21),
     bystander('bystander-magpie', 22, 22),
     bystander('bystander-snail', 41, 21),
-    { name: 'trigger-cottage', x: fenceX * TILE, y: 20 * TILE, width: TILE, height: TILE * 2 },
+    /*
+     * Inside the garden, north of the path, between the gate and the door. She is the only
+     * bystander past the notice post, so by the time she speaks every decision has been made and
+     * the forest notice has already done whatever it was going to do.
+     */
+    bystander('bystander-cat', 47, 19),
+    /*
+     * The walk ends on the DOORSTEP, not at the garden gate.
+     *
+     * It used to end at the gate (x 46), which is the only gap in the fence. That put the end of
+     * the run in front of the door note, so a player who did the natural thing -- meet all three
+     * travellers, then walk east -- had the run taken off them at the gate and could never reach
+     * the note. The `sign` errand goal was advertised in the HUD on every run and, in that order,
+     * could not be earned. It was reachable only by slipping through the gate with a verdict still
+     * outstanding, reading the note, and walking back, which nobody does.
+     *
+     * It spans all three rows of the door lane, not just the doorstep. `overlaps` is a point test
+     * on Red's feet, and a player who only ever holds Right keeps her feet on row 21 for the whole
+     * map. A trigger on row 19 alone is invisible to that player: she walks straight past the door,
+     * out across the lawn, and the run never ends. That is worse than the bug this move fixed.
+     */
+    {
+      name: 'trigger-cottage',
+      x: (cx + 2) * TILE,
+      y: 19 * TILE,
+      width: TILE * 2,
+      height: TILE * 3,
+    },
+    /*
+     * The gap in the garden fence. Nothing in the game reads it; the map tests do, to assert that
+     * the forest notice spans the only way in. That invariant used to be checked against
+     * `trigger-cottage`, which happened to sit on the gap until the trigger moved to the door.
+     * Naming the gap directly means the test says what it means.
+     */
+    { name: 'gate-fence-gap', x: fenceX * TILE, y: 20 * TILE, width: TILE, height: TILE * 2 },
     {
       // Spans the whole gate approach (x 42 to 45, both path rows). The gate at x 46 is only
       // reachable along these two rows, so the notice cannot be walked around: the zero-click
@@ -398,19 +463,21 @@ export function generateForestMap(): GeneratedMap {
     },
     {
       /*
-       * The note on Grandma's door, which the `sign` errand goal needs. It sits on the row
-       * directly below the door, inside the garden and reachable from the gate path, so a player
-       * who walked all the way to the door passes it.
+       * The note on Grandma's door, which the `sign` errand goal needs. It sits in the lane
+       * immediately WEST of the doorstep and matches the trigger row for row, so every approach
+       * from the garden crosses the note first and the trigger second, whichever row Red walks.
+       * Putting it east of the gate but west of the door is what makes the ordering hold without
+       * the two rects ever sharing a tile, which would race inside one frame.
        *
        * This belongs HERE, in the generator, and not in the generated map-forest.json: a previous
        * pass added it by hand to the JSON and every later `pnpm graybox` silently wiped it, which
        * left the goal advertised in the HUD and impossible to complete.
        */
       name: 'notice-cottage-door',
-      x: (cx + 2) * TILE,
+      x: cx * TILE,
       y: 19 * TILE,
       width: TILE * 2,
-      height: TILE,
+      height: TILE * 3,
     },
     { name: 'prop-signpost', ...landmarks['signpost']!, width: TILE, height: TILE },
     { name: 'prop-well', ...landmarks['well']!, width: TILE, height: TILE },

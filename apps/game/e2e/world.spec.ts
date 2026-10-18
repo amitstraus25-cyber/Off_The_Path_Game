@@ -82,11 +82,12 @@ test('input is ignored while a panel is open', async ({ page }) => {
   expect((await probe(page)).position.x).toBeCloseTo(talking.position.x, 0);
 });
 
-test('the cottage gate stays locked until all three skills have a verdict', async ({ page }) => {
+test('the cottage door stays shut until all three skills have a verdict', async ({ page }) => {
   // Walking the whole map takes a while, and the hint toast hides itself after a few seconds.
   test.slow();
-  const gate = await mapObject(page, 'trigger-cottage');
-  await walkTo(page, { x: gate.x + 8, y: gate.y + gate.height / 2 }, 12, 40_000);
+  // trigger-cottage is the doorstep, not the garden gate: the walk ends at Grandma's door.
+  const door = await mapObject(page, 'trigger-cottage');
+  await walkTo(page, { x: door.x + 8, y: door.y + door.height / 2 }, 12, 40_000);
 
   const blocked = await probe(page);
   expect(blocked.phase).toBe('explore');

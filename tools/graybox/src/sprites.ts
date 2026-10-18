@@ -364,6 +364,44 @@ const snail: NpcPainter = (img, blink) => {
   img.outline(shade('ink', 0));
 };
 
+/**
+ * Sitting, facing out, tail curled round her feet.
+ *
+ * Built the way the rabbit is: everything is overlapping ellipses, so `outline` wraps one
+ * silhouette. Ears drawn clear of the head come back as two dark horns, because the outline fills
+ * the transparent gap between them and the skull. No whiskers either, for the same reason the
+ * rabbit has none: at 16px they land as white blocks floating beside the face.
+ */
+const cat: NpcPainter = (img, blink) => {
+  const y = blink ? 1 : 0;
+  img.ellipse(8, 23, 5, 1.4, shade('shadow', 1));
+  // Ears first, short and wide set, overlapping where the skull will go.
+  img.ellipse(5, 7 + y, 1.9, 2.8, shade('stone', 1));
+  img.ellipse(11, 7 + y, 1.9, 2.8, shade('stone', 1));
+  img.ellipse(5, 7.4 + y, 0.9, 1.7, shade('cloak', 1));
+  img.ellipse(11, 7.4 + y, 0.9, 1.7, shade('cloak', 1));
+  // Haunch and head.
+  img.ellipse(8, 19 + y, 5, 4.8, shade('stone', 1));
+  img.ellipse(8, 11 + y, 4.3, 3.8, shade('stone', 1));
+  img.ellipse(6.8, 10.3 + y, 2.8, 2.4, shade('stone', 2));
+  // Tabby bars, the cheapest thing that says cat rather than rabbit.
+  img.line(6, 17 + y, 10, 17 + y, shade('stone', 0));
+  img.line(5, 20 + y, 11, 20 + y, shade('stone', 0));
+  // Tail round the front of the feet, in the lightest step so it reads against the body.
+  img.ellipse(12, 21 + y, 2, 1.4, shade('stone', 3));
+  img.line(11, 22 + y, 5, 22 + y, shade('stone', 3));
+  img.px(4, 22 + y, shade('stone', 0));
+  if (!blink) {
+    img.px(6, 11 + y, shade('gold', 2));
+    img.px(10, 11 + y, shade('gold', 2));
+  } else {
+    img.line(5, 11 + y, 6, 11 + y, shade('ink', 0));
+    img.line(10, 11 + y, 11, 11 + y, shade('ink', 0));
+  }
+  img.px(8, 13 + y, shade('cloak', 2));
+  img.outline(shade('ink', 0));
+};
+
 /** Keyed by the map object name, which is also the texture key the scene looks up. */
 export const NPC_PAINTERS: Record<string, NpcPainter> = {
   'npc-rabbit': rabbit,
@@ -372,6 +410,7 @@ export const NPC_PAINTERS: Record<string, NpcPainter> = {
   'bystander-toadstool': toadstool,
   'bystander-magpie': magpie,
   'bystander-snail': snail,
+  'bystander-cat': cat,
 };
 
 export function paintNpcSheet(name: string): Img {

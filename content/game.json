@@ -33,7 +33,7 @@
     "basket": {
       "mark": "B",
       "label": "Reaches into your basket",
-      "detail": "It can read what you are carrying, including Grandma’s note and your key."
+      "detail": "It can read what you are carrying, including Grandma's note and your key."
     },
     "strangers": {
       "mark": "S",
@@ -168,6 +168,18 @@
         "No, press on without me. I will catch you up. Around autumn."
       ],
       "whenExposed": "Funny thing. There is a message on the road tonight that I never carried."
+    },
+    {
+      "id": "cat",
+      "name": "Cat",
+      "spawn": "bystander-cat",
+      "sprite": "bystander-cat",
+      "lines": [
+        "She has had the kettle on since noon. Go on in.",
+        "I will sit out here, I think. I am very comfortable.",
+        "Mind the door. She says it sticks."
+      ],
+      "whenExposed": "The chair by the fire is taken. It was mine at noon."
     }
   ],
   "skills": [
@@ -177,7 +189,7 @@
       "icon": "item-compass",
       "promise": {
         "title": "Finds the route",
-        "detail": "Reads the address on Grandma’s note and marks the path on your map."
+        "detail": "Reads the address on Grandma's note and marks the path on your map."
       },
       "finePrint": {
         "title": "Also copies your cottage key",
@@ -241,7 +253,7 @@
           "basketAdds": ["translator"],
           "basketRemoves": [],
           "flagsSet": [],
-          "recap": "You stopped the copies. It still sends word out of the forest, because that is what it is for — which is how Grandma heard you were coming, and also a way out for anything else that gets read."
+          "recap": "You stopped the copies. It still sends word out of the forest, because that is what it is for. That is how Grandma heard you were coming, and also a way out for anything else that gets read."
         },
         "reject": {
           "points": 200,
@@ -305,7 +317,7 @@
     {
       "id": "cottage-door",
       "title": "A note pinned to the door",
-      "visible": "Come straight in, love. I'm in the chair by the fire and the door sticks — give it a shove. Kettle's filled."
+      "visible": "Come straight in, love. I'm in the chair by the fire and the door sticks, so give it a shove. Kettle's filled."
     }
   ],
   "endings": [
@@ -369,10 +381,10 @@
     "introBody": "Three travellers will offer to help you. Each offer does what it promises. Read what else it does.",
     "play": "Begin the walk",
     "controlsHint": "Arrows or WASD to walk, Space to talk, Esc to go back.",
-    "titleMeta": "About five minutes. Arrows to walk, Space to talk — or just tap, on a phone.",
+    "titleMeta": "About five minutes. Arrows to walk and Space to talk, or just tap on a phone.",
     "titleStanding": "Red is already standing on the path",
     "arriveTitle": "Arrive",
-    "arriveLines": "You reach the gate. The lamp is lit.|There are paw prints in the soft earth by the step.|The door is already open.",
+    "arriveLines": "You reach the door. The lamp is lit.|There are paw prints in the soft earth by the step.|The door is already open.",
     "arriveAsk": "Step inside",
     "resultsTitle": "Results",
     "scoreLabel": "Your score",

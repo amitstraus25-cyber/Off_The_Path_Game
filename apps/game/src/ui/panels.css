@@ -79,10 +79,16 @@
   animation: otp-panel-in var(--otp-motion-slow) ease-out both;
 }
 
+/*
+ * Slide only, never fade. A panel that animates its own opacity composites over the forest for
+ * the whole 180ms, and because the card is cream on a bright green field what the player sees is
+ * the world showing through the panel and a lilac halo round its border that then vanishes. It
+ * reads as a rendering fault rather than as motion. Moving the panel into place keeps it opaque
+ * at every frame; the backdrop dim underneath is what separates it from the world.
+ */
 @keyframes otp-panel-in {
   from {
-    opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
 }
 

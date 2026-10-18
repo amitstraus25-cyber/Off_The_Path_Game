@@ -21,6 +21,8 @@ declare global {
           asked: Record<string, string[]>;
           basket: string[];
           flags: string[];
+          /** Notice ids Red has actually read, which is what the errand goals score off. */
+          read: string[];
           activeCharacter: string | null;
           runId: string | null;
           log: { t: string }[];

@@ -91,8 +91,8 @@ Checked in this folder before the initial commit:
 
 - `pnpm install --frozen-lockfile` clean
 - 0 type errors, lint clean
-- 144 core + 65 game unit tests, **100% branch coverage** on `packages/core`
-- 50 Playwright tests
+- 146 core + 73 game unit tests, **100% branch coverage** on `packages/core`
+- 51 Playwright tests
 - Production build from the service root
 - Built bundle under the real CSP: no violations, no external requests, logo and both brand fonts
   self-hosted
@@ -100,10 +100,17 @@ Checked in this folder before the initial commit:
 ## The cast
 
 Three **characters** offer skills and are judged: Rabbit, Owl, Lantern Keeper. Three
-**bystanders** offer nothing and are never scored: Toadstool, Magpie, Snail. The split is
+**bystanders** offer nothing and are never scored: Toadstool, Magpie, Snail, Cat. The split is
 load-bearing, not decoration, and `docs/GAME_DESIGN.md` section 5a has the rules for adding to it.
 A bystander that could be mistaken for a decision is a bug, and four lint rules in
 `packages/core/src/content.ts` exist to catch the ways that happens.
+
+## The walk ends at the door
+
+`trigger-cottage` is the doorstep (tiles 52-53, row 19), not the garden gate. It sat on the gate
+until 2026-10-18, which put the end of the run in front of the note on Grandma's door and made the
+`sign` errand goal unearnable in the natural order. `gate-fence-gap` now names the gap in the fence
+so the forest-post invariant has something real to point at. See `docs/GAME_DESIGN.md` section 5b.
 
 ## Where the design truth lives
 

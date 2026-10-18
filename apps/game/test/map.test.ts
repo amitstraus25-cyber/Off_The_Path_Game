@@ -83,7 +83,7 @@ describe('the generated forest is playable', () => {
     expect(touches(open, object(name))).toBe(true);
   });
 
-  it('Red can reach the cottage gate', () => {
+  it('Red can reach the cottage door', () => {
     expect(touches(open, object('trigger-cottage'))).toBe(true);
   });
 
@@ -102,19 +102,73 @@ describe('the notice post cannot be walked around', () => {
    */
   it('the gate is unreachable if the notice is refused', () => {
     const avoidingNotice = reachable(object('notice-forest-post'));
-    expect(touches(avoidingNotice, object('trigger-cottage'))).toBe(false);
+    expect(touches(avoidingNotice, object('gate-fence-gap'))).toBe(false);
   });
 
   it('but the gate is reachable normally', () => {
-    expect(touches(reachable(), object('trigger-cottage'))).toBe(true);
+    expect(touches(reachable(), object('gate-fence-gap'))).toBe(true);
   });
 
+  /*
+   * This used to be checked against `trigger-cottage`, which worked only while the trigger
+   * happened to sit on the gap in the fence. It has since moved to the doorstep, so the gap is
+   * named directly and the assertion says what it always meant.
+   */
   it('the notice spans the full width of the gate approach', () => {
     const notice = tiles(object('notice-forest-post'));
-    const gate = tiles(object('trigger-cottage'));
-    expect(notice.y0).toBeLessThanOrEqual(gate.y0);
-    expect(notice.y1).toBeGreaterThanOrEqual(gate.y1);
-    expect(notice.x1).toBe(gate.x0 - 1);
+    const gap = tiles(object('gate-fence-gap'));
+    expect(notice.y0).toBeLessThanOrEqual(gap.y0);
+    expect(notice.y1).toBeGreaterThanOrEqual(gap.y1);
+    expect(notice.x1).toBe(gap.x0 - 1);
+  });
+});
+
+describe('nothing a goal needs sits behind the end of the walk', () => {
+  /*
+   * The bug this exists to catch: `trigger-cottage` ends the run, and it used to sit on the
+   * garden gate, in front of the note on Grandma's door. A player who met all three travellers
+   * and then walked east had the run taken off her at the gate, so the `sign` errand goal was
+   * advertised in the HUD on every run and could not be earned in that order.
+   *
+   * A flood fill over the collision layer cannot see this. The gate tiles are deliberately
+   * walkable, so the BFS strolls straight through the one thing that ends the run: the trigger is
+   * a terminator, not a wall. The fix is to treat it as a wall HERE, which asks the question that
+   * matters -- can Red still be in the explore phase when she gets there? -- rather than "is
+   * there a corridor of walkable tiles", which was never in doubt.
+   *
+   * This fails on the old map and passes on the new one.
+   */
+  const stillExploring = reachable(object('trigger-cottage'));
+  const acts = content.scoring.errandGoals.flatMap((g) => ('act' in g && g.act ? [g.act] : []));
+
+  /*
+   * `stands on`, not `touches`. Reading a notice needs Red's feet inside the rect (`overlaps` in
+   * world/logic.ts is a point test), so a notice whose own tiles are all unreachable still passes
+   * a `touches` check from the tile next door, and the goal stays unearnable.
+   */
+  const standsOn = (seen: Set<string>, o: MapObject): boolean => {
+    const t = tiles(o);
+    for (let y = t.y0; y <= t.y1; y++)
+      for (let x = t.x0; x <= t.x1; x++) if (seen.has(`${x},${y}`)) return true;
+    return false;
+  };
+
+  it.each(acts)('the notice "%s" can be stood on before the walk ends', (act) => {
+    expect(standsOn(stillExploring, object(`notice-${act}`))).toBe(true);
+  });
+
+  /*
+   * `overlaps` is a point test on Red's feet, not a tile test, and a player who only ever holds
+   * Right walks the whole map with her feet on one exact y. A notice rect that misses that line
+   * is unreachable for her however walkable the tiles around it are, which is the same bug one
+   * level down.
+   */
+  it.each(acts)('the notice "%s" lies on the line a due-east walker actually walks', (act) => {
+    const spawn = object('spawn-red');
+    const feetY = spawn.y + TILE;
+    const notice = object(`notice-${act}`);
+    expect(feetY).toBeGreaterThanOrEqual(notice.y);
+    expect(feetY).toBeLessThan(notice.y + notice.height);
   });
 });
 

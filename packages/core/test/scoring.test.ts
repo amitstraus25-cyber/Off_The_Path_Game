@@ -90,6 +90,58 @@ describe('score: whole runs (seed content)', () => {
     expect(viaPost.total).toBe(straightThere.total + 100);
   });
 
+  /*
+   * The second optimal line, and the one that pays for the walk. Allowing the lantern in full is
+   * the only way to earn `strangers`, which is the only way to read the note on Grandma's door,
+   * so this run trades the lantern's best verdict for two errand goals and lands on the same
+   * ceiling as the careful line.
+   *
+   * It is pinned here because for a while the map made it impossible: the trigger that ends the
+   * walk sat on the garden gate, in front of the door note, so no amount of correct play reached
+   * it. Scoring was always right; the forest was not. apps/game/test/map.test.ts guards the
+   * geometry, and this guards the number it is supposed to produce.
+   */
+  it('the errand line ties the ceiling by reading the note on the door', () => {
+    const errand = { rabbit: 'restrict', owl: 'reject', 'lantern-keeper': 'allow' } as const;
+    const read = (n: string, at: number) => ({ t: 'read', n, at }) as const;
+    const base = fullRun(errand, ['needs']).log;
+
+    const stoppedAtTheGate = score([...base, read('forest-post', 9000)], content);
+    const wentToTheDoor = score(
+      [...base, read('forest-post', 9000), read('cottage-door', 9500)],
+      content,
+    );
+
+    expect(stoppedAtTheGate.goals.filter((g) => g.met).map((g) => g.id)).toEqual(['route']);
+    expect(wentToTheDoor.goals.filter((g) => g.met).map((g) => g.id)).toEqual(['route', 'sign']);
+    expect(wentToTheDoor.total).toBe(stoppedAtTheGate.total + 100);
+    expect(wentToTheDoor.total).toBe(1000);
+    expect(wentToTheDoor.boundaryHeld).toBe(true);
+  });
+
+  /*
+   * The errand is a real trade, not a checklist. `word` is only earned by restricting the Owl,
+   * which costs the messenger its full marks, and `sign` is only earned by allowing the Lantern
+   * in full, which is the one verdict that drops the boundary. So all three goals at once scores
+   * 750, below both 1,000 lines. Worth pinning: it is the claim the whole errand rests on, and
+   * nothing else in the suite says it.
+   */
+  it('you cannot carry out the whole errand and keep the boundary', () => {
+    const everything = { rabbit: 'restrict', owl: 'restrict', 'lantern-keeper': 'allow' } as const;
+    const r = score(
+      [
+        ...fullRun(everything, ['needs']).log,
+        { t: 'read', n: 'forest-post', at: 9000 } as const,
+        { t: 'read', n: 'cottage-door', at: 9500 } as const,
+      ],
+      content,
+    );
+    expect(r.goals.filter((g) => g.met).map((g) => g.id)).toEqual(['route', 'word', 'sign']);
+    expect(r.errandDone).toBe(true);
+    expect(r.boundaryHeld).toBe(false);
+    expect(r.total).toBe(750);
+  });
+
   it('a capability taken by allowing in full does not carry out the errand', () => {
     // Cottage Finder allow grants `basket` and still adds the route, but it takes the key with it.
     const leaked = { rabbit: 'allow', owl: 'reject', 'lantern-keeper': 'restrict' } as const;

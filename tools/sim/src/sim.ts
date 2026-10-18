@@ -24,6 +24,10 @@ const content = loadContent(JSON.parse(readFileSync(join(root, 'content/game.jso
 type Strategy = (skill: Skill, rnd: () => number) => Verdict;
 const STRATEGIES: Record<string, Strategy> = {
   perfect: (s) => s.bestVerdict,
+  // The line that carries out Grandma's errand: it trades the lantern's best verdict for the one
+  // capability that can read the note on her door. Ties `perfect` at 1,000 by a different route,
+  // which is the trade the game is about, so the table should show both.
+  errand: (s) => (s.id === 'night-light' ? 'allow' : s.bestVerdict),
   'reject-all': () => 'reject',
   'allow-all': () => 'allow',
   'restrict-all': () => 'restrict',
@@ -40,7 +44,14 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/** `readFirst` reads the notice before any verdict, which is the cautious-sequencing play. */
+/**
+ * `readFirst` reads the forest post before any verdict, which is the cautious-sequencing play.
+ *
+ * Both notices are read, not just the first one. The sim is the repo's own ceiling-checker, and
+ * for a long time it read `notices[0]` alone -- so it never touched the note on Grandma's door,
+ * reported the errand line 100 points short, and could not have noticed that the map made that
+ * note unreachable. A ceiling-checker that skips part of the walk checks the wrong ceiling.
+ */
 function play(
   c: Content,
   strategy: Strategy,
@@ -56,8 +67,9 @@ function play(
   };
   send({ type: 'START', runId: `sim-${seed}`, at: clock });
   send({ type: 'BEGIN' });
-  const notice = c.notices[0];
-  if (readFirst && notice) send({ type: 'READ_NOTICE', n: notice.id, at: (clock += 2000) });
+  const post = c.notices.find((n) => n.id === 'forest-post');
+  const door = c.notices.find((n) => n.id === 'cottage-door');
+  if (readFirst && post) send({ type: 'READ_NOTICE', n: post.id, at: (clock += 2000) });
   for (const ch of c.characters) {
     const skill = c.skills.find((s) => s.id === ch.skillId)!;
     send({ type: 'MEET', c: ch.id, at: (clock += 5000) });
@@ -65,8 +77,9 @@ function play(
     send({ type: 'INSPECT', s: skill.id, at: (clock += 4000) });
     send({ type: 'VERDICT', s: skill.id, v: strategy(skill, rnd), at: (clock += 6000) });
   }
-  // Red passes the post on the way to the cottage.
-  if (!readFirst && notice) send({ type: 'READ_NOTICE', n: notice.id, at: (clock += 4000) });
+  // Red passes the post on the way to the cottage, and the note on the door as she arrives.
+  if (!readFirst && post) send({ type: 'READ_NOTICE', n: post.id, at: (clock += 4000) });
+  if (door) send({ type: 'READ_NOTICE', n: door.id, at: (clock += 6000) });
   send({ type: 'ENTER_COTTAGE', at: (clock += 8000) });
   send({ type: 'FINISH', at: clock + 1000 });
   return state;

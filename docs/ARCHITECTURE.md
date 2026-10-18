@@ -168,7 +168,7 @@ explore -> cottage -> results -> leaderboard -> (replay -> title)
 - `explore`: Phaser has input. UI shows the HUD only.
 - `dialogue` / `inspect`: Phaser input is paused; UI has focus (focus trap, Esc backs out one level, never skips a verdict).
 - Verdicts are final for a run (replay to retry).
-- Cottage gate: an NPC-free trigger at the fence; if not all verdicts are in, Red says a hint line ("I should talk to everyone first").
+- Cottage door: an NPC-free trigger on the doorstep (tiles 52-53, rows 19-21), NOT at the garden gate; if not all verdicts are in, Red says a hint line ("I should hear all three travellers first"). It moved off the gate because the gate sat in front of the note on Grandma's door and made the `sign` errand goal unearnable. See docs/GAME_DESIGN.md section 5b.
 
 ## 6. World <-> UI wiring
 

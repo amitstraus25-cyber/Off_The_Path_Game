@@ -49,7 +49,7 @@ research / product marketing team before launch. Items marked **[DECISION]** app
 
 ## 5a. Bystanders (added 2026-10-18)
 
-Three people in the forest who are not characters. They offer nothing, grant nothing and are never
+Four people in the forest who are not characters. They offer nothing, grant nothing and are never
 scored: no skill, no capability, no verdict, no log entry. Greeting one shows a named bubble for a
 few seconds and the run is exactly where it was. They exist so the walk between decisions has
 something in it, and so that "someone is talking to me" stops meaning "a decision is coming".
@@ -69,13 +69,56 @@ These are dread rather than warning: in character, about the speaker's own cheer
 about the player's decision. They are the only places in the forest that remark on the trifecta at
 all, and none of them knows what it is remarking on.
 
+The Cat is the only one past the notice post, so every decision is already made before she speaks.
+She is held to the same bar as the others and it is tightest on her, because she is closest to the
+reveal: her exposed line reports a small grievance of her own, not a danger to Red. "Someone is in
+her chair, and I do not know them" was cut for exactly that reason. A bystander who has perceived
+the threat makes the other three read as negligent rather than funny, and turns the ending from a
+surprise into a confirmation.
+
 **Rules for anything added here.** A bystander must never name a skill, a verdict or a mistake,
 must never point the player at a character, and must never give directions a player could act on
 and get lost by. The nonsense has to be unfollowable, not plausibly wrong.
 
 Because the forest now contains people who are not characters, `strings.cottageHint` says "I should
-hear all three travellers first." rather than "talk to everyone": a player held at the gate must
+hear all three travellers first." rather than "talk to everyone": a player held at the door must
 not go back looking for a decision that was never there.
+
+## 5b. Where the walk ends (changed 2026-10-18)
+
+`trigger-cottage` is the **doorstep**, not the garden gate.
+
+It used to be the gate, which is the only gap in the fence, and that put the end of the run in
+front of the note on Grandma's door. A player who did the natural thing, meet all three travellers
+and then walk east, had the run taken off her at the gate and could never reach the note, so the
+`sign` errand goal was advertised in the HUD on every run and could not be earned in that order.
+It was reachable only by slipping through the gate with a verdict still outstanding, reading the
+note and walking back, which nobody does.
+
+Two rules now hold, and both are tested:
+
+- **Nothing a goal needs sits behind the end of the walk.** The map test floods from the spawn
+  with `trigger-cottage` treated as a wall. A plain collision flood fill cannot see this, because
+  the trigger is a terminator rather than an obstacle and its tiles are deliberately walkable.
+- **A notice, and the trigger that ends the walk, must lie on the line a due-east walker actually
+  walks.** `overlaps` is a point test on Red's feet, and a player who only holds Right keeps her
+  feet on row 21 for the whole map. A one-row rect is invisible to that player. The first attempt
+  at this fix put the trigger on the doorstep row alone, which meant she walked past the door and
+  out across the lawn and the run never ended, which is worse than the bug being fixed. The note
+  and the trigger now both span rows 19 to 21, the note in the lane immediately west of the
+  doorstep, so every approach from the garden crosses the note first and the trigger second
+  whichever row she walks, and the two rects never share a tile.
+
+The door note is reachable, not unavoidable: a player who leaves the lane and crosses the lawn
+behind the cottage can still miss it. That is on purpose. The forest post must be unavoidable
+because it carries the lesson; this one is a scored errand, and forcing the panel on every run,
+including the restrict/reject/restrict line where `strangers` is never earned and the goal cannot
+be met anyway, would buy nothing and cost a click.
+
+There are two 1,000-point lines, not one: restrict/reject/restrict keeps the lantern bounded and
+scores the ceiling with one errand goal, and restrict/reject/allow trades the lantern's best
+verdict for the capability that reads the door note and ties it with two. Carrying out all three
+goals costs the boundary and scores 750. `pnpm sim` prints all of this.
 
 ## 6. Skills (draft content, data-driven)
 
