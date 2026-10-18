@@ -15,58 +15,58 @@
   "spritesheets": [
     {
       "key": "npc-rabbit",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "npc-owl",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "npc-lantern-keeper",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "npc-wolf",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "bystander-toadstool",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "bystander-magpie",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "bystander-snail",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "bystander-cat",
-      "frameWidth": 16,
-      "frameHeight": 24
+      "frameWidth": 32,
+      "frameHeight": 48
     },
     {
       "key": "fx-dust",
-      "frameWidth": 8,
-      "frameHeight": 8
+      "frameWidth": 16,
+      "frameHeight": 16
     },
     {
       "key": "fx-interact-prompt",
-      "frameWidth": 16,
-      "frameHeight": 16
+      "frameWidth": 32,
+      "frameHeight": 32
     },
     {
       "key": "fx-pawprints",
-      "frameWidth": 16,
-      "frameHeight": 16
+      "frameWidth": 32,
+      "frameHeight": 32
     }
   ],
   "images": [

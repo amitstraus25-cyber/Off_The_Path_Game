@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAMERA_DEADZONE,
+  FOOT_BOX,
+  MAX_ZOOM,
+  MIN_VIEW,
+  TILE,
   blocked,
   cameraFollow,
   cameraTopLeft,
@@ -21,7 +25,15 @@ const map: CollisionMap = {
   height: 3,
   tiles: [0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0],
 };
-const mid = (tile: number) => tile * 16 + 8;
+/*
+ * Written in TILE terms, like the module under test, so the next rescale is one constant there and
+ * nothing here. The art moved from 16px tiles to 32px and every number below followed for free.
+ */
+const mid = (tile: number) => tile * TILE + TILE / 2;
+/** Stands Red so her foot box sits squarely inside the row, rather than straddling the one below. */
+const foot = (tile: number) => mid(tile) - FOOT_BOX.offsetY;
+/** The world-x of the solid block's left edge. */
+const WALL_X = 2 * TILE;
 
 describe('isSolidTile', () => {
   it('is solid inside the block and outside the map', () => {
@@ -36,32 +48,35 @@ describe('isSolidTile', () => {
 
 describe('blocked', () => {
   it('blocks when the foot box overlaps a solid tile', () => {
-    expect(blocked(map, mid(2), mid(1) + 3)).toBe(true);
-    expect(blocked(map, mid(1), mid(1) + 3)).toBe(false);
+    expect(blocked(map, mid(2), foot(1))).toBe(true);
+    expect(blocked(map, mid(1), foot(1))).toBe(false);
   });
   it('allows a position whose box edge just touches the tile boundary', () => {
-    // foot box is 10 wide, so a centre 5px left of the wall edge just touches it
-    expect(blocked(map, 32 - 5, mid(1) + 3)).toBe(false);
-    expect(blocked(map, 32 - 4.9, mid(1) + 3)).toBe(true);
+    // A centre half a foot box left of the wall edge puts that edge exactly on the boundary.
+    const half = FOOT_BOX.width / 2;
+    expect(blocked(map, WALL_X - half, foot(1))).toBe(false);
+    expect(blocked(map, WALL_X - half + 0.1, foot(1))).toBe(true);
   });
   it('blocks against the map edges', () => {
-    expect(blocked(map, 2, mid(0) + 3)).toBe(true);
+    expect(blocked(map, FOOT_BOX.width / 2 - 1, foot(0))).toBe(true);
   });
 });
 
 describe('moveWithCollision', () => {
-  const open = { x: mid(1), y: mid(1) + 3 };
+  const open = { x: mid(1), y: foot(1) };
+  const atWall = WALL_X - FOOT_BOX.width / 2;
   it('moves freely in open space', () => {
     expect(moveWithCollision(map, open, 2, 0)).toEqual({ x: open.x + 2, y: open.y });
   });
   it('stops at a wall but still slides along the free axis', () => {
-    const next = moveWithCollision(map, { x: 32 - 5, y: open.y }, 3, -4);
-    expect(next.x).toBe(32 - 5); // blocked horizontally
+    const next = moveWithCollision(map, { x: atWall, y: open.y }, 3, -4);
+    expect(next.x).toBe(atWall); // blocked horizontally
     expect(next.y).toBe(open.y - 4); // free vertically
   });
   it('never teleports through a wall', () => {
-    const next = moveWithCollision(map, { x: 32 - 5, y: open.y }, 40, 0);
-    expect(next.x).toBe(32 - 5);
+    // A step of two and a half tiles, far larger than the foot box: it must not tunnel.
+    const next = moveWithCollision(map, { x: atWall, y: open.y }, TILE * 2.5, 0);
+    expect(next.x).toBe(atWall);
   });
   it('ignores a zero step', () => {
     expect(moveWithCollision(map, open, 0, 0)).toEqual(open);
@@ -132,39 +147,42 @@ describe('overlaps', () => {
 
 describe('stageFit', () => {
   it('fills a desktop window at a whole zoom instead of letterboxing it', () => {
+    // 640x360 game pixels at 2x is exactly 1280x720 CSS pixels: no letterbox, and 20x11 tiles.
     expect(stageFit({ width: 1280, height: 720 })).toEqual({
-      zoom: 3,
-      view: { width: 426, height: 240 },
+      zoom: 2,
+      view: { width: 640, height: 360 },
     });
   });
 
   it('keeps a phone playable rather than shrinking the world to a third of the screen', () => {
     // 390x464 is a portrait phone once the frame and the docked panels are taken out. The old
     // rule floored the zoom in device pixels against a fixed 480x270 camera and produced a
-    // 320x180 canvas at DPR 3, or 240x135 at DPR 2.
+    // 320x180 canvas at DPR 3, or 240x135 at DPR 2. At 32px tiles this is zoom 1 rather than the
+    // 16px build's zoom 2, which is the same 32 CSS pixels per tile and the same twelve tiles
+    // across -- with four times the pixels inside each of them.
     expect(stageFit({ width: 390, height: 464 })).toEqual({
-      zoom: 2,
-      view: { width: 195, height: 232 },
+      zoom: 1,
+      view: { width: 390, height: 464 },
     });
   });
 
   it('never magnifies past the tile cap, however large the window', () => {
     const fit = stageFit({ width: 3840, height: 2160 });
-    expect(fit.zoom).toBe(3);
-    // And the camera stays inside the 960x672 map.
-    expect(fit.view).toEqual({ width: 640, height: 400 });
+    expect(fit.zoom).toBe(MAX_ZOOM);
+    // And the camera stays inside the 1920x1344 map: 40x25 tiles of the 60x42.
+    expect(fit.view).toEqual({ width: TILE * 40, height: TILE * 25 });
   });
 
   it('never goes below one game pixel per CSS pixel on a tiny viewport', () => {
     expect(stageFit({ width: 100, height: 100 })).toEqual({
       zoom: 1,
-      view: { width: 192, height: 108 },
+      view: { width: MIN_VIEW.width, height: MIN_VIEW.height },
     });
   });
 
   it('lets the shorter axis decide the zoom', () => {
-    // Wide but short: height allows 2, width would allow 6.
-    expect(stageFit({ width: 1200, height: 230 }).zoom).toBe(2);
+    // Wide but short: height allows 1, width would allow 3.
+    expect(stageFit({ width: 1200, height: 300 }).zoom).toBe(1);
   });
 });
 

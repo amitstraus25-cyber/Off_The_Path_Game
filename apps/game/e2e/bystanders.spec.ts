@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
 
 test('greeting a bystander says a line and changes nothing', async ({ page }) => {
   const spot = await mapObject(page, toadstool.spawn);
-  await walkTo(page, { x: spot.x + 8, y: spot.y + 20 });
+  await walkTo(page, { x: spot.x + 16, y: spot.y + 40 });
   const before = await probe(page);
 
   await page.keyboard.press('Space');
@@ -45,7 +45,7 @@ test('greeting a bystander says a line and changes nothing', async ({ page }) =>
 
 test('greeting again moves to the next line, and the bubble fades on its own', async ({ page }) => {
   const spot = await mapObject(page, toadstool.spawn);
-  await walkTo(page, { x: spot.x + 8, y: spot.y + 20 });
+  await walkTo(page, { x: spot.x + 16, y: spot.y + 40 });
 
   await page.keyboard.press('Space');
   await expect(page.locator('.otp-say')).toContainText(toadstool.lines[0]!);
@@ -58,7 +58,7 @@ test('greeting again moves to the next line, and the bubble fades on its own', a
 
 test('a bystander does not count towards the cottage gate', async ({ page }) => {
   const spot = await mapObject(page, toadstool.spawn);
-  await walkTo(page, { x: spot.x + 8, y: spot.y + 20 });
+  await walkTo(page, { x: spot.x + 16, y: spot.y + 40 });
   await page.keyboard.press('Space');
   await expect(page.locator('.otp-say')).toBeVisible();
 

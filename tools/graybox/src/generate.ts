@@ -8,9 +8,11 @@ import { Img } from './paint.ts';
 import { TILE_NAMES, paintTileset } from './tiles.ts';
 import { generateForestMap } from './forest-map.ts';
 import {
+  FX_SIZES,
   ITEM_PAINTERS,
   NPC_PAINTERS,
   PORTRAIT_PAINTERS,
+  PORTRAIT_SIZE,
   paintDust,
   paintInteractPrompt,
   paintNpcSheet,
@@ -59,14 +61,10 @@ const NPCS = ['npc-rabbit', 'npc-owl', 'npc-lantern-keeper', 'npc-wolf'];
 const BYSTANDERS = Object.keys(NPC_PAINTERS).filter((name) => name.startsWith('bystander-'));
 for (const name of [...NPCS, ...BYSTANDERS]) write(`${name}.png`, paintNpcSheet(name).png());
 
-for (const [name, painter] of Object.entries(PORTRAIT_PAINTERS)) {
-  const img = new Img(32, 32);
-  painter(img);
-  write(`${name}.png`, img.png());
-}
-
-for (const [name, painter] of Object.entries(ITEM_PAINTERS)) {
-  const img = new Img(32, 32);
+// Portraits and items are 64x64 since the remaster (docs/PIXEL_STANDARD.md section 1). They are
+// drawn in the DOM at their own size rather than through the camera, so nothing upscales them.
+for (const [name, painter] of Object.entries({ ...PORTRAIT_PAINTERS, ...ITEM_PAINTERS })) {
+  const img = new Img(PORTRAIT_SIZE, PORTRAIT_SIZE);
   painter(img);
   write(`${name}.png`, img.png());
 }
@@ -90,9 +88,11 @@ write(
           frameWidth: RED_W,
           frameHeight: RED_H,
         })),
-        { key: 'fx-dust', frameWidth: 8, frameHeight: 8 },
-        { key: 'fx-interact-prompt', frameWidth: 16, frameHeight: 16 },
-        { key: 'fx-pawprints', frameWidth: 16, frameHeight: 16 },
+        ...Object.entries(FX_SIZES).map(([key, size]) => ({
+          key,
+          frameWidth: size,
+          frameHeight: size,
+        })),
       ],
       images: [...Object.keys(PORTRAIT_PAINTERS), ...Object.keys(ITEM_PAINTERS)].map(
         (k) => `${k}.png`,

@@ -17,9 +17,11 @@ import { Img, rgb } from './paint.ts';
 import type { RGBA } from './paint.ts';
 import { TILE_NAMES, paintTileset } from './tiles.ts';
 import {
+  FX_SIZES,
   ITEM_PAINTERS,
   NPC_PAINTERS,
   PORTRAIT_PAINTERS,
+  PORTRAIT_SIZE,
   paintDust,
   paintInteractPrompt,
   paintNpcSheet,
@@ -141,29 +143,35 @@ if (want('red')) {
 }
 
 if (want('npcs')) {
-  for (const name of Object.keys(NPC_PAINTERS)) {
+  // The wolf is not in NPC_PAINTERS -- he is never spawned from the map -- so he has to be named
+  // here or the one character with no reference art is also the one nobody can look at.
+  for (const name of [...Object.keys(NPC_PAINTERS), 'npc-wolf']) {
     write(`sheet-${name}.png`, sheet(paintNpcSheet(name), RED_W, RED_H));
   }
 }
 
 if (want('portraits')) {
   for (const [name, painter] of Object.entries(PORTRAIT_PAINTERS)) {
-    const img = new Img(32, 32);
+    const img = new Img(PORTRAIT_SIZE, PORTRAIT_SIZE);
     painter(img);
-    write(`sheet-${name}.png`, sheet(img, 32, 32));
+    write(`sheet-${name}.png`, sheet(img, PORTRAIT_SIZE, PORTRAIT_SIZE));
   }
 }
 
 if (want('items')) {
   for (const [name, painter] of Object.entries(ITEM_PAINTERS)) {
-    const img = new Img(32, 32);
+    const img = new Img(PORTRAIT_SIZE, PORTRAIT_SIZE);
     painter(img);
-    write(`sheet-${name}.png`, sheet(img, 32, 32));
+    write(`sheet-${name}.png`, sheet(img, PORTRAIT_SIZE, PORTRAIT_SIZE));
   }
 }
 
 if (want('fx')) {
-  write('sheet-fx-dust.png', sheet(paintDust(), 8, 8));
-  write('sheet-fx-interact-prompt.png', sheet(paintInteractPrompt(), 16, 16));
-  write('sheet-fx-pawprints.png', sheet(paintPawprints(), 16, 16));
+  const fx = FX_SIZES;
+  write('sheet-fx-dust.png', sheet(paintDust(), fx['fx-dust'], fx['fx-dust']));
+  write(
+    'sheet-fx-interact-prompt.png',
+    sheet(paintInteractPrompt(), fx['fx-interact-prompt'], fx['fx-interact-prompt']),
+  );
+  write('sheet-fx-pawprints.png', sheet(paintPawprints(), fx['fx-pawprints'], fx['fx-pawprints']));
 }

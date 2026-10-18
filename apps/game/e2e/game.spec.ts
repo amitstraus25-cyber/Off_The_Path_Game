@@ -224,8 +224,8 @@ test('replay puts Red back at the spawn and lets the notice fire again', async (
   expect(after.phase).toBe('explore');
   expect(after.flags).toEqual([]);
   // Red is a world object: resetting the store alone used to leave her at the cottage gate.
-  expect(Math.abs(after.position.x - spawn.x)).toBeLessThan(32);
-  expect(Math.abs(after.position.y - spawn.y)).toBeLessThan(32);
+  expect(Math.abs(after.position.x - spawn.x)).toBeLessThan(64);
+  expect(Math.abs(after.position.y - spawn.y)).toBeLessThan(64);
 
   // The notice must be offered again, or the lesson can only ever land once.
   await page.evaluate(() => window.__otp!.bus.emit('reachedNotice', { noticeId: 'forest-post' }));

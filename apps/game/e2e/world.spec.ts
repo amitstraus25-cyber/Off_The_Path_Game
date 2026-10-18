@@ -10,26 +10,26 @@ test('the run starts in explore with Red at the spawn', async ({ page }) => {
   const spawn = await mapObject(page, 'spawn-red');
   const start = await probe(page);
   expect(start.phase).toBe('explore');
-  expect(Math.abs(start.position.x - spawn.x)).toBeLessThan(32);
+  expect(Math.abs(start.position.x - spawn.x)).toBeLessThan(64);
 });
 
 test('Red walks east along the path and the camera follows', async ({ page }) => {
   const before = await probe(page);
   await hold(page, 'ArrowRight', 800);
   const after = await probe(page);
-  expect(after.position.x).toBeGreaterThan(before.position.x + 20);
+  expect(after.position.x).toBeGreaterThan(before.position.x + 40);
   expect(after.position.y).toBeCloseTo(before.position.y, 0);
 });
 
 test('WASD works as well as the arrows', async ({ page }) => {
   const before = await probe(page);
   await hold(page, 'KeyD', 500);
-  expect((await probe(page)).position.x).toBeGreaterThan(before.position.x + 10);
+  expect((await probe(page)).position.x).toBeGreaterThan(before.position.x + 20);
 });
 
 test('the forest border holds Red inside the map', async ({ page }) => {
   await hold(page, 'ArrowUp', 6000);
-  expect((await probe(page)).position.y).toBeGreaterThan(16);
+  expect((await probe(page)).position.y).toBeGreaterThan(32);
 });
 
 test('Red never stands inside a solid tile, whatever route she takes', async ({ page }) => {
@@ -56,7 +56,7 @@ test('Red never stands inside a solid tile, whatever route she takes', async ({ 
 
 test('the interact prompt leads to a dialogue, and Esc backs out', async ({ page }) => {
   const rabbit = await mapObject(page, 'npc-rabbit');
-  await walkTo(page, { x: rabbit.x + 8, y: rabbit.y + 20 });
+  await walkTo(page, { x: rabbit.x + 16, y: rabbit.y + 40 });
 
   await page.keyboard.press('Space');
   await page.waitForTimeout(120);
@@ -72,7 +72,7 @@ test('the interact prompt leads to a dialogue, and Esc backs out', async ({ page
 
 test('input is ignored while a panel is open', async ({ page }) => {
   const rabbit = await mapObject(page, 'npc-rabbit');
-  await walkTo(page, { x: rabbit.x + 8, y: rabbit.y + 20 });
+  await walkTo(page, { x: rabbit.x + 16, y: rabbit.y + 40 });
   await page.keyboard.press('Space');
   await page.waitForTimeout(120);
   const talking = await probe(page);
@@ -87,7 +87,7 @@ test('the cottage door stays shut until all three skills have a verdict', async 
   test.slow();
   // trigger-cottage is the doorstep, not the garden gate: the walk ends at Grandma's door.
   const door = await mapObject(page, 'trigger-cottage');
-  await walkTo(page, { x: door.x + 8, y: door.y + door.height / 2 }, 12, 40_000);
+  await walkTo(page, { x: door.x + 16, y: door.y + door.height / 2 }, 24, 40_000);
 
   const blocked = await probe(page);
   expect(blocked.phase).toBe('explore');
@@ -154,7 +154,7 @@ test('touch controls move Red and stop her on release', async ({ browser }) => {
   await page.waitForTimeout(120);
 
   const after = await probe(page);
-  expect(after.position.x).toBeGreaterThan(before.position.x + 15);
+  expect(after.position.x).toBeGreaterThan(before.position.x + 30);
   await page.waitForTimeout(400);
   expect((await probe(page)).position.x).toBeCloseTo(after.position.x, 0);
   await context.close();

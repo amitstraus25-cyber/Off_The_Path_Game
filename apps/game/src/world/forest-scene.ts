@@ -21,7 +21,16 @@ import type { Facing, Interactable, Vec } from './logic';
 import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
 
-const NPC_SPRITE = { width: 16, height: 24 };
+/**
+ * One character frame, in world pixels: a tile wide and a tile and a half tall.
+ *
+ * In TILE terms, like everything else in `logic.ts`, so the move from 16px to 32px art moved this
+ * with it. It was a hardcoded 16x24, which after the remaster stood every NPC half a sprite too
+ * high in its tile and put the interact prompt through the middle of their heads.
+ */
+const NPC_SPRITE = { width: TILE, height: TILE * 1.5 };
+/** The gap between the top of a character's head and the bottom of the prompt bubble. */
+const PROMPT_GAP = TILE * (3 / 8);
 
 /**
  * Anyone Red can walk up to. `character` offers a skill and opens the real encounter;
@@ -143,7 +152,7 @@ export class ForestScene extends Phaser.Scene {
         .setOrigin(0.5, 1);
       sprite.setDepth(sprite.y);
       const prompt = this.add
-        .sprite(spawn.x, sprite.y - NPC_SPRITE.height - 6, 'fx-interact-prompt', 0)
+        .sprite(spawn.x, sprite.y - NPC_SPRITE.height - PROMPT_GAP, 'fx-interact-prompt', 0)
         .setOrigin(0.5, 1)
         .setDepth(9000)
         .setVisible(false);
@@ -161,7 +170,7 @@ export class ForestScene extends Phaser.Scene {
         .setOrigin(0.5, 1);
       sprite.setDepth(sprite.y);
       const prompt = this.add
-        .sprite(spawn.x, sprite.y - NPC_SPRITE.height - 6, 'fx-interact-prompt', 0)
+        .sprite(spawn.x, sprite.y - NPC_SPRITE.height - PROMPT_GAP, 'fx-interact-prompt', 0)
         .setOrigin(0.5, 1)
         .setDepth(9000)
         .setVisible(false);

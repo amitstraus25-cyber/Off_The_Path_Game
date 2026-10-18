@@ -1,4 +1,9 @@
 import type { Page } from '@playwright/test';
+// The real constants, not copies: `logic.ts` is pure TypeScript with no Phaser and no DOM, so the
+// walking helpers below pace themselves off the same numbers the game walks at. They used to carry
+// a hardcoded 60 px/s and a 20px tolerance, which were right for 16px tiles and silently wrong the
+// moment the art moved to 32px -- every walk overshot by exactly its own length and oscillated.
+import { TILE, WALK_SPEED } from '../src/world/logic';
 
 export interface Probe {
   phase: string;
@@ -116,7 +121,8 @@ export async function dismissNotice(page: Page): Promise<void> {
 export async function walkTo(
   page: Page,
   target: { x: number; y: number },
-  within = 20,
+  // A tile and a quarter: comfortably inside INTERACT_RADIUS, so arriving means she can talk.
+  within = TILE * 1.25,
   budgetMs = 30_000,
 ): Promise<Probe> {
   let spent = 0;
@@ -134,7 +140,9 @@ export async function walkTo(
         ? 'ArrowDown'
         : 'ArrowUp';
     const distance = horizontal ? Math.abs(dx) : Math.abs(dy);
-    const ms = Math.min(900, Math.max(120, (distance / 60) * 1000));
+    // Long enough to cover the gap at the speed Red actually walks, so she lands on the target
+    // instead of sailing past it and turning round to sail past it again.
+    const ms = Math.min(900, Math.max(120, (distance / WALK_SPEED) * 1000));
     await hold(page, key, ms);
     spent += ms;
     await dismissNotice(page);

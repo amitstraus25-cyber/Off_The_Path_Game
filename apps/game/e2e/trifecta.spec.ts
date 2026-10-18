@@ -167,7 +167,7 @@ test('Red stops walking while a notice is open', async ({ page }) => {
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(500);
   await page.keyboard.up('ArrowRight');
-  expect((await probe(page)).position.x).toBeGreaterThan(before.position.x + 10);
+  expect((await probe(page)).position.x).toBeGreaterThan(before.position.x + 20);
 });
 
 test('results lead with the boundary, and name the notice when it fired', async ({ page }) => {

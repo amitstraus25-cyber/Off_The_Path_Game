@@ -9,7 +9,7 @@ import { mapObject, probe, startGame, walkTo } from './helpers';
 
 const takeOnTrust = async (page: import('@playwright/test').Page, npc: string): Promise<void> => {
   const at = await mapObject(page, npc);
-  await walkTo(page, { x: at.x + 8, y: at.y + 20 }, 20, 40_000);
+  await walkTo(page, { x: at.x + 16, y: at.y + 40 }, 40, 40_000);
   await page.keyboard.press('Space');
   await expect(page.getByRole('button', { name: /Take it as offered/ })).toBeVisible();
   await page.getByRole('button', { name: /Take it as offered/ }).click();
@@ -35,7 +35,7 @@ test('an offer can be taken without the card ever being opened', async ({ page }
 
 test('the way past the card is never the brightest thing on the screen', async ({ page }) => {
   const rabbit = await mapObject(page, 'npc-rabbit');
-  await walkTo(page, { x: rabbit.x + 8, y: rabbit.y + 20 });
+  await walkTo(page, { x: rabbit.x + 16, y: rabbit.y + 40 });
   await page.keyboard.press('Space');
   await expect(page.locator('.otp-dialogue__trust')).toBeVisible();
 

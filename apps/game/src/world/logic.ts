@@ -5,13 +5,27 @@ export interface Vec {
   y: number;
 }
 
-/** Red's collision box, in pixels relative to her position (feet centre). */
-export const FOOT_BOX = { width: 10, height: 6, offsetY: -3 } as const;
-export const TILE = 16;
-/** Logical pixels per second. */
-export const WALK_SPEED = 60;
-/** How close Red must stand to talk to someone, centre to centre. */
-export const INTERACT_RADIUS = 24;
+/**
+ * World pixels per tile. The art moved from 16px to 32px tiles; the map stayed 60x42 TILES and the
+ * level was never retuned, because everything below this line is written as a fraction of a tile
+ * rather than as a pixel count. Keep it that way: the next rescale should be this one constant.
+ */
+export const TILE = 32;
+
+/**
+ * Red's collision box, in pixels relative to her position (feet centre).
+ * Five-eighths of a tile wide and three-eighths tall: narrower than her sprite, so she can stand
+ * in a gap her shoulders would not fit through.
+ */
+export const FOOT_BOX = {
+  width: TILE * (5 / 8),
+  height: TILE * (3 / 8),
+  offsetY: -TILE * (3 / 16),
+} as const;
+/** Logical pixels per second: three and three-quarter tiles, so the crossing time never moved. */
+export const WALK_SPEED = TILE * 3.75;
+/** How close Red must stand to talk to someone, centre to centre: a tile and a half. */
+export const INTERACT_RADIUS = TILE * 1.5;
 
 export interface CollisionMap {
   width: number;
@@ -100,12 +114,40 @@ export const overlaps = (point: Vec, rect: Rect): boolean =>
   point.y >= rect.y &&
   point.y < rect.y + rect.height;
 
-/** The smallest camera worth playing on: a phone still shows about twelve tiles across. */
-export const MIN_VIEW = { width: 192, height: 108 } as const;
-/** The largest, so a desktop player does not see half the map at once. Both fit the 960x672 map. */
-export const MAX_VIEW = { width: 640, height: 400 } as const;
-/** A 16px tile should read at 32-48 CSS px, so never magnify past 3. */
-export const MAX_ZOOM = 3;
+/**
+ * The smallest camera worth playing on: a phone still shows about eleven tiles across.
+ *
+ * Eleven, not the twelve the 16px build floored at, because this is also the floor the view is
+ * clamped UP to. The narrowest width the game is built for is 375px (BRAND_AND_UI), which leaves
+ * 369 CSS px inside the frame, and at zoom 1 that is 11.5 tiles. A twelve-tile floor would make
+ * the canvas 384 CSS px wide inside a 375px window -- a horizontal scrollbar on a phone, which
+ * e2e/ui.spec.ts rightly fails on.
+ */
+export const MIN_VIEW = { width: TILE * 11, height: TILE * 6.75 } as const;
+/** The largest, so a desktop player does not see most of the map at once: 40x25 of the 60x42. */
+export const MAX_VIEW = { width: TILE * 40, height: TILE * 25 } as const;
+/**
+ * A 32px tile should read at 32-64 CSS px, so never magnify past 2.
+ *
+ * ART_PRODUCTION section 1 proposed 1.5x here, which would have kept both the old field of view
+ * (26x15 tiles) and the old apparent tile size (48 CSS px) across the move to 32px art. It cannot
+ * be done. The canvas is scaled in CSS over a nearest-sampled backing store, so a 1.5x scale draws
+ * every other source pixel two CSS pixels wide on any DPR-1 display: the shimmer BRAND_AND_UI
+ * forbids, and a direct violation of the two e2e tests that assert a whole number of CSS pixels per
+ * game pixel (e2e/smoke.spec.ts, e2e/world.spec.ts). Letterboxing to reach an exact zoom is out for
+ * the same reason -- e2e/world.spec.ts also asserts the canvas fills its frame.
+ *
+ * So the zoom stays a whole number and the field of view moves instead. Of the two whole numbers:
+ *   zoom 1  -- 32 CSS px per tile, ~39 tiles across at 1280px wide. Half the map on screen at once,
+ *              and every sprite SMALLER on screen than it is today, which spends the remaster's
+ *              four times the detail on making everything harder to see.
+ *   zoom 2  -- 64 CSS px per tile, ~19 tiles across at 1280px wide, ~29 at 1920px.
+ * Taken: zoom 2. The cost is a field of view about a quarter narrower in tiles than the 16px build
+ * at the same window size; the gain is that the new detail is actually visible, and that a phone is
+ * barely touched -- it drops from 2x to 1x, which is the same 32 CSS px per tile and about the
+ * same eleven or twelve tiles across as before, with four times the pixels inside them.
+ */
+export const MAX_ZOOM = 2;
 
 export interface StageFit {
   /** Whole CSS pixels per game pixel. */
@@ -156,7 +198,7 @@ export function stageFit(
  * Wider than tall: sideways drift reads as natural framing, vertical drift reads as the camera
  * being late.
  */
-export const CAMERA_DEADZONE = { x: 16, y: 10 } as const;
+export const CAMERA_DEADZONE = { x: TILE, y: TILE * (5 / 8) } as const;
 
 /**
  * Time constant of the camera's catch-up, in milliseconds: after this long it has closed about
@@ -168,13 +210,14 @@ export const CAMERA_TAU = 120;
  * How far above her feet the camera frames Red, in game pixels. Centring on the feet puts her
  * head in the middle of the shot and wastes the top of the screen on sky.
  */
-export const CAMERA_FOCUS_Y = -10;
+export const CAMERA_FOCUS_Y = -TILE * (5 / 8);
 
 /**
  * Ground covered per frame of the walk cycle. Ties the cadence to WALK_SPEED, so changing the
- * speed cannot silently make the feet skate.
+ * speed cannot silently make the feet skate. A fraction of a tile for the same reason: the cycle
+ * must stay the same twelve frames a second at 32px that it was at 16px.
  */
-export const PX_PER_WALK_FRAME = 5;
+export const PX_PER_WALK_FRAME = TILE * (5 / 16);
 
 /**
  * Frame-rate independent exponential ease. `tau <= 0` snaps.
