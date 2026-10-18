@@ -10,6 +10,8 @@ export interface SkillScore {
   points: number;
   /** True when a bonus-eligible question was asked of this skill's character before the verdict. */
   questionedFirst: boolean;
+  /** The verdict was given without the card ever being opened. */
+  onTrust: boolean;
 }
 
 export interface ScoreResult {
@@ -26,6 +28,10 @@ export interface ScoreResult {
   errandDone: boolean;
   /** One row per goal, so the recap can say which were missed and why. */
   goals: GoalResult[];
+  /** At least one offer was accepted without its card being opened. */
+  tookOnTrust: boolean;
+  /** The whole of what an unopened offer is worth. A single flag takes it away. */
+  trustBonus: number;
 }
 
 /** Pure function of the run log and content. Assumes a legal log (see checkLog). */
@@ -34,27 +40,44 @@ export function score(log: readonly RunEvent[], content: Content): ScoreResult {
   const questioned = new Set<CharacterId>();
   const decided = new Map<SkillId, SkillScore>();
 
+  const opened = new Set<SkillId>();
   for (const e of log) {
     if (e.t === 'asked' && (bonusQuestions as string[]).includes(e.q)) questioned.add(e.c);
+    if (e.t === 'inspected') opened.add(e.s);
     if (e.t === 'verdict') {
       const skill = content.skills.find((s) => s.id === e.s)!;
+      const onTrust = !opened.has(e.s);
       decided.set(e.s, {
         skillId: e.s,
         verdict: e.v,
-        points: skill.outcomes[e.v].points,
+        /*
+         * An offer taken on the offerer's word scores nothing of its own. Everything it is worth
+         * sits in `trustBonus`, which pays only on a clean arrival -- so a gamble that comes off
+         * is worth exactly what reading the card was worth, and a gamble that does not is worth
+         * nothing at all.
+         */
+        points: onTrust ? 0 : skill.outcomes[e.v].points,
         questionedFirst: questioned.has(findCharacterForSkill(content, e.s)!.id),
+        onTrust,
       });
     }
   }
 
   const perSkill = content.skills.map(
-    (s) => decided.get(s.id) ?? { skillId: s.id, verdict: null, points: 0, questionedFirst: false },
+    (s) =>
+      decided.get(s.id) ?? {
+        skillId: s.id,
+        verdict: null,
+        points: 0,
+        questionedFirst: false,
+        onTrust: false,
+      },
   );
   const earned = perSkill.reduce((sum, s) => sum + s.points, 0);
   const allQuestioned = perSkill.every((s) => s.verdict !== null && s.questionedFirst);
   const bonus = allQuestioned ? questionBonus : 0;
 
-  const { verdicts } = derive(log, content);
+  const { verdicts, flags } = derive(log, content);
   // Capabilities only ever accumulate, so "never all three at once" is decided by the final set.
   const boundaryHeld = !trifectaLive(verdicts, content);
   const boundaryBonus = boundaryHeld ? content.scoring.boundaryBonus : 0;
@@ -65,8 +88,16 @@ export function score(log: readonly RunEvent[], content: Content): ScoreResult {
   const errandBonus = goals.reduce((sum, g) => sum + (g.met ? g.points : 0), 0);
   const errandDone = goals.every((g) => g.met);
 
+  /*
+   * The gamble pays only if nothing was taken from Red. One flag is enough to lose it, which is
+   * what keeps "say yes to everything" from being the fast route to a good score: it is the fast
+   * route to the worst one.
+   */
+  const tookOnTrust = perSkill.some((s) => s.onTrust);
+  const trustBonus = tookOnTrust && flags.length === 0 ? content.scoring.trustBonus : 0;
+
   return {
-    total: earned + bonus + boundaryBonus + errandBonus,
+    total: earned + bonus + boundaryBonus + errandBonus + trustBonus,
     perSkill,
     bonus,
     boundaryBonus,
@@ -74,6 +105,8 @@ export function score(log: readonly RunEvent[], content: Content): ScoreResult {
     boundaryHeld,
     errandDone,
     goals,
+    tookOnTrust,
+    trustBonus,
   };
 }
 

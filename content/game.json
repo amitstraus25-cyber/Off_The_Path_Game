@@ -6,6 +6,7 @@
     "maxPerSkill": 200,
     "bonusQuestions": ["needs", "who"],
     "boundaryBonus": 200,
+    "trustBonus": 100,
     "errandGoals": [
       {
         "id": "route",
@@ -418,6 +419,13 @@
     "askingFree": "Asking costs nothing",
     "showSkill": "Show me the skill",
     "chipTitle": "Cyera research",
-    "chipSkill": "Skill"
+    "chipSkill": "Skill",
+    "takeAsOffered": "Take it as offered",
+    "takeAsOfferedHint": "You will not see the card.",
+    "tookOnTrustToast": "You take it as offered and walk on.",
+    "cardNotOpened": "You never opened this card.",
+    "trustHeld": "You took an offer on their word, and arrived with everything.",
+    "trustLost": "You took an offer on their word.",
+    "trustBreakdown": "for taking one on their word"
   }
 }

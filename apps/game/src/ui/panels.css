@@ -750,6 +750,42 @@
   image-rendering: pixelated;
 }
 
+/*
+ * The way past the card. It is the same `allow` the Inspect screen offers, with less reading
+ * attached, so UI_FOUNDATIONS section 2's reasoning applies to it: the unsafe answer must never
+ * be the brightest thing on the screen. Ash, 14px, underlined, no arrow, no fill and no border,
+ * so it reads as a skip link rather than as the thing to press. No new radius.
+ */
+.otp-dialogue__trust {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: calc(16px * var(--otp-ui));
+  color: var(--cyera-ash);
+  font: 400 calc(14px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.otp-dialogue__trust:hover {
+  color: var(--cyera-black);
+}
+
+/* The whole of the warning the game gives, and it is a statement of fact, not advice. Shown on
+   the first encounter only; after that it stays for screen readers. */
+.otp-dialogue__hint {
+  margin-left: calc(8px * var(--otp-ui));
+  color: var(--cyera-ash);
+  font-size: calc(13px * var(--otp-ui));
+}
+
+/* Said once, flatly, on the Results row for a card nobody opened. */
+.otp-recap__trust {
+  margin: calc(4px * var(--otp-ui)) 0 0;
+  color: var(--cyera-ash);
+  font-size: calc(14px * var(--otp-ui));
+}
+
 /* ---------------------------------------------------------------- focus */
 
 .otp-ui :focus-visible {

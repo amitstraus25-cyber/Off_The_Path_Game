@@ -169,6 +169,7 @@ explore -> cottage -> results -> leaderboard -> (replay -> title)
 - `dialogue` / `inspect`: Phaser input is paused; UI has focus (focus trap, Esc backs out one level, never skips a verdict).
 - Verdicts are final for a run (replay to retry).
 - Cottage door: an NPC-free trigger on the doorstep (tiles 52-53, rows 19-21), NOT at the garden gate; if not all verdicts are in, Red says a hint line ("I should hear all three travellers first"). It moved off the gate because the gate sat in front of the note on Grandma's door and made the `sign` errand goal unearnable. See docs/GAME_DESIGN.md section 5b.
+- A verdict normally follows `INSPECT`. `allow` alone may also be given straight from `dialogue`, which is how a skill starts running with nobody having read it; `restrict` and `reject` are refused there with `must-open-the-card`. See docs/GAME_DESIGN.md section 5c.
 
 ## 6. World <-> UI wiring
 

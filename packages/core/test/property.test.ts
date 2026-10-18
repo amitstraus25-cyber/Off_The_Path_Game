@@ -51,6 +51,11 @@ describe('property: random play', () => {
       let state = deepFreeze(createState(content));
       let clock = 0;
       let incremental = 0;
+      /*
+       * Mirrors the scoring rule rather than the card: an offer accepted without its card ever
+       * being opened scores nothing of its own, and is paid for once at the end by `trustBonus`.
+       */
+      const opened = new Set<string>();
       for (const a of [{ type: 'START', runId: `r${seed}`, at: 0 }, { type: 'BEGIN' }] as Action[])
         state = tryReduce(state, a, content).state;
 
@@ -63,7 +68,8 @@ describe('property: random play', () => {
         }
         accepted++;
         const last = r.state.log.at(-1);
-        if (r.state.log.length > state.log.length && last?.t === 'verdict')
+        if (r.state.log.length > state.log.length && last?.t === 'inspected') opened.add(last.s);
+        if (r.state.log.length > state.log.length && last?.t === 'verdict' && opened.has(last.s))
           incremental += content.skills.find((s) => s.id === last.s)!.outcomes[last.v].points;
         state = deepFreeze(r.state);
       }
@@ -84,7 +90,7 @@ describe('property: random play', () => {
       // 2. score(log) equals the incremental running total plus every bonus
       const result = score(state.log, content);
       expect(result.total, `seed ${seed}`).toBe(
-        incremental + result.bonus + result.boundaryBonus + result.errandBonus,
+        incremental + result.bonus + result.boundaryBonus + result.errandBonus + result.trustBonus,
       );
       if (check.complete) complete++;
     }

@@ -23,6 +23,8 @@ declare global {
           flags: string[];
           /** Notice ids Red has actually read, which is what the errand goals score off. */
           read: string[];
+          /** Skill ids whose card was opened. Empty for an offer taken on the offerer's word. */
+          inspected: string[];
           activeCharacter: string | null;
           runId: string | null;
           log: { t: string }[];

@@ -120,6 +120,52 @@ scores the ceiling with one errand goal, and restrict/reject/allow trades the la
 verdict for the capability that reads the door note and ties it with two. Carrying out all three
 goals costs the boundary and scores 750. `pnpm sim` prints all of this.
 
+## 5c. Taking an offer on trust (added 2026-10-18)
+
+Every conversation has a second way out: **Take it as offered**, which gives the verdict `allow`
+from the dialogue without the skill card ever being opened.
+
+**Only `allow`.** Restrict and Reject name what to strip, and from the conversation nothing has
+been named. You cannot scope what you have not read. That asymmetry is the rule, and it is least
+privilege stated as a game rule rather than as copy.
+
+Until this existed the reducer made approval-without-inspection _impossible_: `VERDICT` required
+`phase === 'inspect'`, which is only reachable through `INSPECT`. The game insisted the player
+read every permission before granting it, which is the one thing the research says does not
+happen. The fortieth prompt of the day gets the same half-second as the first.
+
+**It is a gamble, not a trap.** An offer taken on trust scores nothing of its own; the whole of
+what it is worth is `scoring.trustBonus`, paid once at the end and only if Red arrived with no
+flags. So:
+
+| Line                                               | Total              | Ending           |
+| -------------------------------------------------- | ------------------ | ---------------- |
+| Careful `restrict/reject/restrict`                 | 1,000              | Clean arrival    |
+| Careful `restrict/reject/allow`, both notices read | 1,000              | Clean arrival    |
+| Lantern **on trust**, the rest read                | 1,000              | Clean arrival    |
+| Three quick yeses                                  | lowest in the game | The wolf's house |
+
+Trusting the Lantern Keeper ties the ceiling, because their card genuinely has nothing hidden in
+it. You only know that by having read it. Trusting all three lights every capability, fires the
+notice, and lands below even allow-everything-after-reading-everything: **the fastest route
+through the forest is the worst outcome.** Nothing else in the ruleset does that.
+
+`trustBonus` is 100 deliberately. It lets the gamble _tie_ the careful line and never beat it, and
+it keeps the ceiling at exactly 1,000.
+
+**The button is the quietest thing on the screen**, by the same reasoning as UI_FOUNDATIONS section
+2's refusal of Lime on Allow: it is the same unsafe answer with less reading attached, so it is Ash
+at 14px, underlined, no arrow, no fill, after "Show me the skill" in the tab order. The only
+warning the game gives is a statement of fact beside it, "You will not see the card.", on the first
+encounter. No advice, no colour, no nudge.
+
+**The server is not fooled.** `checkLog` replays an unread verdict without opening a card, so a
+submitted log claiming an unread `restrict` fails with `must-open-the-card`. A client cannot award
+itself the points for a careful verdict it never made.
+
+**What Results says**, once, flatly: "You never opened this card." The fine print is then shown
+anyway, which is the payoff.
+
 ## 6. Skills (draft content, data-driven)
 
 | Skill                                  | Promise (shows on card)                                         | Fine print / hidden action                                                                          | Best verdict | Why                                                                              |

@@ -71,10 +71,37 @@ describe('illegal logs', () => {
   });
 
   it('rejects a verdict with no "met" or "inspected" before it (forged shortcut)', () => {
+    // Caught by the rule rather than by the replay length now: a restrict with no card open is
+    // illegal wherever it came from, which is a stronger rejection than it used to get.
     expect(bad(ev({ t: 'verdict', s: 'cottage-finder', v: 'restrict', at: at(1) }))).toMatchObject({
       legal: false,
-      reason: expect.stringContaining('does not replay exactly'),
+      reason: expect.stringContaining('must-open-the-card'),
     });
+  });
+
+  it('accepts an honest run that took an offer on trust, and the log stays unread', () => {
+    const log = ev(
+      { t: 'met', c: 'rabbit', at: at(1) },
+      { t: 'verdict', s: 'cottage-finder', v: 'allow', at: at(2) },
+    );
+    const check = checkLog(log, content, 0);
+    expect(check.legal).toBe(true);
+    if (!check.legal) return;
+    expect(check.state.inspected).toEqual([]);
+    expect(check.state.verdicts['cottage-finder']).toBe('allow');
+  });
+
+  it('a client cannot claim the points for a careful verdict it never made', () => {
+    // The whole server-side guard in one case: swapping `allow` for `restrict` on an unread
+    // verdict would buy the careful line's points, and the replay refuses it.
+    expect(
+      bad(
+        ev(
+          { t: 'met', c: 'rabbit', at: at(1) },
+          { t: 'verdict', s: 'cottage-finder', v: 'restrict', at: at(2) },
+        ),
+      ),
+    ).toMatchObject({ legal: false, reason: expect.stringContaining('must-open-the-card') });
   });
 
   it('rejects a verdict that skips the inspection', () => {

@@ -130,6 +130,12 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                         {row.success ? s('caughtIt') : s('missedIt')}
                       </span>
                     </p>
+                    {/*
+                      The payoff for a gamble that did not come off, and the only place the game
+                      says anything about it. The fine print below is shown either way, so a
+                      player who never opened the card reads here what was in it.
+                    */}
+                    {row.onTrust && <p class="otp-recap__trust">{s('cardNotOpened')}</p>}
                     <p class="otp-recap__detail">{row.recap}</p>
                     {/*
                       The section is headed "What was hiding" and never showed it: outcomes.ts

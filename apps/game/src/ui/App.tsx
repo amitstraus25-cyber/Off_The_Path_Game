@@ -125,6 +125,9 @@ export function App({
             state={state}
             onAsk={(q) => void store.dispatch({ type: 'ASK', c: character.id, q })}
             onInspect={() => void store.dispatch({ type: 'INSPECT', s: character.skillId })}
+            onTakeAsOffered={() =>
+              void store.dispatch({ type: 'VERDICT', s: character.skillId, v: 'allow' })
+            }
           />
         ) : null;
 

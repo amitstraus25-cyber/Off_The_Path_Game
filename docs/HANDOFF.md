@@ -91,8 +91,8 @@ Checked in this folder before the initial commit:
 
 - `pnpm install --frozen-lockfile` clean
 - 0 type errors, lint clean
-- 146 core + 73 game unit tests, **100% branch coverage** on `packages/core`
-- 51 Playwright tests
+- 154 core + 73 game unit tests, **100% branch coverage** on `packages/core`
+- 55 Playwright tests
 - Production build from the service root
 - Built bundle under the real CSP: no violations, no external requests, logo and both brand fonts
   self-hosted

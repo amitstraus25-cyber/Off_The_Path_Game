@@ -81,5 +81,7 @@ export type RejectReason =
   | 'wrong-skill'
   | 'already-asked'
   | 'already-decided'
+  /** Restrict and Reject name what to strip, and from the conversation nothing has been named. */
+  | 'must-open-the-card'
   | 'cottage-locked'
   | 'time-went-backwards';

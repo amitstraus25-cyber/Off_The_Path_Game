@@ -132,8 +132,21 @@ describe('guards', () => {
       'wrong-skill',
     ],
     [
-      'VERDICT before inspecting',
+      // Allow is legal here; restrict and reject are not. See "taking an offer on trust" below.
+      'restricting without opening the card',
       [...begin, { type: 'MEET', c: 'rabbit' }],
+      { type: 'VERDICT', s: 'cottage-finder', v: 'restrict', at: 99999 },
+      'must-open-the-card',
+    ],
+    [
+      'rejecting without opening the card',
+      [...begin, { type: 'MEET', c: 'rabbit' }],
+      { type: 'VERDICT', s: 'cottage-finder', v: 'reject', at: 99999 },
+      'must-open-the-card',
+    ],
+    [
+      'VERDICT from the forest, with nobody in front of you',
+      [...begin],
       { type: 'VERDICT', s: 'cottage-finder', v: 'allow', at: 99999 },
       'wrong-phase',
     ],

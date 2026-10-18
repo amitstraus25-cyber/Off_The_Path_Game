@@ -64,8 +64,23 @@ export function checkLog(raw: unknown, content: Content, startedAt = 0): LogChec
           reason = 'unknown-skill';
           break;
         }
+        /*
+         * A verdict the log never opened a card for must replay WITHOUT opening one. Inserting an
+         * INSPECT here would append an `inspected` event the submitted log does not have, and the
+         * replay check below would then reject an honest run as forged.
+         *
+         * This is also what makes the rule self-enforcing on the server. Only `allow` is legal
+         * from the conversation, so a submitted log claiming an unread `restrict` replays into
+         * `dialogue` and fails with `must-open-the-card`. A client cannot award itself the points
+         * for a careful verdict it never made.
+         */
         const onCard = state.phase === 'inspect' && state.activeCharacter === c.id;
-        reason = onCard ? null : (focus(c.id, e.at) ?? run({ type: 'INSPECT', s: e.s, at: e.at }));
+        const everOpened = state.inspected.includes(e.s);
+        reason = onCard
+          ? null
+          : everOpened
+            ? (focus(c.id, e.at) ?? run({ type: 'INSPECT', s: e.s, at: e.at }))
+            : focus(c.id, e.at);
         reason ??= run({ type: 'VERDICT', s: e.s, v: e.v, at: e.at });
         break;
       }

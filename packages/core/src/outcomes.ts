@@ -175,6 +175,8 @@ export interface RecapRow {
   success: boolean;
   /** True when a hidden action took effect. */
   compromised: boolean;
+  /** The verdict was given without the card ever being opened. */
+  onTrust: boolean;
   hiddenAction: { title: string; detail: string } | null;
   recap: string;
 }
@@ -182,6 +184,7 @@ export interface RecapRow {
 /** One row per decided skill, in content order. */
 export function recap(log: readonly RunEvent[], content: Content): RecapRow[] {
   const { verdicts } = derive(log, content);
+  const opened = new Set(log.flatMap((e) => (e.t === 'inspected' ? [e.s] : [])));
   return content.skills.flatMap((s: Skill) => {
     const v = verdicts[s.id];
     if (v === undefined) return [];
@@ -197,6 +200,7 @@ export function recap(log: readonly RunEvent[], content: Content): RecapRow[] {
         compromised: o.flagsSet.length > 0,
         hiddenAction: s.finePrint ? { title: s.finePrint.title, detail: s.finePrint.detail } : null,
         recap: o.recap,
+        onTrust: !opened.has(s.id),
       },
     ];
   });

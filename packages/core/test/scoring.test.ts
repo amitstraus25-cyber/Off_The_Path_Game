@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { compareRuns, score } from '../src/scoring.ts';
+import { ending } from '../src/outcomes.ts';
 import { VERDICTS } from '../src/content.ts';
 import { begin, content, encounter, fullRun, run } from './helpers.ts';
+import type { Step } from './helpers.ts';
 
 // Best verdicts are restrict / reject / restrict. Every skill grants a leg on allow; only
 // night-light offers a real boundary, where restrict grants nothing at all.
@@ -140,6 +142,90 @@ describe('score: whole runs (seed content)', () => {
     expect(r.errandDone).toBe(true);
     expect(r.boundaryHeld).toBe(false);
     expect(r.total).toBe(750);
+  });
+
+  /*
+   * Taking an offer on the offerer's word: the one path by which a skill starts running with
+   * nobody having read what it asks for. The card scores nothing of its own, and the whole of
+   * what it is worth is paid once at the end, only if Red arrived with everything.
+   */
+  describe('an offer taken on trust', () => {
+    /** Meet, then say yes from the conversation without ever opening the card. */
+    const onTrust = (character: string, questions: string[] = []): Step[] => {
+      const c = content.characters.find((x) => x.id === character)!;
+      return [
+        { type: 'MEET', c: c.id },
+        ...questions.map((q): Step => ({ type: 'ASK', c: c.id, q })),
+        { type: 'VERDICT', s: c.skillId, v: 'allow' },
+      ];
+    };
+
+    it('scores nothing for the card and pays the bonus on a clean arrival', () => {
+      const state = run([
+        ...begin,
+        ...encounter('rabbit', 'restrict', ['needs']),
+        ...encounter('owl', 'reject', ['needs']),
+        ...onTrust('lantern-keeper', ['needs']),
+        { type: 'READ_NOTICE', n: 'forest-post' },
+        { type: 'READ_NOTICE', n: 'cottage-door' },
+        { type: 'ENTER_COTTAGE' },
+      ]);
+      const r = score(state.log, content);
+      const lantern = r.perSkill.find((s) => s.skillId === 'night-light')!;
+
+      expect(lantern.onTrust).toBe(true);
+      expect(lantern.verdict).toBe('allow');
+      expect(lantern.points).toBe(0);
+      expect(r.tookOnTrust).toBe(true);
+      expect(r.trustBonus).toBe(content.scoring.trustBonus);
+      // Ties the careful line exactly. The gamble can equal reading; it can never beat it.
+      expect(r.total).toBe(1000);
+    });
+
+    it('pays nothing once anything has been taken from Red', () => {
+      const state = run([
+        ...begin,
+        ...onTrust('rabbit'),
+        ...encounter('owl', 'reject'),
+        ...encounter('lantern-keeper', 'restrict'),
+        { type: 'ENTER_COTTAGE' },
+      ]);
+      const r = score(state.log, content);
+      expect(r.tookOnTrust).toBe(true);
+      // Allowing the compass in full takes the key, and a flag is what the bonus turns on.
+      expect(r.trustBonus).toBe(0);
+      expect(r.perSkill.find((s) => s.skillId === 'cottage-finder')!.points).toBe(0);
+    });
+
+    it('the fastest way through the forest is the worst outcome', () => {
+      const state = run([
+        ...begin,
+        ...onTrust('rabbit'),
+        ...onTrust('owl'),
+        ...onTrust('lantern-keeper', ['needs']),
+        { type: 'ENTER_COTTAGE' },
+      ]);
+      const r = score(state.log, content);
+      const careless = ending(state, content);
+      const reckless = score(
+        fullRun({ rabbit: 'allow', owl: 'allow', 'lantern-keeper': 'allow' }).log,
+        content,
+      );
+
+      expect(r.perSkill.every((s) => s.onTrust)).toBe(true);
+      expect(r.boundaryHeld).toBe(false);
+      expect(r.trustBonus).toBe(0);
+      // Below allowing everything after reading everything, which was the old floor.
+      expect(r.total).toBeLessThan(reckless.total);
+      expect(careless.id).toBe('wolfhouse');
+    });
+
+    it('a run where every card was opened pays no trust bonus', () => {
+      const r = score(fullRun(perfect, ['needs']).log, content);
+      expect(r.tookOnTrust).toBe(false);
+      expect(r.trustBonus).toBe(0);
+      expect(r.perSkill.every((s) => !s.onTrust)).toBe(true);
+    });
   });
 
   it('a capability taken by allowing in full does not carry out the errand', () => {

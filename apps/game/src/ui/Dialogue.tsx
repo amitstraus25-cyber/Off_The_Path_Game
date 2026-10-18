@@ -50,9 +50,18 @@ export interface DialogueProps {
   state: GameState;
   onAsk(questionId: string): void;
   onInspect(): void;
+  /** Say yes from here, without ever opening the card. */
+  onTakeAsOffered(): void;
 }
 
-export function Dialogue({ content, character, state, onAsk, onInspect }: DialogueProps) {
+export function Dialogue({
+  content,
+  character,
+  state,
+  onAsk,
+  onInspect,
+  onTakeAsOffered,
+}: DialogueProps) {
   const asked = state.asked[character.id] ?? [];
   // The reply to the last question replaces the greeting, as in the mock.
   const [lastAsked, setLastAsked] = useState<string | null>(null);
@@ -194,6 +203,29 @@ export function Dialogue({ content, character, state, onAsk, onInspect }: Dialog
                 {content.strings['showSkill'] ?? 'Show me the skill'}{' '}
                 <span aria-hidden="true">→</span>
               </button>
+              {/*
+                And the way past it. Deliberately the quietest thing on the screen: Ash, small, no
+                arrow, no fill, after the show button in the tab order. UI_FOUNDATIONS section 2
+                refuses Lime on Allow because the unsafe answer must never be the brightest thing
+                here, and this is the same answer with less reading attached.
+              */}
+              <button
+                type="button"
+                class="otp-dialogue__trust"
+                aria-describedby="otp-trust-hint"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTakeAsOffered();
+                }}
+              >
+                {content.strings['takeAsOffered'] ?? 'Take it as offered'}
+              </button>
+              <span
+                id="otp-trust-hint"
+                class={state.inspected.length === 0 ? 'otp-dialogue__hint' : 'otp-visually-hidden'}
+              >
+                {content.strings['takeAsOfferedHint'] ?? ''}
+              </span>
               <span class="otp-dialogue__left">
                 {questionsLeft === 1 ? '1 question left' : `${questionsLeft} questions left`}
               </span>

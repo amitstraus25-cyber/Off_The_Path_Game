@@ -129,6 +129,12 @@ export const contentSchema = z.strictObject({
     /** Awarded when the three capabilities were never all live at once. */
     boundaryBonus: z.number().int().min(0),
     /**
+     * What an offer accepted without opening its card is worth, paid once at the end and only on
+     * a clean arrival. An offer taken on trust scores nothing of its own, so this is the whole of
+     * the gamble: it comes off, or it is worth nothing.
+     */
+    trustBonus: z.number().int().min(0),
+    /**
      * What Grandma actually asked for. One goal per capability, so that refusing a skill costs
      * something concrete instead of being free: a goal needs its capability live AND, where `act`
      * is set, the thing itself done on the walk. Without this the whole capability vector is pure
@@ -250,7 +256,7 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
   const { maxPerSkill, bonusQuestions } = content.scoring;
   if (bonusQuestions.length === 0) add('scoring.bonusQuestions must not be empty');
   if (bonusQuestions.includes('show'))
-    add('"show" cannot earn the question bonus (inspecting is required anyway)');
+    add('"show" cannot earn the question bonus (opening the card is not a question)');
 
   if (!content.skills.some((s) => s.finePrint === undefined))
     add('at least one skill must have no finePrint (a genuinely safe skill)');

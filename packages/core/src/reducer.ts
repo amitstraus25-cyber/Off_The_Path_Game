@@ -72,8 +72,19 @@ export function tryReduce(state: GameState, action: Action, content: Content): S
     }
 
     case 'VERDICT': {
-      // Reaching 'inspect' is only possible through INSPECT, so a verdict always follows an inspection.
-      if (state.phase !== 'inspect') return no(state, 'wrong-phase');
+      /*
+       * A verdict normally follows an inspection, because 'inspect' is only reachable through
+       * INSPECT. It can also be given in the conversation itself, on the offerer's word, but then
+       * ONLY `allow`: restricting or rejecting means naming what to strip, and from here nothing
+       * has been named. You cannot scope what you have not read.
+       *
+       * This is the only path by which a skill starts running with nobody having read what it
+       * asks for, which is how permission is usually granted outside a game. Until it existed the
+       * reducer made the research's actual failure mode impossible to perform.
+       */
+      if (state.phase === 'dialogue' && action.v !== 'allow')
+        return no(state, 'must-open-the-card');
+      if (state.phase !== 'dialogue' && state.phase !== 'inspect') return no(state, 'wrong-phase');
       const c = findCharacter(content, state.activeCharacter!)!;
       if (c.skillId !== action.s) return no(state, 'wrong-skill');
       const outcome = findSkill(content, action.s)!.outcomes[action.v];

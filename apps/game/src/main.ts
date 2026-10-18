@@ -205,8 +205,15 @@ async function start(): Promise<void> {
     if (verdictCount > lastVerdicts) {
       const [skillId, verdict] = Object.entries(state.verdicts).at(-1)!;
       const skill = content.skills.find((s) => s.id === skillId);
+      /*
+       * An offer waved through without opening the card gets the neutral line rather than
+       * "Allowed: Night Light". The player did not weigh it, and the toast should not pretend
+       * they did; what they did is in the Results.
+       */
+      const onTrust = !state.inspected.includes(skillId);
       const word = content.strings[VERDICT_STRING[verdict as Verdict]] ?? verdict;
-      if (skill) showHint(`${word}: ${skill.name}`);
+      if (onTrust) showHint(content.strings['tookOnTrustToast'] ?? '');
+      else if (skill) showHint(`${word}: ${skill.name}`);
       emit('otp:verdict', { skillId, verdict });
     }
     lastVerdicts = verdictCount;
