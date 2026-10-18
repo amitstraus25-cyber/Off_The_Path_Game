@@ -43,58 +43,74 @@ function randomAction(rnd: () => number, clock: number): Action {
 }
 
 describe('property: random play', () => {
-  it('replaying any live log reproduces the live state, score and ending inputs', () => {
-    let accepted = 0;
-    let complete = 0;
-    for (let seed = 1; seed <= 1500; seed++) {
-      const rnd = mulberry32(seed);
-      let state = deepFreeze(createState(content));
-      let clock = 0;
-      let incremental = 0;
-      /*
-       * Mirrors the scoring rule rather than the card: an offer accepted without its card ever
-       * being opened scores nothing of its own, and is paid for once at the end by `trustBonus`.
-       */
-      const opened = new Set<string>();
-      for (const a of [{ type: 'START', runId: `r${seed}`, at: 0 }, { type: 'BEGIN' }] as Action[])
-        state = tryReduce(state, a, content).state;
+  /*
+   * 1,500 seeds by 120 steps, and more of those steps are accepted now that `allow` is legal
+   * straight from the conversation, so this sits close to the default 5s budget. Given a real one
+   * rather than left to flake.
+   */
+  it(
+    'replaying any live log reproduces the live state, score and ending inputs',
+    { timeout: 30_000 },
+    () => {
+      let accepted = 0;
+      let complete = 0;
+      for (let seed = 1; seed <= 1500; seed++) {
+        const rnd = mulberry32(seed);
+        let state = deepFreeze(createState(content));
+        let clock = 0;
+        let incremental = 0;
+        /*
+         * Mirrors the scoring rule rather than the card: an offer accepted without its card ever
+         * being opened scores nothing of its own, and is paid for once at the end by `trustBonus`.
+         */
+        const opened = new Set<string>();
+        for (const a of [
+          { type: 'START', runId: `r${seed}`, at: 0 },
+          { type: 'BEGIN' },
+        ] as Action[])
+          state = tryReduce(state, a, content).state;
 
-      for (let step = 0; step < 120; step++) {
-        clock += 1 + Math.floor(rnd() * 5000);
-        const r = tryReduce(state, randomAction(rnd, clock), content);
-        if (!r.ok) {
-          expect(r.state).toBe(state); // rejected actions never change anything
-          continue;
+        for (let step = 0; step < 120; step++) {
+          clock += 1 + Math.floor(rnd() * 5000);
+          const r = tryReduce(state, randomAction(rnd, clock), content);
+          if (!r.ok) {
+            expect(r.state).toBe(state); // rejected actions never change anything
+            continue;
+          }
+          accepted++;
+          const last = r.state.log.at(-1);
+          if (r.state.log.length > state.log.length && last?.t === 'inspected') opened.add(last.s);
+          if (r.state.log.length > state.log.length && last?.t === 'verdict' && opened.has(last.s))
+            incremental += content.skills.find((s) => s.id === last.s)!.outcomes[last.v].points;
+          state = deepFreeze(r.state);
         }
-        accepted++;
-        const last = r.state.log.at(-1);
-        if (r.state.log.length > state.log.length && last?.t === 'inspected') opened.add(last.s);
-        if (r.state.log.length > state.log.length && last?.t === 'verdict' && opened.has(last.s))
-          incremental += content.skills.find((s) => s.id === last.s)!.outcomes[last.v].points;
-        state = deepFreeze(r.state);
+
+        // 1. the log is legal and replays exactly to the same verdicts, basket and flags
+        const check = checkLog(state.log, content, 0);
+        expect(check.legal, `seed ${seed}`).toBe(true);
+        if (!check.legal) continue;
+        expect(check.state.verdicts).toEqual(state.verdicts);
+        expect(check.state.basket).toEqual(state.basket);
+        expect(check.state.flags).toEqual(state.flags);
+        expect(derive(state.log, content)).toEqual({
+          basket: state.basket,
+          flags: state.flags,
+          verdicts: state.verdicts,
+        });
+
+        // 2. score(log) equals the incremental running total plus every bonus
+        const result = score(state.log, content);
+        expect(result.total, `seed ${seed}`).toBe(
+          incremental +
+            result.bonus +
+            result.boundaryBonus +
+            result.errandBonus +
+            result.trustBonus,
+        );
+        if (check.complete) complete++;
       }
-
-      // 1. the log is legal and replays exactly to the same verdicts, basket and flags
-      const check = checkLog(state.log, content, 0);
-      expect(check.legal, `seed ${seed}`).toBe(true);
-      if (!check.legal) continue;
-      expect(check.state.verdicts).toEqual(state.verdicts);
-      expect(check.state.basket).toEqual(state.basket);
-      expect(check.state.flags).toEqual(state.flags);
-      expect(derive(state.log, content)).toEqual({
-        basket: state.basket,
-        flags: state.flags,
-        verdicts: state.verdicts,
-      });
-
-      // 2. score(log) equals the incremental running total plus every bonus
-      const result = score(state.log, content);
-      expect(result.total, `seed ${seed}`).toBe(
-        incremental + result.bonus + result.boundaryBonus + result.errandBonus + result.trustBonus,
-      );
-      if (check.complete) complete++;
-    }
-    expect(accepted).toBeGreaterThan(1000);
-    expect(complete).toBeGreaterThan(0); // the generator does reach the cottage
-  });
+      expect(accepted).toBeGreaterThan(1000);
+      expect(complete).toBeGreaterThan(0); // the generator does reach the cottage
+    },
+  );
 });

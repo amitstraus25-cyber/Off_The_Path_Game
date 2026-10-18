@@ -33,6 +33,8 @@ export interface AppProps {
   noticeId: string | null;
   onReadNotice(id: string): void;
   onLeaveNotice(): void;
+  /** Whether the bed is playing, and the control that changes it. */
+  music: { on: boolean; onToggle(): void };
 }
 
 function useStoreState(store: Store): GameState {
@@ -53,6 +55,7 @@ export function App({
   noticeId,
   onReadNotice,
   onLeaveNotice,
+  music,
 }: AppProps) {
   const state = useStoreState(store);
   const live = liveCapabilities(state.verdicts, content);
@@ -160,6 +163,7 @@ export function App({
             <WorldFrame
               number="01"
               title="Explore"
+              music={music}
               aside={
                 <>
                   <NotationChip

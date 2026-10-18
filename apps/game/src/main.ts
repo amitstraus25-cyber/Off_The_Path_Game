@@ -9,6 +9,7 @@ import { loadManifest } from './world/assets';
 import { BootScene, ForestScene } from './world/scenes';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
+import { createMusicPlayer } from './audio/player';
 import { watchStage } from './ui/stage';
 import { App } from './ui/App';
 import { createLeaderboardClient } from './net/leaderboard';
@@ -55,6 +56,13 @@ async function start(): Promise<void> {
   const panels = document.createElement('div');
   uiRoot.prepend(panels);
 
+  /*
+   * The music. Off until the player asks for it: this embeds in an iframe on the research page,
+   * and sound that starts by itself in someone else's page is how an embed gets pulled. It can
+   * only ever start after a click anyway, which the browser requires and the design wants.
+   */
+  const music = createMusicPlayer();
+
   let hint: string | null = null;
   /** The last thing a bystander said, and who said it. Pure flavour; no game state moves. */
   let say: { name: string; line: string } | null = null;
@@ -69,6 +77,8 @@ async function start(): Promise<void> {
   const beginRun = (): void => {
     store.dispatch({ type: 'START', runId: crypto.randomUUID() });
     store.dispatch({ type: 'BEGIN' });
+    // "Begin the walk" is the gesture the browser wants before any audio can sound.
+    music.begin();
     emit('otp:started', { runId: store.getState().runId });
   };
 
@@ -79,6 +89,13 @@ async function start(): Promise<void> {
         content,
         hint,
         say,
+        music: {
+          on: music.wanted,
+          onToggle: () => {
+            music.toggle();
+            draw();
+          },
+        },
         onStart: beginRun,
         onReplay: () => {
           // The store is only half the run: the notices Red walked past and where she is standing
@@ -183,6 +200,13 @@ async function start(): Promise<void> {
     scale: { mode: Phaser.Scale.NONE },
     // Plain <img> loading keeps the strict CSP free of a blob: allowance.
     loader: { imageLoadType: 'HTMLImageElement' },
+    /*
+     * Phaser builds a WebAudioSoundManager and an AudioContext on boot unless told not to, and
+     * this game has never played a sound through Phaser. That context was being created on every
+     * page load, in an iframe on someone else's page, for nothing. The music has its own context
+     * and builds it only when the player asks for sound.
+     */
+    audio: { noAudio: true },
     scene: [new BootScene(manifest), new ForestScene(store, bus, input, worldHasInput)],
   });
 
@@ -199,6 +223,8 @@ async function start(): Promise<void> {
   store.subscribe((state) => {
     stage.dataset['phase'] = state.phase;
     touch.setVisible(worldHasInput());
+    // Reading the fine print should be the quiet moment, so the bed drops while a panel is up.
+    music.duck(!worldHasInput());
 
     // A verdict earns a brief confirmation, by shape and words, never by colour alone.
     const verdictCount = Object.keys(state.verdicts).length;

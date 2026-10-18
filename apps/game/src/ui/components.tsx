@@ -59,6 +59,8 @@ export interface WorldFrameProps {
   aside?: ComponentChildren;
   /** Anything that sits over the world itself, such as the controls hint. */
   children?: ComponentChildren;
+  /** Music state and the control for it. Absent on screens that do not carry the frame. */
+  music?: { on: boolean; onToggle(): void };
 }
 
 /**
@@ -66,17 +68,41 @@ export interface WorldFrameProps {
  * that ui/stage.ts publishes, so the world sits inside the same frame as every other screen
  * instead of floating on the page with its quest chip in the window's corner.
  */
-export function WorldFrame({ number, title, aside, children }: WorldFrameProps) {
+export function WorldFrame({ number, title, aside, children, music }: WorldFrameProps) {
   return (
     <div class="otp-world-frame">
       <header class="otp-panel__header otp-world-frame__header">
         <span class="otp-panel__number">{number}</span>
         <span class="otp-panel__title">{title}</span>
         {aside && <span class="otp-panel__aside otp-hud">{aside}</span>}
+        {music && <MusicToggle on={music.on} onToggle={music.onToggle} />}
         <CyeraMark />
       </header>
       {children}
     </div>
+  );
+}
+
+/**
+ * The music control. Sound is off until this is pressed: the game embeds in an iframe on the
+ * research page, and audio that starts by itself in someone else's page is how an embed gets
+ * pulled. It carries its state in a word as well as a glyph, because UI_FOUNDATIONS section 2
+ * refuses status by colour or shape alone, and it is a real toggle so a screen reader announces
+ * the state rather than the action.
+ */
+export function MusicToggle({ on, onToggle }: { on: boolean; onToggle(): void }) {
+  return (
+    <button
+      type="button"
+      class="otp-music"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      title={on ? 'Music on' : 'Music off'}
+    >
+      <span aria-hidden="true">{on ? '♪' : '♩'}</span>
+      <span class="otp-visually-hidden">Music</span>
+    </button>
   );
 }
 
