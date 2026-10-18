@@ -21,6 +21,19 @@ export const rgb = (hex: string, a = 255): RGBA => [
  *
  * `shadow` is the one dusk-shadow ramp docs/ASSETS.md allows. It extends `grass` downward rather
  * than introducing a hue: the board's shadows are grass in shade, never black and never purple.
+ *
+ * Rebranded 2026-10-18 per docs/ART_PRODUCTION.md section 6a. Red's cloak is 50 to 64 per cent of
+ * each of her sixteen frames, which is the whole reason she is findable in a green forest, so when
+ * the cloak moves to Cyera purple everything else that was red has to move off red or she stops
+ * being the one thing the eye catches. Only `cloak`, `roof` and `wolf` change here. The world is
+ * still a forest: Cyera's palette has no green, no brown and no water blue, so grass, water, wood,
+ * stone and sand are untouched, and Lime appears nowhere in the world art -- it is one call to
+ * action per screen.
+ *
+ * The new values were picked against the ladders already in this table, not by pasting brand hexes:
+ * every ramp still climbs in four stops, and each step is kept inside the range the rest of the
+ * palette uses (roughly 20 to 45 levels of luma) so the painters' existing shading still reads at
+ * 16px.
  */
 export const PALETTE = {
   grass: ['#2f7a3e', '#3f9a46', '#50ba51', '#9ed858'],
@@ -34,16 +47,64 @@ export const PALETTE = {
   stone: ['#5f5f66', '#8f8f93', '#b4b4b8', '#d2d2d6'],
   /*
    * The wolf, and only the wolf. He was drawn in `stone` -- the ramp the rocks use -- which is why
-   * he read as a grey teddy rather than a predator. Warm dark grey-brown, so that when he is
-   * wearing Grandma's cool grey shawl the fur above it reads as the wrong animal.
+   * he read as a grey teddy rather than a predator.
+   *
+   * The attacker takes the brand's darkest tokens. Deep Purple #441363 sits at level 1 exactly;
+   * levels 2 and 3 carry it upward with the chroma pulled out, because saturated purple fur reads
+   * as a velvet costume rather than an animal. Level 0 is Black #160923 lifted 13 levels towards
+   * Deep Purple rather than Black itself: `paintWolf` finishes with `outline(shade('ink', 0))`,
+   * which IS Black, so a Black base would swallow his own outline and cost him the silhouette edge
+   * at 16px. It also keeps frames 2 and 3 meaningful -- those are painted straight in `ink`, and
+   * the flat-silhouette-in-shadow trick only works if the lit frames are not already ink.
+   *
+   * Darker than before (span 69 against 72) and he now separates further from Grandma's cool grey
+   * shawl than the warm grey-brown did: fur at 29..67 under a shawl at 143..180.
    */
-  wolf: ['#2a2521', '#403931', '#5a5048', '#786c60'],
-  roof: ['#a8322c', '#e04a42', '#fc695b', '#ff9a86'],
+  wolf: ['#241632', '#441363', '#4a3a61', '#6a5789'],
+  /*
+   * The cottage roof is the biggest red mass in the game and the one thing that would compete with
+   * Red, so it goes neutral. Slate is deliberately not a Cyera token -- the brand does not own a
+   * roof -- but it is kept warm (R > G > B, Clay's own cast) so the cottage still reads as a
+   * cottage and not as rendered concrete.
+   *
+   * The highlight lands in the Clay #D4D2C8 family one step below Clay itself. Level 3 is the lit
+   * cap on every shingle, close to half the painted roof surface; put it on Clay at luma 210 and
+   * the roof's mean lands within about fifteen levels of the cream wall beneath it (`wall` base is
+   * 222) and the cottage reads as one pale mass at a 26-tile camera. Level 0 is pushed deeper than
+   * the old red to compensate for losing hue contrast: the grooves and course lines are drawn in
+   * it, and that texture is now what tells a roof from a lawn.
+   */
+  roof: ['#4a453e', '#787266', '#979082', '#bdb6a7'],
   wall: ['#c4ab8c', '#f3d9c1', '#faeada', '#fffaf0'],
   wood: ['#6b4522', '#9a6a36', '#c08f55', '#dcb882'],
-  cloak: ['#8c2420', '#c0392b', '#d9584a', '#ef8a7c'],
+  /*
+   * Red herself, option A from section 6a: Lilac-led, so she is findable at a 26-tile camera.
+   * Deep Purple in the folds, Aubergine as the body midtone, Lilac across the lit body, Haze as
+   * the highlight -- the four Cyera tokens, in the roles the spec names, unchanged.
+   *
+   * Her mass improves on the scarlet: `red` paints the body rows and the hood in level 1, which
+   * now sits 41 levels off the grass field where the old red sat 21 off it, with a hue flip on top.
+   * The cost is internal: levels 1 and 2 are 99 levels apart, where no other ramp here exceeds 66,
+   * so the 2px lit edge and the hood brim rim-light hard off the body instead of shading into it.
+   * That is inherent to the two tokens the spec picked and is left as specified rather than quietly
+   * regraded; level 3 is unpainted today and is the obvious place to fix it in the 32px redraw.
+   */
+  cloak: ['#441363', '#6d2d93', '#d28eff', '#e8c6ff'],
   skin: ['#c98f63', '#f0c9a0', '#ffe0c0', '#fff0e0'],
   fur: ['#c9c2b4', '#ece6da', '#f8f4ec', '#ffffff'],
+  /*
+   * Dusk, and every portrait backdrop. Section 6a asks whether this should move onto Deep Purple.
+   * It already has: level 2 is Deep Purple #441363 and level 3 is Aubergine #6d2d93, both exact
+   * tokens, so there is nothing to move and it is left alone.
+   *
+   * Two things it is now worth knowing, both of which have to be fixed where the pixels are placed
+   * rather than here. Its level 1 to level 2 step is 6 levels of luma, the flattest in this table,
+   * which is why the Lantern Keeper's spines (level 1) barely separate from his body (level 2).
+   * And `portraitRed` paints the hood in cloak level 1 directly onto a level 2 backdrop: that was
+   * 53 levels and a red-against-purple hue flip, and with the rebrand it is 33 levels of the same
+   * hue. Moving this ramp would silently restyle all five portrait backdrops and the interact
+   * prompt, so the backdrop choice belongs to whoever owns the portrait painters.
+   */
   night: ['#1a1026', '#2d1b3d', '#441363', '#6d2d93'],
   gold: ['#9c7420', '#d4a72c', '#f0c84a', '#ffe88a'],
   ink: ['#160923', '#2a1a38', '#3d2a4d', '#543d66'],

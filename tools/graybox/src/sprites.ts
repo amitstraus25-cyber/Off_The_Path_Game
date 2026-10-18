@@ -12,6 +12,11 @@ export const FACINGS: Facing[] = ['down', 'left', 'right', 'up'];
 /**
  * Red: hooded cloak, boots and a basket. `step` is -1, 0 or 1 for the walk cycle, which swings the
  * legs and bobs the body one pixel so movement reads at this size.
+ *
+ * Every cloak pixel comes from the `cloak` ramp -- there is no hardcoded colour anywhere in this
+ * painter -- so the rebrand to Cyera purple (docs/ART_PRODUCTION.md 6a) reaches all sixteen frames
+ * without a line changing here. She paints levels 0, 1 and 2: Deep Purple in the folds and the
+ * shaded edge, Aubergine across the body and hood, Lilac on the lit edge and the hood peak.
  */
 function paintRed(facing: Facing, step: -1 | 0 | 1): Img {
   const img = new Img(RED_W, RED_H);
@@ -273,10 +278,24 @@ const toadstool: NpcPainter = (img, blink) => {
   // Stem, wide enough that the eyes are not swallowed by the outline at its edges.
   img.rect(4, 13, 8, 10, shade('wall', 1));
   img.rect(4, 13, 4, 10, shade('wall', 2));
-  // Cap.
-  img.ellipse(8, 11, 7.5, 5, shade('roof', 1));
-  img.ellipse(8, 9, 6.5, 3.5, shade('roof', 2));
-  img.line(1, 13, 14, 13, shade('roof', 0));
+  /*
+   * Cap: Aubergine with Offwhite spots, per docs/ART_PRODUCTION.md 6a.
+   *
+   * Painted from `night`, not `cloak`. Levels 2 and 3 of `night` ARE Deep Purple #441363 and
+   * Aubergine #6D2D93 -- the exact tokens the table names -- so the cap gets the specified pixels
+   * while the cloak ramp stays Red's alone. That matters here more than anywhere else: the cap is
+   * 46 per cent of this sprite, and a mass that size wearing Red's own ramp is precisely the
+   * competition the rebrand exists to prevent. The lit dome tops out at Aubergine (luma 76), so
+   * Lilac (175) remains the only bright purple in the forest and it is all hers.
+   *
+   * It also reads better than the red did: the old cap sat at luma 118 against a grass field of
+   * 117 and separated by hue alone. Dark cap, pale stem, Offwhite spots is the toadstool
+   * silhouette at any size, and the spots now punch 175 levels off the dome they sit on where the
+   * red gave them 103.
+   */
+  img.ellipse(8, 11, 7.5, 5, shade('night', 2)); // cap body, Deep Purple
+  img.ellipse(8, 9, 6.5, 3.5, shade('night', 3)); // lit dome, Aubergine
+  img.line(1, 13, 14, 13, shade('night', 0)); // shadowed gills under the brim
   for (const [sx, sy, r] of [
     [4, 10, 1.4],
     [11, 9, 1.6],
@@ -339,14 +358,28 @@ const snail: NpcPainter = (img, blink) => {
   img.ellipse(8, 22 + y, 6.5, 2, shade('stone', 2));
   img.ellipse(8, 21 + y, 5.5, 1.2, shade('stone', 3));
   img.ellipse(4, 19 + y, 2.2, 3, shade('stone', 2));
-  // Shell, wound the right way round.
-  img.ellipse(10, 17 + y, 5, 5, shade('wood', 1));
-  img.ellipse(10, 17 + y, 3.4, 3.4, shade('wood', 2));
-  img.ellipse(10.8, 17.6 + y, 1.8, 1.8, shade('wood', 0));
-  img.px(11, 18 + y, shade('wood', 3));
-  // The parcel, tied on top and going nowhere fast.
-  img.rect(8, 9 + y, 5, 4, shade('cloak', 1));
-  img.rect(8, 9 + y, 5, 1, shade('cloak', 2));
+  /*
+   * Shell, wound the right way round: Clay with a Haze whorl, per 6a.
+   *
+   * `fur` is the palette's warm pale neutral and the closest thing it holds to Clay #D4D2C8. A
+   * ramp rather than the single token, because the shell is the loudest shape on this sprite and
+   * one flat tone cannot carry a spiral; it also separates by hue from the cool grey `stone` foot
+   * underneath, which a cool near-white would not. The whorl needs the dark groove under it --
+   * Haze and Clay are four levels of luma apart, so on its own the swirl would be invisible.
+   */
+  img.ellipse(10, 17 + y, 5, 5, shade('fur', 0)); // shaded rim
+  img.ellipse(10, 17 + y, 3.6, 3.6, shade('fur', 1)); // Clay-family body
+  img.ellipse(10.8, 17.6 + y, 2, 2, shade('fur', 0)); // the groove the whorl winds into
+  img.ellipse(10.8, 17.6 + y, 1.1, 1.1, shade('cloak', 3)); // Haze
+  /*
+   * The parcel, tied on top and going nowhere fast. Brown paper under gold string.
+   *
+   * It was painted from `cloak`, which means the rebrand would have handed a bystander Red's
+   * Aubergine and Lilac for free. `wood` is the ramp the shell has just vacated, so nothing is
+   * invented and nothing is lost.
+   */
+  img.rect(8, 9 + y, 5, 4, shade('wood', 1));
+  img.rect(8, 9 + y, 5, 1, shade('wood', 2));
   img.line(8, 11 + y, 12, 11 + y, shade('gold', 2));
   img.line(10, 9 + y, 10, 12 + y, shade('gold', 2));
   // Eye stalks, high and clear of the shell.
@@ -450,8 +483,11 @@ const portraitRed: PortraitPainter = (img) => {
   img.line(10, 15, 13, 15, shade('trunk', 0));
   img.line(19, 15, 22, 15, shade('trunk', 0));
   img.line(14, 24, 18, 24, shade('cloak', 0));
-  img.px(11, 22, shade('cloak', 2));
-  img.px(21, 22, shade('cloak', 2));
+  // Cheeks. These were cloak level 2 back when that step was a rosy scarlet; the rebrand turned it
+  // into Lilac, and two Lilac dots on a pale face read as markings rather than a blush. `skin` 0 is
+  // the warm step the sprite already uses for her nose, so the portrait and the sprite agree.
+  img.px(11, 22, shade('skin', 0));
+  img.px(21, 22, shade('skin', 0));
 };
 
 const portraitRabbit: PortraitPainter = (img) => {
@@ -669,10 +705,12 @@ const letter: ItemPainter = (img) => {
   img.line(30, 7, 16, 18, shade('wall', 0));
   img.line(2, 7, 16, 17, shade('wall', 1));
   img.line(30, 7, 16, 17, shade('wall', 1));
-  // Wax heart seal, straight from the board.
-  img.ellipse(16, 20, 4, 3.6, shade('cloak', 1));
-  img.ellipse(14.5, 19, 2, 1.8, shade('cloak', 2));
-  img.ellipse(17.5, 19, 2, 1.8, shade('cloak', 2));
+  // Wax heart seal, straight from the board. Deep Purple per 6a, taken from `night` level 2, which
+  // is #441363 exactly: the seal gets the token without borrowing Red's ramp, and the two lit lobes
+  // step up to Aubergine. Darker than the old wax, so it punches harder against the pale paper.
+  img.ellipse(16, 20, 4, 3.6, shade('night', 2));
+  img.ellipse(14.5, 19, 2, 1.8, shade('night', 3));
+  img.ellipse(17.5, 19, 2, 1.8, shade('night', 3));
   img.outline(shade('ink', 0));
 };
 

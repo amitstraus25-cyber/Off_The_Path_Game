@@ -394,15 +394,28 @@ const chimney: Painter = (img, seed) => {
 const stallAwning = (kind: 'left' | 'middle' | 'right'): Painter =>
   function paintAwning(img) {
     img.rect(0, 0, TILE, TILE, [0, 0, 0, 0]);
-    // Striped canvas, the stall's strongest read on the board.
+    /*
+     * Striped canvas, the stall's strongest read on the board. Haze and Offwhite per the rebrand
+     * (docs/ART_PRODUCTION.md section 6a).
+     *
+     * The dark stripe was drawn in `cloak` level 2, so when the cloak moved to purple this tile
+     * quietly took Red's own lit body tone -- a market awning in exactly the colour the player is
+     * meant to track across the forest. The spec sends it one step further up the same ramp, to
+     * Haze, which keeps it on brand and well clear of her body.
+     *
+     * The pale stripe was cream (`wall` level 2) and is now the palette's only neutral white,
+     * standing in for Offwhite #FBFBFB until there is a ramp for it: see the problems note. A warm
+     * cream against a cool Haze would have read as a third colour rather than as white.
+     */
     for (let x = 0; x < TILE; x++) {
       const stripe = Math.floor(x / 4) % 2 === 0;
-      img.rect(x, 4, 1, 8, stripe ? shade('wall', 2) : shade('cloak', 2));
+      img.rect(x, 4, 1, 8, stripe ? shade('fur', 3) : shade('cloak', 3));
     }
     img.rect(0, 3, TILE, 2, shade('wood', 0));
     img.rect(0, 11, TILE, 2, shade('wood', 0));
-    // Scalloped hem.
-    for (let x = 0; x < TILE; x += 4) img.ellipse(x + 2, 13, 2, 1.5, shade('wall', 1));
+    // Scalloped hem: the same canvas, one step down, so the bottom edge still turns under. It
+    // follows the stripes off cream for the same reason they did.
+    for (let x = 0; x < TILE; x += 4) img.ellipse(x + 2, 13, 2, 1.5, shade('fur', 2));
     if (kind === 'left') img.rect(0, 3, 2, 12, shade('wood', 0));
     if (kind === 'right') img.rect(TILE - 2, 3, 2, 12, shade('wood', 0));
   };
@@ -436,6 +449,10 @@ const lanternPost: Painter = (img, seed) => {
  * under it, over a near-black mouth with a bright blue slot in it -- which at 16px read as a block
  * of plastic explosive with an LED timer rather than as a well. The roof is now a stepped gable
  * sitting ON its posts, and the water is a dark glint rather than a lit panel.
+ *
+ * Section 6a sends the well roof onto slate with the cottage roof. It is already painted from the
+ * shared `roof` ramp, so it moved when that ramp did and there is nothing to change here -- which
+ * is the behaviour we want: the two roofs in this world are the same roof.
  */
 const well: Painter = (img, seed) => {
   grass(1)(img, seed);
@@ -495,6 +512,14 @@ const fountain: Painter = (img, seed) => {
 /*
  * A small toadstool, scattered about the glade. A few mushrooms under the trees is what this
  * forest would have anyway, and that is the whole of why it is here.
+ *
+ * The cap was painted in `roof`, which was red; with the roof on slate it would have come out a
+ * grey button, so section 6a names it Aubergine with Offwhite spots and it takes the cloak ramp's
+ * two dark stops instead. Deep Purple is the shaded outer cap and Aubergine the lit crown, so
+ * Aubergine is the colour the cap reads as -- and, deliberately, the lit stop is NOT cloak level 2:
+ * Lilac is Red's own body tone and a scatter of Lilac dots in the grass is exactly the false
+ * positive the rebrand exists to prevent. The cap sits 41 to 74 levels of luma under the grass
+ * field with a hue flip on top, which is what a mushroom in shade should do.
  */
 const toadstoolRing: Painter = (img, seed) => {
   grass(1)(img, seed);
@@ -502,11 +527,13 @@ const toadstoolRing: Painter = (img, seed) => {
   img.ellipse(8, 14, 3.2, 0.8, shade('shadow', 1, 110));
   img.rect(7, 10, 2, 4, shade('wall', 2));
   img.rect(7, 10, 1, 4, shade('wall', 3));
-  img.ellipse(8, 9, 4, 2.6, shade('roof', 1));
-  img.ellipse(8, 8, 3.2, 1.8, shade('roof', 2));
-  img.px(6, 8, shade('wall', 3));
-  img.px(10, 9, shade('wall', 3));
-  img.px(8, 7, shade('wall', 3));
+  img.ellipse(8, 9, 4, 2.6, shade('cloak', 0));
+  img.ellipse(8, 8, 3.2, 1.8, shade('cloak', 1));
+  // Spots: neutral white standing in for Offwhite #FBFBFB, as in the stall awning. They carry the
+  // whole read of the tile now that the cap is dark, so they stay the brightest thing on it.
+  img.px(6, 8, shade('fur', 3));
+  img.px(10, 9, shade('fur', 3));
+  img.px(8, 7, shade('fur', 3));
 };
 
 const signpost: Painter = (img, seed) => {
@@ -556,9 +583,14 @@ export const TILE_PAINTERS: Record<string, Painter> = {
   'shore-e': shore(['e']),
   'shore-w': shore(['w']),
   waterfall: waterfall,
-  'flower-white': flower([250, 250, 245, 255]),
-  'flower-pink': flower([240, 150, 190, 255]),
-  'flower-red': flower([214, 75, 70, 255]),
+  // The three petal colours were the last raw hexes in the tileset. Section 6a moves the red to
+  // Lilac and the pink to Haze; the white is unchanged in everything but provenance, and now comes
+  // off the palette's neutral white (five levels of luma from the literal it replaces, which is
+  // nothing at 16px) so no tile mixes hardcoded colour with ramps. The gold centre is untouched --
+  // it is the only warm note left in these tiles and it is what stops the petals reading as dots.
+  'flower-white': flower(shade('fur', 3)),
+  'flower-pink': flower(shade('cloak', 3)),
+  'flower-red': flower(shade('cloak', 2)),
   bush: bush,
   rock: rock,
   'trunk-l': trunk('left'),
