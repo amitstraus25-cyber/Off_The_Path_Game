@@ -6,6 +6,8 @@
   "scripts": {
     "generate": "node src/generate.ts",
     "preview": "node src/preview.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "world": "node src/world.ts",
+    "score": "node src/score.ts"
   }
 }

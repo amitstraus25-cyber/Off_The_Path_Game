@@ -142,6 +142,81 @@ export type Ramp = keyof typeof PALETTE;
 export const shade = (ramp: Ramp, level: 0 | 1 | 2 | 3, alpha = 255): RGBA =>
   rgb(PALETTE[ramp][level], alpha);
 
+/** Perceptual luminance, 0..255. */
+export const lumaOf = (c: RGBA): number => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+
+/*
+ * Two additions, both measured rather than felt.
+ *
+ * `tools/graybox/src/score.ts` compares a rendered region of our world against crops of the
+ * approved concept board. At the time these were added the numbers were:
+ *
+ *     axis                         ours     board
+ *     keyline (% under luma 60)    0.64     18.95     <- 1/30th
+ *     deep shade (% under luma 81) 2.17     26.68     <- 1/12th
+ *     colour variety per 1000px    0.53     25.74     <- 1/50th
+ *     luma spread (stdev)         29.88     61.23
+ *
+ * Those three gaps are not a drawing problem, they are a PALETTE problem, and no amount of
+ * redrawing fixes them:
+ *
+ * - Every ramp has four stops and nothing below the darkest, so there is no value dark enough to
+ *   outline with. The board outlines everything in a near-black of the object's own hue, which is
+ *   most of why it reads as one illustrated world. Hence `keyline`.
+ * - Four stops per ramp caps how many distinct tones a shape can use, which is why variety came in
+ *   at a fiftieth of the board's. Hence `tone`, which interpolates along the ramp continuously, so
+ *   a leaf clump can round off through a dozen values instead of stepping through four.
+ *
+ * `shade` is unchanged and remains correct for flat fills -- there are over fifteen hundred calls
+ * to it and this does not disturb one of them.
+ */
+
+/**
+ * The outline value for a ramp: its darkest stop taken down by `drop` luma, hue preserved.
+ *
+ * Scaled rather than subtracted, so a brown stays brown instead of sliding towards black.
+ *
+ * The floor is applied to the SCALE, not to each channel. Clamping channels independently is what
+ * a first version did, and on an already-dark ramp it turned Red's #441363 into a neutral #060606:
+ * every channel hit the same floor, so the hue was gone and the protagonist would have been
+ * outlined in the same grey as a rock. Flooring the scale keeps the ratios exactly, so a dark
+ * purple outlines in dark purple and only its brightness moves.
+ */
+export function keyline(ramp: Ramp, drop = 40, alpha = 255, minLuma = 14): RGBA {
+  const base = shade(ramp, 0, alpha);
+  const l = lumaOf(base);
+  if (l <= 0) return base;
+  const factor = Math.min(1, Math.max(minLuma / l, (l - drop) / l));
+  return [
+    Math.round(base[0] * factor),
+    Math.round(base[1] * factor),
+    Math.round(base[2] * factor),
+    alpha,
+  ];
+}
+
+/**
+ * A continuous tone along a ramp: `t` runs 0 (darkest) to 1 (lightest), between the four stops.
+ *
+ * `tone(r, 0)` is `shade(r, 0)` and `tone(r, 1)` is `shade(r, 3)`; everything between is an
+ * interpolation the four-stop palette could not previously express. Use it for anything that should
+ * round -- a leaf mass, a trunk, a boulder -- and keep `shade` for flat faces and single-pixel marks.
+ */
+export function tone(ramp: Ramp, t: number, alpha = 255): RGBA {
+  const stops = PALETTE[ramp];
+  const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+  const i = Math.min(Math.floor(x), stops.length - 2);
+  const f = x - i;
+  const a = rgb(stops[i]!, alpha);
+  const b = rgb(stops[i + 1]!, alpha);
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f),
+    alpha,
+  ];
+}
+
 /**
  * Smooth value noise over a 2D grid, for variation that spans many tiles.
  *

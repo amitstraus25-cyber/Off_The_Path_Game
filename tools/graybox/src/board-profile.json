@@ -1,0 +1,74 @@
+{
+  "from": [
+    "arrive-garden.png",
+    "explore-ne.png",
+    "explore-nw.png",
+    "explore-south.png",
+    "question-forest.png"
+  ],
+  "each": [
+    {
+      "file": "arrive-garden.png",
+      "p": {
+        "deep": 28.46,
+        "keyline": 17.74,
+        "spread": 56.44,
+        "edges": 4.37,
+        "texture": 28.84,
+        "variety": 24.43
+      }
+    },
+    {
+      "file": "explore-ne.png",
+      "p": {
+        "deep": 19.21,
+        "keyline": 12.84,
+        "spread": 61.13,
+        "edges": 4.76,
+        "texture": 26.08,
+        "variety": 26.61
+      }
+    },
+    {
+      "file": "explore-nw.png",
+      "p": {
+        "deep": 24.68,
+        "keyline": 16.45,
+        "spread": 55.56,
+        "edges": 4.52,
+        "texture": 28.14,
+        "variety": 23.93
+      }
+    },
+    {
+      "file": "explore-south.png",
+      "p": {
+        "deep": 39.42,
+        "keyline": 34.44,
+        "spread": 74.24,
+        "edges": 3.16,
+        "texture": 28.93,
+        "variety": 21.83
+      }
+    },
+    {
+      "file": "question-forest.png",
+      "p": {
+        "deep": 21.65,
+        "keyline": 13.3,
+        "spread": 58.76,
+        "edges": 5.71,
+        "texture": 29.6,
+        "variety": 31.9
+      }
+    }
+  ],
+  "target": {
+    "deep": 26.68,
+    "keyline": 18.95,
+    "spread": 61.23,
+    "edges": 4.5,
+    "texture": 28.32,
+    "variety": 25.74
+  }
+}
