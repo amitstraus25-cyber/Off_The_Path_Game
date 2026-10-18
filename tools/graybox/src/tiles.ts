@@ -461,41 +461,31 @@ const well: Painter = (img, seed) => {
 };
 
 /*
- * A fountain in a glade. Scenery, and nothing more.
- *
- * It had two pixels of Cyera Lilac in the falling water, which docs/ASSETS.md forbids in one
- * line about this exact thing: "Palette: keep the approved board's greens, browns, water blues,
- * Red's cloak red... Do not recolor to Cyera purple." The art palette and the UI palette are
- * deliberately separate, and identity colour belongs in the chrome.
+ * The water of the fountain, and only the water. The stone basin that used to be here is gone:
+ * the Cyera symbol sits under this tile as the basin, placed by forest-scene.ts from the official
+ * file, so anything drawn here would fight it. What is left is the pool and the spout rising out
+ * of the middle of the mark.
  */
 const fountain: Painter = (img, seed) => {
   grass(2)(img, seed);
-  // Lower basin.
-  img.ellipse(8, 12, 7, 4, shade('stone', 0));
-  img.ellipse(8, 12, 6, 3.2, shade('stone', 2));
-  img.ellipse(8, 12.2, 4.6, 2.2, shade('water', 1));
-  img.ellipse(6.6, 11.6, 2.2, 1, shade('water', 2));
-  // Pedestal and upper bowl.
-  img.rect(7, 7, 2, 5, shade('stone', 1));
-  img.rect(7, 7, 1, 5, shade('stone', 2));
-  img.ellipse(8, 7, 3.6, 1.5, shade('stone', 0));
-  img.ellipse(8, 6.8, 2.6, 1, shade('water', 2));
+  img.ellipse(8, 11, 4.6, 2.4, shade('water', 0));
+  img.ellipse(8, 11, 3.8, 1.8, shade('water', 1));
+  img.ellipse(6.8, 10.6, 1.8, 0.8, shade('water', 2));
   // The spout, and the fall on either side.
   img.px(8, 2, shade('water', 3));
   img.px(8, 3, shade('water', 3));
-  img.px(7, 4, shade('water', 2));
-  img.px(9, 4, shade('water', 2));
-  img.px(6, 5, shade('water', 2));
-  img.px(10, 5, shade('water', 2));
-  // Where it catches the light, it catches the sky.
-  img.px(6, 6, shade('water', 3));
-  img.px(10, 6, shade('water', 3));
-  img.px(5, 12, shade('water', 2, 200));
+  img.px(8, 4, shade('water', 2));
+  img.px(7, 5, shade('water', 2));
+  img.px(9, 5, shade('water', 2));
+  img.px(6, 7, shade('water', 2));
+  img.px(10, 7, shade('water', 2));
+  img.px(6, 8, shade('water', 1));
+  img.px(10, 8, shade('water', 1));
 };
 
 /*
- * A small toadstool, laid in a ring round the glade. A fairy ring is folklore this forest would
- * have anyway, and that is the whole of why it is here.
+ * A small toadstool, scattered about the glade. A few mushrooms under the trees is what this
+ * forest would have anyway, and that is the whole of why it is here.
  */
 const toadstoolRing: Painter = (img, seed) => {
   grass(1)(img, seed);
@@ -508,6 +498,24 @@ const toadstoolRing: Painter = (img, seed) => {
   img.px(6, 8, shade('wall', 3));
   img.px(10, 9, shade('wall', 3));
   img.px(8, 7, shade('wall', 3));
+};
+
+/*
+ * Flagstone, laid under the fountain. The mark is near-black, and near-black straight onto bright
+ * grass reads as a hole in the ground rather than as a thing someone built; on pale stone it
+ * reads as an inlay, which is what it is.
+ */
+const paving: Painter = (img, seed) => {
+  const rnd = noise(seed + 311);
+  img.rect(0, 0, TILE, TILE, shade('stone', 2));
+  for (let i = 0; i < 26; i++) {
+    const x = Math.floor(rnd() * TILE);
+    const y = Math.floor(rnd() * TILE);
+    img.px(x, y, shade('stone', rnd() > 0.5 ? 1 : 3, 120));
+  }
+  // Joints along two edges only, so a field of these reads as courses rather than as a grid.
+  img.line(0, 0, TILE - 1, 0, shade('stone', 1));
+  img.line(0, 0, 0, TILE - 1, shade('stone', 1));
 };
 
 const signpost: Painter = (img, seed) => {
@@ -587,6 +595,7 @@ export const TILE_PAINTERS: Record<string, Painter> = {
   'stall-counter': stallCounter,
   'lantern-post': lanternPost,
   fountain,
+  paving,
   'toadstool-ring': toadstoolRing,
   well: well,
   signpost: signpost,

@@ -311,22 +311,26 @@ export function generateForestMap(): GeneratedMap {
    * planted with the Lilac flowers. Nothing happens here. It is somewhere to find.
    */
   clearArea(17, 11, 5, 5);
+  // Flagstone under the mark, three by three, so the inlay has something to be inlaid in.
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) set(ground, 19 + dx, 13 + dy, gid('paving'));
   place('fountain', 19, 13, 'fountain');
   /*
-   * A fairy ring round it, and an actual ring: the twelve tiles two out from the fountain with
-   * the four corners left off, which is as round as a tile grid gets. The first attempt filled
-   * every tile at a Chebyshev radius of one, which is a 3x3 BOX -- it looked like a crate of
-   * mushrooms rather than a ring, and no amount of calling it a ring in a comment fixed that.
-   *
-   * None of them is solid, so you walk into the ring and up to the fountain rather than being
-   * fenced out of it.
+   * A few toadstools about the glade. They were a ring of twelve, evenly spaced, which read as
+   * twelve identical caps someone had put there rather than as anything that grew: a perfect
+   * circle is the one arrangement nature never makes. Scattered unevenly instead, clustered in
+   * twos and threes with gaps between, none of them solid.
    */
-  for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -2; dx <= 2; dx++) {
-      const onPerimeter = Math.max(Math.abs(dx), Math.abs(dy)) === 2;
-      const isCorner = Math.abs(dx) === 2 && Math.abs(dy) === 2;
-      if (onPerimeter && !isCorner) set(below, 19 + dx, 13 + dy, gid('toadstool-ring'));
-    }
+  for (const [mx, my] of [
+    [17, 11],
+    [18, 11],
+    [21, 12],
+    [17, 14],
+    [18, 15],
+    [21, 15],
+    [20, 11],
+  ] as const)
+    set(below, mx, my, gid('toadstool-ring'));
   place('lantern-post', 36, 32, 'lantern-post');
 
   // Grandma's cottage at the east end, behind a fence with one gate.
