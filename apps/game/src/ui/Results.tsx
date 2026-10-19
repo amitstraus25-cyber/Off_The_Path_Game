@@ -97,8 +97,21 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                 {result.boundaryHeld ? '✓' : '!'}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
+                {/*
+                  Three states, not two. `boundaryHeld` is `!trifectaLive` and says nothing about
+                  notices, so choosing between two strings on it alone asserted "a notice on a post
+                  did the rest" for every run that let all three run -- including the runs where no
+                  notice was ever read, which then rendered that claim above an empty explanation,
+                  because the paragraphs below are a map over `fired`. An asset about checking what
+                  systems really do cannot misreport the player's own run on the screen that carries
+                  its argument (docs/UX_REVIEW.md blocker 1).
+                */}
                 <p class="otp-recap__heading">
-                  {result.boundaryHeld ? s('boundaryHeld') : s('boundaryBroken')}{' '}
+                  {result.boundaryHeld
+                    ? s('boundaryHeld')
+                    : fired.length > 0
+                      ? s('boundaryBroken')
+                      : s('boundaryOpen')}{' '}
                   <span>{result.boundaryBonus > 0 ? `+${result.boundaryBonus}` : 'no bonus'}</span>
                 </p>
                 {fired.map((notice) => (
@@ -169,13 +182,19 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                 </span>
                 <div>
                   <p class="otp-recap__heading">
-                    {goal.label}{' '}
-                    <span>
-                      {goal.met
-                        ? `+${goal.points}`
-                        : `needed ${content.capabilities[goal.needs]?.label.toLowerCase() ?? goal.needs}`}
-                    </span>
+                    {goal.label} <span>{goal.met ? `+${goal.points}` : 'not met'}</span>
                   </p>
+                  {/*
+                    On its own line, and as a sentence. Gluing "needed" to a capability label built
+                    "Find the cottage before dark needed reaches into your basket" -- a run-on at
+                    every width, because the labels are verb phrases ("Reaches into your basket").
+                  */}
+                  {!goal.met && (
+                    <p class="otp-recap__detail">
+                      {s('errandNeeded')}{' '}
+                      {content.capabilities[goal.needs]?.label.toLowerCase() ?? goal.needs}.
+                    </p>
+                  )}
                 </div>
               </div>
             ))}

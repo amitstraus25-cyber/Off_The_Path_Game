@@ -105,3 +105,48 @@ test('Results says which card was never opened', async ({ page }) => {
   // And the fine print it hid is shown anyway, which is the whole payoff.
   await expect(compass.locator('.otp-recap__hidden')).toBeVisible();
 });
+
+/*
+ * Results must not claim a notice acted when none was read.
+ *
+ * docs/UX_REVIEW.md blocker 1: the boundary heading was chosen on `boundaryHeld` alone, which
+ * `scoring.ts` defines as `!trifectaLive` and which says nothing about notices. So every run that
+ * let all three run at once was told "a notice on a post did the rest" -- including runs where no
+ * notice was ever read, where the explanation beneath it is a map over an empty list and renders
+ * nothing. The reviewer's capture of a post-first run was byte-identical to one that reads no
+ * notice at all: the screen could not tell "it fired" from "it never happened".
+ */
+test('Results does not say a notice acted when none was read', async ({ page }) => {
+  await page.evaluate(() => {
+    const { store } = window.__otp!;
+    for (const [c, s] of [
+      ['rabbit', 'cottage-finder'],
+      ['owl', 'word-weaver'],
+      ['lantern-keeper', 'night-light'],
+    ]) {
+      store.dispatch({ type: 'MEET', c });
+      store.dispatch({ type: 'INSPECT', s });
+      store.dispatch({ type: 'VERDICT', s, v: 'allow' });
+    }
+    store.dispatch({ type: 'ENTER_COTTAGE' });
+    store.dispatch({ type: 'FINISH' });
+  });
+
+  const state = await probe(page);
+  expect(
+    state.log.some((e) => e.t === 'read'),
+    'this run reads no notice',
+  ).toBe(false);
+
+  const boundary = page.locator('.otp-recap__row--boundary');
+  await expect(boundary).toBeVisible();
+  // All three ran, so it must not claim the boundary held either.
+  await expect(boundary).not.toContainText(/never let all three/i);
+  await expect(boundary, 'must not assert a notice fired').not.toContainText(/notice on a post/i);
+  await expect(boundary).toContainText(/nothing you passed/i);
+
+  // And the heading above the per-skill rows must not promise hiding, since Night Light hid nothing.
+  await expect(
+    page.locator('.otp-section-label').filter({ hasText: /each skill/i }),
+  ).not.toContainText(/hiding/i);
+});

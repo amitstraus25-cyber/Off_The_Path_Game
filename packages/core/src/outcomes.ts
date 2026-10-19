@@ -125,6 +125,28 @@ export interface Derived {
   verdicts: Record<SkillId, Verdict>;
 }
 
+/**
+ * Whether a notice still has something left to do: it carries a hidden instruction, and at least
+ * one of the flags that instruction sets is not set yet.
+ *
+ * This is what keeps the forest post re-readable. The post is the only mechanical demonstration of
+ * the whole lesson, and the only clear lane out of the spawn runs straight past it, so a player who
+ * walks east first used to spend it before a single verdict existed -- `already-read` latched, and
+ * every later reading refused. The fiction is unchanged: the injection still needs all three legs
+ * live at the moment of reading, because it is the lantern that reads the hidden line out, the
+ * basket that exposes the letter and the weaver that sends it on. Reading it early still does
+ * nothing. It simply no longer uses the post up.
+ *
+ * A notice with no `whenExposed` -- the note on Grandma's door -- is never pending, so it keeps the
+ * plain read-once rule. So does one whose flags are all already set, which is what stops the beat
+ * being replayed once it has actually fired.
+ */
+export const noticePending = (notice: Notice, flags: readonly Flag[]): boolean =>
+  notice.whenExposed !== undefined &&
+  // `flagsSet` is required by the schema, so there is no empty-array fallback to write here: a
+  // `whenExposed` that set nothing would be a content error, and content.ts would reject it.
+  notice.whenExposed.flagsSet.some((f) => !flags.includes(f));
+
 /** Rebuilds basket, flags and verdicts from a log alone (used by the server and tests). */
 export function derive(log: readonly RunEvent[], content: Content): Derived {
   let basket = [...content.startBasket];
@@ -151,7 +173,12 @@ export function derive(log: readonly RunEvent[], content: Content): Derived {
   return { basket, flags, verdicts };
 }
 
-/** Notices that actually fired, for the recap. */
+/**
+ * Notices that actually fired, for the recap.
+ *
+ * Deduplicated, because a notice is now re-readable until its hidden instruction has taken effect,
+ * so a log can legitimately hold several `read` events for the same post. It still bites once.
+ */
 export function exposedNotices(log: readonly RunEvent[], content: Content): Notice[] {
   const verdicts: Record<SkillId, Verdict> = {};
   const fired: Notice[] = [];
@@ -159,7 +186,7 @@ export function exposedNotices(log: readonly RunEvent[], content: Content): Noti
     if (e.t === 'verdict') verdicts[e.s] = e.v;
     if (e.t === 'read' && trifectaLive(verdicts, content)) {
       const notice = findNotice(content, e.n);
-      if (notice?.whenExposed) fired.push(notice);
+      if (notice?.whenExposed && !fired.some((n) => n.id === notice.id)) fired.push(notice);
     }
   }
   return fired;

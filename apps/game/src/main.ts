@@ -1,6 +1,14 @@
 import Phaser from 'phaser';
 import { h, render } from 'preact';
-import { canEnterCottage, ending, loadContent, score, trifectaLive } from '@otp/core';
+import {
+  canEnterCottage,
+  ending,
+  findNotice,
+  loadContent,
+  noticePending,
+  score,
+  trifectaLive,
+} from '@otp/core';
 import type { Verdict } from '@otp/core';
 import gameContent from '../../../content/game.json';
 import { createBus } from './bus';
@@ -171,8 +179,26 @@ async function start(): Promise<void> {
   });
 
   bus.on('reachedNotice', ({ noticeId: id }) => {
-    if (store.getState().phase !== 'explore') return;
-    if (noticeId || dismissed.has(id) || store.getState().read.includes(id)) return;
+    const state = store.getState();
+    if (state.phase !== 'explore') return;
+    if (noticeId) return;
+    /*
+     * The second of the two latches docs/UX_REVIEW.md blocker 2 found. The reducer will now accept
+     * a second reading of a notice whose hidden instruction has not fired, but it never got the
+     * chance: this handler refused to re-open the panel once the post had been read or waved away,
+     * and `dismissed` is only cleared on replay.
+     *
+     * So the panel re-opens in exactly one case -- the post still has something to demonstrate AND
+     * all three legs are now live, which is to say reading it now would actually do something. That
+     * is the one beat the whole game is built to deliver, and it was unreachable by every route but
+     * one narrow ordering. Once it fires, `noticePending` goes false and it never asks again.
+     */
+    const notice = findNotice(content, id);
+    const wouldFire =
+      notice !== undefined &&
+      noticePending(notice, state.flags) &&
+      trifectaLive(state.verdicts, content);
+    if (!wouldFire && (dismissed.has(id) || state.read.includes(id))) return;
     noticeId = id;
     touch.setVisible(false);
     draw();

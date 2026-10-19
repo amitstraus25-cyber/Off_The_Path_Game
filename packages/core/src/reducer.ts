@@ -1,6 +1,12 @@
 import { findCharacter, findSkill } from './content.ts';
 import type { Content } from './content.ts';
-import { applyOutcome, canEnterCottage, findNotice, trifectaLive } from './outcomes.ts';
+import {
+  applyOutcome,
+  canEnterCottage,
+  findNotice,
+  noticePending,
+  trifectaLive,
+} from './outcomes.ts';
 import { createState } from './state.ts';
 import type { Action, GameState, RejectReason, RunEvent } from './state.ts';
 
@@ -104,7 +110,18 @@ export function tryReduce(state: GameState, action: Action, content: Content): S
       if (state.phase !== 'explore') return no(state, 'wrong-phase');
       const notice = findNotice(content, action.n);
       if (!notice) return no(state, 'unknown-notice');
-      if (state.read.includes(notice.id)) return no(state, 'already-read');
+      /*
+       * Read once -- UNLESS the notice still has a hidden instruction waiting to take effect.
+       *
+       * The post spans the only clear lane east out of the spawn, so the natural first act of the
+       * game reaches it in under ten seconds with no verdicts given. Latching on the first reading
+       * spent the one demonstration this game owns before it could possibly fire, and the careful
+       * player lost it too, since every text explaining the injection is gated on the trifecta.
+       * `noticePending` keeps it open while there is still something to demonstrate, and shuts it
+       * the moment there is not.
+       */
+      if (state.read.includes(notice.id) && !noticePending(notice, state.flags))
+        return no(state, 'already-read');
       // The words on the post are the same either way. What changes is whether anything is
       // standing there able to read them, carry what you hold, and send word out.
       // A notice with no hidden instruction is just a sign: nothing to act on, whoever is reading.
@@ -119,7 +136,10 @@ export function tryReduce(state: GameState, action: Action, content: Content): S
         : { basket: state.basket, flags: state.flags };
       return ok({
         ...state,
-        read: [...state.read, notice.id],
+        // `read` is a set: the errand goal "leave word at the post" is met by having read it, and
+        // reading it twice is not twice the errand. The LOG keeps every reading, because that is
+        // what `exposedNotices` replays to decide whether the hidden line was ever acted on.
+        read: state.read.includes(notice.id) ? state.read : [...state.read, notice.id],
         basket,
         flags,
         log: append(state, { t: 'read', n: notice.id, at: action.at }),
