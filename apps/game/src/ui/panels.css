@@ -4,6 +4,19 @@
  * --otp-ui, so the panels stay readable from 375px to 1280px without changing their look.
  */
 
+/*
+ * THE FLOOR RULE. --otp-ui scales type as well as spacing, and at 0.7 a 13px base lands at 9.1px.
+ * That is how the one sentence that defines Allow, Restrict and Reject, and the privacy line under
+ * the score form, both came to be set at nine pixels on a phone. Every font-size that multiplies
+ * by --otp-ui therefore carries a floor:
+ *
+ *   max(12px, calc(Npx * var(--otp-ui)))   body copy, anything that is a sentence
+ *   max(11px, calc(Npx * var(--otp-ui)))   captions: uppercase micro-labels, counters, footers
+ *   max(10px, calc(10px * var(--otp-ui)))  the 10-cap row eyebrow, which section 3 fixes at 10
+ *
+ * A base of 18px or more cannot reach 12px at the smallest scale (18 x 0.7 = 12.6), so headings
+ * and display sizes are left to scale freely. A new rule below that size without a max() is a bug.
+ */
 .otp-ui {
   --otp-ui: 1;
   /*
@@ -25,6 +38,14 @@
   .otp-ui {
     --otp-ui: 0.78;
     --otp-px: 1;
+    /*
+     * --otp-slot-px must be set wherever --otp-ui is, or the basket icon outgrows the slot that
+     * holds it. .otp-slot is calc(84px x --otp-ui) wide by calc(68px x --otp-ui) tall while the
+     * icon is calc(64px x --otp-slot-px), so at --otp-ui 0.78 a 65.5x53 slot was holding a 64x64
+     * icon: 13px of it hung out of the bottom and broke the lower edge of the Results basket
+     * panel on every current iPhone (390x844, 393x852, 412x915, 430x932).
+     */
+    --otp-slot-px: 0.5;
   }
 }
 
@@ -46,6 +67,9 @@
   .otp-ui {
     --otp-ui: 0.82;
     --otp-px: 1;
+    /* Same reason as the 640px block: 0.82 gave a 68.9x55.8 slot holding a 64x64 icon, 10.3px out
+       of the bottom, on a 1366x768 laptop and a 1280x700 window. */
+    --otp-slot-px: 0.5;
   }
 }
 
@@ -245,6 +269,74 @@
     calc(var(--otp-r-panel) - var(--otp-panel-border)) 0 0;
 }
 
+/*
+ * The world header on a phone.
+ *
+ * The header cannot grow and cannot wrap: ui/stage.ts reserves exactly --otp-world-header pixels
+ * above the canvas and the frame is positioned from that box, so a taller header stops lining up
+ * with the world it is drawn around. Everything in it therefore has to FIT. It did not: at 375 the
+ * chip, the three capability legs and the music control needed 496px of a 352px strip, and because
+ * the frame is position: fixed the 134px that did not fit was simply painted outside the viewport
+ * with no scrollbar, no wheel and no way to reach it. Two of the three legs -- the mechanic this
+ * whole asset exists to teach -- and the only control for the music were off screen entirely.
+ *
+ * So below 640px the header gives up, in this order, the things the player is least reading:
+ * the count, then the screen's name, and only then any part of the quest label.
+ */
+@media (max-width: 640px) {
+  .otp-world-frame__header {
+    gap: calc(9px * var(--otp-ui));
+    padding-right: calc(9px * var(--otp-ui));
+  }
+
+  /*
+   * The count is the longest string in the header ("3 of 3 skills decided" is 105px at 375) and
+   * the one UX_REVIEW finding 5 names as droppable. The chip still reads "Find Grandma", and the
+   * same count is on the Results screen at the end of the run.
+   */
+  .otp-world-frame__header .otp-chip__count {
+    display: none;
+  }
+
+  /*
+   * The screen's name, worth 80px here, is carried by the numeral beside it and by the quest chip
+   * directly under the player's eye. Hidden from the layout but NOT from the accessible tree --
+   * this is the .otp-visually-hidden treatment, not display: none, so "Explore" is still
+   * announced. (The Cyera mark above uses display: none below 560px; it has alt text and no
+   * reading order to keep.)
+   */
+  .otp-world-frame__header .otp-panel__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /*
+   * And if anything still has to give at a narrower width than this, it is the quest label's tail
+   * and never a capability leg. A flex item will not shrink below its content unless min-width is
+   * cleared, which is why the overflow landed on the legs at the end of the row instead.
+   */
+  .otp-world-frame__header .otp-panel__aside,
+  .otp-world-frame__header .otp-chip {
+    min-width: 0;
+  }
+
+  .otp-world-frame__header .otp-chip__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .otp-world-frame__header .otp-trifecta--compact {
+    flex: none;
+  }
+}
+
 /* The controls line sits over the world, bottom left, where the joystick would be on touch. */
 /* Top of the world, because the bottom corners now belong to the errand goals and the basket,
    which are both permanent. This line is onboarding and can sit out of the way. */
@@ -257,7 +349,7 @@
   background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
   border-radius: var(--otp-r-pill);
   padding: calc(7px * var(--otp-ui)) calc(16px * var(--otp-ui));
-  font-size: calc(12.5px * var(--otp-ui));
+  font-size: max(11px, calc(12.5px * var(--otp-ui)));
   line-height: 1.3;
   color: var(--cyera-haze);
   pointer-events: none;
@@ -298,7 +390,7 @@
 }
 
 .otp-hud-basket__label {
-  font-size: calc(12.5px * var(--otp-ui));
+  font-size: max(11px, calc(12.5px * var(--otp-ui)));
   color: var(--cyera-haze);
 }
 
@@ -490,7 +582,7 @@
   display: inline-block;
   width: 22px;
   color: var(--cyera-deep-purple);
-  font-size: calc(15px * var(--otp-ui));
+  font-size: max(12px, calc(15px * var(--otp-ui)));
 }
 
 .otp-option[aria-selected='true'] {
@@ -718,7 +810,7 @@
 }
 
 .otp-verdict__glyph {
-  font-size: calc(17px * var(--otp-ui));
+  font-size: max(12px, calc(17px * var(--otp-ui)));
   line-height: 1;
 }
 
@@ -760,7 +852,7 @@
 }
 
 .otp-basket__label {
-  font-size: calc(17px * var(--otp-ui));
+  font-size: max(12px, calc(17px * var(--otp-ui)));
   margin: 0 0 calc(7px * var(--otp-ui));
   font-weight: 500;
   color: var(--cyera-deep-purple);
@@ -804,7 +896,7 @@
   padding: 0;
   margin-left: calc(16px * var(--otp-ui));
   color: var(--cyera-ash);
-  font: 400 calc(14px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
+  font: 400 max(12px, calc(14px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -818,14 +910,14 @@
 .otp-dialogue__hint {
   margin-left: calc(8px * var(--otp-ui));
   color: var(--cyera-ash);
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(12px, calc(13px * var(--otp-ui)));
 }
 
 /* Said once, flatly, on the Results row for a card nobody opened. */
 .otp-recap__trust {
   margin: calc(4px * var(--otp-ui)) 0 0;
   color: var(--cyera-ash);
-  font-size: calc(14px * var(--otp-ui));
+  font-size: max(12px, calc(14px * var(--otp-ui)));
 }
 
 /*
@@ -833,7 +925,18 @@
  * strip, the same family as the header's own type, and no fill: it is a utility, not a thing to
  * press first.
  */
+/*
+ * It is the only control on Explore and it carries a setting that survives the session in
+ * localStorage, so a returning player who cannot reach it has music they cannot stop. It was a
+ * 26.6x12.6 box at 375 -- well under --otp-touch-min, and 131px outside the viewport besides.
+ * The box does not scale: a thumb is the same size at every breakpoint.
+ */
 .otp-music {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: var(--otp-touch-min);
+  min-height: var(--otp-touch-min);
   background: none;
   border: none;
   padding: 0 calc(10px * var(--otp-ui));
@@ -898,7 +1001,7 @@
  */
 .otp-trifecta__label {
   margin: 0 0 calc(6px * var(--otp-ui));
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(11px, calc(13px * var(--otp-ui)));
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--cyera-ash);
@@ -957,7 +1060,7 @@
 }
 
 .otp-leg__name {
-  font-size: calc(14px * var(--otp-ui));
+  font-size: max(12px, calc(14px * var(--otp-ui)));
   font-weight: 500;
   color: var(--cyera-black);
 }
@@ -1024,7 +1127,7 @@
    below 24px (docs/UI_FOUNDATIONS.md section 7, change 4). */
 .otp-card__primer {
   margin: calc(12px * var(--otp-ui)) 0 0;
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(12px, calc(13px * var(--otp-ui)));
   line-height: 1.45;
   color: var(--cyera-ash);
 }
@@ -1068,13 +1171,13 @@
 
 .otp-notice__effect {
   margin: calc(10px * var(--otp-ui)) 0 0;
-  font-size: calc(15px * var(--otp-ui));
+  font-size: max(12px, calc(15px * var(--otp-ui)));
   line-height: 1.35;
 }
 
 .otp-notice__quiet {
   margin: calc(10px * var(--otp-ui)) 0 0;
-  font-size: calc(15px * var(--otp-ui));
+  font-size: max(12px, calc(15px * var(--otp-ui)));
   color: var(--cyera-ash);
 }
 
@@ -1104,7 +1207,7 @@
 }
 .otp-hud-goals__label {
   display: block;
-  font-size: calc(11px * var(--otp-ui));
+  font-size: max(11px, calc(11px * var(--otp-ui)));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--cyera-haze);
@@ -1121,7 +1224,7 @@
   display: flex;
   align-items: baseline;
   gap: calc(8px * var(--otp-ui));
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(12px, calc(13px * var(--otp-ui)));
   /* Not done is stated by the dot and by "not yet" in the accessible name, never by colour. */
   color: var(--cyera-haze);
 }
@@ -1199,7 +1302,7 @@
   border-left: 3px solid var(--cyera-lilac);
   border-radius: var(--otp-r-inset);
   padding: calc(8px * var(--otp-ui)) calc(14px * var(--otp-ui));
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(12px, calc(13px * var(--otp-ui)));
   line-height: 1.35;
   color: var(--cyera-offwhite);
   pointer-events: none;
@@ -1221,7 +1324,7 @@
   display: flex;
   align-items: center;
   gap: calc(10px * var(--otp-ui));
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(11px, calc(13px * var(--otp-ui)));
   color: var(--cyera-ash);
 }
 .otp-foot .otp-mark {

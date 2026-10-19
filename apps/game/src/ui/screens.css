@@ -1,6 +1,11 @@
 /*
  * Title, Arrive and Results screens. Values follow reference/mocks/results-leaderboard.html
  * (UI_FOUNDATIONS section 3). Season Mix highlights exactly one word per heading, always upright.
+ *
+ * Every font-size here obeys the floor rule at the head of panels.css: body copy carries
+ * max(12px, ...) and captions max(11px, ...), because --otp-ui scales type as well as spacing and
+ * at 0.7 an unfloored 13px base lands at 9.1px -- which is where the privacy line under the score
+ * form was being set on a phone.
  */
 
 .otp-screen {
@@ -50,13 +55,13 @@
 }
 
 .otp-subheading {
-  font-size: calc(17px * var(--otp-ui));
+  font-size: max(12px, calc(17px * var(--otp-ui)));
   color: var(--cyera-ash);
   margin: calc(10px * var(--otp-ui)) 0 calc(24px * var(--otp-ui));
 }
 
 .otp-section-label {
-  font-size: calc(15px * var(--otp-ui));
+  font-size: max(11px, calc(15px * var(--otp-ui)));
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--cyera-ash);
@@ -94,7 +99,7 @@
 .otp-note__from {
   display: block;
   margin-top: calc(8px * var(--otp-ui));
-  font-size: calc(15px * var(--otp-ui));
+  font-size: max(12px, calc(15px * var(--otp-ui)));
   color: var(--cyera-ash);
 }
 
@@ -105,7 +110,7 @@
 }
 
 .otp-hint {
-  font-size: calc(14px * var(--otp-ui));
+  font-size: max(12px, calc(14px * var(--otp-ui)));
   color: var(--cyera-ash);
   margin: calc(10px * var(--otp-ui)) 0 0;
 }
@@ -319,11 +324,11 @@
 .otp-recap__heading span {
   font-weight: 400;
   color: var(--cyera-ash);
-  font-size: calc(16px * var(--otp-ui));
+  font-size: max(12px, calc(16px * var(--otp-ui)));
 }
 
 .otp-recap__detail {
-  font-size: calc(15px * var(--otp-ui));
+  font-size: max(12px, calc(15px * var(--otp-ui)));
   line-height: 1.3;
   margin: 2px 0 0;
 }
@@ -352,13 +357,13 @@
 }
 
 .otp-fine {
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(12px, calc(13px * var(--otp-ui)));
   color: var(--cyera-ash);
   margin: calc(7px * var(--otp-ui)) 0 0;
 }
 
 .otp-error {
-  font-size: calc(14px * var(--otp-ui));
+  font-size: max(12px, calc(14px * var(--otp-ui)));
   color: var(--cyera-deep-purple);
   font-weight: 500;
   margin: calc(7px * var(--otp-ui)) 0 0;
@@ -421,7 +426,7 @@
   border-left: 4px solid var(--cyera-deep-purple);
   border-radius: var(--otp-r-panel);
   background: var(--cyera-haze);
-  font-size: calc(14.5px * var(--otp-ui));
+  font-size: max(12px, calc(14.5px * var(--otp-ui)));
   line-height: 1.35;
   color: var(--cyera-black);
 }
@@ -436,7 +441,7 @@
    forbids carrying status in colour. */
 .otp-recap__status {
   margin-left: calc(8px * var(--otp-ui));
-  font-size: calc(12px * var(--otp-ui));
+  font-size: max(11px, calc(12px * var(--otp-ui)));
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -447,7 +452,7 @@
 .otp-section-label .otp-serif {
   font-family: var(--cyera-font-serif);
   font-style: normal;
-  font-size: calc(16px * var(--otp-ui));
+  font-size: max(12px, calc(16px * var(--otp-ui)));
   letter-spacing: 0.04em;
   text-transform: none;
   color: var(--cyera-deep-purple);
@@ -526,15 +531,15 @@ h2.otp-section-label {
   /* No rule down the side. A bright Lilac stripe beside Grandma's note made the quiet thing on
      the screen the loud one; the indent and the caption under it already say it is a quote. */
   padding: calc(2px * var(--otp-ui)) 0 calc(2px * var(--otp-ui)) calc(2px * var(--otp-ui));
-  font-size: calc(16px * var(--otp-ui));
+  font-size: max(12px, calc(16px * var(--otp-ui)));
   color: var(--cyera-offwhite);
 }
 .otp-title-panel .otp-note__from {
   color: var(--cyera-haze);
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(12px, calc(13px * var(--otp-ui)));
 }
 .otp-title-panel .otp-body-text {
-  font-size: calc(16px * var(--otp-ui));
+  font-size: max(12px, calc(16px * var(--otp-ui)));
   color: var(--cyera-haze);
 }
 .otp-title-panel .otp-hint {
@@ -555,7 +560,7 @@ h2.otp-section-label {
   border-radius: var(--otp-r-pill);
   background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
   color: var(--cyera-offwhite);
-  font-size: calc(13px * var(--otp-ui));
+  font-size: max(12px, calc(13px * var(--otp-ui)));
 }
 
 /* Portrait docks the column under the world rather than beside it, so Red stays visible above it

@@ -17,7 +17,7 @@
  * own lawn tile was carrying. The lawn is calm; all the dark and all the busyness on that frame
  * belong to the canopies, the bushes and the objects.
  *
- * WHAT THIS ROUND CHANGED, AND WHY BOTH CHANGES COST THE SCORE SOMETHING.
+ * WHAT THE LAST THREE ROUNDS CHANGED, AND WHY EACH CHANGE COST THE SCORE SOMETHING.
  *
  * 1. THE MARKS ARE GREEN AGAIN. The previous pass pinned every blade root and contact pool to an
  *    absolute floor of luma 36 and won four axes doing it. On the forest floor that was defensible;
@@ -42,31 +42,42 @@
  *    quilt was a continuous straight edge running the whole length of every tile.
  *
  *     variant   share   core band    rim    role
- *     grass-0   44.9%    62 .. 116   ~172   shade: dappled leaf shadow, soft and irregular
- *     grass-1   33.3%   154 .. 182   ~172   the lawn's shaded side
- *     grass-2    6.0%   168 .. 188   ~172   open lawn -- the board's own 179
- *     grass-3    1.2%   176 .. 192   ~172   full sun
+ *     grass-0   53.7%   164 .. 182   ~173   open lawn, and over half the grass
+ *     grass-1   38.3%   154 .. 182   ~173   the lawn's shaded side
+ *     grass-2    6.5%   168 .. 188   ~173   open lawn -- the board's own 179
+ *     grass-3    1.5%   176 .. 192   ~171   full sun
+ *
+ * THOSE SHARES ARE OF THE GRASS CELLS, not of the whole ground layer, and the distinction matters
+ * because the figures this table replaced (44.9 / 33.3 / 6.0 / 1.2) were of the ground. Counted
+ * both ways off the same map: grass-0 is 45.8% of the 2520 ground cells and 53.7% of the 2149 that
+ * are grass. It did not grow; the denominator changed. Nothing below rests on which is used, but a
+ * reader comparing 44.9 with 53.7 would conclude the map had been edited, and it has not been.
  *
  * THOSE SHARES WERE MEASURED, NOT ASSUMED, and they overturn what this file used to say. It
  * documented 20 / 36 / 32 / 12, which is where the idea that grass-3 was a common surface came
- * from; counted off the real map, grass-3 is twenty-nine tiles in the whole world and the shade
- * tile is nearly half the ground. So the three lawn variants now sit within fifteen luma of each
- * other and carry the board's own lawn tone, and the ladder spends its range on the shade.
+ * from; counted off the real map, grass-3 is thirty-two tiles in the whole world and grass-0 is
+ * over half the grass. So all four variants now sit within a few luma of the rim they share and
+ * carry the board's own lawn tone. The ladder no longer spends its range on a tile-shaped shadow:
+ * see the note on `BANDS` for the lattice that cost, and what it measured.
  *
- * MEASURED, this file against its last committed state with every sibling file held at the same
- * moment: five play cameras 0.220 / 0.216 / 0.221 / 0.183 / 0.260 -> 0.148 / 0.127 / 0.146 / 0.124
- * / 0.206, whole map 0.473 -> 0.440. Against the uncommitted state this round started from, five
- * cameras summed 0.957 -> 0.751 -- but those two are NOT a clean comparison, because forest-map.ts,
- * w-trees.ts and the sprites were all edited by other agents while this round ran. The committed
- * A/B above is the controlled one.
+ * 3. THE SHADE TILE IS GONE AND THE LATTICE WENT WITH IT (2026-10-19, blocker 4 of the design
+ *    review). A seam-free border is not a seam-free frame: `rim + (core - rim) * mass` with a mass
+ *    that is zero at the border and one in the middle is a tile-centred vignette whose depth is
+ *    `rim - core`, and change 2 above spent that freedom on an 80-luma one, on the tile the map
+ *    lays over half the grass. Dappling it and cutting its coverage was this file's answer to the
+ *    chequerboard, and it could not work, because the fault was the vignette's DEPTH and not its
+ *    shape. grass-0's band is now centred on the shared rim. Folded over the tile pitch, the ground
+ *    layer's peak-to-peak drops from 40.1 / 43.0 luma to 9.1 / 12.6 and its mean luma rises from
+ *    147.3 to 170.1, against the board's own open lawn at 177.6. The argument, the instrument and
+ *    the per-variant figures are in the note on `BANDS`. It costs the deep-shade and keyline axes,
+ *    which were mostly this one tile; a cast shadow belongs to the object that casts it.
  *
- * WHAT STILL ISN'T RIGHT, AND IT NEEDS forest-map.ts, NOT THIS FILE. The shade tile is 44.9% of the
- * ground and the map alternates it with lawn tile by tile, so in the wood it still prints a rhythm
- * at the tile pitch. Dappling it and cutting its coverage (`DAPPLE_FLOOR`) takes that from a
- * chequerboard of dark squares down to a texture, which is as far as a 32px tile can go: a tile
- * cannot know where the tree above it stands, so a cast shadow drawn as a tile is always a shadow
- * the shape of a tile. A shadow that hugs its own trunk has to be a decoration sprite placed at map
- * resolution. That is the joint decision this round could not make alone.
+ * MEASURED, changes 1 and 2 against this file's then-committed state with every sibling file held
+ * at the same moment: five play cameras 0.220 / 0.216 / 0.221 / 0.183 / 0.260 -> 0.148 / 0.127 /
+ * 0.146 / 0.124 / 0.206, whole map 0.473 -> 0.440. Change 3 moves the board distance the other way
+ * -- the spawn camera 0.290 -> 0.353, on deep shade (19.23% -> 16.74%) and texture (33.75 -> 29.65)
+ * -- and says so here rather than hiding it: the six axes cannot see repetition, which is the whole
+ * of what change 3 fixes, and the deep shade they are counting was a dark square on open meadow.
  *
  * AIRBRUSHING WAS A REAL FAULT AND STAYS FIXED. Every field here is quantised -- the tone field, the
  * warmth field and the mass envelope -- so a tile carries flat colours in patches with real
@@ -78,7 +89,9 @@
  *
  *   - `rim`  one shared tone, from one shared field. Every grass tile, and the verge of every path
  *            tile, holds it at the border.
- *   - `core` where this variant's own tone field puts the pixel inside its band.
+ *   - `core` where this variant's own tone field puts the pixel inside its band. Every band is
+ *            centred near the rim, so `core - rim` changes sign across the tile and the envelope
+ *            below has no systematic direction to pull in. That is the lattice fix: see `BANDS`.
  *   - `mass` an envelope that is ZERO on the outermost pixels and rises inward, its contour
  *            displaced by a wrapping blob field so the shape is not the tile's.
  *   - `warm` then leans the result toward sun or shade without moving it much in brightness.
@@ -330,34 +343,71 @@ interface Band {
  * and the seam cannot exist -- not reduced, absent by construction. Everything that makes a variant
  * a variant is carried in the middle of the tile, on fields that wrap.
  *
- * That buys back the whole dynamic range. grass-0's core can sit at luma 92 against a lawn at 178
- * -- an 86-luma shadow, where the overlap gave a shadow of nothing in particular -- because the
- * dark never reaches an edge where it would print as a square.
+ * WHAT THAT ARGUMENT DOES NOT BUY, AND THE ROUND BEFORE THIS ONE SPENT IT ANYWAY. A seam-free
+ * BORDER is not a seam-free FRAME. The rim argument removes the step between two tiles; it says
+ * nothing about the shape each tile paints inside its own four edges, and `rim + (core - rim) *
+ * mass` with `mass` zero at the border and one in the middle is, by construction, a tile-centred
+ * vignette of depth `rim - core`. Lay that on every tile and the vignette IS the tile grid, however
+ * irregular its contour: the eye does not need a straight edge to find a rhythm, it needs the same
+ * event every 32 pixels.
  *
- *     variant   core band   core mean   rim      role
- *     grass-0    62 .. 122      92      ~172     a shadow: dark blob, soft irregular edges
- *     grass-1   150 .. 180     165      ~172     the lawn's shaded side
- *     grass-2   166 .. 190     178      ~172     open lawn -- the board's own 177.6
- *     grass-3   176 .. 196     186      ~172     full sun
+ * So the previous pass took grass-0's core to luma 92 against a rim of 172 -- an 80-luma vignette on
+ * what the map lays over half the grass -- and recorded, in this same comment, that it had bought
+ * back "the whole dynamic range". What it had bought was a lattice. The design review found it on
+ * the title screen, which is the hero image of the whole asset, and measured it: grass-0's own
+ * rim-to-core 91.5 luma against ART_DIRECTION section 6.2's 20-luma in-tile cap, a 4.6x breach, and
+ * a peak-to-peak of 40.1 luma in x and 43.0 in y on the ground layer folded over the tile pitch.
  *
- * WHY THE THREE LAWN VARIANTS ARE NOW ALMOST THE SAME GREEN. Measured on the real map rather than
- * assumed: the ground layer is 44.9% grass-0, 33.3% grass-1, 6.0% grass-2 and 1.2% grass-3. This
- * file previously documented 20/36/32/12, which is where the idea that grass-3 was a common surface
- * came from. It is not -- it is twenty-nine tiles in the whole world. The visible lawn is grass-1
- * and grass-2, so those two carry the board's own lawn tone and the ladder spends its range where
- * the map actually uses it, on the shadow.
+ * THE MEASUREMENT THAT SETTLES IT, because three rounds of this file have argued about the lattice
+ * from tile crops that cannot show it. Take the whole ground layer -- all 2149 grass cells the map
+ * actually lays -- and average each tile's luma by its position WITHIN the tile. If every tile
+ * carries the same vignette the fold comes back as a bow, and its peak-to-peak is the lattice in
+ * luma. A ground with no tile-pitch structure folds flat. That instrument is reproducible by anyone
+ * and it does not care what any single tile looks like in isolation, which is the trap every
+ * previous pass fell into.
  *
- * AND WHY A DARK grass-0 NO LONGER FLOODS THE MAP. Of its 1132 tiles, 999 sit under a canopy or a
- * bush and are never seen; the 133 that are bare come in runs of one and two tiles (113 runs of one,
- * 118 of two). A tile that is dark in its middle and lawn-toned at its rim therefore reads as a
- * single soft shadow blob, which is what one or two tiles of shade under a tree should look like.
+ *     ground layer, 2149 grass cells, folded over the tile pitch
+ *     before   x 40.12   y 42.96   mean luma 147.3
+ *     after    x  9.12   y 12.55   mean luma 170.1      board's own open lawn: 177.6
+ *
+ * WHAT CHANGED. One number: grass-0's band. It is now centred ON the shared rim instead of 80 luma
+ * under it, which takes the vignette term to about zero -- where the core field sits above the rim
+ * the tile's middle is a shade lighter, where below, a shade darker, and the sign is chosen by a
+ * wrapping noise field rather than by the distance to the tile edge. The periodicity does not get
+ * smaller; it stops having a preferred direction. Per variant, measured on the tile:
+ *
+ *     variant   core band   rim    rim->core   own fold x/y    role
+ *     grass-0   164 .. 182  ~173      7.9       9.5 / 10.3     open lawn, and over half the grass
+ *     grass-1   154 .. 182  ~173      8.3      13.5 / 17.6     the lawn's shaded side
+ *     grass-2   168 .. 188  ~173      0.9      10.8 / 10.3     open lawn -- the board's own 177.6
+ *     grass-3   176 .. 192  ~171     -3.5      13.7 /  8.1     full sun
+ *
+ * grass-0 is now the QUIETEST of the four by its own fold, where it was five times the worst. All
+ * four sit inside section 6.2's 20-luma cap.
+ *
+ * WHY grass-0 AND NOT ANOTHER VARIANT TAKES THE OPEN-LAWN ROLE. ART_DIRECTION section 6.3 assigns
+ * grass-0 the shade and grass-2 "the quiet one that lets the map breathe", and that assignment
+ * assumed shares this file has since measured and found inverted: the map lays grass-0 on 53.7% of
+ * its grass cells and grass-2 on 6.5%. The variant that covers half the grass is the one that has
+ * to be quiet, whatever it is called. Re-dealing the roles would mean editing the shares in
+ * forest-map.ts, which this change may not touch -- and that file's own note already asks for
+ * exactly this remedy: "the real fix is for the ground painter to narrow the steps between the
+ * variants and carry the variation inside each tile instead. Flagged."
+ *
+ * AND THE CAST SHADOW, WHICH IS WHAT THE DARK grass-0 WAS FOR. It goes, and it should: this file
+ * has recorded for two rounds that a shadow drawn as a tile is always a shadow the shape of a tile,
+ * because a tile cannot know where the tree above it stands. Of grass-0's tiles, the ones under a
+ * canopy or a bush are not visible anyway and the bare ones came in runs of one and two, so what the
+ * 80-luma vignette actually drew was isolated dark squares in open meadow. A shadow that hugs its
+ * own trunk has to be a decoration sprite placed at map resolution. Still the joint decision this
+ * file cannot make alone; it is now flagged without a lattice standing in for it.
  *
  * The hue walk still comes free. Low on the grass ramp R sits a shade BELOW B, a true blue-green;
  * at 180 R leads B by 63. The board does the same -- its shaded greens probe R-B -20 and its lawn
  * +70 -- so shaded ground comes out cool and sunlit ground yellow with no second hue invented.
  */
 const BANDS: readonly Band[] = [
-  { lo: 62, hi: 116 },
+  { lo: 164, hi: 182 },
   { lo: 154, hi: 182 },
   { lo: 168, hi: 188 },
   { lo: 176, hi: 192 },
@@ -381,26 +431,31 @@ const EDGE_SWING = 9;
 /**
  * How far in, in pixels, a tile climbs from the shared rim to its own core.
  *
- * Six is about a fifth of the tile. Shorter and grass-0 reads as a dark square with a thin bright
- * frame; longer and there is no room left for a core at all, so a shadow tile's middle never gets
- * properly dark and the whole point is lost.
+ * Eight is a quarter of the tile. It mattered a great deal when a core sat eighty luma under the
+ * rim -- too short and the tile read as a dark square in a thin bright frame, too long and there
+ * was no room for a core at all -- and it matters little now that every band is centred near the
+ * rim, because the climb is a few luma whatever distance it is given. Left where it is: a quarter
+ * of the tile is also what keeps the mottle's patches clear of the border, where `nearCorner` and
+ * the rim pin are doing the seam work.
  */
 const INSET = 8;
 
 /*
- * THE ENVELOPE'S SHAPE, which is the difference between a shadow and a vignette.
+ * THE ENVELOPE'S SHAPE, AND THE SENTENCE THIS FILE GOT RIGHT AND THEN ARGUED ITSELF OUT OF.
  *
- * Distance to the border, smoothed, is a rounded-rectangle vignette, and a field of tiles each with
- * a soft dark lozenge in the middle is a 32-pixel lattice however soft each lozenge is. So a
- * WRAPPING blob field is brought in to break it.
+ * Distance to the border, smoothed, is a rounded-rectangle vignette, and -- in the words this
+ * comment has carried for two rounds -- "a field of tiles each with a soft dark lozenge in the
+ * middle is a 32-pixel lattice however soft each lozenge is". That is exactly true, and the
+ * conclusion drawn from it was wrong twice over: the file went looking for a better-shaped lozenge,
+ * first by scaling the envelope and then by displacing its contour and dappling it, when what the
+ * sentence says is that no shape of lozenge survives being repeated and the only safe depth is
+ * none. The design review measured the lattice that followed. See `BANDS`.
  *
- * IT DISPLACES THE CONTOUR RATHER THAN SCALING THE ENVELOPE, and the difference is the whole of
- * whether this reads as a shadow. Scaling was the first version and it failed in both directions at
- * once: it weakened the mass in the middle of the tile, where a shadow should be solid -- grass-0
- * came back at a median of 144 against a lawn at 170, which is not a shadow, it is a smudge -- and
- * it left the contour a rounded rectangle anyway, because multiplying a rectangle by anything is
- * still a rectangle. Displacing the contour keeps the interior at full strength and spends the
- * whole blob field on the EDGE, which is the only part of a shadow the eye reads as a shape.
+ * So the depth is gone -- every band is centred near the shared rim -- and the shaping stays,
+ * because it is free and it still does one useful thing: a WRAPPING blob field DISPLACES the
+ * contour rather than scaling the envelope, so the mottle's few luma of patches do not run parallel
+ * to the tile edge. Scaling was tried and left the contour a rounded rectangle anyway, because
+ * multiplying a rectangle by anything is still a rectangle.
  *
  * `BLOB_PUSH` is how far it may displace, as a share of `INSET`, and it is windowed to zero at both
  * ends of the ramp: it cannot reach the border, where it would break the seam argument above, and
@@ -437,10 +492,11 @@ const STEP_LUMA = 15;
  * edge. Without this the overlapping ladder above would be unbuildable: at a fixed three levels a
  * 54-luma band is three flat greens 27 apart, which is camouflage.
  *
- * It also pays on the variety axis, which is the one we are furthest behind on. The shade band's
- * five levels crossed with the warmth field's seven, and then crossed again with the eight levels
- * of the mass envelope, give the shade tile a few hundred distinct greens where four flat stops
- * gave it four -- and none of them costs a hard step.
+ * It also pays on the variety axis, which is the one we are furthest behind on. A band's own levels
+ * crossed with the warmth field's seven, and then crossed again with the eight levels of the mass
+ * envelope, give one tile a few hundred distinct greens where four flat stops gave it four -- and
+ * none of them costs a hard step. That is where the variety has to come from now that no band is
+ * wide enough to carry it on brightness alone.
  */
 const levelsFor = (b: Band): number =>
   Math.max(3, Math.min(8, Math.round((b.hi - b.lo) / STEP_LUMA) + 1));
@@ -465,12 +521,11 @@ const LAWN_OCTAVES: readonly Octave[] = [
 /**
  * Centre-heavy: the mass of a tile sits on its middle levels and the ends of its band are patches.
  *
- * The exponent is the whole of that, and it had to rise with the bands. At 1.0 the levels come out
- * evenly and the lawn reads as camouflage. That mattered little when a band was twenty luma wide
- * and every level was nearly the same green; now that grass-0 spans ninety, an even spread would
- * put a sixth of the forest floor at luma 146 -- full lawn brightness inside a shade tile. At 2.0
- * the band's ends are occasional patches on a green whose own mean still says which rung of the
- * ladder the tile is on, which is what keeps the overlap from washing the sun and shade away.
+ * The exponent is the whole of that. At 1.0 the levels come out evenly and the lawn reads as
+ * camouflage: a tile is then equal parts of three or four greens, which is a pattern rather than a
+ * field with patches in it. At 2.0 two thirds of a tile sits on the middle of its band and the two
+ * ends are occasional patches, so the tile has one green and some variation -- which is what the
+ * board's lawn is, and what keeps a band's extremes from reading as a second surface.
  */
 const LAWN_SHAPE = 2.0;
 const centreHeavy =
@@ -522,9 +577,9 @@ const SHADE_MIX = 0.28;
 /*
  * THE FIELDS EVERY GRASS TILE SHARES, built once.
  *
- * Three of the four fields a grass tile uses are now common to all four variants and to the verge
- * of every path tile: the rim tone, the mass envelope, and the warmth. Only the core field -- the
- * one whose influence the envelope takes to zero at the border -- is drawn per variant.
+ * All four fields a grass tile uses are common to all four variants and to the verge of every path
+ * tile: the rim tone, the mass envelope, and the warmth. Only the core field -- the one whose
+ * influence the envelope takes to zero at the border -- is drawn per variant.
  *
  * Sharing them is not an optimisation, it is the seam proof. Two neighbouring tiles evaluate the
  * same rim field at the same phase (every field here wraps over exactly one tile), the same mass,
@@ -534,18 +589,18 @@ const SHADE_MIX = 0.28;
  * small; this one makes it nothing, and it does so for every one of the sixteen variant pairings
  * rather than for the ones that were sampled.
  *
- * THE MASS IS THE ONE THING THAT IS NOT SHARED, and it does not need to be. The proof above needs
- * only that EVERY variant's mass is zero on the border, not that they are the same field inside. So
- * the open lawn gets one broad shape and the shade tile gets a dappled one, and the boundary between
- * any two of them is still exactly the rim.
+ * THE MASS USED TO BE THE ONE THING THAT WAS NOT SHARED, and the exception is what the design
+ * review found. grass-0 took a second, finer envelope with its lower half cut away, to dapple a
+ * tile that was then 90 luma below the lawn in its middle. The envelope's shape was not the fault
+ * -- its DEPTH was, and no shape of envelope hides a core that far from the rim. See `BANDS`. One
+ * envelope now serves every variant, so the mass term is identical on both sides of every
+ * boundary as well as zero there.
  *
- * The lawn's blob is coarse -- three, five and nine cells -- because for a lawn the mass is barely
- * visible anyway (its core sits within fifteen luma of the rim) and a broad shape is what keeps it
- * from reading as texture. The shade tile's is two octaves finer, because a wood floor is DAPPLED:
- * a single tile-sized blob of shade, repeated wherever the map puts the shade tile, reads as a grid
- * of dark squares, and that is the quilt returning in a new costume. Several smaller patches of
- * light and shade per tile read as leaf shadow, which is both what a forest floor looks like and
- * much harder for the eye to find a repeat in -- a texture has no silhouette to recognise.
+ * The blob is coarse -- three, five and nine cells -- because the mass is barely visible when a
+ * core sits within a few luma of the rim, and a broad shape is what keeps it from reading as
+ * texture. ART_DIRECTION section 6.2 asks for blobs 12 to 30 px across; three cells is 10.7, which
+ * is the closest of the octaves and still short. Flagged rather than fixed: widening it is a change
+ * to all four variants and the review scoped this one to grass-0.
  */
 const EDGE_OCTAVES: readonly Octave[] = [
   [4, 0.5],
@@ -557,45 +612,22 @@ const BLOB_OCTAVES: readonly Octave[] = [
   [5, 0.32],
   [9, 0.18],
 ];
-const DAPPLE_OCTAVES: readonly Octave[] = [
-  [5, 0.44],
-  [9, 0.34],
-  [15, 0.22],
-];
-/**
- * How much of the shade tile's envelope is cut away, so the shade COVERS less of the tile.
- *
- * This is the answer to the one fault the first version of the rim design left, and it is worth
- * setting out because the fault was visible only on the composed map and not on any tile or any
- * axis. Measured on the real map, the ground layer is 44.9% shade tile, and in the wood it
- * alternates with lawn tile by tile. A shade tile that is uniformly 64 luma below the lawn
- * therefore prints a chequerboard of dark squares at the tile pitch wherever the canopy does not
- * cover it -- which is the quilt coming back wearing the shadow's clothes.
- *
- * Mean and depth can be separated, though, because the thing that reads as shadow is the DARK
- * PATCH, not the tile's average. Cutting the envelope's lower half away and rescaling the rest
- * leaves about half the tile at the rim's own lawn tone and takes the other half deeper than
- * before. The tile's mean rises toward the lawn's, so the chequer flattens; its darkest patches go
- * down to luma 80, so the shade reads harder than it did. That is also simply what a wood floor is:
- * bright coins of sun with deep leaf shadow between them, not an evenly dimmed lawn.
- */
-const DAPPLE_FLOOR = 0.42;
 const EDGE_LEVELS = 6;
 
 /**
  * An envelope that is zero on the tile's border and rises inward, its contour displaced by a
  * wrapping blob field.
  *
- * The blob DISPLACES the contour rather than scaling the envelope. Scaling was the first version
- * and it failed in both directions at once: it weakened the mass in the middle of the tile, where a
- * shadow should be solid -- the shade tile came back at a median of 144 against a lawn at 170, which
- * is not a shadow but a smudge -- and it left the contour a rounded rectangle anyway, because
- * multiplying a rectangle by anything is still a rectangle.
+ * The blob DISPLACES the contour rather than scaling the envelope, so the contour is not a rounded
+ * rectangle -- multiplying a rectangle by anything is still a rectangle. That matters much less
+ * than it used to, now that no variant's core is far enough from the rim for the envelope's shape
+ * to be legible at all, but it costs nothing and it is what keeps the mottle's patches from running
+ * parallel to the tile edge.
  *
  * The displacement is windowed to zero at both ends of the ramp, so it can neither reach the border,
  * where it would break the seam argument, nor eat into the solid core.
  */
-function massField(seed: number, octaves: readonly Octave[], floor = 0): Float64Array {
+function massField(seed: number, octaves: readonly Octave[]): Float64Array {
   const blob = field(seed, octaves);
   equalise(blob, (u) => u);
   const mass = new Float64Array(CELLS * CELLS);
@@ -609,11 +641,7 @@ function massField(seed: number, octaves: readonly Octave[], floor = 0): Float64
       const k = by * CELLS + bx;
       const r = clamp01(d / INSET);
       const window = 4 * r * (1 - r);
-      const m = smooth(clamp01(r + BLOB_PUSH * window * (blob[k]! - 0.5)));
-      // `floor` cuts the envelope's lower part away and rescales what is left, so the mass covers
-      // LESS of the tile at the same strength. That is what lets the shade tile be genuinely dark
-      // where it is dark and still average close to the lawn -- see `DAPPLE_FLOOR`.
-      mass[k] = floor > 0 ? clamp01((m - floor) / (1 - floor)) : m;
+      mass[k] = smooth(clamp01(r + BLOB_PUSH * window * (blob[k]! - 0.5)));
     }
   quantise(mass, MASS_LEVELS);
   // Quantising can round a border block up off zero, which would put the variant's core back on the
@@ -630,10 +658,8 @@ function massField(seed: number, octaves: readonly Octave[], floor = 0): Float64
 interface Shared {
   /** The rim tone's own variation, 0..1, quantised. */
   readonly rim: Float64Array;
-  /** The open lawn's envelope: one broad shape. */
+  /** The envelope every variant takes: one broad shape, zero on the border. */
   readonly mass: Float64Array;
-  /** The shade tile's envelope: several patches of leaf shadow. */
-  readonly dapple: Float64Array;
   /** The warmth axis, shared so a hue step cannot appear at a boundary either. */
   readonly warm: Float64Array;
 }
@@ -645,12 +671,7 @@ const SHARED: Shared = (() => {
   equalise(warm, warmCurve);
   quantise(rim, EDGE_LEVELS);
   quantise(warm, WARM_LEVELS);
-  return {
-    rim,
-    mass: massField(6373, BLOB_OCTAVES),
-    dapple: massField(6829, DAPPLE_OCTAVES, DAPPLE_FLOOR),
-    warm,
-  };
+  return { rim, mass: massField(6373, BLOB_OCTAVES), warm };
 })();
 
 /** The tone a tile holds at its border, before the core pulls it anywhere. */
@@ -1184,9 +1205,10 @@ function scatter(mark: Float64Array, rnd: () => number, ground: Ground, inside: 
  * The four variants.
  *
  * They differ in their CORE BAND -- which is the map's sun and shade -- and in where their marks
- * sit. They do NOT differ at the border: the rim tone, the warmth field and (for the three lawn
- * variants) the mass envelope are shared, so the only brightness difference between two variants is
- * the one `BANDS` states, and it is carried entirely inside the tile.
+ * sit. They do NOT differ at the border, and they no longer differ in their envelope either: the
+ * rim tone, the warmth field and the mass envelope are shared by all four, so the only brightness
+ * difference between two variants is the one `BANDS` states, it is carried entirely inside the tile,
+ * and -- since every band is now centred near the shared rim -- it is a few luma rather than eighty.
  *
  * EVERY VARIANT NOW CARRIES THE FULL SCATTER plus one larger sprig for character, where the
  * previous pass carried 0.75 sprigs a tile and nothing else. The reasoning for that cut is in
@@ -1222,18 +1244,13 @@ const VARIANTS: readonly Variant[] = [
  * on rather than against an absolute floor -- see `MARK_FALL`. That is also what makes the marks
  * seam-free for free: they track a field that is identical on both sides of every boundary.
  */
-function lawn(
-  img: Img,
-  seed: number,
-  band: Band,
-  inside: Inside,
-  mass = SHARED.mass,
-): Float64Array {
+function lawn(img: Img, seed: number, band: Band, inside: Inside): Float64Array {
   const lit = field(seed, LAWN_OCTAVES);
   equalise(lit, lawnCurve);
   quantise(lit, levelsFor(band));
   const lum = new Float64Array(CELLS * CELLS);
-  for (let k = 0; k < lum.length; k++) lum[k] = lawnLuma(band, lit[k]!, SHARED.rim[k]!, mass[k]!);
+  for (let k = 0; k < lum.length; k++)
+    lum[k] = lawnLuma(band, lit[k]!, SHARED.rim[k]!, SHARED.mass[k]!);
   paintField(img, lum, SHARED.warm, lawnColour, inside);
   return lum;
 }
@@ -1253,8 +1270,7 @@ const grass =
     const v = VARIANTS[n]!;
     const band = BANDS[n]!;
     const seed = 4100 + n * 977;
-    // grass-0 is the shade tile, and only it takes the dappled envelope. See `massField`.
-    const lum = lawn(img, seed, band, ALL, n === 0 ? SHARED.dapple : SHARED.mass);
+    const lum = lawn(img, seed, band, ALL);
     const ground = groundAt(lum);
     const rnd = noise(seed + 31);
     const mark = new Float64Array(TILE * TILE).fill(NONE);
