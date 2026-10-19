@@ -114,7 +114,7 @@ const TRUNK_H = TILE;
  * why the review found the trees casting no shadow at all. At row 22 there are nine rows of open
  * ground below the flare and the pool is the thing that fills them.
  */
-const GROUND_Y = 18;
+const GROUND_Y = 24;
 
 /**
  * The crown's own top and bottom: the row the light grade starts from, and the row the dark matrix
@@ -123,7 +123,6 @@ const GROUND_Y = 18;
  * below anything in our palette, so nothing here is ever too dark.
  */
 const CROWN_SKY = 2;
-const CROWN_FLOOR = 73;
 
 /* ---------------------------------------------------------------------------- continuous tone */
 
@@ -528,13 +527,80 @@ function lump(
 }
 
 /**
- * The keyline thickening, on the two edges the light does not reach: a second pixel under the
- * lowest pixel of every column, and one to the right of the rightmost pixel of every row in the
- * lower half. ART_DIRECTION section 3.2 -- never the top, never the left. This is what seats a
- * crown or a root onto the ground rather than letting it float on it.
+ * The one light the world is lit by, as a unit vector in image space: down and to the right is
+ * AWAY from it. ART_DIRECTION section 3.2. `paintDapple` lights its clusters along the same axis
+ * and `weight` thickens the keyline along it, so the two cannot drift apart.
+ */
+const AWAY_X = 0.56;
+const AWAY_Y = 0.83;
+
+/**
+ * The keyline's WEIGHT, and this is the review's second finding answered.
  *
- * Run after `outline()`, so the pixel it finds is already the keyline and the one it adds is the
- * second.
+ * What was here was two full `outline()` passes: a hard near-black line two pixels thick wrapped at
+ * constant weight around the entire silhouette, cap and hem alike. It bought the keyline axis
+ * almost exactly, and the picture it bought read as a flat green sticker with a fat black border --
+ * because that is what it was. A flat blob with a heavy outline and a lit dome have the same
+ * histogram, so no axis in `score.ts` could tell them apart.
+ *
+ * Measured on the board instead of counted: a board crown is 210 of the board's pixels across where
+ * ours is 59, so one of our pixels is 3.6 of the board's. Its line at the cap is four of the board's
+ * pixels -- ONE of ours -- and at the foot of the mass it runs to five or six, which is one and a
+ * half to two. The 7.8 per cent of a board crown under luma 30 that an earlier note read as "the
+ * line is two pixels thick" is mostly not the line at all: the board's own hem sits at a median
+ * luma of 26, so that count was measuring the dark matrix the previous section has now graded in.
+ *
+ * So: one ring everywhere, and a second only where the surface turns away from the light. For each
+ * ring pixel this takes the mean direction of the body it touches, flips it to get the outward
+ * normal, and dots that against the light's away-axis -- so the second pixel lands on the lower
+ * right of every lobe and nowhere on its upper left, exactly as a brush loaded at one angle would
+ * leave it. The crown comes out ringed in a line that is hairline across the cap and heavy under
+ * the hem, which is both what the board does and what makes a mass read as sitting IN the light
+ * rather than cut out of paper.
+ *
+ * It runs on the pre-outline mask, which has to be captured by the caller before `outline()`.
+ */
+function weight(img: Img, before: Uint8Array, c: RGBA, bite = 0.18): void {
+  const body = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < img.w && y < img.h && before[y * img.w + x] === 1;
+  for (let y = 0; y < img.h; y++)
+    for (let x = 0; x < img.w; x++) {
+      if (body(x, y) || !opaqueAt(img, x, y)) continue;
+      let nx = 0;
+      let ny = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if ((dx || dy) && body(x + dx, y + dy)) {
+            nx += dx;
+            ny += dy;
+          }
+      const len = Math.sqrt(nx * nx + ny * ny);
+      if (len === 0) continue;
+      // The outward normal is -n; its dot with the away-axis is how far this bit of rim is turned
+      // out of the light.
+      const turn = (-nx / len) * AWAY_X + (-ny / len) * AWAY_Y;
+      if (turn <= bite) continue;
+      const ox = Math.round((-nx / len) * 1.2);
+      const oy = Math.round((-ny / len) * 1.2);
+      if (!opaqueAt(img, x + ox, y + oy)) img.px(x + ox, y + oy, c);
+    }
+}
+
+/** Every opaque pixel of `img`, as a mask -- the body, before any ring is drawn round it. */
+const maskOf = (img: Img): Uint8Array => {
+  const m = new Uint8Array(img.w * img.h);
+  for (let y = 0; y < img.h; y++)
+    for (let x = 0; x < img.w; x++) m[y * img.w + x] = img.get(x, y)[3] !== 0 ? 1 : 0;
+  return m;
+};
+
+/**
+ * The keyline thickening at the very foot of a mass: one more pixel under the lowest pixel of every
+ * column, and one to the right of the rightmost pixel of every row below `fromRow`. This is what
+ * seats a crown or a root onto the ground rather than letting it float on it.
+ *
+ * Run after `outline()` and `weight()`, so the pixels it finds are already the keyline and the one
+ * it adds is the last.
  */
 function seat(img: Img, c: RGBA, fromRow: number): void {
   for (let x = 0; x < img.w; x++) {
@@ -556,59 +622,77 @@ function seat(img: Img, c: RGBA, fromRow: number): void {
 /* --------------------------------------------------------------------------------- the crown */
 
 /**
+ * How far down the crown a row is, 0 at the cap and 1 at the hem. Every curve in the crown's
+ * lighting is a function of this and nothing else, so they can be read against each other.
+ */
+const down = (y: number): number => clamp01((y - CROWN_SKY) / 58);
+
+/**
  * Where the crown's own light puts a LEAF CLUSTER on the ladder, from where the cluster sits.
  *
  * The board lights its crowns from the top, hard: the cap is a bright yellow-green and the bottom
- * third is genuinely dark and leans teal. Measured against the board at our own resolution, that is
- * a swing of two thirds of the whole ladder down sixty rows, where the version this replaces moved
- * through a third of it and came out uniformly mid-green with no self-shadow. Half the frame's
- * missing deep shade was in that one number.
+ * third is genuinely dark and leans teal.
  *
- * The sideways term is a fifth of the vertical one, and it is there because the world has one light
+ * The sideways term is a sixth of the vertical one, and it is there because the world has one light
  * at the upper left (ART_DIRECTION section 3.2), not because the board's crowns are side-lit --
  * their bright greens run right across the cap rather than gathering in the upper-left corner.
  *
- * Note what this does NOT grade: the dark. See `bodyAt`.
- *
- * **The falloff was far too slow, and this is the measured correction.** Sampling a board crown and
- * ours side by side, both taken down to our own resolution and split by brightness:
- *
- *   band              board   ours (before)
- *   under luma  60     32.4%   18.3%
- *   under luma  81     45.2%   24.3%
- *   over  luma 120     34.3%   52.1%
- *   over  luma 150      7.4%   29.4%
- *
- * Four times the board's highlight, and half its dark. The cause was the exponent: at 2.4 the grade
- * is still at 0.85 halfway down a crown, so the top rung reached the waist and over half the tree
- * came out lit. The board's crown is a DARK object with a lit cap, not a lit object with a shaded
- * hem.
- *
  * **It is a smoothstep and not a power, and the reason is worth writing down because two attempts
  * were spent on it.** A power law pinned to the crown's cap cannot hold the board's profile: at an
- * exponent that keeps the body bright enough (2.4) the top rung reaches the waist and over half the
- * tree comes out lit, and at one steep enough to darken the hem (1.3) the body goes with it and the
- * underside turns into a teal pond. Read off the board's own crown, row by row, the curve is FLAT
- * for the top third and then falls fast: its cap and its shoulders are the same brightness, and
- * everything happens between the waist and the hem. That is a smoothstep, not a power.
+ * exponent that keeps the body bright enough the top rung reaches the waist and over half the tree
+ * comes out lit, and at one steep enough to darken the hem the body goes with it and the underside
+ * turns into a teal pond. Read off the board's own crown, row by row, the curve is FLAT for the top
+ * third and then falls fast: its cap and its shoulders are the same brightness, and everything
+ * happens between the waist and the hem.
  *
- * Fitted to four rows of a board crown, with t = 0 the bottom of the ladder and t = 1 the top:
+ * **Refitted on 2026-10-19 against a per-row read of the board, and it had been falling both too
+ * early and too far.** Profiling a 60-wide column down the middle of a board crown (image column
+ * 190, rows 452..660, seven rows to a band) and converting each band's median to a place on this
+ * ladder:
  *
- *   row    board t    this curve
- *     2      0.88       0.88
- *    30      0.80       0.79
- *    45      0.45       0.46
- *    55      0.20       0.20
+ *   place in crown   board p50   ladder t    this curve   previous curve
+ *   cap                    155       0.90        0.93           0.88
+ *   waist                  143       0.85        0.85           0.75
+ *   hem                     44       0.29        0.31           0.09
  *
- * The cap sits at 0.88 and not at 1.0 on purpose. 0.88 snaps to the ladder's second-highest rung,
- * so the top rung is reached only where a cluster's own `lift` and tilt carry it there -- which is
- * the board's three per cent, against the 29 per cent this file used to paint.
+ * The old curve put the hem's CLUSTERS two rungs below the board's, which sounds like more dark and
+ * measured as less form: with the clusters down at the matrix's own value there was nothing left at
+ * the hem for the eye to read as a lit surface, so the underside came out as one flat dark wedge
+ * with a heavy line round it. The board's hem is dark because its MATRIX is black there, not
+ * because its leaves are.
  *
  * Note what is NOT being done to get any of this: nothing is darkened past the ladder's existing
  * rungs, and no mark, speckle or dither is added. The pixels move along the ladder they were on.
  */
 const grade = (x: number, y: number): number =>
-  0.88 - 0.95 * smooth(0.3, 1.25, clamp01((y - CROWN_SKY) / 58)) - 0.14 * ((x - 32) / 30);
+  0.93 - 0.68 * smooth(0.35, 1.15, down(y)) - 0.11 * ((x - 32) / 30);
+
+/**
+ * The crown's local tonal SPAN: how far below the lit clusters the dark matrix sits at this row.
+ *
+ * This is the 2026-10-19 correction and it is the one the director's review is about, so it is
+ * worth being exact. Profiling a board crown row by row, its local histogram does not merely
+ * darken on the way down -- it slides down the ladder bodily, and it is NARROW at both ends and
+ * WIDE through the middle:
+ *
+ *   place in crown   p02    p50    p98      ladder t: p02  p50  p98    span
+ *   cap              ~125   ~155   ~165               0.70 0.90 0.93   0.23
+ *   waist             ~60   ~130   ~150               0.33 0.80 0.86   0.50
+ *   hem                ~2    ~44    ~57               0.00 0.29 0.33   0.29
+ *
+ * The cap is a bright green sheet with thin channels a shade darker. The waist is where the
+ * channels open out and the crown has its full range in one row. The hem is near-black with a few
+ * mid-greens still catching light through the gaps above. A crown painted with ONE span at every
+ * row -- which is what this file did until now, because `bodyAt` held the matrix at a constant deep
+ * teal from cap to hem -- has both extremes present in every row, which is the exact signature the
+ * review measured: max 169-186 and min 14 on every row, top to bottom.
+ *
+ * A tent, then, widest from the waist to the lower third and closing at both ends.
+ */
+const span = (y: number): number => {
+  const u = down(y);
+  return 0.24 + 0.3 * smooth(0, 0.45, u) * (1 - smooth(0.72, 1, u));
+};
 
 /**
  * Half the crown's width at row `y`: a BROAD EGG, as wide as it is tall, widest a little below the
@@ -630,9 +714,19 @@ const grade = (x: number, y: number): number =>
  * silhouette now reaches x 3..61 and it keeps clear of the edge of the tiles -- a crown that touches
  * the
  * edge loses its keyline there and comes out looking cut.
+ *
+ * **The crown moved up two rows and lost two more of height later the same day, and that is the
+ * trunk's doing.** Laid at 1:1, a board tree shows about fourteen of our rows of bark between the
+ * hem of its crown and the grass, of which the root flare is the lower nine. Ours showed three, and
+ * the review counted "at most two trunk stubs in a 280x180 crop of forest" -- so the trees read as
+ * hedges. The crown is 64 pixels of a 96-pixel tree and the rest of it is not negotiable, so the
+ * rows had to come out of the crown: centre 30.5 and half-height 28.5 puts the egg on rows 2..59,
+ * its pendant lobes reach row 66, and with one ring rather than two the lowest painted pixel of the
+ * crown is row 68 -- four rows into the trunk tile instead of eleven. That is where the trunk came
+ * from. It also squares the crown, which the board's is and ours was not.
  */
 const eggHalfW = (y: number): number => {
-  const ny = (y - 32.5) / 30.5;
+  const ny = (y - 30.5) / 28.5;
   if (ny <= -1 || ny >= 1) return 0;
   return 25.0 * Math.sqrt(Math.max(0, 1 - Math.pow(Math.abs(ny), ny < 0 ? 2.0 : 2.8)));
 };
@@ -709,7 +803,7 @@ const blob = (x: number, y: number, r: number, lift = 0): Blob => ({
  */
 const MASS: readonly Blob[] = (() => {
   const out: Blob[] = [];
-  for (let y = 3; y < 64; y += 3.5) {
+  for (let y = 3; y < 60; y += 3.5) {
     const hw = eggHalfW(y);
     if (hw < 3) continue;
     for (let x = 32 - hw + 3; x <= 32 + hw - 3; x += 5) out.push(blob(x, y, 4.4));
@@ -729,7 +823,7 @@ const MASS: readonly Blob[] = (() => {
    * crown comes out looking sliced.
    */
   for (let th = 0.08; th < Math.PI * 2; th += 0.26 + RND() * 0.3) {
-    const y = 32.5 - 30.5 * Math.cos(th);
+    const y = 30.5 - 28.5 * Math.cos(th);
     const hw = eggHalfW(y);
     if (hw < 1.5) continue;
     const r = 4.0 + RND() * 4.0;
@@ -761,7 +855,7 @@ const MASS: readonly Blob[] = (() => {
    * where the silhouette is.
    */
   const eggBottom = (x: number): number => {
-    for (let y = 63; y > 32; y--) if (eggHalfW(y) >= Math.abs(x - 32)) return y;
+    for (let y = 59; y > 30; y--) if (eggHalfW(y) >= Math.abs(x - 32)) return y;
     return 0;
   };
   for (let x = 7.5; x <= 56.5;) {
@@ -784,11 +878,16 @@ const MASS: readonly Blob[] = (() => {
    * the lobes were drawn, and then this filled in every notch between them. Three is what the job
    * actually needs, which is to reach the trunk's two shoulders and to close over the gap between
    * them. The hem's shape now belongs to the lobes.
+   *
+   * They came up five rows later the same day, with the egg, so that the crown stops four rows into
+   * the trunk tile rather than eleven. That is where the visible trunk came from; see `eggHalfW`.
+   * The skirt still has to reach both of the trunk's shoulders -- at row 61 it spans about x 22..42
+   * over a column 15 wide, so there is no grass showing at either shoulder and no lollipop stem.
    */
   for (const [x, y, r] of [
-    [26, 63, 5.2],
-    [39, 63, 5.0],
-    [32, 67, 4.8],
+    [26, 58, 5.0],
+    [39, 58, 4.8],
+    [32, 61, 4.4],
   ] as const)
     out.push(blob(x, y, r));
   return out;
@@ -835,20 +934,22 @@ const DAPPLE: readonly Blob[] = (() => {
       return Math.sqrt(dx * dx + dy * dy) < (r + o.r) * 0.82;
     });
     /*
-     * `lift` centres a touch below the grade rather than above it. It used to run -0.05 to +0.25,
-     * which carried mid-crown clusters up onto the top rung and is half of why the highlight share
-     * came in at four times the board's.
+     * `lift` centres a touch below the grade rather than above it, and its SPREAD is now the same
+     * tent the matrix is placed with -- narrow at the cap, wide through the waist and the lower
+     * third, closing again at the hem.
      *
-     * The SPREAD widens towards the hem, and that is the second half of the same correction. With
-     * the grade falling properly the whole lower crown went dark TOGETHER -- matrix and clusters at
-     * the same value -- and the local contrast inside a 16-pixel block fell with it. Look at the
-     * board's own hem: it is dark overall and it is studded with mid-green clusters catching light
-     * through the gaps above, two rungs brighter than the dark they sit in. That stud is both what
-     * the 16px texture measure counts and what stops the underside reading as a solid navy wedge.
-     * So a cluster at the cap varies by a quarter of a rung and one at the hem by three quarters.
+     * It used to widen all the way to the hem, up to 0.60 of the ladder, and that was measurably
+     * backwards. A cluster at the hem could take 0.48 of lift, and `tilt` below could add another
+     * 0.33 on top: between them they carried hem clusters five rungs up, onto the same bright green
+     * as the cap. That is the arithmetic behind the review's finding that our crown's maximum luma
+     * is 169-186 on EVERY row from top to bottom. The board's hem is a narrow band near the bottom
+     * of the ladder -- p02 to p98 inside 56 luma, against 150 at its waist -- and its few mid-green
+     * studs are two rungs above its own black hem, not five.
+     *
+     * `span` is reused rather than a second curve written, because the two numbers are the same
+     * measurement: how much range a row of the crown has.
      */
-    const low = clamp01((y - 8) / 50);
-    if (!clash) out.push(blob(x, y, r, -0.12 + RND() * (0.26 + 0.34 * low)));
+    if (!clash) out.push(blob(x, y, r, (RND() - 0.58) * (0.6 * span(y) + 0.1)));
   }
   return out;
 })();
@@ -902,28 +1003,45 @@ const RUNGS = LEAF_STOPS.length - 1;
 const snap = (v: number): number => Math.round(clamp01(v) * RUNGS) / RUNGS;
 
 /**
- * The matrix the leaves lie in: a near-constant deep teal, with a smooth unevenness of about a
- * tenth of a rung and a slow darkening towards the underside.
+ * The matrix the leaves lie in: the dark showing between the clusters, and IT GRADES WITH THE
+ * CROWN.
  *
- * **This is the finding of the 2026-10-19 dapple pass and it is worth stating plainly, because the
- * two redraws before it both got it backwards.** Blown up to three times our resolution, a board
- * crown is not a pile of lit lobes. It is a DARK MASS with light leaf clusters lying on top of it,
- * and the dark shows between the clusters as a winding, irregular NETWORK of channels two or three
- * of our pixels wide. The channels are the same deep value at the top of the crown as at the
- * bottom; what grades from bright to dark down the crown is the CLUSTERS, not the dark.
+ * Blown up to three times our resolution, a board crown is not a pile of lit lobes. It is a dark
+ * mass with light leaf clusters lying on top of it, and the dark shows between them as a winding,
+ * irregular NETWORK of channels two or three of our pixels wide. Every previous version here painted
+ * lit discs and then ringed each one, which draws a dark net of uniform mesh -- a repeating unit --
+ * and that is why the result read first as cauliflower and then as a pinecone. Painting the dark
+ * first and letting irregular clusters cover most of it gives the same ink with none of the pitch,
+ * because what is left uncovered is whatever shape the gaps happen to be. That much stands.
  *
- * Every previous version here painted lit discs and then ringed each one, which draws a dark net of
- * uniform mesh -- a repeating unit -- and that is exactly why the result read first as cauliflower
- * and then as a pinecone. Painting the dark first and letting irregular clusters cover most of it
- * gives the same ink with none of the pitch, because what is left uncovered is whatever shape the
- * gaps happen to be.
+ * **What was wrong, and it is the single reason the crowns read as flat stickers: this held the
+ * matrix at one deep teal from cap to hem.** The note it replaces said in as many words that "the
+ * channels are the same deep value at the top of the crown as at the bottom", and the board says
+ * the opposite. Read off a 60-wide column down the middle of a board crown, its second-percentile
+ * -- which is its channel floor, the darkest thing in the row that is not the keyline -- runs:
  *
- * It is also most of the deep shade the frame is missing. At roughly a third of every crown's area
- * and sitting at rungs 0 and 1 -- luma 31 and 53 -- the channels are under both of the scorer's
- * dark thresholds everywhere they appear.
+ *   rows 466..520 (cap)     luma 80..143    ladder t 0.45..0.75
+ *   rows 522..592 (waist)   luma 45..93     ladder t 0.15..0.50
+ *   rows 599..660 (hem)     luma  1..46     ladder t 0.00..0.10
+ *
+ * The board's cap has no deep dark in it at all. Its channels up there are a mid-green a shade off
+ * the sheet they divide, and all the black in the crown lives in the bottom third. Holding the
+ * floor at t = 0.07..0.18 everywhere put luma-31 pixels inside the brightest part of every crown,
+ * which is precisely how a lit dome comes out looking like a flat green sticker: both extremes
+ * present in every row is not a gradient, it is noise, and no axis in `score.ts` can tell the two
+ * apart because they share a histogram.
+ *
+ * So the matrix now sits one `span` below the clusters at the same row, which is the same two
+ * numbers the board was measured for. At the cap that is t = 0.69 (luma ~126) and at the hem it is
+ * t = 0.07 (luma ~40) before the hem's own lobes take it lower -- a fall of ninety luma in the
+ * crown's own darks, where there was none.
+ *
+ * It is still most of the deep shade the frame is missing: the channels through the lower half sit
+ * at rungs 0 and 1, under both of the scorer's dark thresholds, and they are a third of that half's
+ * area.
  */
 const bodyAt = (x: number, y: number): RGBA => {
-  const deep = 0.18 - 0.11 * clamp01((y - CROWN_SKY) / (CROWN_FLOOR - CROWN_SKY));
+  const deep = grade(x, y) - span(y);
   const v = snap(deep + 0.1 * (GRAIN(x / 5.5, y / 5.5) - 0.5));
   // The hue swing across the matrix is 1.3 of the warm/cool axis, up from 0.6. The channels are a
   // quarter of every crown and they used to be painted in two values and almost one hue; widening
@@ -968,17 +1086,20 @@ function paintDapple(img: Img, c: Blob): void {
     const grain = GRAIN(x / 6.5, y / 6.5) - 0.5;
     const hue = HUE_FIELD(x / 4.5, y / 4.5) - 0.5;
     /*
-     * The tilt grows towards the hem, and that is what keeps the underside legible.
+     * The tilt: how much a cluster is lit along its own upper-left and falls away underneath, so
+     * the crown is made of surfaces rather than of flat chips.
      *
-     * At the cap a cluster sits on a bright rung and the dark matrix between clusters separates it
-     * from its neighbours on its own. At the hem everything -- matrix and clusters alike -- is down
-     * at rungs 0 and 1, the gaps stop doing any work, and a flat cluster on a flat matrix is a
-     * teal pond: that is exactly what the first render of this pass showed. The board's hem is dark
-     * AND legible because each pendant lobe there catches light along its top and falls away
-     * underneath, so you read lobes rather than a wedge. A twentieth of a rung does that at the cap
-     * and a third of one is needed at the hem.
+     * It used to grow to a third of the ladder towards the hem, on the argument that the underside
+     * needs the help to stay legible. Measured, that argument was answered in the wrong place: with
+     * the matrix now grading down to black at the hem (see `bodyAt`) a hem cluster is already two
+     * rungs above the dark it sits in, so it reads as a lobe without being lifted onto the cap's
+     * own green. A tilt of 0.33 was pushing the lit side of every hem cluster five rungs up and
+     * flattening the crown's ceiling, which is half of the review's headline finding.
+     *
+     * An eighth of the ladder, growing to a fifth at the hem. That is one rung of relief across a
+     * cluster: enough to round it, not enough to move the row's own ceiling.
      */
-    const tilt = 0.085 + 0.25 * clamp01((c.y - 24) / 38);
+    const tilt = 0.12 + 0.08 * clamp01((c.y - 24) / 38);
     const v = snap(t + tilt * lit + 0.1 * grain) + c.fine;
     const col = leaf(v, clamp(c.hue + 0.5 * lit + 0.7 * hue));
     const dull = clamp01(c.dull + 0.2 * (CHROMA_FIELD(x / 9, y / 9) - 0.5));
@@ -999,39 +1120,38 @@ function paintCrown(): Img {
   for (const b of MASS) paintMass(img, b);
   for (const c of DAPPLE) paintDapple(img, c);
   /*
-   * Twice, and the second pass is the brief's "keyline weight".
+   * One ring, then weight only where the mass turns out of the light, then the foot.
    *
-   * `outline()` paints transparent pixels that touch opaque ones, so calling it again rings the
-   * first ring and the line comes out two pixels thick all the way round. Measured, that is what
-   * the board has: counting every pixel under luma 30 in a board crown taken down to our
-   * resolution gives 7.8 per cent of the patch against our 3.6, and laid at 1:1 the board's line
-   * is plainly two of our pixels on the cap as well as on the hem.
-   *
-   * This is the cheapest of the six axes to move and the one the director keeps asking for. It is
-   * also the thing that makes a forest read as one illustrated world rather than as a sticker
-   * sheet -- the wolf in `sprites/cast.ts` is the in-project proof, and he carries a line this
-   * heavy at a quarter of this size.
-   *
-   * `seat()` still runs afterwards, so the underside and the right-hand edge get a third pixel.
-   * The board's crowns are heaviest exactly there, where they close over the trunk.
+   * The second full `outline()` pass that used to sit here is gone; `weight()` carries the whole
+   * argument. One side effect of dropping it is worth knowing about when touching the silhouette:
+   * two passes filled in any notch narrower than four pixels, so the pendant lobes along the hem
+   * needed a step of 2.8 radii to survive. With one pass a two-pixel notch survives, which is why
+   * the scallop now reads at 1:1 instead of only in the data.
    */
+  const body = maskOf(img);
   img.outline(LEAF_LINE);
-  img.outline(LEAF_LINE);
-  seat(img, LEAF_LINE, 30);
+  weight(img, body, LEAF_LINE);
+  seat(img, LEAF_LINE, 44);
   return img;
 }
 
 /* --------------------------------------------------------------------------------- the trunk */
 
 /**
- * Half the trunk's width at a given row, before the roots widen it. Sixteen pixels where it leaves
- * the crown, widening to twenty by the flare.
+ * Half the trunk's width at a given row, before the roots widen it: a slim column of fifteen
+ * pixels that stays slim until the last third and then swells into the flare.
  *
  * It was twenty-one widening to twenty-five, on a measurement of the board that counted the root
  * flare as part of the trunk. Laid beside a 1:1 crop, the board's trunk is a slim column about a
- * quarter of the tree's width and the flare adds only a few pixels to each side.
+ * quarter of the tree's width and the flare adds only a few pixels to each side; at 3.6 board
+ * pixels to one of ours its bark is twenty-two of ours across at the foot and fifteen at the
+ * shoulder, which is what these two numbers are.
+ *
+ * The straight taper it replaces (7.6 + 0.18y) widened from the very first row, so over a column
+ * twenty rows tall the trunk came out a wedge. The board's is a cylinder for most of its visible
+ * height with the swell confined to the flare, which is what a smoothstep over rows 9..20 gives.
  */
-const halfWidth = (y: number): number => 7.6 + y * 0.18;
+const halfWidth = (y: number): number => 7.4 + 3.4 * smooth(9, 20, y);
 
 /**
  * One root finger: a lobe swept along a curve, laid down six times from the shaded underside up to
@@ -1071,16 +1191,31 @@ function rootFinger(
   }
 }
 
+/** The row the column stops at and the flare takes over; see `paintTrunk`. */
+const COL_ROWS = 21;
+
 /**
  * Trunk and roots, once, at 64x32 -- then ringed and seated.
  *
- * Two lightings at once, both off the board, and both now continuous. Across: a cylinder, lit a
- * fifth of the way in from the left silhouette and falling away smoothly to either side, steeply
- * to the left where the edge is close and gently to the right across the body into the shaded
- * quarter. Down: the crown's own shade, which takes most of a step off the top row and is gone by
- * the thirteenth. That second gradient is what makes the bark read as going up INTO the leaves
- * rather than stopping underneath them, and it is unmistakable on the board -- the trunk is L64
- * where it leaves the crown and L155 at the roots.
+ * Two lightings at once, both off the board, and both continuous. Across: a cylinder, lit a fifth
+ * of the way in from the left silhouette and falling away smoothly to either side, steeply to the
+ * left where the edge is close and gently to the right across the body into the shaded quarter.
+ * Down: the crown's own shade, which takes most of a step off the top row and is gone by the
+ * thirteenth. That second gradient is what makes the bark read as going up INTO the leaves rather
+ * than stopping underneath them, and it is unmistakable on the board -- the trunk is L64 where it
+ * leaves the crown and L155 at the roots.
+ *
+ * **The trunk's HEIGHT is the 2026-10-19 correction, and it is the review's second finding.** The
+ * column ran fourteen rows and the root flare started at row nine, so between the crown's skirt
+ * (which reached row eleven of this tile) and the top of the flare there were at most three rows of
+ * bare bark -- and across a 280x180 crop of forest the review could find two of them. A tree whose
+ * crown meets its roots is a hedge. Measured off the board at 3.6 of its pixels to one of ours, a
+ * board tree shows fourteen of our rows of bark below its hem, of which the lower nine are flare.
+ *
+ * The column is twenty-one rows now and the flare is pushed down to match, which with the crown's
+ * hem raised to row four of this tile gives twelve rows of clear cylinder above a nine-row flare.
+ * All of it had to be found inside the same 32-row tile, so the shadow pool below tightened to suit
+ * -- which is the direction the board wanted it anyway; see `contactShadow`.
  */
 function paintTrunk(): Img {
   const img = new Img(64, TRUNK_H);
@@ -1093,11 +1228,10 @@ function paintTrunk(): Img {
    * third -- which read as a paw rather than a trunk and, worse, covered exactly the ground the
    * tree's own shadow needs to fall on. A narrower flare puts the pool back on show.
    */
-  rootFinger(img, 27, 9, 20, 15, 3.6, 1.6);
-  rootFinger(img, 37, 9, 44, 15, 3.6, 1.6);
+  rootFinger(img, 27, 13, 20, 19, 3.6, 1.6);
+  rootFinger(img, 37, 13, 44, 19, 3.6, 1.6);
 
-  const colRows = 14;
-  for (let y = 0; y < colRows; y++) {
+  for (let y = 0; y < COL_ROWS; y++) {
     const hw = halfWidth(y);
     const x0 = Math.round(32 - hw);
     const x1 = Math.round(32 + hw);
@@ -1112,9 +1246,9 @@ function paintTrunk(): Img {
     }
   }
 
-  rootFinger(img, 29, 11, 23, 17, 3.2, 1.4);
-  rootFinger(img, 35, 11, 41, 17, 3.2, 1.4);
-  rootFinger(img, 32, 11, 31, 18, 3.8, 1.8);
+  rootFinger(img, 29, 15, 23, 21, 3.2, 1.4);
+  rootFinger(img, 35, 15, 41, 21, 3.2, 1.4);
+  rootFinger(img, 32, 15, 31, 22, 3.8, 1.8);
 
   /*
    * The valley between each pair of fingers. `outline()` fills the gaps the fingers leave between
@@ -1122,10 +1256,10 @@ function paintTrunk(): Img {
    * fill, and without these the five roots merge into one pale paw. Short, and only in the flare.
    */
   for (const [x0, y0, x1, y1] of [
-    [28, 11, 25, 15],
-    [31, 11, 29, 17],
-    [34, 11, 36, 17],
-    [37, 11, 39, 15],
+    [28, 15, 25, 19],
+    [31, 15, 29, 21],
+    [34, 15, 36, 21],
+    [37, 15, 39, 19],
   ] as const) {
     img.line(x0, y0, x1, y1, bark(0));
   }
@@ -1139,7 +1273,7 @@ function paintTrunk(): Img {
    */
   const groove = (y: number, k: number): number =>
     Math.round(32 + (k === 0 ? -2.5 : 3.5) + Math.sin((y + k * 9) * 0.38) * 1.2);
-  for (let y = 2; y < colRows + 3; y++) {
+  for (let y = 2; y < COL_ROWS + 3; y++) {
     for (const k of [0, 1]) {
       if ((y + k * 5) % 9 >= 7) continue;
       const x = groove(y, k);
@@ -1161,8 +1295,10 @@ function paintTrunk(): Img {
    * into the flare, and that is enough structure for an object this size.
    */
 
+  const body = maskOf(img);
   img.outline(BARK_LINE);
-  seat(img, BARK_LINE, 9);
+  weight(img, body, BARK_LINE);
+  seat(img, BARK_LINE, 14);
   return img;
 }
 
@@ -1215,10 +1351,10 @@ function contactShadow(img: Img, ox: number): void {
     const u = i / (rings - 1);
     blot(
       img,
-      33 + 8 * u + ox,
-      GROUND_Y + 3.8 - 0.9 * u,
-      27 - 13 * u,
-      8.4 - 4.2 * u,
+      33 + 7 * u + ox,
+      GROUND_Y + 0.8 - 0.7 * u,
+      21 - 10 * u,
+      5.2 - 2.6 * u,
       1.7 + i * 1.31,
       along(SHADE_STOPS, 1 - u),
     );

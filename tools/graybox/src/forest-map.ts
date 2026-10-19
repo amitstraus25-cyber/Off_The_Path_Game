@@ -1869,6 +1869,193 @@ export function generateForestMap(): GeneratedMap {
         if (flips) set(layer, x, y, at(layer, x, y) + flips);
       }
 
+  /*
+   * THE VERGES. A road you cannot walk beside is a corridor, not a road.
+   *
+   * `plantTree` already refuses a path tile, so the track itself is always clear -- but it happily
+   * plants a trunk in the tile NEXT to it, on both sides, and a wood that presses right up to the
+   * sand turns every road into a one-tile slot. Measured by the end-to-end suite rather than by
+   * eye: with the verges closed, five tests that walk Red somewhere timed out, including the whole
+   * errand line to the cottage, because every journey became a single-file shuffle with no room to
+   * round a corner. The connectivity pass below cannot see this -- a one-tile corridor is perfectly
+   * connected.
+   *
+   * So one tile either side of every path tile stays walkable. It costs very little of the wood,
+   * since the track is a small share of the map, and it is also what the board does: its paths have
+   * grass shoulders with the treeline set back, never trunks growing out of the sand.
+   *
+   * IT FELLS TREES AND NOTHING ELSE. The first version cleared any solid tile beside the track,
+   * which quietly demolished a panel of the garden fence and opened a way round the notice post --
+   * and the notice spanning the gate approach is the level's whole zero-click lesson, so
+   * `apps/game/test/map.test.ts` failed on "the gate is unreachable if the notice is refused". The
+   * fence, the cottage wall, the river and the boulders are all deliberate obstacles that happen to
+   * touch a road. Only a tree in the register is fair game, and asking the register rather than
+   * reading the tile also survives the flip flags that are baked in above.
+   */
+  /*
+   * What may be cleared to make a way through, and what may not.
+   *
+   * Trees and loose boulders are scatter: the density field put them wherever it liked and moving
+   * one costs the picture nothing. The garden fence, the cottage wall, the river and the waterfall
+   * are deliberate, and the notice spanning the gate approach is the level's whole zero-click
+   * lesson -- an earlier version of this pass cleared "any solid tile beside the track", quietly
+   * took out a panel of fence, and `map.test.ts` failed on "the gate is unreachable if the notice
+   * is refused". So the test is a whitelist, not a blacklist.
+   *
+   * The flip flags are already baked into the gids by the pass above, so the base gid has to be
+   * masked out before it can be compared with anything.
+   */
+  const BASE_GID = 0x1fffffff;
+  const treeTrunkAt = (x: number, y: number): boolean =>
+    trees.some((t) => t.y === y && (t.x === x || t.x + 1 === x));
+  const fellable = (x: number, y: number): boolean =>
+    treeTrunkAt(x, y) || (at(below, x, y) & BASE_GID) === gid('rock');
+  let verged = 0;
+  for (let y = 2; y < MAP_H - 1; y++)
+    for (let x = 1; x < MAP_W - 1; x++) {
+      if (!isPath(x, y)) continue;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as [number, number][]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!inside(nx, ny) || at(collision, nx, ny) === 0) continue;
+        if (!fellable(nx, ny)) continue;
+        clearArea(nx, ny, 1, 1);
+        verged++;
+      }
+    }
+  console.log(`  verges: ${verged} obstacle(s) cleared beside the track`);
+
+  /*
+   * CONNECTIVITY. A dense wood is only a forest if you can walk through it.
+   *
+   * The density field plants trees wherever the field is willing, and it has no idea whether the
+   * trunks it lays down happen to close a ring around a glade. Measured before this pass existed:
+   * 49 per cent of the map solid, and only 67 per cent of the WALKABLE tiles reachable from the
+   * spawn -- the other third sat in sealed pockets. Every named object stayed reachable, which is
+   * why `apps/game/test/map.test.ts` passed throughout: it floods for object reachability, not for
+   * whether the player has room. The end-to-end suite is what caught it, as five walk timeouts and
+   * "Red never reached both notices walking east".
+   *
+   * So rather than thin the whole wood -- which costs the density the board is made of, and a sweep
+   * of the treeline threshold from 0.44 to 0.62 only moved solid from 49 to 44 per cent anyway --
+   * this opens the specific walls that seal a pocket, and nothing else.
+   *
+   * For each unreachable pocket it runs a 0-1 breadth-first search outward: stepping onto open
+   * ground costs nothing, cutting through a solid tile costs one. That finds the THINNEST wall
+   * between the pocket and the reachable world, so the fewest possible trees come out, and they
+   * come out where the wood was already narrowest -- which is where a gap looks natural.
+   *
+   * Felling is done with `clearArea`, so a tree is struck off the register with its crown: clearing
+   * a trunk tile on its own would leave a crown hanging in the air and, worse, the invisible solid
+   * tile this file warns about twice already.
+   */
+  const STEPS: [number, number][] = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  const reachableFromSpawn = (): Set<number> => {
+    const seen = new Set<number>([spawnY * MAP_W + spawnX]);
+    const queue = [spawnY * MAP_W + spawnX];
+    for (let head = 0; head < queue.length; head++) {
+      const key = queue[head]!;
+      const x = key % MAP_W;
+      const y = (key - x) / MAP_W;
+      for (const [dx, dy] of STEPS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!inside(nx, ny) || at(collision, nx, ny) !== 0) continue;
+        const next = ny * MAP_W + nx;
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    return seen;
+  };
+
+  let felled = 0;
+  for (let guard = 0; guard < 300; guard++) {
+    const reachable = reachableFromSpawn();
+    let pocket = -1;
+    for (let y = 2; y < MAP_H - 1 && pocket < 0; y++)
+      for (let x = 1; x < MAP_W - 1; x++) {
+        if (at(collision, x, y) === 0 && !reachable.has(y * MAP_W + x)) {
+          pocket = y * MAP_W + x;
+          break;
+        }
+      }
+    if (pocket < 0) break;
+
+    // 0-1 BFS out of the pocket: free across open ground, one per solid tile cut through.
+    const cost = new Map<number, number>([[pocket, 0]]);
+    const from = new Map<number, number>();
+    let front = [pocket];
+    let next: number[] = [];
+    let landed = -1;
+    for (let ring = 0; ring <= 4 && landed < 0; ring++) {
+      for (let head = 0; head < front.length && landed < 0; head++) {
+        const key = front[head]!;
+        const x = key % MAP_W;
+        const y = (key - x) / MAP_W;
+        for (const [dx, dy] of STEPS) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 1 || ny < 2 || nx >= MAP_W - 1 || ny >= MAP_H - 1) continue;
+          const nk = ny * MAP_W + nx;
+          const blocked = at(collision, nx, ny) !== 0;
+          // Only a tree may be cut through, for the same reason the verge pass fells only trees:
+          // the fence, the cottage wall, the river and the boulders are deliberate obstacles, and
+          // the notice spanning the gate approach is the level's whole lesson. A pocket that can
+          // only be opened by demolishing one of those is left closed and reported below.
+          if (blocked && !fellable(nx, ny)) continue;
+          const step = blocked ? 1 : 0;
+          const total = cost.get(key)! + step;
+          if (cost.has(nk) && cost.get(nk)! <= total) continue;
+          cost.set(nk, total);
+          from.set(nk, key);
+          if (reachable.has(nk)) {
+            landed = nk;
+            break;
+          }
+          (step === 0 ? front : next).push(nk);
+        }
+      }
+      if (landed >= 0) break;
+      front = next;
+      next = [];
+    }
+    if (landed < 0) break;
+
+    // Walk the path back and fell whatever was solid along it.
+    let cursor: number | undefined = landed;
+    let cut = 0;
+    while (cursor !== undefined) {
+      const x = cursor % MAP_W;
+      const y = (cursor - x) / MAP_W;
+      if (at(collision, x, y) !== 0) {
+        clearArea(x, y, 1, 1);
+        cut++;
+      }
+      cursor = from.get(cursor);
+    }
+    if (cut === 0) break;
+    felled += cut;
+  }
+
+  const walkable = collision.filter((v) => v === 0).length;
+  const open = reachableFromSpawn().size;
+  console.log(
+    `  connectivity: ${felled} tile(s) opened; ${open}/${walkable} walkable tiles reachable ` +
+      `(${Math.round((open / walkable) * 100)}%)`,
+  );
+
   const json = JSON.stringify({
     compressionlevel: -1,
     type: 'map',

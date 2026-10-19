@@ -164,64 +164,72 @@ const lump = (a: number, seed: number): number =>
  * near 122. Neither of those is a stop, and three previous passes tried to synthesise them with
  * dithers and glows and got a lattice. Evaluated once, here, they are exact and they are flat.
  *
- *   W_DEEP  L  99   the trough, and the shade a bank throws onto the water
- *   W_DARK  L 122   the body of the river -- a quarter of the board's surface is this
- *   W_BASE  L 151   the lit surface, and the board's single most common water value
- *   W_LIT   L 176   the top of a swell
+ *   W_LIT   L 176   the top of a swell: the lit strokes that carry the open surface
  *   W_PALE  L 202   the step below white, which only the fall is bright enough to need
- *   W_FOAM  L 243   white, and an accent only: about one and a half per cent
+ *   W_FOAM  L 243   white: the shoreline rim, the rope cores and the crest
  *
- * `W_LINE` is the dark water line the board draws at the foot of anything standing in the river.
- * The `water` ramp bottoms out at luma 99, far too light to read as a line against a 151 surface,
- * so this takes it down with the hue kept -- luma 59, which is the only thing in this file that
- * puts water pixels into the deep-shade and keyline bands at all.
+ * The three mid values this block used to name -- a 99, a 122 and a 151 -- are gone as CONSTANTS,
+ * and that is the substance of this pass rather than a tidy-up. They were the whole vocabulary of
+ * both the open surface and the fall, and three flat blues is what made the river read as a tiled
+ * pool and the fall as three stripes. Both are now `snap`ped off `tone('water', t)` over a range
+ * with sixteen or eighteen levels in it, which spans the same luma and spells it in twenty values
+ * instead of three. `W_LINE`, the near-black water line, went with them: it was being drawn the
+ * length of both banks directly against the grass keyline, and it is what made the shore tile five
+ * and a half per cent black where the board's bank is one and a half.
  */
-const W_DEEP = shade('water', 0);
-const W_DARK = tone('water', 0.22);
-const W_BASE = tone('water', 0.46);
 const W_LIT = shade('water', 2);
 const W_PALE = tone('water', 0.8);
 const W_FOAM = shade('water', 3);
-const W_LINE = keyline('water');
 
 const SURFACE_PHASES: Phases = [0.7, 2.4, 1.1, 3.9];
 
 /**
- * The surface, as BANDS cut out of the smooth field rather than as a gradient painted from it.
+ * A tone snapped to one of `steps` even levels between `lo` and `hi` on the `water` ramp.
  *
- * This is the whole correction. `field` is unchanged and still wraps, still runs on diagonals, and
- * still has no term whose period fails to divide 32 -- it is a good field. What was wrong was
- * painting it continuously, which gave a photographic blur. Cutting it at four thresholds gives
- * large flat masses of one value meeting at a hard boundary, which is what the board's water is
- * and what pixel-art water has always been.
+ * This replaces the four-value band cut the surface used to be painted with, and the reason is a
+ * scanline off the board rather than a preference. Sampled straight across the board's channel at
+ * three heights, every row says the same thing:
  *
- * The thresholds are the board's own band weights read back through the field's distribution.
- * `field` is roughly normal with a standard deviation near 0.37, so the cuts below put about 18
- * per cent of the tile in W_DEEP, 30 in W_DARK, 43 in W_BASE and 9 in W_LIT.
+ *     midstream -> right bank, board pixels, 6px apart
+ *     158 155 153 153 155 152 | 133 132 142 132 132 | 117 108 105 | 202 219 239 | bank
+ *     \------ body, flat -----/ \--- darker ----/  \-- darkest --/ \-- foam --/
  *
- * Those are the board's water weights renormalised over its four water bands, and the DARK end is
- * the part that matters. The first quantised render used 15/24/45/16 and came back visibly too
- * pale, which is the same fault the airbrushed build had in a different form: the board's river is
- * a dark blue body with a lit surface on it, not a bright cyan with some shade. Ours was six times
- * too heavy in the 165-194 band, and at whole-map scale that is what made the river read as a
- * glowing ribbon through the forest rather than as water lying in a valley.
+ * The body is FLAT: luma 152 to 159 over sixteen consecutive samples, and at y=600 it holds 152 to
+ * 159 across the entire channel without a single excursion. All of the board's water darkness is a
+ * band hugging the bank, two to six pixels wide at our scale, and none of it is scattered over the
+ * open surface.
  *
- * Contour banding of a smooth field is a real risk here -- cut too finely it reads as an oil slick
- * or a topographic map. Four bands over a field whose slowest terms have a period of 32 gives
- * masses eight to sixteen pixels across, which is the scale of the board's own tonal patches.
+ * Ours was the other way round. Measured on the painted tile, `water` put 18.6 per cent of itself
+ * at luma 81-109 and 28.7 per cent at 110-134 -- 47 per cent of the open surface in the two bands
+ * the board keeps for its banks -- organised as blobs eight to sixteen pixels across. That is why
+ * the river read as pool mosaic: the right values in the wrong places, in camouflage patches.
+ *
+ * So the surface is still quantised -- flat masses meeting at a boundary is what pixel-art water is
+ * -- but into MANY levels over a NARROW range instead of four levels over a wide one. Sixteen
+ * levels between luma 131 and 167 is a two-to-three luma step, which is below anything the eye or
+ * the edge axis reads as a boundary, while the tile carries sixteen distinct blues where it used to
+ * carry five. That is the brief's point exactly: the range goes INSIDE the mass as grade, and the
+ * contrast moves to the bank where the board puts it.
  */
-const BANDS: readonly (readonly [number, RGBA])[] = [
-  [-0.337, W_DEEP],
-  [-0.018, W_DARK],
-  [0.62, W_BASE],
-  [Infinity, W_LIT],
-];
-
-const bandAt = (x: number, y: number): RGBA => {
-  const f = field(x, y, SURFACE_PHASES);
-  for (const [limit, c] of BANDS) if (f < limit) return c;
-  return W_BASE;
+const snap = (lo: number, hi: number, steps: number, t: number): RGBA => {
+  const k = Math.round(clamp01((t - lo) / (hi - lo)) * (steps - 1));
+  return tone('water', lo + (k * (hi - lo)) / (steps - 1));
 };
+
+/**
+ * The open body: mean t 0.48 (luma 151, the board's own 152-159), swinging a tenth either way.
+ *
+ * `field` has a standard deviation near 0.37 and a range of roughly +-1, so this puts the bulk of
+ * the surface between t 0.42 and 0.54 -- luma 146 to 158 -- with tails to 131 and 167 in the broad
+ * patches where several harmonics agree. The patches are the board's: it does carry slightly
+ * deeper water in places mid-channel (132-142 at y=480), just not as half the surface.
+ */
+const SURF_LO = 0.34;
+const SURF_HI = 0.62;
+const SURF_STEPS = 16;
+
+const bandAt = (x: number, y: number): RGBA =>
+  snap(SURF_LO, SURF_HI, SURF_STEPS, 0.48 + 0.16 * field(x, y, SURFACE_PHASES));
 
 type Ripple = readonly [x: number, y: number, len: number];
 
@@ -247,6 +255,10 @@ const RIPPLES_A: readonly Ripple[] = [
   [11, 13, 4],
   [25, 17, 3],
   [16, 27, 3],
+  [7, 21, 4],
+  [29, 9, 2],
+  [13, 2, 3],
+  [21, 30, 3],
 ];
 
 const RIPPLES_B: readonly Ripple[] = [
@@ -255,6 +267,10 @@ const RIPPLES_B: readonly Ripple[] = [
   [14, 18, 2],
   [27, 21, 4],
   [9, 25, 3],
+  [17, 5, 4],
+  [5, 30, 3],
+  [30, 14, 2],
+  [23, 28, 3],
 ];
 
 /**
@@ -723,9 +739,34 @@ function landTone(into: number, x: number, y: number): RGBA {
  * 25.89 edge density against the board's 17.44. Doubling the outer bands keeps every tone and
  * halves the boundaries, and a 2px band also simply reads better: a 1px ring is a line round a
  * shape, a 2px band is water doing something.
+ *
+ * THAT ORDER WAS WRONG, and the scanline says so flatly. The apron above ran bright-bright-dark
+ * from the bank outwards: W_LIT at luma 176 in the two pixels next to the foam, and the darker band
+ * two pixels further out. The board runs the other way, at every height it was sampled:
+ *
+ *     foam 239 219 202 | 105 108 117 | 132 132 142 133 | 152 153 153 155 155 158
+ *     d1               | d2  d3  d4  | d5  d6  d7  d8  | open body, flat to midstream
+ *
+ * Darkest immediately inside the foam, climbing to the body over six or eight pixels. That is a
+ * CROSS-SECTION -- the channel has a near bank, a deep middle and a far bank, and the eye reads
+ * depth from it. Ours had a bright halo round the bank instead, which is why the river read as a
+ * tiled pool: a pool is lit from inside its own edge, a river is dark where the bank overhangs it.
+ *
+ * So `CHANNEL` is the board's own profile, as `t` on the `water` ramp per pixel out from the
+ * waterline, and `shore` now runs the apron twelve rings deep instead of five. Twelve is not
+ * arbitrary: a shore tile holds about twenty pixels of water, so twelve rings put the hand-over to
+ * the open body inside the tile, and the `water` tiles beyond it are already at the body value --
+ * the cross-section therefore completes across the river's whole three-to-five tile width rather
+ * than stopping at a tile edge.
+ *
+ * Every step here is between two and nine luma, so the whole gradient is below the edge threshold
+ * and adds eleven distinct blues without adding one boundary. All of this tile's contrast stays
+ * where the board puts it: the single hard step from foam at 243 to dark water at 100.
  */
 const FOAM_PHASES: Phases = [3.6, 1.2, 2.9, 0.5];
-const APRON: readonly RGBA[] = [W_FOAM, W_LIT, W_LIT, W_DARK, W_DARK];
+const CHANNEL: readonly number[] = [
+  0.02, 0.05, 0.11, 0.19, 0.27, 0.33, 0.38, 0.42, 0.45, 0.47, 0.48,
+];
 
 function shore(side: Side): (img: Img) => void {
   return (img) => {
@@ -769,7 +810,7 @@ function shore(side: Side): (img: Img) => void {
     let front: [number, number][] = [];
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) if (solid[y * S + x] === 1) front.push([x, y]);
-    for (let d = 1; d <= APRON.length && front.length; d++) {
+    for (let d = 1; d <= CHANNEL.length + 1 && front.length; d++) {
       const next: [number, number][] = [];
       for (const [x, y] of front)
         for (const [dx, dy] of [
@@ -806,17 +847,42 @@ function shore(side: Side): (img: Img) => void {
          * divides 32 so it still wraps where the tile repeats.
          */
         const [bt] = toBank(side, x, y);
-        if (d === 1) {
-          const surf = Math.sin((TAU * bt) / 8 + 1.3) + 0.6 * Math.sin((TAU * bt) / 16 + 0.4) > 0.2;
-          img.px(x, y, surf ? W_FOAM : W_LINE);
+        const surf = Math.sin((TAU * bt) / 8 + 1.3) + 0.6 * Math.sin((TAU * bt) / 16 + 0.4);
+        /*
+         * The foam rim, and it is CONTINUOUS now rather than alternating with the dark water line.
+         *
+         * The previous pass drew foam on the stretches where `surf` is high and `W_LINE` -- a luma
+         * 59 near-black -- on the rest, on the reading that the board's water "lies dark and quiet
+         * in the lee". Three scanlines across the board say otherwise: the white rim is unbroken at
+         * every height sampled, 202-239 against a bank that is already keylined, and the quiet
+         * stretches are quiet because the rim narrows to one pixel there, not because it goes dark.
+         *
+         * Keeping a dark line at d1 was also doing active harm. It sat directly against
+         * `BANK_LINE` at luma 53, so wherever `surf` fell the shore carried a two-pixel near-black
+         * rule -- and the shore tile measured 5.7 per cent of itself under luma 60 where the board's
+         * bank measures 1.6. That rule is most of the difference, and removing it moves those
+         * pixels into the 81-134 band where the board keeps three times as much weight as we do.
+         *
+         * So `surf` now decides the rim's WIDTH, not its colour: one pixel in the lee, two where
+         * the water piles against the bank. Varying the width along the shore is also what keeps a
+         * column of forty-two identical tiles from reading as a drawn outline -- the rim thickens
+         * and thins on a period of 8 that divides 32, so it wraps and never repeats as a rule.
+         */
+        if (d === 1 || (d === 2 && surf > 0.45)) {
+          img.px(x, y, W_FOAM);
           continue;
         }
-        // The lit shallows lose their outer pixel wherever the field is high, and the shadow band
-        // stops short wherever the bank is low, so neither runs as an even stripe down a column of
-        // identical tiles.
-        if (d === 3 && field(x, y, FOAM_PHASES) > 0.25) continue;
-        if (d >= 4 && field(x, y, LAND_PHASES) > 0.1) continue;
-        img.px(x, y, APRON[d - 1]!);
+        /*
+         * The cross-section. `CHANNEL` is indexed from the foam outwards, modulated a little by the
+         * field so the bands wander across the tile instead of tracking the waterline exactly --
+         * the board's dark band is wider under an overhang and narrower off a shallow spit.
+         */
+        const k = Math.min(CHANNEL.length - 1, d - 2);
+        img.px(
+          x,
+          y,
+          snap(SURF_LO, SURF_HI, SURF_STEPS, CHANNEL[k]! + 0.05 * field(x, y, FOAM_PHASES)),
+        );
       }
   };
 }
@@ -854,7 +920,20 @@ function fallTone(x: number, y: number): number {
   const b = (TAU * (x + 2.3 * Math.sin((TAU * y) / 16 + 1.9))) / 16 + 2.2;
   const c = (TAU * (x + 2.4 * Math.sin((TAU * y) / 32 + 2.0))) / 32 + 4.1;
   const d = (TAU * (x + 1.0 * Math.sin((TAU * y) / 16 + 3.3))) / 4 + 0.8;
-  const rope = 0.18 * Math.sin(a) + 0.34 * Math.sin(b) + 0.46 * Math.cos(c) + 0.02 * Math.sin(d);
+  /*
+   * THE WEIGHTING IS THE FIX, and it is the same fault as the crowns in a third ramp.
+   *
+   * Led by its period-32 term at 0.46 against the period-8 term at 0.18, this sum had about one
+   * broad peak per tile -- so the painted fall came out as three fat white ribbons down a pale
+   * sheet, which is what the review called it, word for word. The board's fall is the opposite
+   * shape: six to eight THIN white ropes across a channel of about the same width, a bright core one
+   * or two pixels wide with blue either side of it.
+   *
+   * Leading with the period-8 term instead, and giving the period-4 term eight times the weight it
+   * had, puts a rope roughly every ten pixels. The total amplitude is held at 0.94 against the old
+   * 1.00 so the shaping below and the white threshold still mean what they say.
+   */
+  const rope = 0.3 * Math.sin(a) + 0.24 * Math.sin(b) + 0.24 * Math.cos(c) + 0.16 * Math.sin(d);
   /*
    * Four sines rarely peak together, so their raw sum spends almost all of its time near the
    * middle: the first render of this came back with a luma spread of 17 and not one pixel under
@@ -868,60 +947,109 @@ function fallTone(x: number, y: number): number {
 }
 
 /**
- * The sheet's six values and where `fallTone` is cut to get them.
+ * The sheet, as `FALL_STEPS` levels between luma 110 and 199, with white on top of it.
  *
- * The board's fall is 21 per cent pure white, 10 per cent pale, 12 per cent lit, 39 per cent body,
- * 16 per cent channel and 2 per cent deep -- and nothing at all under luma 81, because a waterfall
- * is a bright object whose darkness is channels rather than shadow. The pass this replaces painted
- * `fallTone` continuously, which produced a luma spread of 26 against the board's 48 and almost no
- * white: a slightly lighter band of the same slab, exactly as the review described it.
+ * The six-value band cut this replaces reproduced the board's histogram almost exactly -- measured
+ * on the painted tile it came back 23.7 per cent white, 12.4 pale, 7.1 lit, 36.6 body, 17.7 channel
+ * and 2.4 deep, against the board's 21/10/12/39/16/2. Every band was within three points, and the
+ * tile still read as three white stripes. Six values cannot be anything but stripes: with the ropes
+ * running the full height of a tile and the tile repeating four times, six flat masses IS six
+ * ribbons, and a histogram cannot tell a ribbon from a rope.
  *
- * These cuts reproduce that histogram band for band. They also do most of the work on the three
- * axes the fall was failing, because the quantising is what creates edges at all: six flat values
- * across a sheet of vertical ropes gives a hard boundary at every rope flank.
+ * So the body is graded and the white is drawn, which separates the two jobs the band cut was
+ * conflating. `FALL_LO` is the board's channel value (110) and `FALL_HI` its brightest blue (199);
+ * eighteen steps between them is a five-luma step, under the edge threshold, and takes the tile from
+ * six distinct colours to around twenty. The white then goes on as thin rope cores at the peaks of
+ * a sheet that already has form, instead of being the top sixth of a staircase.
  */
-const FALL_BANDS: readonly (readonly [number, RGBA])[] = [
-  [0.1, W_DEEP],
-  [0.23, W_DARK],
-  [0.52, W_BASE],
-  [0.585, W_LIT],
-  [0.66, W_PALE],
-  [Infinity, W_FOAM],
-];
+const FALL_LO = 0.1;
+const FALL_HI = 0.74;
+const FALL_STEPS = 18;
 
 /**
- * Spray: short horizontal white marks, and the one place this file bends constraint C.
+ * Where the rope goes pure white, and it is a threshold on the SHAPED tone rather than a band.
  *
- * Nothing with a vertical period can read as water breaking, and the board's fall is covered in
- * short horizontal white strokes. A feature that spans the tile would repeat four times down the
- * stack as a rung, which is why the previous build banned horizontal marks outright and ended up
- * with vertical wallpaper. A THREE-pixel mark is not a rung: it repeats as texture, the way the
- * white dashes on the open river do, and at four scattered heights the eye reads spray rather than
- * a grid. The real fix is still a lip tile and a foot tile the map does not have; this is the best
- * that one repeated image can do, and it is noted with the other two map gaps below.
+ * Tuned so white lands near the board's 21 per cent once the crest is on. Because `fallTone` now
+ * peaks about every ten pixels instead of once a tile, the same share of white arrives as six to
+ * eight cores one to three pixels wide rather than as three ribbons eight wide -- the same number of
+ * white pixels, organised as the board organises them.
+ */
+const ROPE_WHITE = 0.655;
+const ROPE_PALE = 0.6;
+
+/**
+ * The cascade crest: how many pixels of white break over the ledge at column `x`, 0 where it is dry.
+ *
+ * This is the one deliberate bend of constraint C, and it is taken with the brief's instruction in
+ * hand: the fall is to have a lip, a fall and a plunge. A single image laid four tiles tall cannot
+ * have one lip -- but it can have FOUR, and four ledges down a gorge is a cascade, which is a real
+ * waterfall and a common one in this art's own tradition. The previous build banned horizontal marks
+ * outright and the result was vertical wallpaper with no event in it anywhere.
+ *
+ * What stops a cascade reading as a ladder is that the break is not a rule. Roughly a third of the
+ * columns are dry, the wet ones break one to three pixels deep, and both the gaps and the depths run
+ * on periods of 32, 16 and 8 -- so the crest wraps where the tile repeats, and the map's own
+ * per-tile horizontal mirror reflects the pattern about the tile centre, which means the three
+ * columns of the fall carry three different crest profiles at the same height rather than one
+ * profile drawn three times.
+ *
+ * Row 0 is deliberately left as body. A crest starting at the very first row would put the previous
+ * tile's bottom row directly against white at the seam, and the seam is the one horizontal line in
+ * this tile that the player's eye can actually find.
+ */
+const crestDepth = (x: number): number => {
+  const dry = Math.sin((TAU * x) / S + 0.9) + 0.7 * Math.cos((TAU * x) / 16 + 2.1);
+  if (dry < -0.25) return 0;
+  return 2 + Math.round(1.4 * Math.sin((TAU * x) / 8 + 1.7));
+};
+
+/**
+ * Spray: short horizontal white marks scattered down the sheet.
+ *
+ * The board's fall is covered in these. A THREE-pixel mark is not a rung -- it repeats as texture,
+ * the way the white dashes on the open river do -- so unlike the crest these need no justification
+ * beyond the board having them. They are placed off the crest rows so the two never merge into a
+ * band, and they land only where the sheet is already bright, so a mark never fills a dark channel
+ * and breaks the rope structure the fall is read by.
  */
 const SPRAY: readonly Ripple[] = [
-  [4, 5, 3],
-  [21, 11, 3],
-  [12, 19, 4],
-  [26, 26, 3],
+  [4, 9, 3],
+  [21, 14, 3],
+  [12, 21, 4],
+  [26, 27, 3],
+  [8, 17, 2],
+  [17, 30, 3],
 ];
 
 function waterfall(img: Img): void {
   for (let y = 0; y < S; y++)
     for (let x = 0; x < S; x++) {
       const v = fallTone(x, y);
-      let c = W_FOAM;
-      for (const [limit, band] of FALL_BANDS)
-        if (v < limit) {
-          c = band;
-          break;
-        }
+      const c =
+        v > ROPE_WHITE
+          ? W_FOAM
+          : v > ROPE_PALE
+            ? W_PALE
+            : // `v` is divided by ROPE_PALE so the body uses the WHOLE of its range before the
+              // pale step takes over. Mapping the raw `v` instead left the body topping out at
+              // luma 157 and then jumping straight to 202 -- a 45-luma hole in the middle of the
+              // sheet, measured as 0.0 per cent of the tile in the 165-194 band. That hole is a
+              // hard border inside the mass, which is the exact fault this pass exists to remove.
+              snap(FALL_LO, FALL_HI, FALL_STEPS, FALL_LO + (FALL_HI - FALL_LO) * (v / ROPE_PALE));
       img.px(x, y, c);
     }
 
-  // Spray only where the sheet is already bright, so a mark never lands in a dark channel and
-  // breaks the rope structure the fall is read by.
+  /*
+   * The crest last, over the ropes, because the water breaking over a ledge is in front of the
+   * sheet behind it. One pale row under the white gives the break a lit underside rather than a
+   * cut edge, which is what the board draws below its own lip.
+   */
+  for (let x = 0; x < S; x++) {
+    const d = crestDepth(x);
+    for (let y = 1; y <= d; y++) img.px(x, y, W_FOAM);
+    if (d > 0) img.px(x, d + 1, W_PALE);
+  }
+
   for (const [x, y, len] of SPRAY)
     for (let i = 0; i < len; i++) if (fallTone(wrap(x + i), y) > 0.45) wpx(img, x + i, y, W_FOAM);
 }

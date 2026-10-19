@@ -271,7 +271,26 @@ function plasterT(x: number, y: number): number {
     0.17 * (LIT[1](x, y) - 0.5) +
     0.24 * (LIT[2](x, y) - 0.5) +
     0.17 * (LIT[3](x, y) - 0.5) +
-    0.06 * Math.sin((Math.PI * 5 * y) / 16 + 6 * (LIT[1](x, y) - 0.5))
+    /*
+     * THE TROWEL, AT DOUBLE ITS OLD AMPLITUDE AND IN TWO PASSES, because the review's verdict was
+     * "the wall is a large blank cream rectangle and the trowel striation is invisible at 1x" and
+     * that was simply true. At 0.06 on a ramp whose upper two thirds span thirty luma, the float
+     * marks were worth about four levels: real, measurable, and under the threshold at which an eye
+     * at a 26-tile camera can see anything at all.
+     *
+     * 0.13 is about nine levels on the coarse pass. Two passes rather than one louder one, at
+     * periods of 32/5 and 32/9 rows, because a single sine at a visible amplitude is a corduroy --
+     * five even stripes, and `wall` is laid three tiles deep so that is fifteen even stripes down
+     * the elevation. Two incommensurate periods beat against each other into bands of uneven weight,
+     * which is what a plasterer's float actually leaves, and both still close on the tile.
+     *
+     * The phase of each is dragged about by its own octave of the noise, so neither ever rules a
+     * straight line across the facade's six columns -- the thing that killed the three motifs
+     * recorded in `wrapNoise`. Steepest neighbour-to-neighbour step is still about six luma against
+     * the edge axis's threshold of twenty-four, so this buys texture and spread without buying edges.
+     */
+    0.13 * Math.sin((Math.PI * 5 * y) / 16 + 6 * (LIT[1](x, y) - 0.5)) +
+    0.06 * Math.sin((Math.PI * 9 * y) / 16 + 5 * (LIT[2](x, y) - 0.5))
   );
 }
 
@@ -620,7 +639,33 @@ function shingle(
    * It stays dark enough to separate the tabs -- about luma 76, under the deep-shade threshold --
    * and the flares at the tab's two ends still get the keyline from the flood above and below it.
    */
-  for (let r = 0; r < h - 2; r++) img.px(x0, y + r, tone('roof', 0.05 * dim));
+  /*
+   * THE PERPEND STOPS SHORT OF THE COURSE'S HEAD, AND THAT IS THIS ROUND'S CORRECTION.
+   *
+   * It used to run the full height of the cell at the joint's own value. The review's reading --
+   * "six identical slate tabs across by five identical courses reads as a brick wall lying down" --
+   * is exactly what a full-height perpend produces: a dark vertical from the head of the cell to its
+   * butt, meeting the course line at both ends, closes a RECTANGLE round every tab, and a grid of
+   * closed rectangles in offset rows is stretcher bond however the faces are shaded. Six rounds of
+   * work went into the tab's outline while the joint around it went on drawing brickwork.
+   *
+   * Measured off the board's roof crop at 3x, the board does the opposite in both directions:
+   *
+   *   each course carries ONE CONTINUOUS BRIGHT CATCH along its whole head, unbroken by the
+   *   verticals -- that single line is what makes a course read as a course;
+   *   the vertical between two tiles in the same course is a SHORT NICK in the lower two thirds,
+   *   visibly thinner and lighter than the horizontal, and it never reaches the catch above it.
+   *
+   * So the cap's top two rows are drawn across the joint in the tab's own face colour, and the nick
+   * runs from there to about seven tenths of the cell before giving way to the flood. What is left
+   * below it merges into the course line -- which is where a real joint pools -- so the dark is
+   * concentrated on the horizontal and the eye gets courses on a slope instead of bonded masonry.
+   */
+  const cap = Math.min(2, h - 2);
+  for (let r = 0; r < cap; r++)
+    img.px(x0, y + r, face((roll(r / Math.max(1, h - 1)) + v + 0.06) * dim));
+  const nick = Math.max(cap + 1, Math.round((h - 2) * 0.72));
+  for (let r = cap; r < nick; r++) img.px(x0, y + r, tone('roof', 0.14 * dim));
 
   for (let i = 1; i < w; i++) {
     const u = Math.abs(i - (w - 1) / 2) / ((w - 1) / 2); // 0 mid-tab, 1 at its two ends
@@ -879,12 +924,55 @@ function pane(img: Img, x: number, y: number, w: number, h: number): void {
     }
 }
 
+/**
+ * A lamplit room behind the glass: warm amber, brightest where the lamp stands, falling off down
+ * and to the right.
+ *
+ * `pane` is the board's LEFT window and `lamp` is its RIGHT one, and the two are genuinely
+ * different pictures rather than two moods of one. Measured off the two crops at 6x, the left
+ * window's glass runs luma 45 to 91 in navy; the right window's runs 146 to 225 in amber, because
+ * there is a lamp lit behind it and a wolf standing in front of the lamp.
+ *
+ * `gold` rather than a mix, because this is the one surface on the building that is a light SOURCE
+ * rather than a lit material: the ramp runs #9c7420 to #ffe88a, which is a lamp seen through glass,
+ * and it is the only place in the world art that ramp is used at full reach.
+ */
+function lamp(img: Img, x: number, y: number, w: number, h: number): void {
+  for (let v = 0; v < h; v++)
+    for (let u = 0; u < w; u++) {
+      const s = h > 1 ? 1 - v / (h - 1) : 1; // 1 at the top of the opening, 0 at the sill
+      // The lamp stands a third of the way across, so the glow is off-centre and not a vignette.
+      const across = w > 1 ? 1 - Math.abs(u - (w - 1) * 0.34) / (w - 1) : 1;
+      img.px(x + u, y + v, tone('gold', clamp(0.14 + 0.56 * s + 0.26 * across)));
+    }
+}
+
 /* ------------------------------------------------------------------- window */
 
 /*
- * The window, its box and its blooms.
+ * The window, its box and its blooms -- and the wolf behind it.
  *
- * The board draws two and the map lays two, so one painter serves both.
+ * THE WOLF IN THE WINDOW IS THE PREMISE OF THE GAME AND IT WAS NOT DRAWN. The board puts him in the
+ * right-hand window of the Arrive frame: a dark purple silhouette, two pointed ears over a broad
+ * head, an amber muzzle mark, standing against a lamplit room with the flower box across his chest.
+ * He is the whole staging of "That's Not My Grandma" -- the player can see from the gate that
+ * something is in there -- and this file had two identical sheets of navy glass instead.
+ *
+ * HE IS DRAWN IN `wolf`, THE SAME RAMP THE SPRITE USES, so the thing in the window and the thing
+ * that meets you are recognisably one animal. Deep Purple is what the board uses for him too, which
+ * is the one place the rebrand and the board agree without a departure.
+ *
+ * WHAT THE LAMP BUYS BESIDES THE STORY. The lit glass is 11 by 14 of amber at luma 146 to 225 with
+ * a near-black animal cut out of it -- about seventy pixels under luma 35 inside a frame that is
+ * otherwise the brightest part of the elevation. That pairing is the largest local contrast on the
+ * building after the door, it is a hue nothing else on the facade carries, and it is the reason a
+ * player walking east out of the dark forest has something to walk TOWARDS. A dark cottage at the
+ * end of the map is scenery; a lit one with a shape in the window is a destination.
+ *
+ * THE MAP LAYS ONE WINDOW TILE TWICE, SO BOTH WINDOWS GET THE WOLF. See the escalation at the head
+ * of this file: the board's two windows are different pictures and the frozen list has one tile for
+ * them. Both lit and both occupied is the better of the two readings available -- he paces between
+ * the rooms -- and `pane` is kept, drawn in the door's fanlight, so the navy glass is not lost.
  *
  * IT IS BIGGER AND IT IS WARMER. The pane used to be a 2x2 of near-black at 15 by 13, floating in
  * the middle of a blank cream sheet, and at a 26-tile camera it read as a hole punched in the wall.
@@ -893,6 +981,10 @@ function pane(img: Img, x: number, y: number, w: number, h: number): void {
  * `trunk` body this used to paint, which gave the window no material at all. `wood` for the frame,
  * `trunk`'s keyline round it, and a lintel cap that steps a pixel proud at the head, as the board's
  * does.
+ *
+ * THE GLAZING IS THREE LIGHTS, NOT FOUR PANES, which is what the board draws and what leaves room
+ * for him: a narrow light at the left split by a transom, and one tall light beside it. A 2x2 grid
+ * cut the animal into quarters and none of the four read as anything.
  */
 
 /*
@@ -911,6 +1003,58 @@ function pane(img: Img, x: number, y: number, w: number, h: number): void {
 const BUSH_TOP = [
   27, 26, 25, 24, 25, 26, 25, 23, 22, 22, 23, 24, 26, 25, 24, 23, 24, 25, 23, 22, 23, 25, 26, 27,
 ] as const;
+
+/* The glass: one opening, three lights. The transom splits the narrow left light only. */
+const GLASS_L = 7;
+const GLASS_R = 24;
+const GLASS_T = 6;
+const GLASS_B = 19;
+const MULLION = 12; // columns 12..13
+const TRANSOM = 12; // rows 12..13, left light only
+
+/**
+ * The wolf's silhouette, as the top row of each of his ten columns, x = 15..24.
+ *
+ * A per-column profile rather than an ellipse or a blit, for the same reason the bushes in this file
+ * use one: a curve reads as a blob and a hand-set profile reads as a creature. Two ears two pixels
+ * wide reaching row 9, a four-row notch between them, and shoulders falling away at each side so the
+ * lamp shows round him -- which is what makes him a shape against a light rather than a dark patch.
+ *
+ * He is deliberately NOT centred in his light. The board's wolf is pushed to the right of the glass
+ * with the glow open beside him, which is what stops the window reading as a framed portrait.
+ */
+const WOLF_X = 15;
+const WOLF_TOP = [17, 13, 9, 9, 13, 13, 9, 9, 13, 17] as const;
+const WOLF_FOOT = GLASS_B;
+
+/**
+ * The wolf, standing in the lit room.
+ *
+ * GRADED, NOT FLAT. The brief on this round is that our masses have no form, and a silhouette is the
+ * easiest place in the build to get that wrong: a single flat fill with a hard edge is exactly the
+ * "flat sticker with a fat border" the review named on the crowns. He rolls from `wolf` 0.3 at the
+ * ear tips -- where the window's own light catches the fur from behind -- down to 0.02 at his chest,
+ * which is about luma 35 to 20. The roll is small in absolute terms because he must stay a
+ * silhouette against a 200-luma glow, and it is the whole difference between a cut-out and an animal.
+ */
+function wolf(img: Img): void {
+  for (let i = 0; i < WOLF_TOP.length; i++) {
+    const x = WOLF_X + i;
+    const top = WOLF_TOP[i]!;
+    for (let y = top; y <= WOLF_FOOT; y++) {
+      const down = (y - top) / Math.max(1, WOLF_FOOT - top);
+      img.px(x, y, tone('wolf', clamp(0.3 - 0.28 * Math.pow(down, 0.6))));
+    }
+    img.px(x, top - 1, keyline('wolf')); // the silhouette's own edge against the lamp
+  }
+  // Two eye glints and an amber muzzle. The board's wolf is three times this size and can carry a
+  // dark eye on dark fur; at ten pixels across, a lit eye is the only thing that reads as a face
+  // rather than as a smudge, and the warm catch is the lamp behind him in any case.
+  img.px(18, 14, tone('gold', 0.86));
+  img.px(21, 14, tone('gold', 0.86));
+  img.rect(19, 16, 2, 1, tone('gold', 0.42));
+  img.px(19, 17, tone('gold', 0.2));
+}
 
 const cottageWindow: Painter = (img) => {
   plaster(img);
@@ -933,14 +1077,26 @@ const cottageWindow: Painter = (img) => {
       );
     }
 
-  pane(img, 7, 6, 8, 6);
-  pane(img, 17, 6, 8, 6);
-  pane(img, 7, 14, 8, 6);
-  pane(img, 17, 14, 8, 6);
-  img.rect(15, 6, 2, 14, tone('wood', 0.34)); // the glazing bars
-  img.rect(7, 12, 18, 2, tone('wood', 0.34));
-  img.rect(15, 6, 1, 7, tone('wood', 0.52)); // each catches the light down its left
-  img.rect(7, 12, 9, 1, tone('wood', 0.46));
+  /*
+   * The lit room, flooded across the whole opening, then the reveal, then the animal, then the bars
+   * over the top of him. Order matters: the bars have to cross IN FRONT of the glass or the window
+   * reads as a picture of a window.
+   */
+  lamp(img, GLASS_L, GLASS_T, GLASS_R - GLASS_L + 1, GLASS_B - GLASS_T + 1);
+  /*
+   * The reveal: the frame is a box and the glass sits at the back of it, so the inner edge is in
+   * shadow all the way round. Without it the amber butts straight onto the lit timber face and the
+   * opening has no depth -- the same fault the door had before it got its own reveal, and here it
+   * matters more because the two values meeting are 200 and 160 of the same hue.
+   */
+  img.frame(GLASS_L - 1, GLASS_T - 1, GLASS_R - GLASS_L + 3, GLASS_B - GLASS_T + 3, FRAME_LINE);
+
+  wolf(img);
+
+  img.rect(MULLION, GLASS_T, 2, GLASS_B - GLASS_T + 1, tone('wood', 0.3)); // the mullion
+  img.rect(MULLION, GLASS_T, 1, GLASS_B - GLASS_T + 1, tone('wood', 0.52)); // lit down its left
+  img.rect(GLASS_L, TRANSOM, MULLION - GLASS_L, 2, tone('wood', 0.3)); // the transom, left light only
+  img.rect(GLASS_L, TRANSOM, 4, 1, tone('wood', 0.46));
 
   /*
    * The sill, standing proud of the frame and lit along its top -- and STONE, not timber.
@@ -1251,6 +1407,30 @@ const cottageDoor: Painter = (img) => {
   img.rect(TILE - 2, STEP_Y, 2, 3, STONE_LINE);
   img.rect(0, TILE - 1, TILE, 1, STONE_LINE);
 
+  /*
+   * THE PAW PRINTS, on the doorstep, and they are the other half of the premise.
+   *
+   * The board lays a trail of them across the sand from the gate to the door: that is how a player
+   * standing at the fence knows what went in before them, and it is the one piece of staging that
+   * makes the Arrive frame a scene rather than a picture of a house. The trail across the APPROACH
+   * belongs to the path and grass tiles and is escalated at the head of this file. The two on the
+   * threshold belong here, they are the last two of that trail, and they are the pair that actually
+   * lands the point -- muddy prints on Grandma's own clean step, going IN.
+   *
+   * Drawn in the window frames' own near-black `trunk`, which is mud rather than ink, on a tread at
+   * about luma 190: the strongest small contrast anywhere on the facade, which is what a 5x3 mark
+   * needs to survive a 26-tile camera. Three toes over a pad, twice, the second one further in and
+   * half a step up, so they read as a stride rather than as a stamp.
+   */
+  for (const [px, py] of [
+    [8, STEP_Y],
+    [17, STEP_Y + 1],
+  ] as const) {
+    for (const dx of [0, 2, 4]) img.px(px + dx, py, tone('trunk', 0.1));
+    img.rect(px + 1, py + 1, 3, 1, FRAME_LINE);
+    if (py + 2 < TILE - 1) img.rect(px + 1, py + 2, 3, 1, tone('trunk', 0.06));
+  }
+
   // The planting, last, so it sits in front of the step and the jambs.
   doorBush(img, 0, DOOR_BUSH_L);
   doorBush(img, TILE - DOOR_BUSH_R.length, DOOR_BUSH_R);
@@ -1291,13 +1471,42 @@ const cottageDoor: Painter = (img) => {
 const BLOCK_W = 10;
 const BLOCK_H = 9;
 
+/*
+ * THE STACK AND ITS CROWN HAVE MOVED DOWN FIVE ROWS TO MAKE ROOM FOR SMOKE, and the smoke is the
+ * point of this tile now.
+ *
+ * The board gives the cottage a plume: three pale puffs climbing up and to the right out of the
+ * flue, the near one largest and the far one nearly gone. It is the only MOVING thing in the Arrive
+ * frame, it is what says somebody is home, and in a story about a house that is not what it looks
+ * like, smoke from the chimney is the lie the player can see from the gate. We had a bare post.
+ *
+ * It fits because the stack is only twenty of the tile's thirty-two columns wide and the tile is
+ * drawn on transparency with grass behind it: the five rows the crown gives up cost the stack two
+ * pixels of its lowest course and nothing else. The plume runs diagonally so it uses the corner the
+ * stack does not, rather than needing height the tile does not have.
+ *
+ * NO ALPHA, so the puffs are built the way everything else in this file is: a pale crown inset up
+ * and to the left over a darker body, which is a lit sphere rather than a flat disc. Nothing here is
+ * keylined -- `outline()` runs before the smoke is drawn, deliberately. Vapour has no edge, and a
+ * near-black ring round each puff would read as three grey rocks floating over the roof.
+ */
+const SMOKE_Y = 7; // rows 0..6 are the plume; the crown starts here
+const STACK_Y = SMOKE_Y + 6; // and the stack below the crown
+
+/** Three puffs, up and to the right, thinning as they go: x, y, radius, tone. */
+const PLUME = [
+  [15.5, 5, 3.1, 2.3, 0.92],
+  [19.5, 2.6, 2.5, 1.9, 0.84],
+  [23, 0.6, 1.9, 1.5, 0.76],
+] as const;
+
 const chimney: Painter = (img) => {
-  for (let y = 7; y < TILE; y++)
+  for (let y = STACK_Y; y < TILE; y++)
     for (let x = 6; x < 26; x++) {
-      const row = Math.floor((y - 8) / BLOCK_H);
+      const row = Math.floor((y - STACK_Y - 1) / BLOCK_H);
       const off = (((row % 2) + 2) % 2) * 5; // the bond alternates course by course
       const bx = (((x - 6 - off) % BLOCK_W) + BLOCK_W) % BLOCK_W;
-      const by = (((y - 8) % BLOCK_H) + BLOCK_H) % BLOCK_H;
+      const by = (((y - STACK_Y - 1) % BLOCK_H) + BLOCK_H) % BLOCK_H;
       if (bx === 0 || by === 0) {
         img.px(x, y, tone('stone', 0.04)); // the bed and perpend joints
         continue;
@@ -1312,23 +1521,47 @@ const chimney: Painter = (img) => {
         0.05 * Math.sin(x * 1.7 + y * 2.3);
       img.px(x, y, tone('stone', clamp(t)));
     }
-  img.rect(25, 7, 1, TILE - 7, tone('stone', 0.06)); // the stack's shaded right face
+  img.rect(25, STACK_Y, 1, TILE - STACK_Y, tone('stone', 0.06)); // the stack's shaded right face
 
   // Crown, overhanging the stack, with the flue's opening notched into its top. It keeps its lit
   // edge -- the stack went dark, and without one bright row the whole thing loses its top.
-  for (let y = 2; y < 8; y++)
+  for (let y = SMOKE_Y; y < STACK_Y; y++)
     for (let x = 3; x < 29; x++)
-      img.px(x, y, tone('stone', clamp(0.72 - 0.46 * ((y - 2) / 5) - 0.12 * ((x - 3) / 25))));
-  img.rect(3, 7, 26, 1, tone('stone', 0.08)); // the dark under-edge of the overhang
-  img.rect(11, 2, 10, 3, tone('night', 0.35)); // the flue
-  img.rect(11, 2, 10, 1, keyline('night', 10));
+      img.px(x, y, tone('stone', clamp(0.72 - 0.46 * ((y - SMOKE_Y) / 5) - 0.12 * ((x - 3) / 25))));
+  img.rect(3, STACK_Y - 1, 26, 1, tone('stone', 0.08)); // the dark under-edge of the overhang
+  img.rect(11, SMOKE_Y, 10, 3, tone('night', 0.35)); // the flue
+  img.rect(11, SMOKE_Y, 10, 1, keyline('night', 10));
 
   img.outline(STONE_LINE);
   // outline() cannot give the 2px band on the side the light does not reach, so the shade-side
   // keyline is thickened by hand -- against the stack only, where the mass is 20 wide. The crown is
   // left at one pixel: a second line beside a 6px-tall overhang reads as a loose tick floating off
   // the chimney rather than as a thicker edge.
-  img.rect(27, 9, 1, 23, STONE_LINE);
+  img.rect(27, STACK_Y + 2, 1, TILE - STACK_Y - 2, STONE_LINE);
+
+  /*
+   * The smoke, drawn last and deliberately after `outline()`, exactly as the note above `PLUME`
+   * says: vapour has no edge, and a near-black ring round each puff would read as three grey rocks
+   * floating over the roof. The board's cottage has a plume, which is most of what says somebody is
+   * home -- and this is the detail the whole errand is walking toward.
+   *
+   * Each puff is a lit sphere rather than a flat disc: a body at the puff's own tone with a
+   * brighter core set up and to the left, where the light comes from.
+   */
+  for (const [px, py, rx, ry, t] of PLUME) {
+    img.ellipse(px, py, rx, ry, tone('stone', clamp(t - 0.18)));
+    img.ellipse(px - rx * 0.28, py - ry * 0.28, rx * 0.6, ry * 0.6, tone('stone', clamp(t)));
+  }
+
+  /*
+   * The plume, LAST, after `outline()`, so the stonework keeps its silhouette and the smoke does not
+   * get one. Each puff is a darker body with a lit crown set up and to the left of it, from the same
+   * top-left sun as every other object on this building.
+   */
+  for (const [px, py, rx, ry, t] of PLUME) {
+    img.ellipse(px, py, rx, ry, tone('stone', clamp(t - 0.3)));
+    img.ellipse(px - 0.5, py - 0.6, rx - 0.7, ry - 0.5, tone('stone', clamp(t)));
+  }
 };
 
 export const COTTAGE_TILES: Record<string, Painter> = {
