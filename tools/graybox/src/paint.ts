@@ -254,6 +254,56 @@ export function noise(seed: number): () => number {
   };
 }
 
+/* ------------------------------------------------------- the three warm families, promoted here */
+
+/**
+ * `PALETTE` has no pink, no red and no russet: after the rebrand it has no saturated warm colour at
+ * all below `gold`. These four were built in `tiles/w-undergrowth.ts` for the flowers and the
+ * toadstool caps, measured against the board's own blooms, and they are MOVED here unchanged --
+ * `cast.ts` wants them for the rabbit's inner ears, nose and blush, `s-props.ts` for the stall cloth
+ * and the signpost, and a warm family reconstructed by every painter that happens to need one is how
+ * three slightly different reds end up in one frame. Appended rather than inserted, and nothing
+ * above this line is touched.
+ *
+ * `pull` keeps a palette tone's red channel and scales its green and blue down, which is the one
+ * transform that turns the warm ramps we own into the warm hues we do not: `gold` is a yellow whose
+ * green channel carries most of its luma, so taking that green down two thirds leaves a vermilion
+ * standing on gold's own value ladder, four stops and all. Every stop is still a `tone()` of a
+ * `PALETTE` entry and no hex is inlined.
+ *
+ * Probed off `reference/mocks/gameplay-concepts.png` at matched points:
+ *
+ *   family  source  at t = 1          ours       board          what it is for
+ *   rose    skin    #fff0e0  ->       #ff4648    #fb4346        pink petals, inner ears, a blush
+ *   ember   gold    #ffe88a  ->       #f74a21    #f74b23        vermilion petals, a warm garment
+ *   rust    wood    #c08f55  ->       #c0592c    #bf412e        toadstool caps
+ *
+ * None of this is a Cyera brand colour and none of it is a status colour. It is world art, the
+ * board's own flowers are the reference, and Lime still appears nowhere in the world.
+ *
+ * ON WHERE TO HOLD EACH ONE, because the obvious choice is wrong for two of the three. `rose` keeps
+ * the red channel untouched, so the top of its ramp is pinned near luma 165 -- lighter than the lawn
+ * it stands on, which is the one thing a flower must never be. Held over 0 to 0.42 its petals run
+ * 108 to 145, which is where the board's pink cross probes. `rust` is pulled harder than a straight
+ * reading of the probe asks because at `wood`'s own ratios a cap came out as a flat supermarket
+ * brown. Both are deliberate and both are recorded at their callers.
+ */
+export const pull = (c: RGBA, g: number, b: number): RGBA => [
+  c[0],
+  Math.round(c[1] * g),
+  Math.round(c[2] * b),
+  255,
+];
+
+/** The board's pink: a coral that leaves green and blue level. `skin` with the yellow taken out. */
+export const rose = (t: number): RGBA => pull(tone('skin', t), 0.5, 0.58);
+
+/** The board's red: a vermilion, blue well under green. `gold` with two thirds of its green out. */
+export const ember = (t: number): RGBA => pull(tone('gold', t), 0.32, 0.24);
+
+/** The toadstool cap: a russet, `wood` with half its green and a bit less of its blue taken down. */
+export const rust = (t: number): RGBA => pull(tone('wood', t), 0.55, 0.42);
+
 export class Img {
   readonly w: number;
   readonly h: number;

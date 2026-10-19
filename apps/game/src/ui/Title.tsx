@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'preact/hooks';
 import type { Content } from '@otp/core';
-import { Highlighted, WorldFrame } from './components';
+import { CyeraMark, Highlighted, WorldFrame } from './components';
 
 export interface TitleProps {
   content: Content;
@@ -36,6 +37,69 @@ export const PAD_HIDDEN_QUERY = '(pointer: fine) and (hover: hover)';
  */
 export const padIsHidden = (): boolean =>
   typeof matchMedia !== 'function' || matchMedia(PAD_HIDDEN_QUERY).matches;
+
+/**
+ * The media query that drops the Cyera wordmark out of the world frame's header, copied from the
+ * rule in panels.css that sets `.otp-world-frame__header .otp-mark { display: none }`.
+ *
+ * The header cannot grow and cannot wrap -- ui/stage.ts reserves exactly --otp-world-header pixels
+ * above the canvas -- so below 560px it gives up the mark, and the hero screen of a marketing asset
+ * was left carrying no brand at all: at 375 the header reads "00" and nothing else
+ * (docs/DESIGN_BOARD.md section 3, "the screens").
+ */
+export const FRAME_MARK_HIDDEN_QUERY = '(max-width: 560px)';
+
+/**
+ * Whether the frame header has dropped the wordmark, so the title card has to carry it.
+ *
+ * It is asked rather than always drawn because the answer must be exactly one mark. The board's
+ * page shows one; `WorldFrame` draws one in the header above 560px, and a second in the card
+ * underneath it would be two wordmarks on one screen, which the logo README does not allow.
+ *
+ * With no `matchMedia` -- a server or a test renderer -- it answers "not hidden", which is the
+ * conservative end: the screen may then be judged for a missing mark, but it can never ship two.
+ * The opposite default to `padIsHidden` above, for that reason and not by accident.
+ */
+export const frameMarkIsHidden = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia(FRAME_MARK_HIDDEN_QUERY).matches;
+
+/**
+ * The same question, asked continuously instead of once.
+ *
+ * `padIsHidden` above is matched per render and the comment there defends that, correctly: pointer
+ * and hover describe the machine, and a machine does not change mid-screen. WIDTH IS NOT LIKE
+ * THAT. It changes whenever a desktop window is dragged narrower and whenever a tablet is turned,
+ * and `Title` has no prop that changes when it happens -- so the answer taken at mount was the
+ * answer the screen kept. Measured on the running build, at 560px, before this hook existed:
+ *
+ *   load at 1280, narrow to 375   ->  0 marks   (header drops its copy, the card never adds one)
+ *   load at 375,  widen to 1280   ->  2 marks   (header adds its copy, the card still has one)
+ *
+ * Zero is the hero screen of a marketing asset carrying no brand at all, which is the defect
+ * docs/DESIGN_BOARD.md section 3 raised against 375 in the first place. Two is the one outcome
+ * reference/brand/logos/README.md does not allow, reached by the ordinary act of maximising a
+ * window. The invariant the card's mark exists to keep -- exactly one mark on the screen -- held
+ * only for a player who never resized.
+ *
+ * Lazily seeded from `frameMarkIsHidden` so the first paint is already right and nothing flashes,
+ * and so a renderer with no `matchMedia` keeps that function's conservative answer: not hidden,
+ * no second mark, never two.
+ */
+export function useFrameMarkHidden(): boolean {
+  const [hidden, setHidden] = useState(frameMarkIsHidden);
+
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const query = matchMedia(FRAME_MARK_HIDDEN_QUERY);
+    const sync = (): void => setHidden(query.matches);
+    // Once on mount as well: the viewport can cross 560px between the lazy seed and this effect.
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  return hidden;
+}
 
 /**
  * The line under the CTA, for a player the pad is or is not drawn for.
@@ -90,15 +154,32 @@ export function Title({ content, onPlay }: TitleProps) {
    */
   const hint = titleHint(content.strings, padIsHidden());
 
+  /*
+   * Subscribed, not sampled -- see useFrameMarkHidden. This is the one question on the screen
+   * whose answer a player can change without touching the game.
+   */
+  const markHidden = useFrameMarkHidden();
+
   return (
     <>
-      {/* The frame carries the wordmark instead of a chip reading "Cyera" out -- but only down to
-          560px, where panels.css hides it and the hero screen of a marketing asset is left with no
-          brand on it at all. The deck puts a mark at the top of the card; that needs a rule in
-          screens.css to sit there, so it is the CSS owner's to place (UX_REVIEW finding 11). */}
       <WorldFrame number="00" title="Title" />
       <div class="otp-title-dock">
         <div class="otp-title-panel">
+          {/*
+            The mark, where the deck puts it: above the wordmark, at the card's right edge. It is
+            drawn only on the widths where the frame header has dropped its own copy, so the screen
+            carries exactly one (see frameMarkIsHidden above).
+
+            `.otp-mark` is `display: block; margin-left: auto; flex: none`, and .otp-title-panel is
+            a flex column, so it lands top-right with no new rule -- which matters this round,
+            because the stylesheets have another owner.
+
+            THE GROUND IT SITS ON. White-on-dark is correct TODAY and only today: .otp-title-panel
+            is 88% Black, and docs/DESIGN_BOARD.md section 2 asks for that near-black half-screen to
+            go. The moment the panel takes a light ground this must become `on="light"`, per
+            reference/brand/logos/README.md -- a white wordmark on Shell is an invisible one.
+          */}
+          {markHidden && <CyeraMark />}
           <h1 class="otp-title__mark">
             <Highlighted text={s('title')} word={s('titleHighlight')} />
           </h1>

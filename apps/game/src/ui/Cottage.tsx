@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { ending } from '@otp/core';
 import type { Content, GameState } from '@otp/core';
-import { NotationChip, WorldFrame } from './components';
+import { WorldFrame } from './components';
 import { assetUrl } from '../world/assets';
 
 export interface CottageProps {
@@ -10,16 +10,32 @@ export interface CottageProps {
   onFinish(): void;
 }
 
+/**
+ * The advance mark, as the board draws it.
+ *
+ * The board's Arrive card (gameplay-concepts.png, crop `1536 1024 1536 1024 0.72`; the mark itself
+ * at `2880 1860 200 120 6`) ends on a small solid triangle pointing down -- a game's "there is more"
+ * prompt. This was a two-pixel stroked chevron, which at 3x reads as the scroll-down affordance off
+ * a web form rather than as a text advance. Solid, and a little wider than tall, like the board's.
+ *
+ * It is still drawn rather than typed: U+25BC is not in Haffer either (789 codepoints, probed
+ * against public/fonts/HafferUprightsVF.ttf), so the board's shape is only available as a path.
+ *
+ * MEASURED OFF THE BOARD, not guessed. Crop `2920 1890 110 90 6` and the mark is about 25 x 27
+ * board pixels -- very nearly equilateral, barely wider than it is tall. My first solid version was
+ * a 13 x 8 dart, which at 6x reads as a dropdown chevron with the stroke filled in rather than as
+ * the board's blunt wedge, so the shape went back to the board's ratio. 25px in the board's
+ * 1489px-wide frame is about 21px in our 1248px one; it is drawn a little under that because it is
+ * still inside a ring.
+ *
+ * That ring is `.otp-advance` in screens.css, which has another owner this round. The board has no
+ * ring -- the triangle sits bare in the card's corner with clear space around it -- and at the
+ * board's own size it would crowd a 34px circle. The ask is in the handback; this glyph is drawn to
+ * look right the day the ring goes and acceptable until then.
+ */
 const Caret = () => (
-  <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true" focusable="false">
-    <path
-      d="M5 7.5l5 5 5-5"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
+  <svg viewBox="0 0 20 21" width="20" height="21" aria-hidden="true" focusable="false">
+    <path d="M1 1h18L10 20z" fill="currentColor" />
   </svg>
 );
 
@@ -61,16 +77,24 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
 
   return (
     <>
-      <WorldFrame
-        number="04"
-        title={content.strings['arriveTitle'] ?? 'Arrive'}
-        aside={
-          <NotationChip
-            label=""
-            count={`${content.skills.length} of ${content.skills.length} skills decided`}
-          />
-        }
-      />
+      {/*
+        No chip in this header. It carried `<NotationChip label="" count="3 of 3 skills decided" />`
+        and three things were wrong with that at once:
+
+         - At 640px and below, panels.css hides `.otp-world-frame__header .otp-chip__count` -- it is
+           the longest string in a header that cannot grow -- so with an empty label the chip
+           degenerated to a purple pill holding one Lilac dot and nothing else. That is the
+           decorative "•••" that UI_FOUNDATIONS section 7 change 7 retired, drawn as a dot.
+         - The board's Arrive frame (gameplay-concepts.png, crop `1536 1024 1536 1024 0.72`) carries
+           a bare header: the numeral, the word, and nothing in the corner. The arrival is the
+           payoff shot and its chrome should be quiet.
+         - The count said nothing new. It is the same sentence the quest chip has been showing for
+           the whole walk, and Results restates it on the screen that carries the argument.
+
+        If a label is wanted here rather than silence, it needs a key in content/game.json, which
+        this round belongs to someone else -- the ask is in the handback as `arriveChip`.
+      */}
+      <WorldFrame number="04" title={content.strings['arriveTitle'] ?? 'Arrive'} />
       <div class="otp-layer otp-layer--arrive">
         <div class="otp-dialogue otp-arrive">
           <div

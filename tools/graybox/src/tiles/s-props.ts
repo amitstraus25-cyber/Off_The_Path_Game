@@ -53,8 +53,9 @@
  *              of crates, sacks and round wares; a barrel either side; a hanging sign on two rings
  *              carrying the skill's own icon. All of it ringed in near-black.
  *   signpost   TWO arrow boards on a capped post, pointed ends, visible grain and a knot. No writing.
- *   well       a ring of individual stone blocks around a capped timber post, a bucket on the rim.
- *              (The board's well has no roof; ours keeps one, in slate, per ART_PRODUCTION 6a.)
+ *   well       a ring of individual stone blocks around a capped timber post, a bucket on the rim,
+ *              and NO ROOF. Ours had one, in slate, per ART_PRODUCTION 6a; it is gone, because the
+ *              board has none and because rendered it was a bus shelter. See the note on `well`.
  *   lantern    a DARK slate lantern with a warm gold pane, on a cross-arm tenoned into a capped post.
  *
  * The previous pass flagged the barrel and the hanging sign as impossible without a map change.
@@ -1037,9 +1038,37 @@ const lanternPost: Painter = (img) => {
        * first pass, which made the two the same mass and the arm stopped reading as a cantilever. The
        * post is three, and the arm sits a row clear of the cap with its own shade under it.
        */
-      postV(s, 16, 6, 3, 23);
+      postV(s, 16, 6, 3, 20);
       capBlock(s, 15, 3, 5, 3);
 
+      /*
+       * THE STONE FOOTING, which is the board review's ask for this prop and which the post plainly
+       * needed: it ran to the tile's last row and ended in lawn, so the lamp read as a stick pushed
+       * into grass. A lit post on a public track stands on something, and the board's free-standing
+       * uprights all meet the ground on either worked stone or a band of tufts -- this one gets both.
+       *
+       * Two courses of the same `block()` the well and the fountain are built from, so the three
+       * pieces of stonework in this file agree with each other, stepped so the lower course is wider:
+       * a plinth, not a cube. The post's own keylines run down into it.
+       */
+      for (const [bx, bw] of [
+        [14, 4],
+        [18, 3],
+      ] as const)
+        block(s, bx, 26, bw, 3);
+      for (const [bx, bw] of [
+        [12, 4],
+        [16, 4],
+        [20, 3],
+      ] as const)
+        block(s, bx, 29, bw, 3);
+
+      /*
+       * The cross-arm, and the brace under it. The arm sits a row clear of the cap with its own shade
+       * beneath it, so it reads as a cantilever rather than as the top of the post. The brace is the
+       * mark that makes a cantilever believable at this size: a diagonal from the post's face up to
+       * the arm's underside, drawn twice -- a dark line and a lit one beside it.
+       */
       beamH(s, 7, 7, 12, 3);
       s.line(14, 13, 17, 10, tone('wood', 0.1));
       s.line(14, 12, 16, 10, tone('wood', 0.46));
@@ -1168,126 +1197,117 @@ const fountain: Painter = (img) => {
 /* ------------------------------------------------------------------- the well */
 
 /*
- * The well: stone, a shingled roof on two posts, a windlass with the rope wound on it, and a bucket.
+ * The well: a round stone drum of individually keylined blocks, a dark shaft, a capped timber post
+ * rising from the back of it, and a bucket on the rim.
  *
- * The board's own well is a ring of INDIVIDUAL blocks around a capped timber post, and that is what
- * the first painter missed: it drew two smooth ellipses with joint lines scratched on afterwards.
- * The ring is built from `block()` here, the same helper the fountain uses, so the two agree.
+ * THE ROOF IS GONE, AND THAT IS THE WHOLE CHANGE. Read this before putting one back.
  *
- * The board's well has no roof. Ours keeps one, because the brief asks for it and because section 6a
- * sends it onto slate with the cottage roof, painted from the same `roof` ramp so the two roofs in
- * this world stay the same roof.
+ * Rendered at 6x the prop was a wide flat grey pyramid on two legs with a pale grey lump under it,
+ * and "bus shelter" is exactly what it looked like -- the roof took eleven of the tile's thirty-two
+ * rows, it was the widest and lightest mass in the frame, and the stonework that actually says
+ * "well" was reduced to a four-row footnote beneath it. The head of product's board review names it
+ * twice.
+ *
+ * The concept board settles it. Crop `1360 570 170 210 5`: its well is a ROUND STONE DRUM, two or
+ * three courses of separately keylined blocks each round-lit on its own top-left, with the inside of
+ * the ring showing as a dark band at the back, and a square capped timber post standing up out of
+ * the middle of it. No roof, no posts either side, no windlass. The drum is the prop, it fills the
+ * frame, and it is the brightest stonework on the board -- pale block caps against near-black
+ * joints.
+ *
+ * THIS CONTRADICTS ART_PRODUCTION SECTION 6a, which sends the well's roof onto slate with the
+ * cottage's, and that document is not this element's to edit. The departure is deliberate and it is
+ * raised in the handback: 6a says what COLOUR the roof should be, and the board says there is no
+ * roof. The board wins, and 6a's sentence about this prop should be struck rather than honoured.
+ *
+ * What the drum gains from the eleven rows: it is now fourteen rows tall over three courses instead
+ * of eight over two, its rim reads from above with the shaft open in it, and its blocks are back up
+ * near the board's own value instead of being held down to avoid competing with a roof.
  */
 const well: Painter = (img) => {
   groundUnder(img, 1);
-  cast(img, 16.5, 30, 12.5, 3);
+  cast(img, 16.5, 30, 13, 3.2);
 
   stand(
     img,
     (s) => {
-      // Posts first; the roof sits on them and the stonework laps over their feet.
-      for (const px0 of [5, 24]) postV(s, px0, 9, 3, 17);
+      /*
+       * The post first; the stonework laps over its foot, which is what seats it IN the well rather
+       * than beside it. Square-section and capped, as the board's is, and set back of centre so the
+       * rim shows in front of it.
+       */
+      postV(s, 13, 8, 6, 16);
+      capBlock(s, 12, 5, 8, 3);
+      s.rect(12, 8, 1, 16, LINE.wood);
+      s.rect(19, 8, 1, 16, LINE.wood);
 
       /*
-       * Pitched roof: nine courses, each two pixels wider on a side than the one above it, and each
-       * a continuous fall across its own width with the slope darkening toward the eave. The
-       * per-shingle lit caps this used to draw in `roof[3]` were a 72-luma step every five pixels;
-       * what replaces them is a seven-luma lift on the same beat, which still reads as overlapping
-       * tiles at a 26-tile camera and costs nothing on any axis.
+       * The drum, as the board lays it: three staggered courses of blocks, each round-lit on its own
+       * top-left corner with its mortar as the last pixel of its own fall, clipped to a round
+       * footprint so the thing is a cylinder and not a wall.
        */
-      for (let r = 0; r < 9; r++) {
-        const y = 2 + r;
-        const half = 1 + r * 2;
-        const x0 = 16 - half;
-        const w = half * 2;
-        // Every third course breaks as a real shingle line. The previous pass ran these as a
-        // two-tenths dip inside a continuous fall and they quantised away to nothing: rendered at a
-        // 26-tile camera the roof came back as one flat grey triangle, which is most of why the
-        // brief calls this prop a bus shelter.
-        const seam = r % 2 === 1;
-        for (let i = 0; i < w; i++) {
-          const capped = (i + (r % 2 ? 2 : 0)) % 5 < 2 ? 0.12 : 0;
-          const t = roundT(i / (w - 1), 0.2, 0.2 + SPAN * 0.8, 0.2);
-          s.px(x0 + i, y, seam ? tone('roof', 0.04) : band('roof', t - (r / 8) * 0.12 + capped));
-        }
-      }
-      // The eave, and the fascia under it. Slate's own dark: a cool keyline band here read as a
-      // purple stripe across the widest line in the tile.
-      for (let i = 0; i < 30; i++) s.px(1 + i, 11, band('roof', roundT(i / 29, 0.04, 0.26, 0.2)));
-      for (let i = 0; i < 24; i++) s.px(4 + i, 12, tone('roof', 0.0));
-
-      // Windlass: a drum with the rope wound round it, and a crank on the right. The coils are a
-      // tonal ripple of about twenty luma; as alternating `path[1]`/`path[0]` pixels they were a
-      // corn cob and sixteen hard edges.
-      beamH(s, 7, 14, 18, 4);
-      for (let i = 0; i < 16; i++) {
-        const t = 0.3 + 0.16 * (1 + Math.cos((i / 3) * Math.PI * 2));
-        s.px(8 + i, 15, tone('path', t + 0.1));
-        s.px(8 + i, 16, tone('path', t - 0.08));
-      }
-      postV(s, 28, 15, 2, 4);
-      s.rect(25, 15, 3, 1, tone('wood', 0.24));
-
-      /*
-       * The stonework, as the board lays it: two staggered courses of blocks, each round-lit on its
-       * own top-left corner with its mortar as the last pixel of its own fall.
-       */
-      dome(s, 16, 25.2, 12, 4.6, 'stone', 0.0, 0.42);
+      dome(s, 16, 24, 13, 6.4, 'stone', 0.0, 0.42);
       for (const [bx, bw] of [
-        [5, 7],
-        [12, 6],
+        [3, 7],
+        [10, 6],
+        [16, 7],
+        [23, 6],
+      ] as const)
+        block(s, bx, 19, bw, 5);
+      for (const [bx, bw] of [
+        [5, 6],
+        [11, 7],
         [18, 6],
         [24, 5],
       ] as const)
-        block(s, bx, 23, bw, 5);
+        block(s, bx, 24, bw, 5);
       for (const [bx, bw] of [
-        [7, 6],
-        [13, 7],
-        [20, 6],
+        [8, 7],
+        [15, 6],
+        [21, 6],
       ] as const)
-        block(s, bx, 27, bw, 3);
-      clipEllipse(s, 16, 25.2, 12, 4.9, 23);
+        block(s, bx, 29, bw, 3);
+      clipEllipse(s, 16, 24, 13.4, 7.6, 19);
 
       /*
-       * The rim, and THE MOUTH, which is the whole prop.
-       *
-       * The brief says a player cannot tell from the render which objects they can talk to, and the
-       * well was the clearest case: it came back as a grey hat on a pale grey lump. The reason is
-       * that the one mark which says "well" -- an open dark shaft -- was not visible at all. It was
-       * drawn, at five pixels across, and then the bucket was parked dead centre on top of it.
-       *
-       * So the mouth is wide and genuinely dark now, and the bucket has moved off it onto the front
-       * left of the rim, which is where this file's own header always said the board puts it. A
-       * stone ring, a black hole and a bucket on a rope: three marks, and the prop announces itself
-       * from across the glade.
+       * The rim, and THE MOUTH, which is the whole prop. A stone ring, a dark hole and a bucket on a
+       * rope: three marks, and the prop announces itself from across the glade.
        */
-      dome(s, 16, 21.4, 12, 3.2, 'stone', 0.0, 0.12);
-      dome(s, 16, 21.1, 10.6, 2.4, 'stone', 0.1, 0.1 + SPAN * 0.55);
+      dome(s, 16, 17.4, 13, 3.6, 'stone', 0.0, 0.12);
+      dome(s, 16, 17.1, 11.4, 2.8, 'stone', 0.1, 0.1 + SPAN * 0.7);
       // The shaft, in the stone's own near-black rather than in `night`. `night` is the portrait
       // backdrop ramp and it is frankly purple: at 32px it put a violet fringe round the mouth of
       // a grey well, which is a hue this world has nowhere outside Red and the wolf.
-      s.ellipse(16, 22, 7.4, 2.1, LINE.stone);
-      s.ellipse(16.2, 21.6, 6.2, 1.4, tone('stone', 0.06));
+      s.ellipse(16, 18.2, 8.2, 2.3, LINE.stone);
+      s.ellipse(16.2, 17.8, 6.8, 1.5, tone('stone', 0.06));
 
       /*
        * Rope and bucket last, in front of the stonework -- drawn before it, the rim painted straight
-       * over both and left a windlass winding nothing.
+       * over both and left a rope hanging through solid stone. The rope runs down the post, which is
+       * what the post is for now that there is no windlass to wind it on.
        */
-      for (let j = 0; j < 3; j++) s.px(10, 15 + j, tone('path', 0.4));
-      s.line(10, 15, 15, 15, tone('path', 0.34));
-      // Taller than it is wide, which is the whole difference between a bucket and a satchel: at
-      // six by five the first version of this read as a brown pouch hung on the rim.
-      postV(s, 8, 18, 5, 8);
-      for (const hy of [19, 25]) sinkRun(s, 8, hy, 5, 1, 26);
+      for (let j = 0; j < 4; j++) s.px(10, 10 + j, tone('path', 0.4));
+      s.line(10, 10, 12, 9, tone('path', 0.34));
+      /*
+       * The bucket STANDS ON THE RIM, at the front left, which is where the board puts its own small
+       * round ware. Hung halfway up the post it floated in mid-air beside the stonework with nothing
+       * under it -- and the one thing a bucket has to do at this size is touch the thing it belongs
+       * to. Its foot now laps the rim's front face.
+       *
+       * Taller than it is wide, which is the whole difference between a bucket and a satchel: at six
+       * by five the first version of this read as a brown pouch hung on the rim.
+       */
+      postV(s, 6, 13, 5, 8);
+      for (const hy of [14, 20]) sinkRun(s, 6, hy, 5, 1, 26);
       // The handle, and the bucket's own keyline, which the ring cannot reach: it stands against
       // opaque stone on every side.
-      s.line(8, 18, 10, 16, LINE.wood);
-      s.line(10, 16, 12, 18, LINE.wood);
-      s.rect(7, 18, 1, 8, LINE.wood);
-      s.rect(13, 18, 1, 8, LINE.wood);
-      s.rect(8, 26, 5, 1, LINE.wood);
+      s.line(6, 13, 8, 11, LINE.wood);
+      s.line(8, 11, 10, 13, LINE.wood);
+      s.rect(5, 13, 1, 8, LINE.wood);
+      s.rect(11, 13, 1, 8, LINE.wood);
+      s.rect(6, 21, 5, 1, LINE.wood);
     },
-    LINE.roof,
+    LINE.stone,
   );
 };
 
@@ -1302,7 +1322,31 @@ const well: Painter = (img) => {
  * the honest thing at this size: a legible word would be a smear.
  */
 
-/** One arrow board: a plank with a chevron point on the ends that are pointed. */
+/**
+ * One arrow board: a plank with a chevron point on the ends that are pointed.
+ *
+ * THE TAPER IS A CURVE, NOT A RATE, AND EACH BOARD POINTS ONE WAY ONLY. Both are corrections, and
+ * both came out of putting the render beside `700 520 130 160 6`.
+ *
+ * A LINEAR taper -- one pixel a row, or 1.5, or 2.6 -- cannot draw this shape at any rate. At a
+ * small rate the end loses a few columns evenly down its height, which is a bevel, and the arm reads
+ * as a flattened hexagon: a bone, or a letterbox, which is the word the client used. At a large rate
+ * it loses them evenly and fast, and the arm reads as a spearhead, which is what 2.6 rendered as.
+ *
+ * Crop the board and count: its arm holds its FULL length across the middle four or five of its ten
+ * rows, then pulls in sharply over the outer two at each edge -- three columns, then five. So the
+ * profile is flat in the middle with a knee near the edges, and the only way to get that out of
+ * `|row - mid|` is to raise it to a power. `^2.2` on the normalised distance is the knee; five
+ * columns is the reach at the very edge. Flat tip, square shoulders, and it reads as an arrow.
+ *
+ * And they point ONE WAY EACH. The board's signpost is two arms on a post, the upper one pointed at
+ * its right and square at its left, the lower pointed at its left and square at its right -- a fork,
+ * drawn as two directions. Ours pointed the upper board at both ends, which says nothing: an arrow
+ * with two heads is a decoration. A square end also lets the arm read as having been CUT, which is
+ * what makes the pointed end read as deliberate.
+ */
+const TIP_REACH = 5;
+
 function arrowBoard(
   s: Img,
   y: number,
@@ -1313,8 +1357,8 @@ function arrowBoard(
 ): void {
   const mid = y + (h - 1) / 2;
   for (let row = 0; row < h; row++) {
-    // 1.5 rather than 1: a taper of one pixel a row makes a hexagon, not an arrow.
-    const taper = Math.round(Math.abs(y + row - mid) * 1.5);
+    const d = Math.abs(y + row - mid) / Math.max(1, (h - 1) / 2);
+    const taper = Math.round(Math.pow(d, 2.2) * TIP_REACH);
     const x0 = left + (tips.left ? taper : 0);
     const x1 = right - (tips.right ? taper : 0);
     const t = roundT(h < 2 ? 0.3 : row / (h - 1), 0.1, 0.9);
@@ -1341,46 +1385,80 @@ const signpost: Painter = (img) => {
      * takes it to the tile's last row, where the ring seats it with its own dark band.
      */
     postV(s, 13, 6, 5, 26);
-    capBlock(s, 12, 3, 7, 4);
+    /*
+     * The cap: NARROWER AND SHALLOWER. At seven wide by four deep on a five-wide post it was half
+     * again the post's width and a third of the visible post's height, which rendered as a mushroom
+     * head. The board's cap is a thin collar -- one pixel proud each side, two rows deep, with its
+     * own keyline -- and the post reads as a post because the cap barely interrupts it.
+     */
+    capBlock(s, 12, 4, 7, 3);
 
-    // The upper board, pointed at both ends: the fork.
-    arrowBoard(s, 9, 7, 1, 30, { left: true, right: true });
+    // The upper board, pointed at its right: the way on.
+    arrowBoard(s, 9, 8, 2, 29, { left: false, right: true });
     // The lower board, pointing back the way you came.
-    arrowBoard(s, 19, 6, 3, 26, { left: true, right: false });
+    arrowBoard(s, 20, 7, 3, 27, { left: true, right: false });
 
     // Grain, and a knot in each board -- a tonal ripple rather than a drawn dash. As hard
     // `wood[0]` lines at alpha 140 these four strokes alone were forty hard edges on one tile.
     for (const [gx, gy, gw] of [
       [6, 11, 6],
-      [18, 13, 7],
-      [8, 21, 5],
-      [17, 22, 6],
+      [19, 13, 6],
+      [8, 22, 5],
+      [18, 24, 6],
     ] as const)
       sinkRun(s, gx, gy, gw, 1, 11);
     for (const [kx, ky] of [
-      [23, 11],
-      [11, 22],
+      [23, 12],
+      [11, 23],
     ] as const)
       dome(s, kx, ky, 1.6, 1.1, 'wood', 0.1, 0.36);
 
     // Each board throws a line onto the post below it, and an interior keyline where it crosses --
     // the ring cannot see those edges, they are opaque against opaque.
-    for (const by of [16, 25]) {
+    for (const by of [17, 27]) {
       sinkRun(s, 13, by, 5, 1, 44);
       sinkRun(s, 13, by + 1, 5, 1, 22);
     }
-    s.rect(13, 8, 5, 1, LINE.wood);
-    s.rect(13, 18, 5, 1, LINE.wood);
+    s.rect(13, 9, 5, 1, LINE.wood);
+    s.rect(13, 20, 5, 1, LINE.wood);
+
+    /*
+     * The joint lozenge where each arm crosses the post. The board draws a small dark diamond at
+     * both crossings -- the nail plate -- and it is the one mark that says the arms are FIXED to the
+     * post rather than painted across it.
+     */
+    for (const jy of [12, 23]) {
+      s.rect(15, jy, 1, 3, LINE.wood);
+      s.rect(14, jy + 1, 3, 1, LINE.wood);
+      s.px(15, jy + 1, tone('wood', 0.3));
+    }
   });
 
-  // A couple of blades at the foot, so the post grows out of the grass instead of onto it.
+  /*
+   * The tuft ring at the foot. The board wraps a band of dark teal blades round the base of every
+   * free-standing upright it draws -- the signpost, the mailbox post, the well -- and that band is
+   * what makes the post grow OUT of the lawn instead of standing on it. Two single blades were not
+   * a band; they were two pixels.
+   *
+   * Each sprig is three blades of unequal height, the middle one tallest, in the grass ramp's own
+   * TWO DARKEST stops -- `grass[0]` at the base and `grass[1]` at the tip -- so it reads as grass in
+   * the prop's shade rather than as a new plant. The lit-tip convention (levels 2 and 1, which is
+   * what the two blades this replaces used) puts the blade at luma 157 against a lawn at about 180,
+   * which at 1x is a twenty-luma mark on green: it was drawn and it was not visible. The board's
+   * tufts are plainly the darkest green in their own patch.
+   */
   for (const [bx, by] of [
-    [12, 28],
-    [20, 29],
-  ] as const) {
-    img.px(bx, by, shade('grass', 2));
-    img.px(bx, by + 1, shade('grass', 1));
-  }
+    [8, 29],
+    [11, 30],
+    [19, 29],
+    [22, 30],
+  ] as const)
+    for (const [dx, up] of [
+      [0, 1],
+      [1, 2],
+      [2, 1],
+    ] as const)
+      for (let j = 0; j < up; j++) img.px(bx + dx, by - j, shade('grass', j === up - 1 ? 1 : 0));
 };
 
 /** Keys are the contract the map generator and the tileset both look these up by. */

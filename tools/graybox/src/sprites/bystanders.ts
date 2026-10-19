@@ -53,16 +53,17 @@
  *   - the snail's shell is Clay with a Haze whorl: `fur` is the palette's warm pale neutral and the
  *     closest it holds to Clay, and the whorl is `cloak` level 3, which IS Haze. One line of it.
  *   - the cat is a ginger tabby in `wood`.
- *   - the magpie is black and white: `fur` for the white, and -- as of 2026-10-19 -- the BOTTOM
- *     HALF of `night` for the black, where he used to be painted and outlined in literal `ink`.
- *     `docs/PIXEL_STANDARD.md` section 4 reserves `ink` for the wolf, who is the one character
- *     meant to read as a flat silhouette, and a second near-black bird in the same ramp is exactly
- *     what makes that reservation mean nothing. `tone('night', 0..0.5)` runs #1a1026 to #2d1b3d,
- *     luma 22 to 36: a blue-black, which is what a magpie's gloss actually is, a step lighter than
- *     `ink` 0 at luma 16 so the wolf keeps the darkest mass in the game, and capped below level 2
- *     because `night` 2 and 3 are byte-identical to Red's cloak. He carries almost no internal
- *     modelling as a result, and should not: on a bird this dark the white belly and the white
- *     primary flash are the structure, and that is how the board would draw him too.
+ *   - the magpie is black and white: `fur` for the white, and -- as of 2026-10-20 -- a NEUTRAL
+ *     near-black keylined off `stone` for the black. She has now been through all three near-blacks
+ *     the palette can reach. `ink` is reserved by `docs/PIXEL_STANDARD.md` section 4 for the wolf,
+ *     who is the one character meant to read as a flat silhouette, and a second near-black bird in
+ *     the same ramp makes that reservation mean nothing. `night` was the answer to that and it was
+ *     a violet: the design board's 2026-10-20 note is "it is currently purple-black rather than
+ *     black, the same ink family as Red's cloak", which is exactly what #1a1026 to #2d1b3d is.
+ *     `keyline('stone', 64..30)` runs #1f1f21 to #3e3e43, luma 31 to 66 -- a cool grey-black that
+ *     is nobody else's hue, with enough range for the lit crown the board gives every mass, and
+ *     with its keyline at luma 22 still clear of `ink` 0 at 16, so the wolf keeps the darkest mass
+ *     in the game. See the note over `MAGPIE_DARK` for the full argument.
  *
  * Outlines follow section 4 -- `keyline(ramp)`, the object's own darkest taken down with the hue
  * kept, not `shade(ramp, 0)`. The snail and the cat used to finish on `shade('stone', 0)` (luma 96)
@@ -114,38 +115,6 @@ function dome(img: Img, cx: number, baseY: number, rx: number, ry: number, c: RG
     const half = rx * Math.sqrt(1 - dy * dy);
     for (let x = Math.floor(cx - half); x <= Math.ceil(cx + half); x++)
       if (x + 0.5 >= cx - half && x + 0.5 <= cx + half) img.px(x, y, c);
-  }
-}
-
-/**
- * A logarithmic-ish spiral, drawn one pixel at a time. `dr` offsets the track outward, so the same
- * call drawn twice gives a groove and the lit line that rides just above it -- which is the only
- * way a whorl reads at this size. Four levels of Clay cannot carry a spiral on their own.
- *
- * `squash` flattens it in y, and it is not cosmetic. The shell it has to sit inside is an ellipse
- * now that the snail is 14 px tall, and a circular spiral in an ellipse escapes through the top: at
- * `squash` 0.94 -- the value this took as a constant while the shell was round -- the outermost
- * Haze turn stood two rows PROUD of the shell and carried the finished silhouette a pixel over its
- * body plan, which is how it was found.
- */
-function whorl(
-  img: Img,
-  cx: number,
-  cy: number,
-  r0: number,
-  turns: number,
-  phase: number,
-  dr: number,
-  squash: number,
-  c: RGBA,
-): void {
-  const steps = 320;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const a = phase + t * turns * Math.PI * 2;
-    const r = r0 * (1 - 0.86 * t) + dr;
-    if (r <= 0.5) continue;
-    img.px(cx + Math.cos(a) * r, cy + Math.sin(a) * r * squash, c);
   }
 }
 
@@ -260,9 +229,15 @@ const CAP_LINE = ((c: RGBA): RGBA => [c[0], Math.round(c[1] * 0.62), Math.round(
 function paintToadstool(img: Img, blink: boolean): void {
   const t = blink ? 1 : 0;
 
-  // --- stem: a short tapered column with a swollen base, lit down the left ---
+  /*
+   * --- stem: a short tapered column with a swollen base, lit down the left ---
+   *
+   * Eight columns wide rather than six. The face has to fit inside it with a clear column of stem
+   * down each side -- at six the two eyes took four of them and the pair sat against the silhouette
+   * edge, where `outline` crowds them and they read as two notches rather than as a face.
+   */
   for (let y = 38; y <= 46; y++) {
-    const hw = 2.8 + (y > 43 ? (y - 43) * 0.45 : 0);
+    const hw = 3.6 + (y > 43 ? (y - 43) * 0.45 : 0);
     const left = Math.round(16 - hw);
     const right = Math.round(16 + hw);
     img.rect(left, y, right - left, 1, shade('wall', 1));
@@ -272,7 +247,7 @@ function paintToadstool(img: Img, blink: boolean): void {
 
   // --- the ring: the torn veil, flared wider than the stem and catching light on its top face ---
   for (let y = 39; y <= 40; y++) {
-    const hw = 4.2 - (y - 39) * 1.2;
+    const hw = 5.0 - (y - 39) * 1.2;
     const left = Math.round(16 - hw);
     const right = Math.round(16 + hw);
     img.rect(left, y, right - left, 1, y === 39 ? shade('wall', 3) : shade('wall', 1));
@@ -282,37 +257,53 @@ function paintToadstool(img: Img, blink: boolean): void {
   /*
    * --- cap: full mass in shade, body inset up-left, the lit quarter kept to the top-left ---
    *
-   * The three levels are the tile's three levels, in the tile's order: `rust` 0 for the dark a
-   * pixel proud of everything, `rust` 1 for the cap proper, `rust` 2 for the quarter facing the
-   * light. He and `toadstoolRing` are the same mushroom at two sizes.
+   * THE LEVELS MOVED UP ONE, because the claim that this cap and the tile's were "the same mushroom
+   * at two sizes" turned out to be measurably false. A value census of both: the keyline agrees
+   * exactly (#331408, luma 28 on each), and the deep shade agrees within three levels -- but the
+   * TILE's dome carries its body between luma 95 and 121, where this sprite's cap proper was `rust`
+   * 1 at luma 83, below everything the tile paints. One step darker over the cap's largest area, and
+   * on grass beside the tile the two did read as one species in two ages.
+   *
+   * So the cap proper is `rust` 2 at 108, which is inside the tile's band; the lit quarter is
+   * `rust` 3 at 131, a touch above it, which is what a sprite with twice the diameter is for; the
+   * shaded flank comes up off the keyline onto `rust` 1 at 83, which gives the dome a third step
+   * where it only had two; and `rust` 0 at 56 stays as the pixel proud of everything.
+   *
+   * The rim light is now the same value as the lit quarter. That is not a loss -- a rim and the lit
+   * face of the same dome under one light ARE the same value -- and with the body at 108 there is no
+   * step left above `rust` 3 that is not a pink.
    */
   dome(img, 16, 38, 9.6, 7.0, rust(0));
-  dome(img, 15.4, 37.4, 9.0, 6.4, rust(1)); // the cap proper
-  dome(img, 13.6, 35.4, 5.6, 4.0, rust(2)); // the lit quarter only
+  dome(img, 15.4, 37.4, 9.0, 6.4, rust(2)); // the cap proper
+  dome(img, 13.6, 35.4, 5.6, 4.0, rust(3)); // the lit quarter only
   // The shaded flank: a crescent down the low right, where the dome turns away from the light.
   for (let y = 33; y <= 37; y++) {
     const dy = (y + 0.5 - 37.4) / 6.4;
     const half = 9.0 * Math.sqrt(Math.max(0, 1 - dy * dy));
     const edge = Math.round(15.4 + half);
-    img.rect(edge - 2, y, 2, 1, rust(0));
+    img.rect(edge - 2, y, 2, 1, rust(1));
   }
-  // Rim light along the very top of the dome, one pixel thick and no more. The tile is too small
-  // to carry a rim, so this is the one place the sprite says more than the tile does.
+  // Rim light along the very top of the dome, one pixel thick and no more.
   for (let x = 8; x <= 19; x++) {
     const dx = (x + 0.5 - 15.4) / 9.0;
     const y = Math.round(37.4 - 6.4 * Math.sqrt(Math.max(0, 1 - dx * dx)));
     img.px(x, y + 1, rust(3));
   }
 
-  // Gills: short radial ticks under the brim, deepest in the middle where the brim is widest.
-  // CAP_LINE rather than `rust` 0: the tile takes its gills a full keyline under the cap's own
-  // darkest, and at this size the brim needs that gap or the ticks vanish into the flank.
-  for (let x = 7; x <= 25; x += 2) {
-    const dx = (x + 0.5 - 16) / 9.6;
-    const depth = Math.round(2 * (1 - dx * dx));
-    for (let d = 0; d < depth; d++) img.px(x, 38 + d, CAP_LINE);
-  }
+  /*
+   * Gills: the SHADOW under the brim, and three ticks in it. Not a comb.
+   *
+   * This used to be a dark tick every second pixel right across the brim, nineteen pixels of
+   * alternating dark and cream, and rendered at size it was a row of five white squares with gaps
+   * between them sitting directly above the two eyes -- which reads as a mouth full of teeth, on a
+   * face that is supposed to be friendly. A brim is a dark band with a little structure in it; the
+   * band does the work and the ticks only hint at what it is made of.
+   *
+   * CAP_LINE rather than `rust` 0: the tile takes its gills a full keyline under the cap's own
+   * darkest, and at this size the brim needs that gap or the band vanishes into the flank.
+   */
   img.line(6, 38, 25, 38, CAP_LINE);
+  img.rect(9, 39, 14, 1, CAP_LINE);
 
   // Spots: a dark seat, a mid face, a cream core inset up-left, so each one sits on the curve.
   // `wall` rather than `fur`, which is what the live tile spots this cap with: the cottage cream
@@ -328,29 +319,49 @@ function paintToadstool(img: Img, blink: boolean): void {
   }
 
   /*
-   * Face, well inside the stem so the outline never eats an eye. The brow bar above each eye is
-   * what stops the pair reading as two holes punched in the stem -- and it also gives him the
-   * expression of somebody about to tell you the way whether or not you asked.
+   * Face, well inside the stem so the outline never eats an eye.
+   *
+   * It did not read at all before this pass, and both reasons were measurable. The brow was
+   * `wall` 0 on a `wall` 1 stem -- 41 luma, which is nothing at six pixels -- and the eyes sat
+   * directly under it, so brow and eye were one 3-row dark mark that the brim's own shadow then
+   * swallowed. Now the brow is CAP_LINE, the same dark the brim is drawn in, and there is a clear
+   * row of lit stem between it and the eye: brow, stem, eye, then three rows of blank stem below.
+   * Those three rows are the toadstool's cheek and chin, and they are where the whole expression
+   * lives -- the same finding the design board made about the rabbit's missing chin.
    */
   for (const ex of [13, 17]) {
-    img.rect(ex, 41, 3, 1, shade('wall', 0));
+    img.rect(ex, 41, 2, 1, CAP_LINE);
     if (!blink) {
-      img.rect(ex, 42, 2, 2, CAP_LINE);
-      img.px(ex, 42, shade('wall', 3));
+      img.rect(ex, 43, 2, 2, CAP_LINE);
+      img.px(ex, 43, shade('wall', 3));
     } else {
-      img.rect(ex, 43, 2, 1, CAP_LINE);
+      img.rect(ex, 44, 2, 1, CAP_LINE);
     }
   }
 
   /*
    * The twig arm, held out with great authority, pointing at nothing in particular.
    *
+   * IT HAS TO BE IN CLEAR AIR, AND IT HAS TO START OUTSIDE THE STEM. It was drawn from inside the
+   * stem up and to the right into the rows the cap occupies, so every pixel after the first two was
+   * painted over the cap's own shaded flank, in `wood` against `rust`: what rendered was a brown
+   * smudge on the mushroom's right cheek -- no arm, no point, no gesture, and the one thing that
+   * makes him a character rather than scenery simply absent. Dropping it to the stem's own rows was
+   * worse, because at 1.8 px the root then landed on top of the right eye.
+   *
+   * So it is held LEVEL, at rows 41 to 42, leaving the stem's right edge at x 20 and running out to
+   * x 26 -- open sky from the cap's brim (row 39, out to x 22) all the way down. A level arm is also
+   * the funnier one: a signpost's arms are horizontal, and he is convinced he is a signpost.
+   *
    * Thin. A twig drawn three pixels wide is a club: the shape that says "branch" is the taper plus
-   * the side shoot, not the mass. One shoot now rather than two -- at this length two is a hand.
+   * the side shoot, not the mass. One shoot -- at this length two is a hand.
    */
-  taper(img, 19.4, 41 - t, 24.2, 38.6 - t, 1.8, 0.9, shade('wood', 0));
-  taper(img, 19.4, 40.6 - t, 24.0, 38.4 - t, 1.0, 0.8, shade('wood', 2));
-  taper(img, 22.2, 39.6 - t, 23.6, 37.0 - t, 1.2, 0.8, shade('wood', 0));
+  taper(img, 20.2, 42.4 - t, 26.0, 41.8 - t, 1.8, 0.9, shade('wood', 0));
+  taper(img, 20.2, 42.0 - t, 25.8, 41.5 - t, 1.0, 0.8, shade('wood', 2));
+  // The side shoot goes DOWN. Raised, it ran into the two rows directly under the brim, where the
+  // brim's own dark and the outline that follows it swallowed every pixel of it; below the arm it is
+  // in open grass and it is the mark that makes the limb a twig rather than a stick.
+  taper(img, 23.0, 42.2 - t, 24.2, 44.0 - t, 1.2, 0.8, shade('wood', 0));
 
   base(img, 11, 21, 47, CAP_LINE);
   img.outline(CAP_LINE);
@@ -358,108 +369,247 @@ function paintToadstool(img: Img, blink: boolean): void {
 
 // ----------------------------------------------------------------------------- the magpie
 
-/** His near-black, and the wolf still owns the darker one. See the header on `night`. */
-const MAGPIE_DARK: RGBA = keyline('night', 10);
-/** The plumage, capped below `night` level 2 so it never reaches Red's purple. */
-const PLUMAGE = (t: number): RGBA => {
-  const a = shade('night', 0);
-  const b = shade('night', 1);
+/** Mix two palette colours. Both ends come from `PALETTE`, so no raw hex enters the file. */
+const mix = (a: RGBA, c: RGBA, t: number): RGBA => {
   const k = Math.max(0, Math.min(1, t));
   return [
-    Math.round(a[0] + (b[0] - a[0]) * k),
-    Math.round(a[1] + (b[1] - a[1]) * k),
-    Math.round(a[2] + (b[2] - a[2]) * k),
+    Math.round(a[0] + (c[0] - a[0]) * k),
+    Math.round(a[1] + (c[1] - a[1]) * k),
+    Math.round(a[2] + (c[2] - a[2]) * k),
     255,
   ];
 };
+
+/**
+ * HER BLACK IS NEUTRAL NOW, and that is the design board's finding of 2026-10-20: "it is currently
+ * purple-black rather than black, the same ink family as Red's cloak."
+ *
+ * It was `night` 0 to 1, #1a1026 to #2d1b3d. Those are violets -- the blue channel runs half again
+ * the red and nearly four times the green -- and the file's old header argued for them on the
+ * grounds that a magpie's gloss is a blue-black. The gloss is, in three pixels on the wing; the
+ * other two hundred are plain black, and painting the whole bird in Red's own hue family put a
+ * small purple animal in a forest whose one purple thing is supposed to be the protagonist.
+ *
+ * `stone` is the palette's neutral, #5f5f66, six points of blue over a flat grey. Taken down by
+ * `keyline` the ratio is kept exactly, so the whole plumage is a cool near-black that is not any
+ * character's hue: #1f1f21 to #353539, luma 31 to 54. The wolf keeps the darkest mass in the game
+ * -- `ink` 0 is luma 16 and his keyline 14, both under this bird's keyline at 22 -- which was the
+ * one real constraint the `night` choice was serving.
+ */
+const MAGPIE_DARK: RGBA = keyline('stone', 74);
+
+/** The plumage, cool near-black, nowhere near Red's purple. */
+const PLUMAGE = (t: number): RGBA => mix(keyline('stone', 64), keyline('stone', 30), t);
+
+/**
+ * The wing gloss: `water` 0 taken most of the way down to the plumage, which lands at luma 58 -- a
+ * deep blue a clear 27 levels above the feathers it sits in.
+ *
+ * `water` 0 neat is luma 99 and a strong cerulean, and three pixels of it on the wing came back as
+ * a little blue FLAG rather than as iridescence. A magpie's gloss is a dark blue that you notice
+ * only when the light catches it, which is what a value this close to the feather does.
+ */
+const GLOSS: RGBA = mix(keyline('stone', 64), shade('water', 0), 0.45);
+
+/** The bill, lit and shaded. Horn, not gold: see the note on the bead at the foot of the painter. */
+const HORN: RGBA = shade('stone', 1);
+const HORN_DARK: RGBA = keyline('stone', 18);
 
 /**
  * Repeats whatever she last overheard, and is holding a bead she is not going to give back.
  *
  * Perched and facing left, 28 across and 22 high, and the proportion IS the character: she is the
  * only thing in the cast whose silhouette is a long horizontal wedge. Section 10.2 spells out what
- * makes it one -- a 14 px tail behind a 12 px body, carried level rather than swept down -- and
- * that is the single change from the old sprite that matters. At 31 x 36 with the tail raked down
- * to the bottom corner she was a dark upright lump with a point on it, which at 24 px is the
- * toadstool, the snail and the owl as well.
+ * makes it one -- a 14 px tail behind a 12 px body, carried level rather than swept down.
  *
- * Three things make a magpie rather than a generic black bird and all three still get real pixels:
- * the white belly, the white flash along the folded wing, and that tail. The belly and the flash do
- * all of the structural work now, because the plumage is a near-flat blue-black by design -- see
- * the note on `night` in the header.
+ * WHAT THE DESIGN BOARD SENT BACK (2026-10-20), after a first pass fixed the white and the gold and
+ * the bird still failed: "one near-black horizontal wedge with a white belly patch, a white wing
+ * dash, a gold beak nub and a blue tail dash. THE HEAD DOES NOT SEPARATE FROM THE BODY AND THERE IS
+ * NO EYE, which is why it reads as a slug with a horn. A magpie is read by its head-body-tail
+ * articulation before it is read by its colours."
+ *
+ * That is a drawing about ARTICULATION, and the previous pass answered it with pattern. Every mark
+ * below is one of the four joints the board named, and the colour is what is left over.
+ *
+ * 1. THE HEAD IS SET OFF BY A NECK, not by a value. Head, breast and wing were three overlapping
+ *    ellipses of near-identical width, so the outline ran unbroken from the bill to the tail and
+ *    there was no silhouette event anywhere along it -- which is the whole of "it reads as a slug".
+ *    The neck is now a stroke NARROWER THAN EITHER MASS, five pixels between a nine-pixel skull and
+ *    an eleven-pixel body, which pinches the outline twice: a notch under the jaw at the front and
+ *    a step at the nape behind. Both are transparent pixels, so `outline` keylines each side of
+ *    them, and both survive to the 26-tile camera because they are shape rather than shading.
+ *
+ * 2. THE EYE IS THE BOARD'S OWN EYE. `reference/mocks/gameplay-concepts.png` at `650 270 120 130 8`
+ *    is the board's bird, and its eye is a third of the width of its head: a hard white ring, a
+ *    near-black pupil inside it, and a bright glint at the upper left. Ours was a three-pixel pale
+ *    field with a two-pixel pupil in it, which leaves half a pixel of white and renders as a smudge
+ *    on the rim of the skull. It is now five across with two of pupil, set in the middle of the
+ *    head with black all round it. On a bird whose plumage spans twenty-three luma, the eye is the
+ *    only high-contrast mark the head can carry, and it is what makes the head a head.
+ *
+ * 3. THE BILL IS PALE AND IT BREAKS THE FRONT. A dark bill on a dark head is not a bill at any
+ *    size, and the previous one -- plumage-coloured, two pixels of gold at the tip -- gave the
+ *    board "a gold beak nub". Horn grey off `stone`, luma 66 under and 143 along the lit top edge,
+ *    held clear of the head so the keyline gets all the way round the point.
+ *
+ * 4. THE TAIL IS HELD APART. It used to leave the BOTTOM of the body and continue its underside,
+ *    which makes one wedge however long it is drawn. It now leaves the rump HIGH and narrow, and
+ *    the body's belly line rises steeply behind the legs to get out from under it -- so from the
+ *    rump back there is sky above the tail and sky below it, and the eye reads body, stick, tip.
+ *
+ * The pattern that survived the rewrite, because the board liked it: a white belly carried as one
+ * low mass, a white scapular patch on the shoulder, and the iridescence as three touching pixels on
+ * the wing's trailing edge rather than one blue pixel on the tail.
  */
 function paintMagpie(img: Img, blink: boolean): void {
-  const b = blink ? 1 : 0;
-
-  // --- legs and feet, planted; they never bob ---
-  for (const lx of [9, 13]) {
-    img.rect(lx, 42, 2, 4, shade('gold', 0));
-    img.rect(lx, 42, 1, 4, shade('gold', 1));
-    img.rect(lx - 1, 46, 4, 1, shade('gold', 1));
-    img.px(lx - 1, 46, shade('gold', 0));
-    img.px(lx + 2, 46, shade('gold', 0));
-  }
+  const b = blink ? 1 : 0; // the head dips; the feet, the body and the tail are planted
 
   /*
-   * TAIL: level, long, and cut away from the body by a lit line along its whole upper edge.
+   * TAIL, drawn first and so behind everything. It leaves the rump HIGH -- its axis runs from row
+   * 36 to row 38.4 while the body's belly reaches row 44 -- and it is four pixels at the root under
+   * an eleven-pixel body. Those two facts are the whole of joint 4: from column 19 back, the only
+   * thing in the frame is a narrow bar with air above it and air below it.
    *
-   * The separation between wing and tail is that line and nothing else at the size a player sees.
-   * With the tail painted in the body's own value under a wing painted in the same, the whole back
-   * half came back as one dark wedge and the bird read as a puffin.
+   * The underside is the keyline value rather than a plumage step, because the one place a tail has
+   * to read against the ground is its bottom edge.
    */
-  taper(img, 14.6, 37.6 + b, 27.2, 38.8 + b, 7.4, 2.8, PLUMAGE(0.1));
-  taper(img, 14.6, 37.0 + b, 26.8, 38.0 + b, 5.6, 1.8, PLUMAGE(0.55));
-  taper(img, 17.0, 39.4 + b, 27.0, 39.8 + b, 1.2, 1.0, PLUMAGE(0));
-  img.px(24, 38 + b, shade('water', 0)); // the sheen a magpie really has: two pixels, not forty
-  img.px(25, 38 + b, shade('water', 0));
-
-  // --- body: mass, then the lit cap on the breast ---
-  img.ellipse(10.5, 37.0 + b, 5.6, 5.0, PLUMAGE(0.1));
-  img.ellipse(9.9, 36.4 + b, 5.0, 4.4, PLUMAGE(0.4));
-  img.ellipse(8.6, 34.4 + b, 3.0, 2.6, PLUMAGE(0.75));
+  taper(img, 16.6, 36.2, 26.6, 38.6, 3.8, 2.4, PLUMAGE(0.08));
+  taper(img, 16.6, 35.8, 26.2, 38.1, 2.2, 1.2, PLUMAGE(0.55));
+  taper(img, 18.4, 37.8, 26.6, 39.8, 1.1, 1.0, MAGPIE_DARK);
+  // Graduated tip: a magpie's central feathers are the longest, so the end steps rather than
+  // rounding off. Two pixels of it, which is all 22 rows can spare and all the shape needs.
+  img.rect(26, 38, 2, 2, PLUMAGE(0.22));
+  img.rect(27, 39, 2, 1, PLUMAGE(0.08));
 
   /*
-   * White belly, then the black breast painted back over its top. A white ellipse on its own came
-   * back as an egg stuck to the bird; what makes it plumage is the hard curved boundary where the
-   * black bib ends, which only exists if something is drawn over it afterwards.
+   * BODY: breast in front, rump behind, and the rump deliberately SHORTER and HIGHER so the belly
+   * line climbs away from the tail instead of running level into it.
    */
-  img.ellipse(9.2, 39.6 + b, 4.0, 3.0, shade('fur', 1));
-  img.ellipse(8.8, 39.0 + b, 3.4, 2.4, shade('fur', 3));
-  img.ellipse(9.6, 34.8 + b, 4.6, 3.0, PLUMAGE(0.4));
-  img.ellipse(8.4, 33.6 + b, 2.8, 2.0, PLUMAGE(0.75));
+  img.ellipse(13.0, 39.2, 5.0, 4.8, PLUMAGE(0.08));
+  img.ellipse(16.0, 38.8, 3.4, 3.9, PLUMAGE(0.08));
+  img.ellipse(12.6, 38.4, 4.3, 4.1, PLUMAGE(0.52));
 
-  // --- folded wing over the back, then the white primary flash in one clean wedge ---
-  taper(img, 10.4, 33.6 + b, 15.0, 40.4 + b, 5.6, 3.4, PLUMAGE(0.05));
-  taper(img, 10.2, 33.2 + b, 14.6, 39.6 + b, 4.4, 2.4, PLUMAGE(0.45));
-  taper(img, 13.2, 37.6 + b, 15.0, 41.4 + b, 2.8, 1.8, shade('fur', 3));
+  /*
+   * THE NECK -- joint 1, and the single most important stroke in the sprite. Five pixels between a
+   * nine-pixel skull and an eleven-pixel body, running up and forward, so the outline is pinched
+   * under the jaw at the front and steps three rows at the nape behind.
+   */
+  taper(img, 10.4, 33.6 + b, 13.2, 35.8, 5.2, 6.2, PLUMAGE(0.34));
 
-  // --- head: a trough under the jaw, or head and breast are one unbroken black lump ---
-  img.ellipse(7.2, 31.2 + b, 4.0, 3.8, PLUMAGE(0.1));
-  img.ellipse(6.8, 30.8 + b, 3.4, 3.2, PLUMAGE(0.5));
-  img.ellipse(5.8, 29.4 + b, 2.0, 1.6, PLUMAGE(0.85));
-  taper(img, 4.6, 34.0 + b, 11.4, 35.0 + b, 1.4, 1.2, PLUMAGE(0));
+  /*
+   * THE WHITE UNDERSIDE, drawn as ONE low block along the whole bottom of the body and terminating
+   * hard where the black rump begins.
+   *
+   * It was three whites two passes ago -- a belly, a scapular and a separate primary flash -- and
+   * rendered on grass they joined into one diagonal slash and the bird came back wearing a sash.
+   * Three pale marks is a polka dot at 22 rows.
+   */
+  img.ellipse(12.8, 41.4, 4.6, 2.4, shade('fur', 1));
+  img.ellipse(12.2, 40.9, 3.0, 1.3, shade('fur', 3));
 
-  // --- bill: long and pointed, lit on the upper mandible with a gape line under it ---
-  taper(img, 5.4, 32.2 + b, 3.4, 33.0 + b, 2.8, 1.0, PLUMAGE(0.4));
-  taper(img, 5.4, 31.8 + b, 3.6, 32.6 + b, 1.6, 0.8, PLUMAGE(0.85));
-  img.line(5.0, 33.0 + b, 3.6, 33.4 + b, PLUMAGE(0));
+  /*
+   * FOLDED WING: a big mass over the whole flank, from behind the shoulder back to the tail root,
+   * and DARKER than the back above it, because the light is up and to the left and a folded wing is
+   * the side of the bird. That one step is what lets the scapular read as being above the wing
+   * rather than beside it.
+   */
+  taper(img, 13.6, 37.4, 17.4, 40.4, 5.6, 3.4, PLUMAGE(0.12));
+  taper(img, 13.4, 37.0, 16.8, 39.6, 4.0, 2.0, PLUMAGE(0.3));
+  // The sheen a magpie really has, on the WING, along its trailing edge where the gloss catches.
+  // TOUCHING pixels, hard against the seam: set on a diagonal with corners only between them they
+  // came back as three rivets punched in the wing, and out in the middle of the mass they read as
+  // damage. Forty of them would be a kingfisher.
+  img.rect(16, 37, 1, 2, GLOSS);
+  // The seam where the wing crosses the tail root: the only thing at this size saying these are two
+  // limbs rather than one wedge.
+  img.line(17.4, 36.6, 18.2, 40.4, MAGPIE_DARK);
 
-  // --- eye ---
+  /*
+   * THE WHITE SCAPULAR, an oval laid along the shoulder immediately behind the neck and one row in
+   * from the back line, so black nape, white shoulder, black wing read as three bands rather than
+   * as a patch stuck on the skyline. It is the mark that tells a magpie from a crow, and sitting
+   * where it does it also does the work of the pale collar the board offered as the alternative to
+   * a silhouette step. We have both.
+   */
+  img.rect(12, 35, 4, 2, shade('fur', 1));
+  img.px(15, 36, PLUMAGE(0.3)); // the lower-back corner off, so it is a patch and not a label
+  img.rect(12, 35, 3, 1, shade('fur', 3));
+
+  /*
+   * HEAD: a round skull nine across and eight deep, carried forward of the breast and above it,
+   * with its own lit crown up and to the left (docs/PIXEL_STANDARD.md section 3).
+   *
+   * No drawn jaw line. The previous pass ran one in the keyline value under the skull and it came
+   * back as a black bar across the throat -- the head needs the outline's own edge there and
+   * nothing else, which is what the notch between chin and breast now gives it.
+   */
+  img.ellipse(8.6, 31.2 + b, 4.3, 4.1, PLUMAGE(0.08));
+  img.ellipse(8.2, 30.8 + b, 3.5, 3.3, PLUMAGE(0.5));
+  img.ellipse(7.3, 29.3 + b, 1.9, 1.4, PLUMAGE(0.74));
+
+  /*
+   * BILL -- joint 3. Short, heavy, POINTED and PALE, coming off the lower front of the skull on the
+   * row under the eye and projecting two columns clear of it, so `outline` gets a dark edge the
+   * whole way round the point. Integer rows, so the upper mandible is one pixel longer than the
+   * lower and the bill ends in a point rather than in a blunt grey tube.
+   */
+  img.rect(4, 32 + b, 4, 1, HORN);
+  img.rect(5, 33 + b, 3, 1, HORN_DARK);
+
+  /*
+   * EYE -- joint 2, and the owl's own construction from `cast.ts`: INTEGER pixels, never an ellipse,
+   * because at this radius the rasteriser's answer depends on the sub-pixel phase of the centre and
+   * what came back last pass was a white hook rather than a ring.
+   *
+   * Four by four of white with a two-by-two pupil inside it is the board owl's 0.47 ratio, so a
+   * whole pixel of white survives on every side, and the head carries a row of brow above it and
+   * three of cheek below. The four corners come off again afterwards, or a ring this small reads as
+   * a square label rather than as an eye. There is no catchlight: one pixel of `fur` 3 inside a
+   * `fur` 1 ring is 25 luma on a mark four pixels wide, which is not a glint, it is a dirty pixel
+   * -- on a head this dark the ring itself is the light.
+   */
   if (!blink) {
-    img.ellipse(6.4, 30.4 + b, 1.7, 1.7, shade('fur', 3));
-    img.ellipse(6.7, 30.6 + b, 1.1, 1.1, PLUMAGE(0));
-    img.px(6, 29 + b, shade('fur', 3));
+    img.rect(7, 28 + b, 4, 4, shade('fur', 1));
+    for (const [cx, cy] of [
+      [7, 28],
+      [10, 28],
+      [7, 31],
+      [10, 31],
+    ] as const)
+      img.px(cx, cy + b, PLUMAGE(0.08)); // the corners off, so the ring is round and not a patch
+    img.rect(8, 29 + b, 2, 2, PLUMAGE(0));
   } else {
-    img.rect(5, 31 + b, 3, 1, PLUMAGE(0));
-    img.rect(5, 30 + b, 3, 1, PLUMAGE(0.7));
+    // The lid closes to the lower half of the ring, so the eye shuts rather than vanishing.
+    img.rect(7, 30 + b, 4, 1, shade('fur', 1));
+    img.rect(7, 29 + b, 4, 1, MAGPIE_DARK);
   }
 
-  // --- the bead she is not going to give back ---
-  img.ellipse(4.2, 36.0 + b, 1.6, 1.6, shade('gold', 0));
-  img.ellipse(4.0, 35.8 + b, 1.1, 1.1, shade('gold', 2));
-  img.px(4, 35 + b, shade('gold', 3));
+  /*
+   * LEGS: dark with a lit front edge, which is what a magpie's legs are. Gold ones put a pair of
+   * brass pins under a black bird and were half of the board's "bell" read two passes ago.
+   *
+   * SHORT. At four rows of leg over a foot bar and a contact row, the bottom five of her twenty-two
+   * went to undercarriage and she stood up like a wader; the board's own bird gives its feet two
+   * rows out of twenty-six.
+   */
+  for (const lx of [11, 15]) {
+    img.rect(lx, 44, 2, 3, PLUMAGE(0));
+    img.rect(lx, 44, 1, 2, HORN_DARK);
+    img.rect(lx - 1, 46, 3, 1, MAGPIE_DARK);
+    img.px(lx, 46, HORN_DARK);
+  }
 
-  base(img, 7, 16, 47, MAGPIE_DARK);
+  /*
+   * The bead she is not going to give back: ONE bright pixel, gripped at the tip of the bill.
+   *
+   * It was a 3 px ellipse of `gold` 0 round a `gold` 2 core, held level with the bill, and the
+   * board's note was that the gold hook read as a bell. Two pixels later it was reading as a yellow
+   * BEAK, which is a blackbird. One pixel of `gold` 3 on a horn-grey bill is 85 luma above what it
+   * sits on: a glint of something carried, with none of the hardware.
+   */
+  img.px(3, 32 + b, shade('gold', 3));
+
+  base(img, 11, 16, 47, MAGPIE_DARK);
   img.outline(MAGPIE_DARK);
 }
 
@@ -467,6 +617,18 @@ function paintMagpie(img: Img, blink: boolean): void {
 
 /** His keyline: `stone` 0 is luma 96 and outlines nothing (section 13 item 16). This is luma 36. */
 const SNAIL_DARK: RGBA = keyline('stone', 60);
+
+/**
+ * The groove the shell's coil is cut with: `stone` 0 taken two thirds of the way down to the
+ * keyline, which lands at luma 60.
+ *
+ * `stone` 0 neat is luma 96 under a shell at 194 to 230, and that is what the old spiral was drawn
+ * in -- rendered on grass it came back as grey blotches scattered over cream rather than as a coil.
+ * Sixty is 140 under the shell's lit face and still a clear 24 above SNAIL_DARK, so the coil reads
+ * as a groove in the shell and not as the shell's own outline, which is the mistake the design
+ * board caught on the rabbit's eyes.
+ */
+const SHELL_GROOVE: RGBA = mix(shade('stone', 0), SNAIL_DARK, 0.66);
 
 /**
  * Delivering a parcel. He set out on Tuesday. It is going very well.
@@ -490,48 +652,103 @@ const SNAIL_DARK: RGBA = keyline('stone', 60);
 function paintSnail(img: Img, blink: boolean): void {
   const b = blink ? 1 : 0;
 
-  // --- foot: one long low wedge with the head end raised, and nothing that could read as a leg ---
-  // The sole is the widest thing on him (10.2 says the shell; the sole is what carries it) and its
-  // radius is measured rather than chosen: at 11.8 he came back 26 wide, which is inside the
-  // toadstool's width band, and 10.2's own figures for those two share both bands. See BYSTANDER_PLAN.
-  img.ellipse(16.4, 43.8, 12.2, 2.4, SNAIL_DARK);
-  // The sole keeps `stone` 0 at luma 96 for its face and gives `stone` 2 only a thin lit top edge.
-  // Lit across its whole width -- which is how it was drawn when the shell sat 27 rows above it --
-  // a luma-180 sole under a luma-230 shell merges into one pale mound, and at 14 px tall the sole
-  // and the shell are the only two masses he has.
-  img.ellipse(16.0, 43.4, 11.4, 2.0, shade('stone', 0));
-  img.ellipse(15.4, 42.9, 10.0, 1.1, shade('stone', 2));
+  /*
+   * --- foot: one long low wedge with the head end raised, and nothing that could read as a leg ---
+   *
+   * The sole is the widest thing on him (10.2 says the shell; the sole is what carries it) and its
+   * radius is measured rather than chosen: at 11.8 he came back 26 wide, which is inside the
+   * toadstool's width band, and 10.2's own figures for those two share both bands. See BYSTANDER_PLAN.
+   *
+   * THE BODY STAYS IN THE BOTTOM HALF OF `stone`. It used to finish on `stone` 3 at luma 210 at the
+   * head end, which is the shell's own value, so the two masses met and the whole animal rendered as
+   * one pale mound with marks on it. He has exactly two masses at 14 px -- a grey body and a cream
+   * shell -- and they have to be told apart by value before anything inside either one can matter.
+   * Also one row shallower on the dark: at ry 2.4 over a 2.0 face the keyline filled rows 45 AND 46
+   * across the full 24 px and he sat in a black trench.
+   */
+  img.ellipse(16.4, 43.6, 12.2, 2.0, SNAIL_DARK);
+  img.ellipse(16.0, 43.3, 11.4, 1.7, shade('stone', 0));
+  img.ellipse(15.4, 42.9, 10.0, 1.1, shade('stone', 1));
   img.ellipse(7.4, 41.4, 3.6, 3.0, shade('stone', 0));
-  img.ellipse(6.9, 40.9, 3.0, 2.4, shade('stone', 2));
-  img.ellipse(6.2, 39.8, 1.6, 1.2, shade('stone', 3));
-
-  // --- shell: mass, body, lit upper-left ---
-  img.ellipse(19.2, 40.0, 8.4, 5.2, shade('fur', 0));
-  img.ellipse(18.7, 39.5, 7.8, 4.6, shade('fur', 1));
-  img.ellipse(16.8, 37.8, 4.2, 2.4, shade('fur', 2));
+  img.ellipse(6.9, 41.0, 3.0, 2.4, shade('stone', 1));
+  img.ellipse(6.2, 40.0, 1.8, 1.3, shade('stone', 2));
 
   /*
-   * The whorl, and the count of marks is the whole lesson of drawing him at 14 px.
+   * --- THE SHELL, drawn as NESTED WHORLS converging on an apex, not as a spiral ---
    *
-   * At 41 px tall he carried 1.85 turns on three tracks -- two grooves one pixel apart so the curve
-   * never broke into dashes, and a Haze line winding in above them. Rebuilt at eleven rows of shell
-   * that is not a spiral, it is a filled disc: three tracks at 1.7 turns leave no cream between the
-   * turns at all, and the rendered snail came back as a grey and lilac tin. So: ONE groove, ONE and
-   * a quarter turns, and the cream of the shell carrying everything between them.
+   * Three versions of this were a real logarithmic spiral stepped one pixel at a time, and every
+   * one failed the same way: at this radius consecutive turns land one or two pixels apart, the
+   * track crosses itself, and what renders is not a coil but a scatter of grey dashes on cream --
+   * on grass, a dirty shell. A fourth tried the same idea as nested ARCS, and `arc` lays a disc at
+   * every step, so at w 1 over a 6 px radius it came back as a thick dark band across the whole
+   * top of the shell. The arithmetic was never the problem, which is why tuning the arithmetic
+   * three times never fixed it.
    *
-   * The groove is `stone` 0 at luma 96 rather than `fur` 0 at luma 194. `fur` spans 194 to 255, so
-   * a groove cut in its own darkest step is 36 luma under a shell that is already near-white --
-   * nothing, at this size. The spiral is the one feature 10.2 gives him ("a spiral, no legs"), so it
-   * gets a value that can carry it.
+   * A shell at eleven rows reads from CONCENTRIC RINGS OFFSET TOWARD AN APEX, each a step of value
+   * from the last. That is what a shell is -- turns of one tube seen end-on -- and the eye assembles
+   * "spiral" from four rings and a bright point without being shown a single curve. It is also the
+   * only construction here that cannot stand proud of the silhouette, since every ring is an
+   * ellipse strictly inside the one before it; the old spiral broke the body plan by a row twice.
    *
-   * Section 6a's Haze is now a short lit arc across the shell's upper-left shoulder instead of a
-   * second spiral. It is still one line of `cloak` 3 and it lands where the light is.
+   * The apex is up and to the RIGHT, behind the aperture at the lower left, because that is the way
+   * round a snail's shell actually sits when he is facing left. The light stays up-LEFT like every
+   * other light in this project: the lit cap on the near shoulder and the apex are two different
+   * things and they belong on opposite sides.
+   *
+   * CLAY WITH A HAZE WHORL, literally and at last. The shell is `fur`, the palette's warm pale
+   * neutral and the closest it holds to Clay; one of its four rings is `cloak` 3, which IS Haze. It
+   * used to be an extra arc laid over the top of a finished shell, which rendered as three loose
+   * lilac pixels that read as damage. A whorl of it is a whorl of it.
    */
-  whorl(img, 19.6, 40.2, 6.0, 1.25, Math.PI * 0.8, 0, 0.62, shade('stone', 0));
-  arc(img, 19.2, 39.6, 6.6, 3.8, Math.PI * 1.08, Math.PI * 1.46, 1, shade('cloak', 3));
+  /*
+   * THE SHELL'S OWN EDGE, and it is the change that finally made him a snail.
+   *
+   * Four passes went into the coil -- a log spiral, nested arcs, four value rings, three -- and
+   * every render came back as a pale lump with marks on it, because the coil was never the fault.
+   * The fault was that THE SHELL AND THE BODY HAD NO BOUNDARY: cream shell ran straight into cream
+   * foot inside one unbroken outline, so there was no round mass for a coil to be a coil ON. A
+   * shell is an object sitting on an animal and the eye wants to see it perch.
+   *
+   * So the shell is laid down a pixel proud in SHELL_GROOVE. Round the top that pixel is the
+   * silhouette edge and `outline` covers it; where the shell meets the foot at the lower left it is
+   * the only thing drawn there, and it reads as the shell's rim. Same single call, two jobs.
+   *
+   * ROUNDER, too. At 8.4 x 5.2 the shell was 1.6:1 and every "ring" inside it came out as a pair of
+   * horizontal bands with the turns reading as stripes. At 7.2 x 5.0 it is round enough that a ring
+   * is a ring.
+   */
+  img.ellipse(19.6, 39.8, 7.2, 5.0, SHELL_GROOVE);
+  img.ellipse(19.2, 39.4, 6.6, 4.4, shade('fur', 0)); // the shell's face
+  img.ellipse(16.4, 37.9, 2.8, 1.6, shade('fur', 1)); // the lit near shoulder, up-left
+  /*
+   * `fur` 0 UNDER `fur` 1, not the other way up, because the brief says CLAY and Clay is #D4D2C8 at
+   * luma 209 -- between `fur` 0 at 194 and `fur` 1 at 231, and much nearer the first. Led by 1 the
+   * shell averaged near-white: blitted into the real world render beside the path it was the
+   * brightest object in the frame, out-shouting Red, and on the sand it vanished altogether, which a
+   * flat-grass preview cannot show you. Led by 0 its mean lands on Clay, where it was always
+   * specified, and the dark foot under a mid-pale shell becomes a two-value read at a 26-tile
+   * camera, which is the only thing that makes a 14 px animal findable at all.
+   */
+  /*
+   * The whorls: ONE STEP OF SHADE BETWEEN THEM, not a plunge, and the apex offset up and to the
+   * RIGHT -- behind the aperture at the lower left, which is the way round a snail's shell sits when
+   * he is facing left. An earlier pass cut the innermost whorl in SHELL_GROOVE under a `cloak` 3
+   * ring and what rendered was not a shell, it was an EYE: a black pupil in a lilac iris, on the one
+   * sprite whose whole job is to be a spiral. The turns of a shell are the same material at
+   * different angles, so about fifty luma apart and no more.
+   *
+   * Clay with a Haze whorl, literally: the shell is `fur`, the palette's warm pale neutral and the
+   * closest it holds to Clay, and one of its turns is `cloak` 3, which IS Haze. It used to be an
+   * extra arc laid over a finished shell and rendered as three loose lilac pixels reading as damage.
+   */
+  img.ellipse(20.4, 39.1, 4.4, 3.0, shade('stone', 1));
+  img.ellipse(21.0, 38.8, 2.8, 1.9, shade('fur', 0)); // cuts the above into a ring, not a disc
+  img.ellipse(21.6, 38.6, 1.2, 0.9, shade('stone', 1)); // the turn inside that
+  arc(img, 20.4, 39.1, 3.7, 2.5, Math.PI * 1.08, Math.PI * 1.52, 1, shade('cloak', 3));
+  img.px(22, 38, shade('fur', 2)); // the apex, one lit pixel
 
   // Shell mouth, with a lip: the body goes IN here, which is what makes it a shell and not a ball.
-  img.ellipse(12.8, 41.8, 2.8, 2.0, shade('fur', 0));
+  img.ellipse(12.8, 41.8, 2.8, 2.0, shade('fur', 1));
   img.ellipse(12.8, 41.9, 2.0, 1.4, shade('stone', 0));
 
   /*
@@ -549,36 +766,59 @@ function paintSnail(img: Img, blink: boolean): void {
   // `arc` interpolates from a0 to a1 the short way round only if a1 > a0: given 1.88pi to 0.12pi it
   // sweeps BACKWARD through 316 degrees and draws a gold hoop round the whole shell, which is what
   // the first version of this did. 2.12pi is the same bearing, said so the sweep is 43 degrees.
-  arc(img, 19.4, 40.0, 7.2, 4.2, Math.PI * 1.88, Math.PI * 2.12, 1.4, shade('gold', 0));
-  arc(img, 19.4, 40.0, 6.8, 3.8, Math.PI * 1.88, Math.PI * 2.12, 1, shade('gold', 1));
-  img.rect(22, 37, 5, 4, shade('wood', 0));
-  img.rect(22, 37, 4, 3, shade('wood', 1));
-  img.rect(22, 37, 4, 1, shade('wood', 2));
+  arc(img, 19.4, 40.0, 7.0, 4.1, Math.PI * 1.9, Math.PI * 2.1, 1.2, shade('wood', 0));
+  img.rect(23, 37, 4, 4, shade('wood', 0));
+  img.rect(23, 37, 3, 3, shade('wood', 1));
+  img.rect(23, 37, 3, 1, shade('wood', 2));
   img.rect(24, 39, 2, 2, shade('wall', 3)); // the label
-  img.rect(24, 37, 1, 4, shade('gold', 1)); // string, one pixel of it
-  img.px(24, 38, shade('gold', 3)); // the knot
+  img.px(25, 37, shade('gold', 2)); // the knot, and the only gold on him now
+  /*
+   * The parcel used to carry a `gold` 0 band under a `gold` 1 band wrapping the shell and a `gold`
+   * 1 string up the box with a `gold` 3 knot -- eight or nine pixels of brass on a fourteen-row
+   * animal, sitting exactly where the coil is. At size it was the loudest thing on the sprite and
+   * the shell read as a tin. The strap is `wood` now, the way a strap is, and one pixel of gold is
+   * left at the knot.
+   */
 
-  // --- eye stalks, up and clear of the shell, and thin: a thick stalk is a chimney ---
+  /*
+   * --- eye stalks, up and clear of the shell, and thin: a thick stalk is a chimney ---
+   *
+   * PALE, though. Drawn in `stone` 0 at luma 96 they were two mid-grey rods two pixels wide, and
+   * `outline` then put SNAIL_DARK down both sides of each: four pixels across of which two were
+   * keyline, so on grass the head end came back as a dark thicket with white specks in it rather
+   * than as two stalks with eyes on. A stalk this narrow has to be light enough that its core still
+   * reads once its own outline has taken a pixel off each side.
+   *
+   * SHORT, as well. Three rows of 2 px stalk above the body is five or six pixels of which four are
+   * keyline, and they came back reading as two black horns. The shell sets his height -- its top row
+   * is the sprite's -- so a shorter stalk costs nothing in the body plan and buys a core that shows.
+   */
   const stalk = (x0: number, y0: number, x1: number, y1: number): void => {
-    taper(img, x0, y0, x1, y1 + b, 2.0, 1.5, shade('stone', 0));
-    taper(img, x0 - 0.4, y0 - 0.4, x1 - 0.4, y1 - 0.4 + b, 1.1, 0.9, shade('stone', 2));
+    taper(img, x0, y0, x1, y1 + b, 2.6, 1.8, shade('stone', 1));
+    taper(img, x0 - 0.4, y0 - 0.4, x1 - 0.4, y1 - 0.4 + b, 1.4, 1.0, shade('stone', 2));
   };
-  stalk(7.0, 40.6, 5.6, 37.4);
-  stalk(9.6, 40.8, 11.4, 37.6);
+  stalk(7.2, 40.8, 5.8, 38.8);
+  stalk(9.6, 40.9, 11.2, 39.0);
+  /*
+   * The eyes on the ends of them: a dark knob with ONE pale pixel of light, not a pale knob with a
+   * dark speck in it. `fur` 3 filled to 2 px across, which is what they were, is the brightest
+   * value in the palette put on the two smallest shapes on the sprite -- on grass they rendered as
+   * a pair of little white ghosts floating over him, and they were the first thing the eye found.
+   * The light goes upper-left, where every other light in this project goes.
+   */
   for (const [ex, ey] of [
-    [5.6, 36.8],
-    [11.4, 37.2],
+    [5.8, 38.2],
+    [11.2, 38.4],
   ] as const) {
-    img.ellipse(ex, ey + b, 1.5, 1.5, shade('stone', 0));
-    img.ellipse(ex - 0.3, ey - 0.3 + b, 1.0, 1.0, shade('fur', 3));
-    if (!blink) img.px(ex - 0.3, ey - 0.3, shade('stone', 0));
-    else img.rect(Math.round(ex) - 1, Math.round(ey) + 1, 3, 1, shade('stone', 0));
+    img.ellipse(ex, ey + b, 0.9, 0.9, SNAIL_DARK);
+    if (!blink) img.px(Math.floor(ex), Math.floor(ey) + b, shade('fur', 2));
+    else img.px(Math.floor(ex), Math.floor(ey) + 1 + b, shade('stone', 2));
   }
   // Lower tentacles, the short pair he actually smells with. Short: any longer and they read as
   // legs, which 10.2 says he does not have.
   taper(img, 6.6, 42.0, 4.6, 43.0, 1.6, 1.0, shade('stone', 0));
 
-  base(img, 6, 27, 47, SNAIL_DARK);
+  base(img, 8, 25, 47, SNAIL_DARK);
   img.outline(SNAIL_DARK);
 }
 
@@ -673,6 +913,16 @@ function paintCat(img: Img, blink: boolean): void {
   taper(img, 19.0, 41.0, 20.4, 25.4, 3.0, 2.4, CAT_DARK);
   taper(img, 18.9, 40.6, 20.3, 25.6, 2.2, 1.6, shade('wood', 1));
   taper(img, 18.7, 40.0, 20.1, 26.4, 1.1, 1.0, shade('wood', 2));
+  /*
+   * Two rings on it. The tail was drawn in the body's own two levels of `wood` and standing against
+   * the hip, which is both the same ramp and the same value, so at size it read as a plank rather
+   * than as a limb -- a brown column beside a brown cat. A ringed tail is also the oldest tabby
+   * shorthand after the forehead M, and it costs two marks: at three bars on the haunch, three bars
+   * on the forehead and two here the count is still inside "three is a tabby, thirty is a dirty
+   * sprite", because no one group of them is more than three.
+   */
+  img.rect(19, 35, 2, 1, CAT_DARK);
+  img.rect(20, 30, 2, 1, CAT_DARK);
 
   /*
    * --- ears, and the V between them, which is the whole of her silhouette above the shoulder ---
@@ -707,13 +957,30 @@ function paintCat(img: Img, blink: boolean): void {
   // at row 22 and not a row higher -- see the note on the ears.
   for (const mx of [13, 15, 17]) img.rect(mx, 22 + b, 1, 3, shade('wood', 0));
 
-  // --- face ---
-  for (const ex of [11, 16]) {
+  /*
+   * --- face: two eyes, each a small dark pupil in a lit field with a light on it ---
+   *
+   * This is the design board's finding about the rabbit and the owl, arriving a third time. Each
+   * eye was a 3 x 2 block of `gold` 2 at luma 190 with a one-pixel dark column down its MIDDLE,
+   * which does not make a pupil -- it cuts the eye in half, so the face rendered as FOUR bright gold
+   * bars in a row across nine columns of head, and they were far and away the brightest thing on
+   * the sprite. A cat's eye is mostly iris and that is the charm of it, but the board's rule still
+   * holds: the dark mark has to be small, inside the light, with the light showing round it.
+   *
+   * So: 2 x 2 of `gold` 1 -- a step down from 2, because at 190 the pair out-shouted everything --
+   * with the pupil one pixel at the lower-inner corner and the catch one pixel at the upper-left,
+   * where every light in this project comes from. Four pixels of eye each, three columns of
+   * forehead between them.
+   */
+  for (const [ex, px] of [
+    [11, 12],
+    [16, 17],
+  ] as const) {
     if (blink) {
       img.rect(ex, 25 + b, 3, 1, shade('wood', 0));
     } else {
-      img.rect(ex, 24 + b, 3, 2, shade('gold', 2));
-      img.rect(ex + 1, 24 + b, 1, 2, shade('wood', 0));
+      img.rect(ex, 24 + b, 2, 2, shade('gold', 1));
+      img.px(px, 25 + b, CAT_DARK);
       img.px(ex, 24 + b, shade('gold', 3));
     }
   }
@@ -731,7 +998,9 @@ function paintCat(img: Img, blink: boolean): void {
   }
   img.px(15, 27 + b, shade('wood', 0)); // the seam between the lobes
   img.px(15, 28 + b, shade('wood', 0));
-  img.ellipse(14.9, 26.4 + b, 1.3, 0.9, shade('skin', 0));
+  // The nose: two pixels. At a 1.3 x 0.9 ellipse it came out three wide by two deep, which on a
+  // seven-row face is a snout -- the rendered cat had a brown block in the middle of a cream muzzle.
+  img.rect(14, 26 + b, 2, 1, shade('skin', 0));
   // The jaw line. Head and body are both `wood` and a head on a body in one ramp is a post: the
   // keyline under the chin is the only thing that says where one ends and the other begins, and
   // `outline` cannot help because the join never touches the background.

@@ -4,6 +4,31 @@ import type { Content, GameState, GoalResult, SkillId, Verdict } from '@otp/core
 import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
 
+/*
+ * THE RECAP BADGES ARE TYPED, AND TWO OF THE THREE ARE NOT IN THE FONT. Measured, not asserted:
+ * `public/fonts/HafferUprightsVF.ttf` carries 789 codepoints, and U+2713 CHECK MARK and U+2296
+ * CIRCLED MINUS are both outside them, while "!" is inside. So this column -- whose whole job is to
+ * read as one vocabulary down the page -- renders two of its three marks from whatever the next
+ * family in the stack is, at that family's weight and on its baseline, beside one real Haffer
+ * glyph. It is precisely the defect SkillCard.tsx describes over its verdict glyphs, which is why
+ * those are drawn; and the "⊖" here is a LOOKALIKE of the Restrict pill's mark, not the same path,
+ * although the comment on the errand row below says it takes "the Restrict glyph from the verdict
+ * pills".
+ *
+ * I drew both and reverted it, which is why this note is here instead of the fix. Two end-to-end
+ * specs read these badges as text and pin the characters --
+ * `e2e/trifecta.spec.ts:247` expects `['✓', '⊖', '⊖']` and `e2e/results-payoff.spec.ts:179` counts
+ * `r.badge === '⊖'` -- so drawing the marks turns every badge's textContent into "" and takes the
+ * suite red. Neither spec is this round's file, and the glyph assertion in the second one is
+ * load-bearing for finding 15, so it wants its owner rather than a drive-by edit. Results carries
+ * no board frame, so this was craft work beyond the brief and not worth a red build.
+ *
+ * The handover, so nobody has to re-derive it: draw the two marks, and change the specs to assert
+ * on a `data-glyph` attribute (or on the drawn path) instead of textContent. "!" stays as text --
+ * it is Haffer's own and it is what both UI_FOUNDATIONS section 5 and the board's Inspect disc
+ * show.
+ */
+
 /** Matches the server rule in ARCHITECTURE section 8, so a handle never fails only on the server. */
 const HANDLE = /^[A-Za-z0-9][A-Za-z0-9_.-]{1,14}[A-Za-z0-9]$/;
 const BLOCKED = ['cyera', 'admin', 'official', 'moderator', 'support'];

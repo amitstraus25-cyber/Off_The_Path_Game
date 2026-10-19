@@ -104,6 +104,118 @@ export const TILE_NAMES: readonly string[] = [
   'toadstool-ring',
   'well',
   'signpost',
+  /*
+   * APPENDED, which is the only safe way to add a tile while a map exists.
+   *
+   * `TILE_NAMES` is no longer frozen, but it is unfrozen rather than unconstrained: a gid is this
+   * array's index plus one, so inserting a name anywhere but the end renumbers every tile after it
+   * and `map-forest.json` has to be regenerated in the same change or grass becomes roof. Appending
+   * renumbers nothing -- every existing gid keeps its value, the committed map stays valid, and the
+   * sheet's 12-wide layout puts the new tiles in cells nobody referenced before.
+   *
+   * The cost of appending is only that a new tile does not appear anywhere until the map owner
+   * places it, and that `pnpm graybox` must be re-run to get it into `tileset-forest.png` and
+   * `tileset-forest.gids.json`.
+   *
+   * Two more bush silhouettes: `bush-low` is a wide bank in the bottom half of its tile with lawn
+   * above it, `bush-tall` a narrow leaning shrub with lawn either side. Both differ from `bush` in
+   * FOOTPRINT rather than in outline detail, which is what reads at a 26-tile camera.
+   */
+  'bush-low',
+  'bush-tall',
+  /*
+   * Two more tree SCALES, appended for the reason above, 2026-10-19.
+   *
+   * One crown stamped 318 times at one size is 41.8 per cent of the frame and is why the wood reads
+   * as an orchard, and the painter owner proved it cannot be fixed from inside a painter:
+   * autocorrelation excess at lag 64 is +0.082 before and after breaking up the crown's highlight.
+   * The board's wood has trees at three scales -- measured at our own resolution, 80, 55 and 43 px
+   * of crown -- and that spread is most of why it reads as a wood. ART_DIRECTION section 7.5.
+   *
+   *   elder-*       the board's FOREGROUND tree: an 86 px crown in a 3x3 over a trunk row of three.
+   *                 Nine canopy cells laid at (0..2, -3..-1) from the trunk row, then
+   *                 `elder-trunk-l/-m/-r` across the trunk row itself. The trunk's two cells of
+   *                 collision footprint become three. Mirrors by swapping the left and right
+   *                 COLUMNS of the nine and leaving the middle column where it is.
+   *   sapling-*     the board's BACKGROUND tree: crown, trunk, roots and shadow all inside one 2x2,
+   *                 so it needs no trunk row and no six-cell footprint -- four cells and it is a
+   *                 whole tree. Mirrors left for right like the mid crown. This is the one that
+   *                 lets a grove have an edge: small trees fill between big ones.
+   */
+  'elder-tl',
+  'elder-tc',
+  'elder-tr',
+  'elder-ml',
+  'elder-mc',
+  'elder-mr',
+  'elder-bl',
+  'elder-bc',
+  'elder-br',
+  'elder-trunk-l',
+  'elder-trunk-m',
+  'elder-trunk-r',
+  'sapling-tl',
+  'sapling-tr',
+  'sapling-bl',
+  'sapling-br',
+  /*
+   * The garden's corner post, appended for the reason above, 2026-10-19.
+   *
+   * A fence seen ALONG its run and a fence seen FACE-ON are different objects, and the run has to
+   * END somewhere. `fence-corner` is the board's own corner post: one wide flat cap over a body with
+   * no rhythm in it, which is what makes a run read as turning rather than stopping. One tile serves
+   * all four corners of the garden and both ends of a picket run -- a post is a post.
+   *
+   * `fence-post` is NOT new and keeps its gid, but it has been REDRAWN as the run seen end-on, which
+   * is the only way the map places it (nine times down column 46, never beside itself). So the
+   * client's "from the top view, in the front, it looks weird" is fixed with no map change at all;
+   * the corners are the part that needs placing. See the long note in s-outdoor.ts.
+   */
+  'fence-corner',
+  /*
+   * The corner post with a rail stub, appended for the reason above, 2026-10-19.
+   *
+   * `fence-corner` paints x 8..24 and `fence-h` paints its rails across the full 0..31, so a picket
+   * run arriving at a corner post leaves seven or eight columns of bare lawn between the post and
+   * the first rail: the fence comes apart at the corner. These two carry the same approved post with
+   * the rails continuing out of one side of the tile, so the run actually meets it.
+   *
+   * Which side is a property of the corner rather than of the post. `fence-corner-e` is the post a
+   * run leaves to the EAST -- the north-west and south-west corners of the garden, and the west side
+   * of a gate gap. `fence-corner-w` is the mirror: the north-east and south-east corners, and the
+   * east side of a gate. Plain `fence-corner` stays for a post with no picket run against it at all,
+   * which is either end of a bare north-south run.
+   */
+  'fence-corner-e',
+  'fence-corner-w',
+  /*
+   * The cottage's outline, appended for the reason above, 2026-10-19.
+   *
+   * The review's verdict on the building was that the facade is "two stacked rectangles ... a grey
+   * mat on a cream mat; per-tile scalloping cannot rescue a wrong outline". All three of these are
+   * outline rather than detail, and none of them could exist while this list was frozen.
+   *
+   *   gable             the front gable, over the door. Laid at (cx + 2, cy - 1) and again at
+   *                     (cx + 3, cy - 1) with the horizontal mirror bit, so the two halves meet in
+   *                     an apex on the seam and the attic window straddles it. That row is cleared
+   *                     grass today, so the gable rises against the garden and breaks a ridge line
+   *                     that is otherwise a straight 192px rule -- `roof-peak` is laid six times and
+   *                     a gable happens once, which is the whole reason this is a tile.
+   *   wall-corner       the facade's end: a timber corner post, with its outer SIXTEEN COLUMNS
+   *                     TRANSPARENT. That transparency is what makes the roof overhang -- the wall
+   *                     stops half a tile in and `roof-l`/`roof-r` keep going over the grass. Laid
+   *                     at cx and, mirrored, at cx + 5, on every wall course.
+   *   wall-window-lit   the board's right-hand window with the lamp on, for ONE of the two window
+   *                     positions. The Arrive panel's "The lamp is lit" has been printing over two
+   *                     dark windows. No animal in it: a tile is the same pixels on every ending.
+   *
+   * Appending renumbers nothing, so `map-forest.json` stays valid as it is and needs no regeneration
+   * -- the three only have to be PLACED, which is four lines in `forest-map.ts`, and `pnpm graybox`
+   * re-run to get them onto the sheet. See the long notes in s-cottage.ts.
+   */
+  'gable',
+  'wall-corner',
+  'wall-window-lit',
 ];
 
 /*

@@ -17,6 +17,15 @@
  * own lawn tile was carrying. The lawn is calm; all the dark and all the busyness on that frame
  * belong to the canopies, the bushes and the objects.
  *
+ * 2026-10-20: THE LAWN HAS TUFTS. One chevron per variant, and it is the only mark in this file
+ * drawn at an absolute tone rather than at a share of the ground under it. The design board's
+ * finding was that "five by six tiles of w-grass.png at 5.6x contain not one three-blade sprig" and
+ * that the board's "are plainly visible as little chevrons", and both halves were true: `sprig` drew
+ * the right shape at a depth of 13 to 36 luma, which is inside the mottle's own range and therefore
+ * not a plant. See the long note above `CHEVRON`, which also records why the withdrawn luma-36 floor
+ * is not being re-opened by this. Two of the four sit ON a tile edge and wrap, so the common joins
+ * carry a tuft that straddles them rather than a motif centred in every square.
+ *
  * WHAT THE LAST THREE ROUNDS CHANGED, AND WHY EACH CHANGE COST THE SCORE SOMETHING.
  *
  * 1. THE MARKS ARE GREEN AGAIN. The previous pass pinned every blade root and contact pool to an
@@ -36,10 +45,14 @@
  *    STATED PRECISELY, because the loose version of this claim is wrong and someone will check it.
  *    The FIELD cannot step: at a boundary both tiles evaluate the same shared rim at the same phase
  *    with a mass of zero, so they are the same colour, in all sixteen pairings. The MARKS can, where
- *    a tuft happens to be cut by the tile edge. Measured over all 1024 grass-to-grass boundary
- *    pixels: median step 0.0, mean 3.0, and 5.76% of them above the 24 luma the score calls an
- *    edge -- all of those being two- and three-pixel tufts, not a line. A cut tuft is a dot; the
- *    quilt was a continuous straight edge running the whole length of every tile.
+ *    a tuft happens to be cut by the tile edge. Re-measured over all 1024 grass-to-grass boundary
+ *    pixels after the chevron went in: median step 0.0, mean 5.5, 8.40% of them above the 24 luma
+ *    the score calls an edge, against 5.76% before. Split by pairing, same variant on both sides
+ *    gives 7.42% and different variants 8.72%. Every one of those is a blade edge two or three
+ *    pixels long -- a chevron's point row is wider than the row under it, so its own silhouette
+ *    registers wherever it lands, join or no join. The median is the number that matters and it is
+ *    still zero: the quilt was a continuous straight edge running the whole length of every tile,
+ *    and there is not one of those anywhere.
  *
  *     variant   share   core band    rim    role
  *     grass-0   53.7%   164 .. 182   ~173   open lawn, and over half the grass
@@ -1013,52 +1026,82 @@ function paintMarks(
     }
 }
 
-/**
- * One sprig of grass, generated rather than stamped.
+/*
+ * THE CHEVRON TUFT: the one mark on this lawn that is a drawing rather than a texture.
  *
- * The old painter held five fixed shapes and laid at most one shape per variant, so four marks
- * covered the entire map and the eye found the repeat across forty tiles instantly. Here the blade
- * count, the fan's spread, the whole sprig's lean and every blade's height come from the variant's
- * own stream, so no two sprigs in the tileset are the same plant and they lean at different angles
- * the way the board's do.
+ * The design board's verdict was that "the grass has no tufts at all ... the board's tufts are
+ * plainly visible as little chevrons", and it is right about the picture even though this file had
+ * a `sprig` in every variant. Crop `240 650 100 80 9` -- open lawn east of the big trunk on the
+ * Explore frame -- and the board's tuft is unmistakable: a fan of four or five short dark strokes
+ * springing from one point, about seven of our pixels across and four tall, in a teal-green sixty
+ * to seventy luma under the lawn around it. Everything else on that lawn is one- and two-pixel
+ * flecks. One drawing, a lot of mottle.
  *
- * Blades are SWORDS, not antennae: two pixels wide for the lower half, tapering to one at the tip,
- * leaving the root vertical and giving way late (t^1.7), with their roots touching so the sprig
- * reads as one dense fan.
+ * `sprig` drew the right SHAPE at the wrong DEPTH. Its tones came off `MARK_FALL`, which is a share
+ * of the local ground, so on a lawn at 170 its root landed at 134 and its tip at 157 -- a 13-to-36
+ * luma mark, which is inside the mottle's own range and therefore invisible as a plant. `MARK_FALL`
+ * is right for the mottle and it is right for the reason the long note above gives; it is not a
+ * depth at which anything can be drawn.
+ *
+ * So the chevron takes ABSOLUTE tones off the grass ramp, which is the one mark in this file that
+ * does. The values are the board's own and they are the same three this project's decor tiles have
+ * always cut their tufts in -- `tone('grass', 0.34 - i * 0.1)`, luma 118 at the point falling to 96
+ * at the root. Against the four variants' bands, 154 to 192, that is a fall of 36 to 96: a plant
+ * standing in front of the lawn rather than a patch of it.
+ *
+ * THE FLOOR ARGUMENT IS NOT RE-OPENED BY THIS. What the previous pass withdrew was a mark pinned at
+ * luma 36 -- a near-black speck on a bright lawn, three hundred of them a tile. 96 is a mid-green,
+ * forty-two levels above the board's own deepest open-lawn pixel of 127 only in the sense that a
+ * tuft is vegetation and the sample that produced 127 was chosen to exclude vegetation. The board's
+ * tuft in the crop above probes well under 127, and there are four of these marks in the whole
+ * tileset against several hundred flecks.
  */
-function sprig(
-  mark: Float64Array,
-  rnd: () => number,
-  bx: number,
-  by: number,
-  size: number,
-  ground: Ground,
-): void {
-  const here = ground(bx, by);
-  const fall = here * MARK_FALL;
-  const root = here - fall * (ROOT_DEEP + rnd() * ROOT_SPAN);
-  const tip = here - fall * (TIP_DEEP + rnd() * TIP_SPAN);
-  const blades = 5 + Math.floor(rnd() * 3);
-  const lean = (rnd() - 0.5) * 0.9;
-  // The roots touch, over two pixels and no more. Three was tried and the sprig came out as a
-  // solid stem under a solid crown -- a small dark tree, not a tuft.
-  markAt(mark, bx, by, root);
-  markAt(mark, bx + (lean < 0 ? -1 : 1), by, root);
-  for (let b = 0; b < blades; b++) {
-    const spread = blades === 1 ? 0 : (b / (blades - 1)) * 2 - 1;
-    const h = Math.max(4, Math.round(size * (0.6 + rnd() * 0.4)));
-    const reach = Math.round(spread * size * 0.34 + lean * size * 0.3);
-    for (let k = 0; k < h; k++) {
-      const u = h === 1 ? 0 : k / (h - 1);
-      const x = Math.round(bx + reach * Math.pow(u, 1.7));
-      const t = root + (tip - root) * u;
-      markAt(mark, x, by - k, t);
-      // Two pixels wide for the bottom two rows and nowhere else. A third of the height was tried
-      // and with five blades inside seven pixels the fan welded into one dark mass -- the sprig
-      // read as a small mushroom. Thin blades that touch only at the root read as a tuft.
-      if (k < 2) markAt(mark, x + (reach < 0 ? 1 : -1), by - k, t);
+const TUFT_TOP = 0.34;
+const TUFT_STEP = 0.1;
+const tuftLuma = (i: number): number =>
+  lumaOf(tone('grass', Math.max(0, TUFT_TOP - i * TUFT_STEP)));
+
+/**
+ * `[base offset, tip offset, height]` per blade. The centre is tallest and vertical, the two
+ * flankers spring from beside it and splay to either side, which is the chevron.
+ *
+ * Three blades and not five. At five the fan welds into one dark mass inside seven pixels and the
+ * tuft reads as a small mushroom, which is the failure the `tuft` note below records from the other
+ * direction. Three strokes with a pixel of lawn between them read as blades.
+ */
+const CHEVRON: readonly (readonly [number, number, number])[] = [
+  [0, 0, 4],
+  [-1, -2, 3],
+  [1, 2, 3],
+];
+
+/**
+ * One chevron tuft, drawn with WRAPPING arithmetic so it may sit across a tile edge.
+ *
+ * The wrap is the anti-grid half of this mark and it is worth being exact about what it buys. Every
+ * field in this file is periodic over one tile, so two tiles of the SAME variant laid side by side
+ * draw the same chevron at the same phase: a tuft placed at y 1 puts its point on rows 30 and 31
+ * and its root on rows 0 and 1, and the tile above it does likewise, so across that join the eye
+ * sees one whole tuft straddling the boundary. `grass-0` is 53.7% of the grass and `grass-1` 38.3%,
+ * so their joins are the common case and their tufts are the two that wrap.
+ *
+ * A tuft that sits wholly inside its tile is a silhouette repeated at the tile pitch, which is the
+ * most findable thing a tilemap can show -- the reason this file cut its marks to mottle in the
+ * first place. A tuft cut by the pitch is not: half of its instances read as a tuft on a join and
+ * the rest as a tuft in a field, and there is no 32-pixel rhythm to find.
+ */
+function chevron(mark: Float64Array, bx: number, by: number): void {
+  for (const [bdx, tdx, h] of CHEVRON)
+    for (let i = 0; i < h; i++) {
+      // `i` counts DOWN from the point, which is where the tone ramp starts: a blade is lightest
+      // where it catches the light and darkest at the root, which is what the board draws.
+      const u = i / (h - 1);
+      // Squared, so the blade is vertical for its lower half and gives way only near the point. A
+      // blade that steps sideways on every row is a 45-degree dash, and a tile of dashes reads as
+      // pen hatching -- this file has made that mistake once already, see `tuft`.
+      const x = bx + bdx + Math.round(tdx * (1 - u) ** 2);
+      markAt(mark, wrap(x, TILE), wrap(by - (h - 1) + i, TILE), tuftLuma(i));
     }
-  }
 }
 
 /**
@@ -1248,16 +1291,25 @@ function scatter(mark: Float64Array, rnd: () => number, ground: Ground, inside: 
  * different way of being obviously generated.
  */
 interface Variant {
-  /** Root position and size of each sprig. All of it stays clear of every corner. */
-  readonly sprigs: readonly (readonly [number, number, number])[];
+  /**
+   * Where this variant's one chevron tuft has its root.
+   *
+   * A different place in each of the four, and the first two sit ON an edge so they wrap -- see
+   * `chevron`. Every one of them is clear of `nearCorner`'s three-pixel exclusion, which needs a
+   * mark to be near an edge in BOTH axes at once to bite: a tuft at x 12 can sit on row 1, and one
+   * on column 31 can sit at y 20.
+   */
+  readonly tuft: readonly [number, number];
   readonly clover: readonly [number, number] | null;
 }
 
 const VARIANTS: readonly Variant[] = [
-  { sprigs: [[11, 24, 9]], clover: null },
-  { sprigs: [[22, 12, 8]], clover: null },
-  { sprigs: [[26, 25, 6]], clover: null },
-  { sprigs: [[19, 27, 9]], clover: [12, 10] },
+  // Over the top edge, and `grass-0` is 53.7% of the grass, so this is the join the player sees.
+  { tuft: [12, 1], clover: null },
+  // Over the right edge, and `grass-1` is 38.3%: the other common join.
+  { tuft: [31, 20], clover: null },
+  { tuft: [8, 25], clover: null },
+  { tuft: [22, 13], clover: [12, 10] },
 ];
 
 /**
@@ -1304,8 +1356,10 @@ const grass =
     const rnd = noise(seed + 31);
     const mark = new Float64Array(TILE * TILE).fill(NONE);
     scatter(mark, rnd, ground, ALL);
-    for (const [bx, by, size] of v.sprigs) sprig(mark, rnd, bx, by, size, ground);
     if (v.clover) clover(mark, v.clover[0], v.clover[1], ground);
+    // Last, so `markAt`'s darkest-wins cannot let a fleck or a pool eat a blade: the chevron is the
+    // deepest mark on the tile and it is the one the player is meant to see.
+    chevron(mark, v.tuft[0], v.tuft[1]);
     for (let y = 0; y < TILE; y++)
       for (let x = 0; x < TILE; x++) if (nearCorner(x, y)) mark[y * TILE + x] = NONE;
     paintMarks(img, mark, ALL, SHARED.warm);
