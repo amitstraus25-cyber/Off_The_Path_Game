@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Off the Path: That's Not My Grandma</title>
-    <!-- Placeholder: suppresses the /favicon.ico request browsers make unasked, which 404s on every
-         load. A real mark is a brand asset and has to come from Brand Kit (see docs/ASSETS.md);
-         inventing one here would break the "never invent brand assets" rule. -->
-    <link rel="icon" href="data:," />
+    <!-- The real symbol, served from our own origin. The placeholder that stood here was written
+         before cyera-symbol-black.svg was added to public/brand, and its reasoning was right at the
+         time: a mark has to come from Brand Kit and inventing one would break "never invent brand
+         assets". It is here now, unmodified and self-hosted, so the placeholder has no reason left.
+         NOTE for brand: this is the BLACK symbol, which is correct on light browser chrome and
+         low-contrast on dark. Brand Kit has no white symbol, only a white wordmark, and recolouring
+         the file is the one thing rule 5 forbids outright -- so a dark-mode variant is a request to
+         Brand, not a change to make here. -->
+    <link rel="icon" type="image/svg+xml" href="/brand/cyera-symbol-black.svg" />
     <link rel="preload" as="font" type="font/ttf" crossorigin href="/fonts/HafferUprightsVF.ttf" />
     <link
       rel="preload"
