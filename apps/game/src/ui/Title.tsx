@@ -7,6 +7,56 @@ export interface TitleProps {
 }
 
 /**
+ * The media query that decides whether the on-screen pad exists, copied from the rule in
+ * tokens.css that hides `.otp-touch`. The hint and the pad have to answer the same question --
+ * "will this player be given a joystick?" -- and before this they answered two different ones
+ * (UX_REVIEW finding 11).
+ *
+ * `(pointer: coarse)` is not the complement of this. A device with a fine primary pointer and no
+ * hover -- a pen-first tablet, a TV remote, a kiosk stylus -- is coarse-negative, so it used to
+ * read the keyboard line, while this query is also false for it so the CSS *does* draw the pad.
+ * That player was shown arrow keys they may not have and told nothing about the stick under their
+ * thumb. apps/game/test/title.test.ts holds this constant against the stylesheet, so if the pad's
+ * rule moves the hint fails the build rather than drifting quietly.
+ */
+export const PAD_HIDDEN_QUERY = '(pointer: fine) and (hover: hover)';
+
+/**
+ * Whether this player is being given the on-screen pad, asked of the browser.
+ *
+ * Shared because two screens have to answer it the same way: the title's hint, and the world
+ * summary a screen reader reads instead of the canvas (`App.tsx`). The summary used to print
+ * `controlsHint` -- "Arrows or WASD to walk, Space to talk, Esc to go back" -- to every player,
+ * including a phone, where `panels.css` already hides the visible copy of that line for naming keys
+ * to someone holding a phone. The sighted touch player was spared it and the blind touch player was
+ * not, which is finding 11's defect inside finding 16's fix.
+ *
+ * With no `matchMedia` there is no player to be wrong about -- a server or a test renderer -- so
+ * it answers "hidden", which is also what every capture shows.
+ */
+export const padIsHidden = (): boolean =>
+  typeof matchMedia !== 'function' || matchMedia(PAD_HIDDEN_QUERY).matches;
+
+/**
+ * The line under the CTA, for a player the pad is or is not drawn for.
+ *
+ * Narrow and fine-pointer is a desktop window, not a phone: the pad is hidden at every width by
+ * the query above, the keyboard is the only way to walk, and so the keyboard line is the true one
+ * at 375 just as it is at 1280. The screenshots are what mislead there, not the screen -- a mouse
+ * at 375 is a reviewer's window, not a device anyone plays on.
+ *
+ * Where the pad *is* drawn the keyboard line is not merely incomplete, it is wrong about the
+ * machine, so the touch line replaces it rather than joining it. If content has no touch line the
+ * screen stays quiet: a missing string is better than a keyboard hint on a phone.
+ *
+ * Pure and exported so the branch is testable without a DOM; the component supplies `padHidden`.
+ */
+export function titleHint(strings: Record<string, string>, padHidden: boolean): string {
+  if (!padHidden) return strings['titleMetaTouch'] ?? '';
+  return strings['titleMeta'] ?? strings['controlsHint'] ?? '';
+}
+
+/**
  * The cold open.
  *
  * This used to be an `.otp-screen`: a centred card on an opaque black field, which meant the first
@@ -31,12 +81,14 @@ export function Title({ content, onPlay }: TitleProps) {
    * The hint is read on two different machines, and `titleMeta` only describes one of them: arrow
    * keys and Space are not on a phone, and "just tap" promises a walk a tap does not give -- one
    * tap is about 4px of a 120px/s step (world/logic.ts WALK_SPEED), only a held stick walks, and
-   * the pad itself is not drawn until the phase is `explore` (main.ts). So touch reads its own
-   * line, and until that line exists in content the screen stays quiet rather than lying. Matched
-   * per render, as Dialogue.tsx matches reduced motion: a pointer does not change mid-screen.
+   * the pad itself is not drawn until the phase is `explore` (main.ts). So the machine that gets
+   * the pad reads the pad's line. Matched per render, as Dialogue.tsx matches reduced motion: a
+   * pointer does not change mid-screen.
+   *
+   * With no `matchMedia` there is no player to be wrong about -- a server or a test renderer -- so
+   * it takes the keyboard branch, which is also what every capture shows.
    */
-  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-  const hint = coarse ? s('titleMetaTouch') : s('titleMeta') || s('controlsHint');
+  const hint = titleHint(content.strings, padIsHidden());
 
   return (
     <>

@@ -63,6 +63,22 @@ const PAW_TRAIL: readonly { frame: 0 | 1 | 2; dx: number; dy: number }[] = [
 const LANE_ROWS = 3;
 
 /**
+ * How the canvas tells the DOM that someone has come within reach (docs/UX_REVIEW.md 16).
+ *
+ * A DOM event rather than the typed bus in `src/bus.ts`, which this change does not own: the bus
+ * is the right home for it and moving it there is a two-line change for whoever holds that file
+ * next. Two listeners need it -- the live region in `ui/App.tsx`, which says it, and the walk
+ * controls in `ui/touch-controls.ts`, which stop Red when she arrives -- so it is one channel with
+ * two subscribers either way. The same name is written in both of those files; the end-to-end
+ * guard in `e2e/world-reach.spec.ts` is what keeps the three spellings honest.
+ *
+ * The payload is the npc's ID and nothing else. Not the name, deliberately: the UI already holds
+ * `content` and looks the name up itself, so an event dispatched by anything other than this scene
+ * cannot put words of its own into a live region.
+ */
+const WITHIN_REACH = 'otp:within-reach';
+
+/**
  * Anyone Red can walk up to. `character` offers a skill and opens the real encounter;
  * `bystander` offers nothing and only says a line. They share the prompt and the proximity
  * test so that one person is highlighted at a time, and differ only in what interacting emits.
@@ -94,6 +110,8 @@ export class ForestScene extends Phaser.Scene {
   /** True once the run has reached the cottage, so the arrival is staged exactly once. */
   private arrived = false;
   private notices: MapObject[] = [];
+  /** Who was last announced as within reach, so the announcement is made once per arrival. */
+  private withinReach: string | null = null;
   private promptBob = 0;
   private reducedMotion = false;
   /** The camera's own centre, which lags Red rather than being pinned to her. */
@@ -178,6 +196,7 @@ export class ForestScene extends Phaser.Scene {
     this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
     this.red.setDepth(this.red.y);
     for (const npc of this.npcs) npc.prompt.setVisible(false);
+    this.announceWithinReach(null);
     // The last run's trail is the last run's. A replay that kept it would promise an ending the
     // new run has not earned, in the one place the game puts a fact on the ground.
     this.arrived = false;
@@ -296,8 +315,11 @@ export class ForestScene extends Phaser.Scene {
 
     if (exploring) {
       this.move(input.x, input.y, deltaMs);
-      this.updatePrompts();
-      if (input.interactPressed) this.interact();
+      // One proximity test per frame, shared by the bubble, the announcement and the A button,
+      // rather than three scans of the cast that can disagree with each other by a pixel.
+      const target = this.updatePrompts();
+      this.announceWithinReach(target);
+      if (input.interactPressed) this.interact(target);
       this.checkNotices();
       this.checkCottage();
     } else if (this.walking) {
@@ -333,6 +355,8 @@ export class ForestScene extends Phaser.Scene {
     this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
     this.red.setDepth(this.red.y);
     for (const npc of this.npcs) npc.prompt.setVisible(false);
+    // Nobody is within reach on the doorstep, whoever she was standing next to a frame ago.
+    this.announceWithinReach(null);
 
     /*
      * The trail is a claim about what happened, so it is content's to make and not this file's:
@@ -400,7 +424,8 @@ export class ForestScene extends Phaser.Scene {
     });
   }
 
-  private updatePrompts(): void {
+  /** Puts the bubble over whoever is in range, and hands that person back to the caller. */
+  private updatePrompts(): Npc | null {
     const target = nearest(this.position, this.available(), INTERACT_RADIUS);
     this.promptBob += 1;
     for (const npc of this.npcs) {
@@ -408,10 +433,28 @@ export class ForestScene extends Phaser.Scene {
       npc.prompt.setVisible(active);
       if (active) npc.prompt.setFrame(this.reducedMotion ? 0 : Math.floor(this.promptBob / 30) % 2);
     }
+    return target;
   }
 
-  private interact(): void {
-    const target = nearest(this.position, this.available(), INTERACT_RADIUS);
+  /**
+   * The bubble, said out loud (docs/UX_REVIEW.md 16).
+   *
+   * The proximity test above has always been computed -- it is what shows the prompt -- and never
+   * reported, so a sighted player gets a speech bubble over the Rabbit and a screen-reader player
+   * gets silence. The three encounters the whole game is built from were undiscoverable: the only
+   * way to find anybody was to sweep the forest pressing Space.
+   *
+   * On the edge rather than every frame, because the listener is a polite live region and a region
+   * whose text is rewritten sixty times a second is a region that never finishes a sentence.
+   */
+  private announceWithinReach(target: Npc | null): void {
+    const id = target?.id ?? null;
+    if (id === this.withinReach) return;
+    this.withinReach = id;
+    window.dispatchEvent(new CustomEvent(WITHIN_REACH, { detail: { id } }));
+  }
+
+  private interact(target: Npc | null): void {
     if (!target) return;
     if (target.kind === 'bystander') this.bus.emit('greetBystander', { bystanderId: target.id });
     else this.bus.emit('interact', { characterId: target.id });

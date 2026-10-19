@@ -218,3 +218,38 @@ test('an errand whose skill handed the capability over is a miss, not a trade', 
   expect(word.badge).toBe('!');
   expect(word.missed).toBe(true);
 });
+
+/*
+ * docs/UX_REVIEW.md 21: "800out of 1,000" and "you restricted itCaught it" announce as
+ * run-together words.
+ *
+ * Both were two adjacent inline elements with the whitespace between them on a line break, which
+ * JSX drops -- so the page's one h1 read as one word, and so did every recap row. A screenshot
+ * cannot show it, because CSS puts visible space where the text has none; this reads the text the
+ * way a screen reader does. Asserted as "no letter or digit touching a letter across the join",
+ * not as an exact sentence, so a copy edit cannot make it pass while the join is still broken.
+ */
+test('nothing on Results announces as one run-together word', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  await playToResults(page, PERFECT);
+
+  const score = (await page.locator('.otp-hero__score').textContent()) ?? '';
+  console.log('finding 21 (score h1):', JSON.stringify(score));
+  expect(score, 'the number and "out of" are two words').toMatch(/\d\s+\S/);
+  expect(score, 'a digit must never touch a letter').not.toMatch(/\d[A-Za-z]/);
+
+  // Every row, for the run-together join; then the skill rows, which are the ones that carry the
+  // verdict clause and the status word the review found stuck to it.
+  for (const heading of await page.locator('.otp-recap__heading').allTextContents())
+    // A lower-case letter immediately followed by a capital is two clauses with no gap.
+    expect(heading, `"${heading}"`).not.toMatch(/[a-z][A-Z]/);
+
+  const skills = await page.locator('.otp-recap__row--skill .otp-recap__heading').allTextContents();
+  console.log('finding 21 (skill rows):', JSON.stringify(skills));
+  expect(skills.length).toBe(3);
+  for (const heading of skills)
+    expect(heading, `"${heading}" says the verdict and the status as separate words`).toMatch(
+      /\bit\s+\S/,
+    );
+});

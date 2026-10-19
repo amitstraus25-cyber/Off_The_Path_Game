@@ -12,7 +12,7 @@ import type { Character, Content, GameState, Verdict } from '@otp/core';
 import type { Store } from '../store';
 import { Dialogue } from './Dialogue';
 import { SkillCard } from './SkillCard';
-import { Title } from './Title';
+import { Title, padIsHidden } from './Title';
 import { Cottage } from './Cottage';
 import { Results } from './Results';
 import { Notice } from './Notice';
@@ -55,6 +55,36 @@ const VERDICT_STRING: Record<Verdict, string> = {
   reject: 'verdictRejected',
 };
 
+/**
+ * The canvas saying that someone has come within reach. Declared in `world/forest-scene.ts`, which
+ * dispatches it, and read here and in `ui/touch-controls.ts`; see the note there for why it is a
+ * DOM event and not the typed bus.
+ */
+const WITHIN_REACH = 'otp:within-reach';
+
+/**
+ * Who the scene says is within reach, by id.
+ *
+ * The id, and only the id: the name is looked up in `content` below rather than taken from the
+ * event, so nothing but a real member of this cast can ever put words into the live region.
+ */
+function useWithinReach(): string | null {
+  const [id, setId] = useState<string | null>(null);
+  useEffect(() => {
+    const onReach = (event: Event): void => {
+      const detail: unknown = (event as CustomEvent<unknown>).detail;
+      const value =
+        typeof detail === 'object' && detail !== null && 'id' in detail
+          ? (detail as { id: unknown }).id
+          : null;
+      setId(typeof value === 'string' ? value : null);
+    };
+    window.addEventListener(WITHIN_REACH, onReach);
+    return () => void window.removeEventListener(WITHIN_REACH, onReach);
+  }, []);
+  return id;
+}
+
 export function App({
   store,
   content,
@@ -70,6 +100,7 @@ export function App({
   music,
 }: AppProps) {
   const state = useStoreState(store);
+  const withinReach = useWithinReach();
   const live = liveCapabilities(state.verdicts, content);
   const notice = noticeId ? findNotice(content, noticeId) : undefined;
   const character = state.activeCharacter
@@ -88,6 +119,25 @@ export function App({
   /** The forest itself is what is on screen: no panel is over it. */
   const inForest = state.phase === 'explore';
   const allLive = live.length === CAPABILITIES.length;
+
+  /**
+   * What the speech bubble over someone's head says, for a player who cannot see it: the name,
+   * then what to do about it.
+   *
+   * The NAME comes first and comes from the cast, because it is the fact the player is waiting for
+   * and it is data rather than copy. What to do about it is `worldTravellerNear`, in the content
+   * file with the rest of the world summary's strings. Joined rather than interpolated so that a
+   * content file without that key still announces "Rabbit" on its own -- thin, but true, and never
+   * an English literal standing in for a missing one.
+   */
+  const reachName = withinReach
+    ? (findCharacter(content, withinReach)?.name ??
+      content.bystanders.find((b) => b.id === withinReach)?.name ??
+      null)
+    : null;
+  const reachLine = reachName
+    ? [reachName, content.strings['worldTravellerNear']].filter(Boolean).join(', ')
+    : '';
 
   return (
     <>
@@ -133,6 +183,14 @@ export function App({
           </p>
           <p data-announce="say" role="status" aria-live="polite">
             {inForest && say ? `${say.name}: ${say.line}` : ''}
+          </p>
+          {/*
+            Its own region, for the same reason the others have theirs: walking into range and
+            being told something else can happen on the same tick, and one region can only hold
+            one of them.
+          */}
+          <p data-announce="near" role="status" aria-live="polite">
+            {inForest ? reachLine : ''}
           </p>
           <p data-announce="trifecta" role="status" aria-live="polite">
             {inForest && allLive ? (content.strings['trifectaWarning'] ?? '') : ''}
@@ -260,14 +318,16 @@ export function App({
   /**
    * The world, in words (UX_REVIEW finding 16).
    *
-   * The forest is a canvas with nothing behind it: no text alternative for where Red is, what is
-   * near her or what she can interact with. This is the part of that which the UI can actually
-   * know. Who is out there and how far the player has got with each of them is in the store, so it
-   * can be stated; WHERE anyone is, and whether one of them is in range right now, is known only
-   * to the Phaser scene, which reports neither on the bus. Until it does, a player who cannot see
-   * the forest can still tell who is left to meet, what Grandma asked for and whether the cottage
-   * will open -- but has to sweep the forest pressing Space to find anybody. Said plainly in the
-   * notes with this change, because it is the difference between completable and usable.
+   * The forest is a canvas with nothing behind it. This is the standing part of the alternative:
+   * who is out there and how far the player has got with each of them, which is all in the store.
+   * Whether one of them is in range right now is the scene's to say, and it now does -- see the
+   * `near` region above.
+   *
+   * What is still missing is WHERE anyone is. A player who cannot see the forest can tell who is
+   * left to meet, what Grandma asked for, whether the cottage will open, and -- the moment she
+   * arrives -- who is within reach; but finding someone is still a sweep, because nothing here
+   * says "the Owl is east of you". A bearing per traveller is the remaining piece and it needs
+   * direction words in the content file, which this change does not own.
    */
   function worldAsText() {
     const travellerState = (c: Character): string => {
@@ -282,8 +342,22 @@ export function App({
 
     return (
       <section class="otp-visually-hidden" aria-label={content.strings['worldSummaryLabel'] ?? ''}>
-        {/* The same line as the hint over the canvas, which is display: none on a touch device. */}
-        <p>{content.strings['controlsHint'] ?? ''}</p>
+        {/*
+          The controls, for the machine this player is actually on -- the same branch, off the same
+          query, as the title's hint (Title.tsx, UX_REVIEW finding 11).
+
+          This printed `controlsHint` to everyone, which names Arrows, WASD, Space and Esc. The
+          visible copy of that line is already `display: none` below `@media (hover: none)`, with a
+          comment in panels.css saying why: it is "dead weight... it names Arrows and WASD to
+          someone holding a phone". So the sighted touch player was spared the wrong instructions
+          and the blind touch player -- the one player for whom this section IS the game -- was
+          handed them as the only instructions there were.
+        */}
+        <p>
+          {padIsHidden()
+            ? (content.strings['controlsHint'] ?? '')
+            : (content.strings['controlsHintTouch'] ?? '')}
+        </p>
         <ul>
           {content.characters.map((c) => (
             <li key={c.id}>{`${c.name}, ${travellerState(c)}`}</li>

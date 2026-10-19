@@ -499,7 +499,21 @@ h2.otp-section-label {
 }
 .otp-title-panel {
   box-sizing: border-box;
-  width: min(calc(430px * var(--otp-ui)), 62%);
+  /*
+   * 340, not 430. At 430 the column's right edge landed 46px PAST Red's left edge, so the first
+   * thing a visitor sees on the hero screen is a cottage path with nobody on it -- she was
+   * rendering behind 88%-black at about 1.1:1, which is invisible. The camera cannot help: scrollX
+   * is already clamped at the map's left bound, so the only lever is the column. 340px is the
+   * number docs/UX_REVIEW.md finding 11 asks for, and the copy still sets on one line at every size
+   * -- "Off the Path" is 235px of the 292px this leaves inside the padding.
+   *
+   * Measured at 1280x860 and 1440x900: the column ends at 359 and her 64px sprite box runs
+   * 339..403, so 44 of those 64 pixels are clear of it -- which is the review's "44px of air", read
+   * exactly. It is not a gap: her leftmost ~20px of box, about 7px of actual cloak, still sits
+   * under the column. Clearing the whole sprite wants 300px or less, which no longer holds the
+   * heading on one line, so that is a call for the title's owner and not a silent widening here.
+   */
+  width: min(calc(340px * var(--otp-ui)), 62%);
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -551,20 +565,14 @@ h2.otp-section-label {
 .otp-title__foot {
   padding-top: calc(16px * var(--otp-ui));
 }
-.otp-title__standing {
-  position: absolute;
-  right: calc(14px * var(--otp-ui));
-  bottom: calc(14px * var(--otp-ui));
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0;
-  padding: calc(7px * var(--otp-ui)) calc(16px * var(--otp-ui));
-  border-radius: var(--otp-r-pill);
-  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
-  color: var(--cyera-offwhite);
-  font-size: max(12px, calc(13px * var(--otp-ui)));
-}
+
+/*
+ * No .otp-title__standing rule. The chip that claimed "Red is already standing on the path" was
+ * removed with the claim (docs/UX_REVIEW.md finding 11): it was shown on exactly the landscape
+ * widths where the column hid her and suppressed in the portrait one where she was visible. Its
+ * styling and its portrait `display: none` outlived it by a round. e2e/title-claims.spec.ts still
+ * asserts the element is absent, which is what keeps it from coming back by accident.
+ */
 
 /* Portrait docks the column under the world rather than beside it, so Red stays visible above it
    (decision D5: canvas on top, panels below, never require rotation).
@@ -591,8 +599,5 @@ h2.otp-section-label {
     border: var(--otp-panel-border) solid var(--cyera-deep-purple);
     border-radius: var(--otp-r-panel);
     background: color-mix(in srgb, var(--cyera-black) 94%, transparent);
-  }
-  .otp-title__standing {
-    display: none;
   }
 }

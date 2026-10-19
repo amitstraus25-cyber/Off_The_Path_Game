@@ -58,7 +58,22 @@ async function start(): Promise<void> {
     onBack: () => void store.dispatch({ type: 'BACK' }),
     isActive: worldHasInput,
   });
-  const touch = createTouchControls(input);
+  /*
+   * The pad's six accessible names, from the content file like every other player-facing word
+   * (CLAUDE.md rule 3). `?? ''` and no literal behind it on purpose: a key that goes missing must
+   * fail a guard rather than quietly render English from a component. Two guards cover it --
+   * test/strings.test.ts on the read, and e2e/world-reach.spec.ts, which finds all six controls by
+   * the name content gives them and so fails on an empty one.
+   */
+  const touch = createTouchControls(input, {
+    walkGroup: content.strings['touchWalkLabel'] ?? '',
+    up: content.strings['touchWalkUp'] ?? '',
+    down: content.strings['touchWalkDown'] ?? '',
+    left: content.strings['touchWalkLeft'] ?? '',
+    right: content.strings['touchWalkRight'] ?? '',
+    stop: content.strings['touchWalkStop'] ?? '',
+    interact: content.strings['touchInteract'] ?? '',
+  });
   uiRoot.append(touch.root);
 
   const panels = document.createElement('div');

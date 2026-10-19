@@ -78,8 +78,19 @@ export interface ResultsProps {
   onPost(handle: string): Promise<string | null>;
 }
 
-/** "600 from your three verdicts · 100 for asking · 200 for keeping the boundary" */
-function breakdown(result: ReturnType<typeof score>, content: Content): string {
+/**
+ * "600 from your three verdicts · 100 for asking · 200 for never running all three at once"
+ *
+ * Every bonus `score()` adds into `total` must have a clause here, or the parts do not sum to the
+ * headline and the screen that carries the argument is wrong about the player's own run -- the
+ * same failure as finding 1, in arithmetic. `trustBonus` had no clause, so a clean
+ * take-one-on-trust run showed parts totalling 800 under a headline of 900 (UX_REVIEW finding 13);
+ * `trustBreakdown` is the copy that was written for it and never wired.
+ *
+ * Exported for `test/results.test.ts`, which adds the clauses up and holds them against
+ * `score().total` on every run shape, so the next bonus cannot be added without one.
+ */
+export function breakdown(result: ReturnType<typeof score>, content: Content): string {
   const verdictPoints = result.perSkill.reduce((sum, p) => sum + p.points, 0);
   const decided = result.perSkill.filter((p) => p.verdict !== null).length;
   const parts = [`${verdictPoints} from your ${decided === 1 ? 'verdict' : `${decided} verdicts`}`];
@@ -89,7 +100,8 @@ function breakdown(result: ReturnType<typeof score>, content: Content): string {
   const met = result.goals.filter((g) => g.met).length;
   if (result.errandBonus > 0)
     parts.push(`${result.errandBonus} for ${met} of ${result.goals.length} of what Grandma asked`);
-  void content;
+  if (result.trustBonus > 0)
+    parts.push(`${result.trustBonus} ${content.strings['trustBreakdown'] ?? ''}`.trim());
   return parts.join(' · ');
 }
 
@@ -141,9 +153,13 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
               <div>
                 <p class="otp-section-label">{s('scoreLabel')}</p>
                 {/* The score is the subject of this page, so it is the page's one h1. */}
+                {/*
+                  The explicit space is load-bearing: JSX drops whitespace that spans a line
+                  break, so the number and the <small> ran together and the page's one h1
+                  announced as "900out of 1,000" (docs/UX_REVIEW.md 21). It is a space, not copy.
+                */}
                 <h1 class="otp-hero__score">
-                  {result.total.toLocaleString('en')}
-                  <small>{s('scoreOutOf')}</small>
+                  {result.total.toLocaleString('en')} <small>{s('scoreOutOf')}</small>
                 </h1>
                 {/* Say where the points came from, in words, as the deck does. */}
                 <p class="otp-hero__breakdown">{breakdown(result, content)}</p>
@@ -199,7 +215,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                   <div>
                     <p class="otp-recap__heading">
                       {row.skillName}{' '}
-                      <span>you {s(VERDICT_WORD[row.verdict]).toLowerCase()} it</span>
+                      <span>you {s(VERDICT_WORD[row.verdict]).toLowerCase()} it</span>{' '}
                       {/* Status in words, never by glyph or colour alone. */}
                       <span class="otp-recap__status">
                         {row.success ? s('caughtIt') : s('missedIt')}

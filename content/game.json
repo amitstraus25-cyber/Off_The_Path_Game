@@ -1,6 +1,6 @@
 {
   "version": "0.2.0-draft",
-  "status": "PLACEHOLDER copy except Cottage Finder; research team must review every string before launch",
+  "status": "Written copy, not signed-off copy: research review of every string is still the launch gate and has not happened. docs/COPY_REVIEW.md is stale against this file (UX_REVIEW finding 13) -- regenerate it from here; copy changes land in this file, never there.",
   "scoring": {
     "questionBonus": 100,
     "maxPerSkill": 200,
@@ -87,7 +87,7 @@
       "portrait": "portrait-owl",
       "skillId": "word-weaver",
       "spawn": "npc-owl",
-      "greet": "A traveler left this with me. It understands every creature in the forest.",
+      "greet": "A traveller left this with me. It understands every creature in the forest.",
       "asks": [
         {
           "id": "needs",
@@ -97,7 +97,7 @@
         {
           "id": "who",
           "label": "Who made it?",
-          "reply": "I never caught the traveler's name. They were kind, though. Very kind."
+          "reply": "I never caught the traveller's name. They were kind, though. Very kind."
         },
         {
           "id": "show",
@@ -373,7 +373,6 @@
     "cottageHint": "I should hear all three travellers first.",
     "cta": "Read the Research",
     "ctaPrompt": "Who wrote the instructions your agent follows?",
-    "leaderboardTitle": "Wolf Spotters",
     "leaderboardDown": "Leaderboard unavailable right now.",
     "title": "Off the Path",
     "titleHighlight": "Path",
@@ -382,8 +381,16 @@
     "introBody": "Three travellers will offer to help you. Each offer does what it promises. Read what else it does.",
     "play": "Begin the walk",
     "controlsHint": "Arrows or WASD to walk, Space to talk, Esc to go back.",
+    "controlsHintTouch": "Use the walk buttons to move, and Talk or interact when someone is within reach.",
     "titleMeta": "About five minutes. Arrow keys to walk, Space to talk.",
     "titleMetaTouch": "About five minutes. The pad and the A button appear once you start walking.",
+    "touchWalkLabel": "Walk",
+    "touchWalkUp": "Walk up",
+    "touchWalkDown": "Walk down",
+    "touchWalkLeft": "Walk left",
+    "touchWalkRight": "Walk right",
+    "touchWalkStop": "Stop",
+    "touchInteract": "Talk or interact",
     "musicLabel": "Music",
     "musicOn": "on",
     "musicOff": "off",
@@ -429,19 +436,17 @@
     "boundaryHeld": "You never let all three run at once.",
     "boundaryBroken": "All three ran at once, and a notice on a post did the rest.",
     "boundaryOpen": "All three ran at once. Nothing you passed happened to be carrying an instruction \u2014 this time.",
-    "errandDone": "You arrived with the route Grandma asked for.",
-    "errandFailed": "You arrived without the route.",
     "errandNeeded": "Needed a skill that",
     "errandTraded": "Traded for the boundary",
     "errandTradedDetail": "You held back the skill that",
     "worldSummaryLabel": "The forest, in words",
     "worldTravellerMet": "met, no answer given yet",
     "worldTravellerUnmet": "not met yet",
+    "worldTravellerNear": "within reach: you can talk now.",
     "worldCottageOpen": "Grandma's cottage: you can go in.",
     "worldCottageLocked": "Grandma's cottage: still locked.",
     "askingFree": "Asking costs nothing",
     "showSkill": "Show me the skill",
-    "chipTitle": "Cyera research",
     "chipSkill": "Skill",
     "takeAsOffered": "Take it as offered",
     "takeAsOfferedHint": "You will not see the card.",
@@ -449,8 +454,6 @@
     "cardNotOpened": "You never opened this card.",
     "cardBack": "Go back",
     "cardBackHint": "Going back costs nothing. A verdict is final.",
-    "trustHeld": "You took an offer on their word, and arrived with everything.",
-    "trustLost": "You took an offer on their word.",
     "trustBreakdown": "for taking one on their word"
   }
 }

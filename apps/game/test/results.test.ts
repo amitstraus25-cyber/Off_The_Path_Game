@@ -13,9 +13,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import raw from '../../../content/game.json';
-import { errandGoals, loadContent } from '@otp/core';
-import type { Content, SkillId, Verdict } from '@otp/core';
-import { errandState } from '../src/ui/Results';
+import { createState, errandGoals, loadContent, reduce, score } from '@otp/core';
+import type { Content, GameState, SkillId, Verdict } from '@otp/core';
+import { breakdown, errandState } from '../src/ui/Results';
 
 /** The shipped content, through the same schema the game validates at startup. */
 const content: Content = loadContent(raw);
@@ -83,5 +83,97 @@ describe('an errand given up to keep the boundary is not a miss', () => {
     // Results only renders after all three verdicts, but a row must never read as a deliberate
     // trade on the strength of a decision nobody made.
     expect(rows({})['word']).toBe('missed');
+  });
+});
+
+/*
+ * docs/UX_REVIEW.md finding 13's arithmetic half: the parts must sum to the headline.
+ *
+ * `breakdown()` builds one clause per bonus and `score()` adds five of them into `total`. The
+ * trust bonus had a clause written for it in content (`trustBreakdown`) and no code reading it, so
+ * a clean take-one-on-trust run printed parts summing to 800 under a headline of 900 -- the same
+ * kind of claim about the player's own run as finding 1, in arithmetic rather than prose.
+ *
+ * The guard adds up the numbers in the rendered sentence and holds them against `result.total`, so
+ * a sixth bonus cannot be added to `score()` without a clause here: it fails on the shape of the
+ * string, not on a hardcoded list of bonus names.
+ */
+describe('the breakdown sums to the score above it', () => {
+  /** The run as the reducer would have produced it, so `score()` reads a real log. */
+  function runLog(
+    verdicts: Record<string, Verdict>,
+    opts: { inspect?: boolean; read?: string[] } = {},
+  ): GameState {
+    // `at` is the run clock every action carries; the breakdown does not read it, so it stays 0.
+    let state = createState(content);
+    state = reduce(state, { type: 'START', runId: 'breakdown', at: 0 }, content);
+    state = reduce(state, { type: 'BEGIN' }, content);
+    for (const notice of opts.read ?? [])
+      state = reduce(state, { type: 'READ_NOTICE', n: notice, at: 0 }, content);
+    for (const [skillId, verdict] of Object.entries(verdicts)) {
+      const character = content.characters.find((c) => c.skillId === skillId)!;
+      state = reduce(state, { type: 'MEET', c: character.id, at: 0 }, content);
+      if (opts.inspect !== false)
+        state = reduce(state, { type: 'INSPECT', s: skillId, at: 0 }, content);
+      state = reduce(state, { type: 'VERDICT', s: skillId, v: verdict, at: 0 }, content);
+      if (state.phase !== 'explore') state = reduce(state, { type: 'BACK' }, content);
+    }
+    return state;
+  }
+
+  /** Every number at the head of a clause in the sentence the screen prints. */
+  const clauseTotal = (sentence: string): number =>
+    sentence
+      .split(' · ')
+      .map((clause) => Number(/^(\d+)\b/.exec(clause)?.[1] ?? NaN))
+      .reduce((sum, n) => sum + n, 0);
+
+  const cases: [string, GameState][] = [
+    ['the perfect run', runLog(PERFECT)],
+    ['one taken on trust, nothing stolen', runLog({ 'night-light': 'allow' }, { inspect: false })],
+    [
+      'taken on trust and the rest played right',
+      runLog({ ...PERFECT, 'night-light': 'allow' }, { inspect: false }),
+    ],
+    [
+      'allow everything',
+      runLog({ 'cottage-finder': 'allow', 'word-weaver': 'allow', 'night-light': 'allow' }),
+    ],
+    [
+      'reject everything',
+      runLog({ 'cottage-finder': 'reject', 'word-weaver': 'reject', 'night-light': 'reject' }),
+    ],
+    ['one verdict only', runLog({ 'cottage-finder': 'restrict' })],
+  ];
+
+  it.each(cases)('%s', (_name, state) => {
+    const result = score(state.log, content);
+    expect(clauseTotal(breakdown(result, content))).toBe(result.total);
+  });
+
+  it('says what the trust bonus was for, in the words the content file holds', () => {
+    const result = score(runLog({ 'night-light': 'allow' }, { inspect: false }).log, content);
+    expect(
+      result.trustBonus,
+      'the run this guard is about actually earns the bonus',
+    ).toBeGreaterThan(0);
+    expect(breakdown(result, content)).toContain(content.strings['trustBreakdown']);
+  });
+
+  it('spells one word for a person on the road', () => {
+    /*
+     * docs/UX_REVIEW.md 21: "traveler" appeared twice against six "traveller". It is the Owl's
+     * own two lines -- the supply-chain compromise in six words the review asks to protect -- so
+     * the spelling was the only thing changed in them.
+     */
+    const file = JSON.stringify(raw);
+    expect(file.match(/traveler(?!l)/g) ?? [], 'American spelling in player copy').toEqual([]);
+    expect((file.match(/traveller/g) ?? []).length).toBeGreaterThan(5);
+  });
+
+  it('prints no empty or numberless clause', () => {
+    for (const [, state] of cases)
+      for (const clause of breakdown(score(state.log, content), content).split(' · '))
+        expect(clause, 'every clause opens with its own number').toMatch(/^\d+ \S/);
   });
 });

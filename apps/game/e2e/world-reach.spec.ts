@@ -1,0 +1,224 @@
+/*
+ * Can a player who cannot see the canvas find anybody, and get to them? docs/UX_REVIEW.md 16.
+ *
+ * The two halves of that finding are a pair, and this file is deliberately one file: the scene
+ * announcing that someone is within reach is what makes an encounter discoverable, and a walk
+ * control that answers a single activation is what makes it reachable. Either alone leaves the
+ * three encounters the whole game is built from out of play.
+ *
+ * Both assertions are about things no screenshot shows, so both read the running build. The
+ * live-region test uses the node-identity trick the rest of e2e/a11y.spec.ts uses -- a region
+ * inserted into the DOM already holding its text is announced by nobody, and a test that only
+ * checks "the text is there" passes on that broken case too.
+ *
+ * The numbers these were written against, measured on the build before the fix:
+ *   - standing inside INTERACT_RADIUS of the Rabbit, every live region on the page was empty and
+ *     no region on the page contained the word "Rabbit";
+ *   - one `touchscreen.tap` on the joystick moved Red 0.0px, because the stick takes its vector
+ *     from pointer OFFSET and a point activation has none;
+ *   - the only element in the pad exposed to assistive technology as a control was a
+ *     `role="application"` div, and the A button listened for `pointerdown` only, so a
+ *     synthesised activation of it did nothing at all.
+ */
+import { expect, test } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
+import { mapObject, probe, startGame, walkTo } from './helpers';
+// The real constant, as helpers.ts does it: a threshold copied by hand is a threshold that rots.
+import { INTERACT_RADIUS } from '../src/world/logic';
+
+/** The scene's own event name. A typo in any of the three files that spell it fails this file. */
+const WITHIN_REACH = 'otp:within-reach';
+
+const NEAR = '[data-announce="near"]';
+
+/** Tags a DOM node so a later render can be asked whether it is still the same object. */
+const tag = (page: Page, selector: string, mark: string): Promise<void> =>
+  page
+    .locator(selector)
+    .evaluate((el, m) => void ((el as unknown as Record<string, string>)['__otpTag'] = m), mark);
+
+const tagOf = (page: Page, selector: string): Promise<string | null> =>
+  page
+    .locator(selector)
+    .evaluate((el) => (el as unknown as Record<string, string>)['__otpTag'] ?? null);
+
+/** What a screen reader does to a control: one activation, no pointer, no hold. */
+const activate = (page: Page, name: string): Promise<void> =>
+  page.getByRole('button', { name, exact: true }).evaluate((el) => (el as HTMLElement).click());
+
+/** A phone, which is the only place the pad is on screen: on a fine pointer it is display: none. */
+const touchPage = async (browser: Browser): Promise<Page> => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  await page.goto('/');
+  await startGame(page);
+  return page;
+};
+
+/**
+ * Where an NPC can actually be TALKED to, which is not where the map object is.
+ *
+ * `npc-rabbit` is a tile at (416, 608); the person standing on it answers at (432, 648), because
+ * the spawn is centred in its tile and the sprite's origin is its feet. The difference is 56px and
+ * INTERACT_RADIUS is 48, so walking to the object's own corner parks Red one tile short of being
+ * able to say anything -- which is exactly how this file was wrong first time round. The rest of
+ * e2e walks to `+16, +40` for the same reason.
+ */
+const talkingDistance = async (page: Page, name: string): Promise<{ x: number; y: number }> => {
+  const spot = await mapObject(page, name);
+  return { x: spot.x + 16, y: spot.y + 40 };
+};
+
+/* -------------------------------------------- half one: is anybody there? */
+
+test('a traveller who comes within reach is announced, politely', async ({ page }) => {
+  await page.goto('/');
+  await startGame(page);
+
+  await expect(page.locator(NEAR)).toHaveCount(1);
+  await expect(page.locator(NEAR)).toHaveAttribute('aria-live', 'polite');
+  expect(await page.locator(NEAR).textContent(), 'silent while nobody is near').toBe('');
+  await tag(page, NEAR, 'before-arrival');
+
+  await walkTo(page, await talkingDistance(page, 'npc-rabbit'));
+
+  // The name comes from the cast and the sentence from `worldTravellerNear`, so this asserts both
+  // halves: who is there, and that content -- not a literal in a component -- says what to do.
+  await expect(page.locator(NEAR)).toContainText('Rabbit');
+  await expect(page.locator(NEAR)).toContainText(/within reach/i);
+  expect(await tagOf(page, NEAR), 'the same node, mutated -- not a new one').toBe('before-arrival');
+
+  /*
+   * And it goes quiet again when there is nothing to say. A verdict takes the Rabbit out of the
+   * cast that still talks, which is the same code path as walking away from her and a great deal
+   * faster to drive.
+   */
+  await page.evaluate(() => {
+    const { store } = window.__otp!;
+    store.dispatch({ type: 'MEET', c: 'rabbit' });
+    store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
+    store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'restrict' });
+  });
+  await expect(page.locator(NEAR)).toHaveText('');
+});
+
+/*
+ * The summary is the game for this player, so it may not describe a different machine.
+ *
+ * Found by playing the run with the canvas treated as invisible: on a phone the first thing the
+ * summary said was "Arrows or WASD to walk, Space to talk, Esc to go back." -- the line panels.css
+ * already hides on `(hover: none)`, with a comment saying it "names Arrows and WASD to someone
+ * holding a phone". The sighted touch player was spared it; the blind touch player got it as the
+ * only instructions on the page. That is UX_REVIEW finding 11's defect inside finding 16's fix,
+ * which is why the guard lives beside finding 16's other tests.
+ */
+const WORLD_SUMMARY = 'section.otp-visually-hidden[aria-label]';
+
+test('the world summary names the controls this machine actually has', async ({
+  browser,
+  page,
+}) => {
+  const touch = await touchPage(browser);
+  const spoken = (await touch.locator(WORLD_SUMMARY).textContent()) ?? '';
+  expect(spoken, 'the summary is there at all').not.toBe('');
+  expect(spoken, 'no keyboard the player does not have').not.toMatch(
+    /arrow|wasd|\bspace\b|\besc\b/i,
+  );
+  // And it names controls that are really on the page, by the name they answer to.
+  for (const name of ['walk buttons', 'Talk or interact']) expect(spoken).toContain(name);
+  await touch.context().close();
+
+  // The same screen on a machine with a keyboard and no pad says the opposite, and is right to.
+  await page.goto('/');
+  await startGame(page);
+  expect(await page.locator(WORLD_SUMMARY).textContent()).toMatch(/arrow/i);
+});
+
+/* -------------------------------------------- half two: can she get there? */
+
+test('the pad offers real controls, not a drag surface', async ({ browser }) => {
+  const touch = await touchPage(browser);
+
+  for (const name of ['Walk up', 'Walk down', 'Walk left', 'Walk right', 'Stop'])
+    await expect(touch.getByRole('button', { name, exact: true })).toHaveCount(1);
+
+  // The joystick cannot answer an activation, so it must not be offered as the thing that can.
+  await expect(touch.locator('.otp-stick')).toHaveAttribute('aria-hidden', 'true');
+  await expect(touch.locator('.otp-stick')).toBeVisible();
+
+  await touch.context().close();
+});
+
+test('one activation of a walk button carries Red, and stops by itself', async ({ browser }) => {
+  const touch = await touchPage(browser);
+
+  const before = await probe(touch);
+  await activate(touch, 'Walk right');
+  await touch.waitForTimeout(1400);
+  const after = await probe(touch);
+
+  /*
+   * The press is designed to carry her four tiles. The floor asserted is the interact radius,
+   * because that is the invariant rather than the tuning: a press that cannot cover the radius can
+   * never change who is within reach, which is the whole point of having the control. A tighter
+   * bound was tried and is wrong -- Phaser clamps its frame delta, so a run on a loaded machine
+   * covers real ground short of the four tiles (81px of 128 on one, measured) with nothing broken.
+   */
+  expect(after.position.x - before.position.x, 'px walked east on one press').toBeGreaterThan(
+    INTERACT_RADIUS,
+  );
+
+  // Bounded: a press is a step, not a commitment. Nothing runs off across the map.
+  await touch.waitForTimeout(600);
+  expect((await probe(touch)).position.x).toBeCloseTo(after.position.x, 0);
+
+  await touch.context().close();
+});
+
+test('the walk stops the moment someone comes within reach', async ({ browser }) => {
+  const touch = await touchPage(browser);
+
+  const before = await probe(touch);
+  await activate(touch, 'Walk right');
+  await touch.waitForTimeout(150);
+
+  /*
+   * She has to be WALKING before the stop can mean anything. Without this the test passes on a pad
+   * whose buttons do nothing at all -- which it did, the first time this fix was broken on purpose
+   * to check the guard: a Red who never set off is trivially a Red who did not overshoot.
+   */
+  const underway = await probe(touch);
+  expect(underway.position.x - before.position.x, 'underway before the event').toBeGreaterThan(5);
+
+  await touch.evaluate(
+    (event) => window.dispatchEvent(new CustomEvent(event, { detail: { id: 'rabbit' } })),
+    WITHIN_REACH,
+  );
+  await touch.waitForTimeout(80);
+  const stopped = await probe(touch);
+  await touch.waitForTimeout(500);
+
+  expect(
+    (await probe(touch)).position.x,
+    'she must not be walked past the person she was looking for',
+  ).toBeCloseTo(stopped.position.x, 0);
+
+  await touch.context().close();
+});
+
+test('one activation of the A button talks to whoever is within reach', async ({ browser }) => {
+  const touch = await touchPage(browser);
+
+  await walkTo(touch, await talkingDistance(touch, 'npc-rabbit'));
+  await expect(touch.locator(NEAR)).toContainText('Rabbit');
+
+  await activate(touch, 'Talk or interact');
+  await expect(touch.locator('.otp-dialogue')).toBeVisible();
+  expect(await touch.evaluate(() => window.__otp!.store.getState().activeCharacter)).toBe('rabbit');
+
+  await touch.context().close();
+});

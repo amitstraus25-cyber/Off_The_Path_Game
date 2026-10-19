@@ -433,6 +433,349 @@ test('Results keeps every surface inside the viewport', async ({ page }) => {
   }
 });
 
+/* ------------------------------------------- finding 21, the remainder: --otp-ui */
+
+/**
+ * Every step --otp-ui takes, as the four media blocks in panels.css declare them. The width pair
+ * and the height pair are independent, and the scale is meant to be the smaller of the two.
+ */
+const WIDTH_STEP = (w: number): number => (w <= 380 ? 0.7 : w <= 640 ? 0.78 : 1);
+const HEIGHT_STEP = (h: number): number => (h <= 580 ? 0.7 : h <= 780 ? 0.82 : 1);
+
+/** Every corner of the step table, plus the four viewports the review caught it wrong at. */
+const SCALE_MATRIX: [number, number][] = [
+  [1280, 860],
+  [1920, 1080],
+  [1366, 768],
+  [1280, 700],
+  [768, 1024],
+  [641, 700],
+  [640, 700],
+  [430, 932],
+  [390, 844],
+  [375, 812],
+  [375, 667],
+  [360, 640],
+  [320, 568],
+  [812, 375],
+];
+
+test('--otp-ui is the smallest step the viewport matches, not the last one declared', async ({
+  page,
+}) => {
+  test.slow();
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto('/');
+  await startGame(page);
+
+  /*
+   * Two of the four blocks key off the height and two off the width, so a viewport can match one
+   * from each pair -- and the cascade takes whichever is written later, not the smaller. With the
+   * height blocks written last a 375x667 phone took 0.82 from `max-height: 780` and rendered 17%
+   * LARGER than the same phone at 375x812, which took 0.7. 360x640 and 640x700 did the same.
+   *
+   * panels.css fixes it by declaring the blocks in descending order of their value, which makes
+   * last-wins identical to min(). That is an ORDER, not an expression, so it is one careless
+   * insertion away from breaking again -- hence a matrix rather than a spot check. A new step
+   * belongs in descending order and in the list above.
+   */
+  const wrong: string[] = [];
+  for (const [w, h] of SCALE_MATRIX) {
+    await resize(page, w, h);
+    const ui = await page.evaluate(() =>
+      parseFloat(getComputedStyle(document.querySelector('.otp-ui')!).getPropertyValue('--otp-ui')),
+    );
+    const want = Math.min(WIDTH_STEP(w), HEIGHT_STEP(h));
+    expect(Number.isFinite(ui), `--otp-ui is a number at ${w}x${h}, not a token stream`).toBe(true);
+    if (Math.abs(ui - want) > 0.001) {
+      wrong.push(`${w}x${h}: --otp-ui ${ui}, min(${WIDTH_STEP(w)}, ${HEIGHT_STEP(h)}) = ${want}`);
+    }
+  }
+  expect(wrong, 'viewports where --otp-ui is not the smallest matching step').toEqual([]);
+});
+
+/* ----------------------------------- finding 21, the remainder: the HUD never covers itself */
+
+/** Overlap in px between one element and each match of a selector, as width x height. */
+function overlaps(page: Page, one: string, many: string): Promise<string[]> {
+  return page.evaluate(
+    ([a, b]) => {
+      const first = document.querySelector(a!);
+      if (!first) return [`${a} is absent`];
+      const ra = first.getBoundingClientRect();
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll(b!))) {
+        const rb = el.getBoundingClientRect();
+        const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+        const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+        if (w > 0.5 && h > 0.5) {
+          out.push(
+            `${a} covers ${Math.round(w)}x${Math.round(h)} of ${b} ` +
+              `"${(el.textContent ?? '').trim().slice(0, 24)}"`,
+          );
+        }
+      }
+      return out;
+    },
+    [one, many],
+  );
+}
+
+/** The three skills, in the order the three characters offer them. */
+const OFFERS: [character: string, skill: string][] = [
+  ['rabbit', 'cottage-finder'],
+  ['owl', 'word-weaver'],
+  ['lantern-keeper', 'night-light'],
+];
+
+test('the verdict toast never covers an errand goal in portrait', async ({ page }) => {
+  test.slow();
+  /*
+   * The toast docks to the bottom of the viewport, 140px up to clear the touch controls, and in
+   * portrait that was exactly where the errand goals are: at 375x812 "Allowed: Night Light" covered
+   * the first two of the three goals outright, 178x19 each, and clipped the third. The player was
+   * told what they had just done by having the thing it affects hidden. panels.css retargets that
+   * layer to the world box in portrait, above the basket pill.
+   *
+   * One verdict per viewport, because main.ts clears the hint after HINT_MS: a sweep that resizes
+   * three times and then measures would be measuring an empty toast, which is a guard that proves
+   * nothing.
+   */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/');
+  await startGame(page);
+
+  const sizes: [number, number][] = [
+    [375, 812],
+    [390, 844],
+    [360, 740],
+  ];
+  for (const [i, [w, h]] of sizes.entries()) {
+    await resize(page, w, h);
+    const [c, s] = OFFERS[i]!;
+    await page.evaluate(
+      ([character, skill]) => {
+        const { store } = window.__otp!;
+        store.dispatch({ type: 'MEET', c: character });
+        store.dispatch({ type: 'INSPECT', s: skill });
+        store.dispatch({ type: 'VERDICT', s: skill, v: 'allow' });
+      },
+      [c, s],
+    );
+    await expect(page.locator('.otp-toast')).toContainText(/\S/);
+    await expect(page.locator('.otp-hud-goal')).not.toHaveCount(0);
+
+    expect(await overlaps(page, '.otp-toast', '.otp-hud-goal'), `at ${w}x${h}`).toEqual([]);
+    // And it must not land on the basket either, which is the corner it was moved next to.
+    expect(await overlaps(page, '.otp-toast', '.otp-hud-basket'), `at ${w}x${h}`).toEqual([]);
+  }
+});
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  test('the joystick and the A button never cover the HUD', async ({ page }) => {
+    test.slow();
+    /*
+     * The A button is a 72px disc in the viewport's bottom-right corner and the basket pill was in
+     * the world's, so on every landscape phone the button covered the last TWO basket slots
+     * outright -- 24x20 slots with 24x20 of overlap at 812x375, 844x390 and 740x360. The run's own
+     * record of what it is carrying sat behind the button the player presses to add to it.
+     *
+     * The clearances are tokens.css's numbers (72px disc, 16px off the edge) read from panels.css,
+     * which is exactly the kind of coupling that rots, so this measures the overlap instead of
+     * trusting either file.
+     */
+    await page.setViewportSize({ width: 812, height: 375 });
+    await page.goto('/');
+    await startGame(page);
+
+    const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+    expect(coarse, 'this test is only meaningful with a coarse pointer').toBe(true);
+
+    for (const [w, h] of [
+      [812, 375],
+      [844, 390],
+      [740, 360],
+      [375, 812],
+      [390, 844],
+    ] as const) {
+      await resize(page, w, h);
+      await expect(page.locator('.otp-a-button')).toBeVisible();
+      await expect(page.locator('.otp-hud-slot')).not.toHaveCount(0);
+
+      for (const control of ['.otp-a-button', '.otp-stick']) {
+        for (const hud of ['.otp-hud-slot', '.otp-hud-basket__label', '.otp-hud-goal']) {
+          expect(await overlaps(page, control, hud), `${control} at ${w}x${h}`).toEqual([]);
+        }
+      }
+    }
+  });
+});
+
+/* ------------------------------- finding 21, the remainder: below the canvas's own floor */
+
+test('the world chrome stays inside the viewport below 358px', async ({ page }) => {
+  test.slow();
+  /*
+   * ui/stage.ts will not size the canvas below 352 logical pixels, so the chrome drawn around it
+   * has a hard minimum of 358px -- and below that the canvas box the frame is anchored to is wider
+   * than the window. Everything positioned from that box went with it: at 320 the frame's right
+   * border was 35px off screen, the music control 25.7px, and two basket slots 16.6px, with no
+   * scrollbar and no wheel because a fixed layer never produces one. The forest is still cropped
+   * at the right down here, which is stage.ts's floor; the chrome is not.
+   */
+  await page.setViewportSize({ width: 320, height: 812 });
+  await page.goto('/');
+  await startGame(page);
+
+  for (const width of [300, 320, 340, 357, 375]) {
+    await resize(page, width, 812);
+    const outside = await page.evaluate(
+      (sels) => {
+        const out: string[] = [];
+        for (const sel of sels) {
+          for (const el of Array.from(document.querySelectorAll(sel))) {
+            const r = el.getBoundingClientRect();
+            // Screen-reader-only text is a deliberately clipped 1px box; it paints nothing.
+            if (r.width <= 1 || r.height <= 1) continue;
+            const over = Math.max(-r.left, r.right - window.innerWidth);
+            if (over > 0.5) out.push(`${sel} is ${Math.round(over * 10) / 10}px outside`);
+          }
+        }
+        return out;
+      },
+      [
+        '.otp-world-frame',
+        '.otp-world-frame__header',
+        '.otp-music',
+        '.otp-world-anchor',
+        '.otp-hud-basket',
+        '.otp-hud-slot',
+        '.otp-hud-goals',
+      ],
+    );
+    expect(outside, `world chrome at ${width}px`).toEqual([]);
+
+    // The music control is the only control on Explore and its mute setting persists, so it has to
+    // be reachable, not merely on screen: --otp-touch-min, which does not scale.
+    const music = await page.evaluate(() => {
+      const r = document.querySelector('.otp-music')!.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    });
+    expect(music.w, `music control width at ${width}px`).toBeGreaterThanOrEqual(44);
+    expect(music.h, `music control height at ${width}px`).toBeGreaterThanOrEqual(44);
+  }
+});
+
+/* --------------------------------------------- finding 11: the title column and Red */
+
+test('the title column leaves Red on the path it says she is standing on', async ({ page }) => {
+  test.slow();
+  /*
+   * "Red is already standing on the path" was the first thing the hero screen said and it was false
+   * at every landscape width: a 430px copy column put its right edge 46px past her, and she renders
+   * behind 88%-black at about 1.1:1, which is invisible. The chip has gone with the claim; the
+   * column is 340px, which is the number docs/UX_REVIEW.md finding 11 asks for and leaves 44 of her
+   * 64px sprite box clear of it. The camera cannot help -- scrollX is already clamped at the map's
+   * left bound -- so the column is the only lever, and widening it hides her again.
+   */
+  for (const [w, h] of [
+    [1280, 860],
+    [1440, 900],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto('/');
+    await page.waitForSelector('#game[data-ready="true"]');
+
+    const seen = await page.evaluate(() => {
+      const scene = window.__otp!.scene as unknown as {
+        redPosition: { x: number; y: number };
+        cameras: { main: { width: number; scrollX: number } };
+      };
+      const canvas = document.querySelector('#game canvas')!.getBoundingClientRect();
+      const column = document.querySelector('.otp-title-panel')!.getBoundingClientRect();
+      // red.png frames are 32x48 with the origin at her feet (world/forest-scene.ts).
+      const zoom = canvas.width / scene.cameras.main.width;
+      const right = canvas.left + (scene.redPosition.x + 16 - scene.cameras.main.scrollX) * zoom;
+      return {
+        clear: Math.round(right - column.right),
+        column: Math.round(column.width),
+      };
+    });
+    expect(seen.column, `the title column at ${w}x${h}`).toBeLessThanOrEqual(384);
+    expect(seen.clear, `Red's sprite clear of the column at ${w}x${h}`).toBeGreaterThanOrEqual(40);
+  }
+});
+
+/* ------------------------------------------------- what the fixes must not break */
+
+interface Indicator {
+  what: string;
+  outlineColour: string;
+  outlineWidth: string;
+  shadow: string;
+}
+
+/**
+ * Tabs until `selector` holds the focus and reports what the ring looks like there.
+ *
+ * It has to be the Tab key: `:focus-visible` is a heuristic about how the focus arrived, and
+ * element.focus() from a script does not satisfy it on a button, so a scripted focus measures an
+ * element with no indicator at all and passes or fails for the wrong reason.
+ */
+async function ringAtFocus(page: Page, selector: string): Promise<Indicator> {
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press('Tab');
+    const found = await page.evaluate((sel) => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || !el.matches(sel)) return null;
+      const cs = getComputedStyle(el);
+      return {
+        what: el.className || el.tagName,
+        outlineColour: cs.outlineColor,
+        outlineWidth: cs.outlineStyle === 'none' ? 'none' : cs.outlineWidth,
+        shadow: cs.boxShadow,
+      };
+    }, selector);
+    if (found) return found;
+  }
+  throw new Error(`Tab never reached ${selector}`);
+}
+
+test('the focus indicator stays two-tone on both grounds', async ({ page }) => {
+  /*
+   * 3px Deep Purple inside a 6px Lilac halo, swapped on the dark headers. Either colour alone
+   * vanishes on one of the two grounds -- Deep Purple reads on Shell at 12.7:1 and disappears on
+   * Black, Lilac the other way round -- so the pairing IS the indicator, not a decoration on it.
+   * docs/UX_REVIEW.md names it among the things a CSS fix could casually destroy, and the fixes in
+   * this round move the layer that holds half the focusable controls.
+   */
+  const purple = 'rgb(68, 19, 99)';
+  const lilac = 'rgb(210, 142, 255)';
+
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto('/');
+  await startGame(page);
+
+  // On Black: the music control, which is the only focusable thing on Explore and sits in the
+  // world frame's dark header.
+  const onBlack = await ringAtFocus(page, '.otp-music');
+  expect(onBlack.outlineColour, 'outline on the dark header').toBe(lilac);
+  expect(onBlack.outlineWidth, 'outline width on the dark header').toBe('3px');
+  expect(onBlack.shadow, 'halo on the dark header').toContain(purple);
+  expect(onBlack.shadow, 'the halo is 6px').toContain('6px');
+
+  // On Shell: a question option inside the dialogue panel.
+  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
+  await expect(page.locator('.otp-option').first()).toBeVisible();
+  const onShell = await ringAtFocus(page, '.otp-option');
+  expect(onShell.outlineColour, 'outline on a Shell panel').toBe(purple);
+  expect(onShell.outlineWidth, 'outline width on a Shell panel').toBe('3px');
+  expect(onShell.shadow, 'halo on a Shell panel').toContain(lilac);
+  expect(onShell.shadow, 'the halo is 6px').toContain('6px');
+});
+
 /* -------------------------------------------------------------- measurements */
 
 test.describe('measurements', () => {

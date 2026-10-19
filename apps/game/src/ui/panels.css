@@ -43,7 +43,52 @@
    * room there really is, and it shrinks again when the layer puts up a scrollbar.
    */
   --otp-panel-w: min(var(--otp-canvas-w, 92vw), 748px, 100%);
+  /*
+   * The height of the basket pill in the world's bottom-right corner, declared rather than
+   * measured, because two other things have to be placed clear of it: the verdict toast in
+   * portrait and the A button in landscape. Its own box is 6px of padding each side around a
+   * calc(28px x --otp-ui) slot, which is exactly 40px at --otp-ui 1 and 28px at 0.7; it is applied
+   * back to .otp-hud-basket as a min-height so the number here and the box cannot drift apart.
+   */
+  --otp-hud-basket-h: calc(40px * var(--otp-ui));
   font-family: var(--cyera-font-sans);
+}
+
+/*
+ * THE SCALE STEPS, AND WHY THEY ARE IN THIS ORDER.
+ *
+ * Four blocks set --otp-ui: two off the width, because a skill card has to fit between the
+ * gutters, and two off the height, because the Inspect group is the tallest thing in the game and
+ * a 1366x768 laptop or a landscape phone has far less vertical room than a 1280x800 window.
+ *
+ * A viewport can match one block from each pair, and the intent has always been the SMALLER of the
+ * two: whichever axis is tighter is the one that decides. The cascade does not do that on its own
+ * -- it takes whichever matching block is written later -- so with the height blocks written last,
+ * a 375x667 phone took 0.82 from `max-height: 780` and rendered 17% LARGER than the same phone at
+ * 375x812, which took 0.7. 360x640 and 640x700 did the same thing.
+ *
+ * So the blocks are ordered by DESCENDING value, which makes last-wins identical to min(): the
+ * last block a viewport matches is then always the smallest one it matches. It is written as an
+ * order rather than as a literal `min()` because these are plain numbers that tests and
+ * `getPropertyValue('--otp-ui')` read with parseFloat, and an unregistered custom property
+ * substitutes its tokens rather than computing them -- `min(0.78, 0.82)` would reach the test as a
+ * string.
+ *
+ * ADDING A STEP: put it in descending order of its value, not at the end, and add its viewport to
+ * the matrix in e2e/css-contract.spec.ts, which asserts the min() equality at 14 sizes.
+ *
+ * --otp-slot-px goes wherever --otp-ui goes, or the basket icon outgrows the slot that holds it:
+ * .otp-slot is calc(84px x --otp-ui) wide by calc(68px x --otp-ui) tall while the icon is
+ * calc(64px x --otp-slot-px), so at 0.78 a 65.5x53 slot held a 64x64 icon -- 13px out of the
+ * bottom, breaking the lower edge of the Results basket panel on every current iPhone
+ * (390x844, 393x852, 412x915, 430x932) -- and 0.82 did the same by 10.3px on a 1366x768 laptop.
+ */
+@media (max-height: 780px) {
+  .otp-ui {
+    --otp-ui: 0.82;
+    --otp-px: 1;
+    --otp-slot-px: 0.5;
+  }
 }
 
 /* One scale step down on phones so a full skill card still fits above the controls. */
@@ -51,13 +96,6 @@
   .otp-ui {
     --otp-ui: 0.78;
     --otp-px: 1;
-    /*
-     * --otp-slot-px must be set wherever --otp-ui is, or the basket icon outgrows the slot that
-     * holds it. .otp-slot is calc(84px x --otp-ui) wide by calc(68px x --otp-ui) tall while the
-     * icon is calc(64px x --otp-slot-px), so at --otp-ui 0.78 a 65.5x53 slot was holding a 64x64
-     * icon: 13px of it hung out of the bottom and broke the lower edge of the Results basket
-     * panel on every current iPhone (390x844, 393x852, 412x915, 430x932).
-     */
     --otp-slot-px: 0.5;
   }
 }
@@ -66,22 +104,6 @@
   .otp-ui {
     --otp-ui: 0.7;
     --otp-px: 1;
-    --otp-slot-px: 0.5;
-  }
-}
-
-/*
- * Height matters as much as width here: the Inspect group is the tallest thing in the game, and a
- * 1366x768 laptop window or any landscape phone has far less vertical room than a 1280x800 one.
- * Without these the only breakpoints were width-based, so a landscape phone got the full desktop
- * scale and the verdict pills fell off the screen.
- */
-@media (max-height: 780px) {
-  .otp-ui {
-    --otp-ui: 0.82;
-    --otp-px: 1;
-    /* Same reason as the 640px block: 0.82 gave a 68.9x55.8 slot holding a 64x64 icon, 10.3px out
-       of the bottom, on a 1366x768 laptop and a 1280x700 window. */
     --otp-slot-px: 0.5;
   }
 }
@@ -148,6 +170,40 @@
 @media (orientation: portrait) {
   .otp-layer--modal {
     align-content: safe end;
+  }
+
+  /*
+   * The transient lines -- the verdict toast and whatever a bystander just said -- move INSIDE the
+   * world in portrait.
+   *
+   * They dock to the bottom of the viewport, 140px up to clear the touch controls, and in portrait
+   * that is exactly where the errand goals are: at 375x812 "Allowed: Night Light" covered the first
+   * two of the three goals outright (178x19 of overlap each) and clipped the third. The player was
+   * told what they had just done by having the thing it affects hidden.
+   *
+   * There is nowhere else below the world to put it. The strip under the frame is 231px tall at
+   * 375x812; the goals take 93 of it and the joystick and A button take the bottom 128, which
+   * leaves a 1px gap. The world, by contrast, has nothing in its lower half but forest for the 2.6s
+   * the line is up -- and the frame's bottom edge then sits between the line and the goals it
+   * reports on, so they read as a pair instead of one covering the other.
+   *
+   * So this layer is retargeted to the world box and keeps its `align-content: end`: the lines
+   * stack up from just above the basket pill in the corner. The two modifier layers are excluded
+   * because they are whole panels with their own portrait docking, four rules above.
+   */
+  .otp-layer:not(.otp-layer--modal):not(.otp-layer--arrive) {
+    top: var(--otp-canvas-y, 0px);
+    bottom: auto;
+    height: calc(var(--otp-canvas-h, 0px) - var(--otp-hud-basket-h) - 24px * var(--otp-ui));
+    /* The viewport's safe area is irrelevant now the box ends inside the world. */
+    padding-bottom: calc(14px * var(--otp-ui));
+  }
+
+  /* And so is the 140px that lifted the toast over the joystick: this layer stops above the basket
+     pill, 128px short of the controls. Left in, it floated the line in the middle of the forest,
+     157px clear of the corner it is supposed to sit in. */
+  .otp-layer:not(.otp-layer--modal):not(.otp-layer--arrive) .otp-toast {
+    margin-bottom: 0;
   }
 }
 
@@ -272,13 +328,24 @@
  * Drawn in the UI layer and anchored to the canvas box that ui/stage.ts publishes as
  * --otp-canvas-x/y/w/h. The frame itself takes no pointer events, so clicks still reach the
  * world; its header does, so the chip and any control in it stay usable.
+ *
+ * THE 358px FLOOR. ui/stage.ts will not size the canvas below 352 logical pixels, so with the
+ * frame's two 3px borders the chrome has a hard minimum of 358px -- and below that the canvas box
+ * it is anchored to is WIDER than the viewport. Everything positioned from that box then went with
+ * it: at 320 the frame's right border was 35px off screen, the music control 25.7px (the only
+ * control on Explore, and its mute setting persists), and two basket slots 16.6px, with nothing to
+ * scroll because a fixed layer never produces a scrollbar. So the frame and the anchor are clamped
+ * to the viewport. The forest is still cropped at the right below 358px, which is stage.ts's floor
+ * and not something CSS can undo -- but the frame closes at the viewport's edge and every control
+ * inside it stays reachable, which is the part that was broken. min() is inert above the floor:
+ * the canvas is narrower than the viewport at every width the game is actually played at.
  */
 .otp-world-frame {
   position: fixed;
   box-sizing: border-box;
-  left: calc(var(--otp-canvas-x, 0px) - var(--otp-panel-border));
+  left: max(0px, calc(var(--otp-canvas-x, 0px) - var(--otp-panel-border)));
   top: calc(var(--otp-canvas-y, 0px) - var(--otp-world-header) - var(--otp-panel-border));
-  width: calc(var(--otp-canvas-w, 0px) + var(--otp-panel-border) * 2);
+  width: min(calc(var(--otp-canvas-w, 0px) + var(--otp-panel-border) * 2), 100%);
   height: calc(var(--otp-canvas-h, 0px) + var(--otp-world-header) + var(--otp-panel-border) * 2);
   border: var(--otp-panel-border) solid var(--cyera-deep-purple);
   border-radius: var(--otp-r-panel);
@@ -392,12 +459,14 @@
 /* -------------------------------------------------------- the basket, in the HUD */
 
 /* Spans the world box, so anything inside it can be placed against the canvas rather than the
-   window, and survives a panel opening over the top. */
+   window, and survives a panel opening over the top. Clamped to the viewport for the reason on
+   .otp-world-frame above: below 358px the canvas box is wider than the window, and the basket and
+   the errand goals are both positioned from this element's corners. */
 .otp-world-anchor {
   position: fixed;
-  left: var(--otp-canvas-x, 0px);
+  left: max(0px, var(--otp-canvas-x, 0px));
   top: var(--otp-canvas-y, 0px);
-  width: var(--otp-canvas-w, 0px);
+  width: min(var(--otp-canvas-w, 0px), 100%);
   height: var(--otp-canvas-h, 0px);
   pointer-events: none;
 }
@@ -406,6 +475,8 @@
   position: absolute;
   right: calc(14px * var(--otp-ui));
   bottom: calc(14px * var(--otp-ui));
+  /* Declared, not inferred: see --otp-hud-basket-h. This is the height the box already had. */
+  min-height: var(--otp-hud-basket-h);
   display: flex;
   align-items: center;
   gap: calc(10px * var(--otp-ui));
@@ -1423,6 +1494,20 @@
     top: calc(var(--otp-world-header) + 10px * var(--otp-ui));
     bottom: auto;
     max-width: 52%;
+  }
+
+  /*
+   * And the A button owns the bottom-right corner the basket was in. It is a 72px disc sitting 16px
+   * off the viewport's bottom edge (ui/tokens.css), and on a landscape phone it covered the last
+   * TWO basket slots outright -- a 24x20 slot with a 24x20 overlap at 812x375, 844x390 and 740x360
+   * -- so the run's own record of what it is carrying was behind the button the player presses to
+   * add to it. The basket therefore lifts to sit above the button rather than under it: the
+   * button's own height plus a gap, measured from the corner the basket already uses. The numbers
+   * are tokens.css's, so e2e/css-contract.spec.ts asserts the overlap is zero rather than trusting
+   * them to stay put.
+   */
+  .otp-hud-basket {
+    bottom: calc(14px * var(--otp-ui) + 72px + 14px);
   }
 }
 
