@@ -377,6 +377,55 @@ const FRINGE = [6, 6, 5, 4, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6];
  * whole lower-right quadrant at L43 and took half of her below L81, which is the opposite of the
  * problem she exists to solve.
  */
+/*
+ * THE MARK ON HER CAPE -- and it is a MOTIF, not the logo. Read this before changing it.
+ *
+ * `CLAUDE.md` rule 5 forbids redrawn logo variants, and commit ba44d80 reverted the one previous
+ * attempt to put the real mark in the world with measurements that are not arguable: scaled into a
+ * `pixelArt: true` scene the SVG point-samples into a deformed resample -- 61 of about 800 pixels
+ * wrong and bilateral symmetry lost across its own axis -- while a CORRECT rasterisation carries
+ * 195 partial-alpha pixels against a tileset that has zero. Its conclusion was that the only routes
+ * are a pixel-art symbol authored by design, or the DOM layer, where the header mark is already
+ * crisp at any zoom.
+ *
+ * Measured here: the widest run of cape on her back is 15px, narrowing to 8 by the hem. With the
+ * clear space `BRAND_AND_UI` section 82 requires -- at least the height of the "c" -- the most a
+ * mark can occupy is about 9x9. The Cyera symbol is built from four arcs rotating about a centre
+ * with notches between them; at nine pixels those arcs are one pixel each and the notches are
+ * nothing. It cannot be the logo at this size. Anything that tried would be the squashed logo
+ * `ART_PRODUCTION` section 6a calls the one unacceptable outcome.
+ *
+ * So this is what section 6a proposed instead and what the request was taken to mean: a device that
+ * carries the mark's RADIAL FOUR-FOLD FORM without claiming to be it. Four arms about a centre,
+ * rotationally symmetric, so it cannot be mistaken for a tilted or stretched logo -- the failure
+ * the revert was about. It is worked in the cloak's own ramp, two steps below the cloth so it reads
+ * as weave rather than a sticker, and it is on the four back-facing frames only, which is where a
+ * cape carries a device and where the board shows her from behind.
+ *
+ * IT STILL WANTS BRAND SIGN-OFF, and section 6a says so: approve it as a deliberately-not-the-logo
+ * device, or leave the cape plain. Both are acceptable. What is not acceptable is calling this the
+ * logo, in a commit message, a review, or to a stakeholder.
+ */
+const MOTIF = 9;
+function paintCapeMotif(img: Img, cx: number, top: number): void {
+  // Sits in the upper back, below the hood's overhang and above the hem, where the cape is widest.
+  const cy = top + 4;
+  const ink = tone('cloak', CLOAK_FOLD);
+  const lit = tone('cloak', CLOAK_LIT);
+  const r = (MOTIF - 1) / 2;
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++) {
+      const d = Math.hypot(dx, dy);
+      if (d > r) continue;
+      // Four arms at the diagonals, a gap between each: the mark's rotational form, nothing more.
+      const arm = Math.abs(Math.abs(dx) - Math.abs(dy)) <= 0.5 && d > 1.2;
+      const hub = d <= 1.2;
+      if (!arm && !hub) continue;
+      // The hub catches the light, the arms are the shadow: it reads as stitched, not printed.
+      img.px(cx + dx, cy + dy, hub ? lit : ink);
+    }
+}
+
 function domeTone(dx: number, dy: number): number {
   const z = Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy));
   // The light sits mostly in the plane of the picture -- 0.66 across against 0.36 out of it. A
@@ -665,10 +714,22 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, swa
   // at right angles and the back of her reads as a graphic cross rather than as cloth; started
   // under it, the two meet in a T, which is what a cape over a skirt actually does.
   if (facing === 'up') {
-    for (let y = Math.max(capeY + 1, shoulder + 1); y < HEM; y++) {
+    const foldTop = Math.max(capeY + 1, shoulder + 1);
+    /*
+     * The seam breaks for the device. `BRAND_AND_UI` section 82 asks for clear space of at least
+     * the height of the "c" round the mark, and running the fold straight through it put a vertical
+     * line across a four-armed radial form -- which reads as a scuff on the cloth rather than as
+     * anything deliberate. Broken either side, the seam reads as a seam interrupted by a device,
+     * which is what a garment with a badge on it actually looks like.
+     */
+    const motifTop = foldTop + 4 - (MOTIF - 1) / 2;
+    const motifBottom = foldTop + 4 + (MOTIF - 1) / 2;
+    for (let y = foldTop; y < HEM; y++) {
+      if (y >= motifTop - 1 && y <= motifBottom + 1) continue;
       img.px(cx, y, keyline('cloak'));
       img.px(cx - 1, y, tone('cloak', CLOAK_LIT));
     }
+    paintCapeMotif(img, cx, foldTop);
   }
 
   // The hood's OVERHANG, cast down onto the shoulders.
