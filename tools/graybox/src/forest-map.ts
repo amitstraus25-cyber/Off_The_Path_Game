@@ -1062,18 +1062,102 @@ export function generateForestMap(): GeneratedMap {
   /** The two rows and two columns of sealed scrub that stop the player seeing the end of the map. */
   const onBorder = (x: number, y: number): boolean =>
     x === 0 || x === MAP_W - 1 || y <= 1 || y === MAP_H - 1;
+  /*
+   * WHAT SEALS THE EDGE, and why it cannot be one tile.
+   *
+   * This planted `bush` and nothing else, and the product manager's report named the result -- "the
+   * 2x6 column of byte-identical bushes down the left margin of the title screen" -- as the most
+   * visible instance of the whole repetition finding. Measured: 223 bushes in the band, in connected
+   * runs of 118 and 63, drawn from a vocabulary of exactly two images, because `bush` has a lit top
+   * and a shadow under it so the mirror pass may only flip it sideways. Two images over 223 tiles
+   * puts a 2x6 block of one of them somewhere by arithmetic, and the title camera sits on the west
+   * margin, so the block it puts there is the first thing a visitor sees.
+   *
+   * Three changes, all placement, none of them a new tile:
+   *
+   *   1. THE BAND IS SCRUB, NOT HEDGE. Stone drifts and the odd toadstool ring among the bushes
+   *      take the vocabulary from two images to six. They are read off a broad field rather than a
+   *      coin flip per tile, so they arrive as outcrops two or three tiles long -- the same reason
+   *      the gorge banks and the forest floor are cut out of fields: every decor tile here is a
+   *      fully opaque 32x32, so one dropped singly is a hard-edged square, not a speck.
+   *      Deliberately no flowers: the frame of the picture should recede, and three bright tiles
+   *      along the top edge would pull the eye straight to it.
+   *   2. IT IS PLANTED ALREADY MIRRORED. `sealBorder` is called twice, and the second call runs
+   *      AFTER the mirror pass -- that is the whole point of the second call, since felling a tree
+   *      that straddles column 0 reopens a border cell late. So every tile the second call planted
+   *      came out unflipped while its neighbours from the first call were flipped half the time,
+   *      which is a seam the mirror pass can never reach. Flipping here, off the same `heads` bits
+   *      the mirror pass uses, makes the two calls agree by construction.
+   *   3. THE DEPTH WANDERS. The band is two rows at the top and one everywhere else, so row 1 and
+   *      the two columns are each a single file of cover with clean grass on one side -- a drawn
+   *      line, whatever is drawn on it. Letting the inner row or column fall back to grass over
+   *      whole stretches, and the treeline behind it come forward, gives the margin a ragged inner
+   *      edge. It only ever ADDS cover one tile inside the sealed band, never removes any, so the
+   *      edge of the world stays sealed and nothing about the collision layer changes.
+   */
+  const hem = valueNoise2D(20261049);
+  /*
+   * Bush, with drifts of stone and the odd ring of toadstools. Never a flower: the frame recedes.
+   *
+   * The field is deliberately FINE -- about two tiles -- where every other field in this file is
+   * broad. Everywhere else the argument for a broad field is that an opaque tile dropped singly is
+   * a hard-edged square in open grass; here there is no open grass to be a square in, because the
+   * band is solid cover by definition. What the band needs is the opposite: an interruption often
+   * enough that no long run of one image survives anywhere along 200 tiles of it, which is what the
+   * eye reads as wallpaper. Measured along the band, the longest run of a single identical image
+   * went from 7 tiles to 3.
+   */
+  const sealTile = (x: number, y: number): string => {
+    const drift = hem(x / 2.1, y / 2.1) * 0.7 + hem(x / 1.15 + 71, y / 1.15 + 71) * 0.3;
+    return drift > 0.63 ? 'rock' : drift > 0.52 ? 'toadstool-ring' : 'bush';
+  };
+  /** Already flipped, so the late re-seal and the early one cannot disagree about a tile. */
+  const sealGid = (x: number, y: number): number =>
+    gid(sealTile(x, y)) + (heads(x, y, 1) ? FLIP_H : 0);
+  /*
+   * The same mix with the boulders taken out, for anywhere the cover is SOFT.
+   *
+   * `rock` is in the generator's own `MUST_STOP_HER` list -- it is drawn as a boulder, so it has to
+   * stop her -- and the audit caught the first version of the ragged edge below planting two soft
+   * ones at (24,40) and (25,40). A boulder the player walks through and an invisible wall are the
+   * same bug seen from either side, and this file has shipped both.
+   */
+  const softSealGid = (x: number, y: number): number =>
+    gid(sealTile(x, y) === 'rock' ? 'bush' : sealTile(x, y)) + (heads(x, y, 1) ? FLIP_H : 0);
   const sealBorder = (): void => {
     for (let x = 0; x < MAP_W; x++)
       for (const y of [0, 1, MAP_H - 1]) {
         solid(x, y);
         // Masked: by the second call the waterfall carries its mirror bits.
         if (at(below, x, y) === 0 && (at(ground, x, y) & BASE_GID) !== gid('waterfall'))
-          set(below, x, y, gid('bush'));
+          set(below, x, y, sealGid(x, y));
       }
     for (let y = 0; y < MAP_H; y++)
       for (const x of [0, MAP_W - 1]) {
         solid(x, y);
-        if (at(below, x, y) === 0) set(below, x, y, gid('bush'));
+        if (at(below, x, y) === 0) set(below, x, y, sealGid(x, y));
+      }
+    /*
+     * The ragged inner edge. One tile in from the seal, where the field says the thicket comes
+     * forward, and only onto ground that is genuinely empty -- never over a tree, the waterfall,
+     * a path, the water or a shoreline that has nothing else to carry it. Soft on purpose: this is
+     * the undergrowth the band stands in, not part of the wall, and adding collision here would
+     * narrow the walkable map for a decoration.
+     */
+    for (let y = 1; y < MAP_H - 1; y++)
+      for (let x = 1; x < MAP_W - 1; x++) {
+        if (
+          !onBorder(x - 1, y) &&
+          !onBorder(x + 1, y) &&
+          !onBorder(x, y - 1) &&
+          !onBorder(x, y + 1)
+        )
+          continue;
+        if (at(below, x, y) !== 0 || at(above, x, y) !== 0) continue;
+        if (isPath(x, y) || isWater(x, y) || inClearing(x, y)) continue;
+        if (!TILE_NAMES[(at(ground, x, y) & BASE_GID) - 1]?.startsWith('grass')) continue;
+        if (hem(x / 5.2 + 17, y / 5.2 + 17) < 0.56) continue;
+        set(below, x, y, softSealGid(x, y));
       }
   };
   sealBorder();
@@ -1094,19 +1178,70 @@ export function generateForestMap(): GeneratedMap {
    * are big, dark and low-contrast against the wood; they are the tile that can fill ground
    * without adding edges, and filling ground is the job.
    */
-  const clump = (tile: string, sites: number, spread: number, each: number, hard = false): void => {
+  /*
+   * ...AND THE REASON THE CLUMPS THEMSELVES CAME OUT ON A LATTICE.
+   *
+   * This used to scatter `each` independent picks about a centre with `Math.round((rnd() - 0.5) *
+   * spread)`, which at spread 3.4 draws from exactly {-2,-1,0,1,2}. Five picks in a 5x5 box, and
+   * the box's own middle column and row heavily favoured by the rounding, is not a clump: it is a
+   * tight rosette with holes in it, and a rosette is a SHAPE. Lay eighteen of them at random
+   * centres and the eye reads the shape, not the scatter -- and because a one-tile hole inside a
+   * rosette is as regular as the disc beside it, the result on the title camera was a near-checker
+   * of identical dark discs separated by single tiles of grass. The product manager's report called
+   * the whole class of this "uncanny rather than lush", and this is where the undergrowth half of
+   * it comes from.
+   *
+   * A mass GROWS instead. Start at the seed and repeatedly take a random cell off the frontier --
+   * the 4-neighbours of what has been taken so far -- until the mass is as big as it wanted to be
+   * or there is nowhere left to go. Three properties fall out of that and none of them can be had
+   * from independent picks:
+   *
+   *   - it is CONNECTED, so there are no one-tile holes inside it and no isolated outliers;
+   *   - its OUTLINE is ragged, because which arm of the frontier grows next is random, so it has
+   *     bays and spurs instead of being a disc;
+   *   - it FLOWS round things. A path, a tree or another mass simply removes cells from the
+   *     frontier, so a thicket grows along a verge or wraps a trunk the way real scrub does,
+   *     rather than being clipped off square by a box.
+   *
+   * Size is drawn over a wide range and squared, so most masses are small and a few are big: the
+   * board's undergrowth varies in size, and a fixed `each` is the one thing that guarantees it
+   * cannot. Masses are free to grow into each other -- a seed landing beside an existing mass just
+   * grows away from it -- which is the "overlaps itself" half of the brief.
+   */
+  const clump = (tile: string, sites: number, small: number, large: number, hard = false): void => {
+    const plantable = (x: number, y: number): boolean =>
+      inside(x, y) &&
+      !isPath(x, y) &&
+      !isWater(x, y) &&
+      !inClearing(x, y) &&
+      at(below, x, y) === 0 &&
+      at(above, x, y) === 0;
     for (let i = 0; i < sites; i++) {
       const ox = 2 + Math.floor(rnd() * (MAP_W - 4));
       const oy = 3 + Math.floor(rnd() * (MAP_H - 6));
-      for (let j = 0; j < each; j++) {
-        const x = ox + Math.round((rnd() - 0.5) * spread);
-        const y = oy + Math.round((rnd() - 0.5) * spread);
-        if (!inside(x, y)) continue;
-        if (isPath(x, y) || isWater(x, y) || at(below, x, y) !== 0 || at(above, x, y) !== 0)
-          continue;
-        if (inClearing(x, y)) continue;
+      if (!plantable(ox, oy)) continue;
+      const want = Math.round(small + (large - small) * rnd() ** 2);
+      const taken = new Set<number>([oy * MAP_W + ox]);
+      const frontier: [number, number][] = [[ox, oy]];
+      let grown = 0;
+      while (grown < want && frontier.length > 0) {
+        const pick = Math.floor(rnd() * frontier.length);
+        const [x, y] = frontier[pick]!;
+        // Swap-remove: the frontier is a bag, so order does not matter and this stays O(1).
+        frontier[pick] = frontier[frontier.length - 1]!;
+        frontier.pop();
+        if (!plantable(x, y)) continue;
         set(below, x, y, gid(tile));
         if (hard) solid(x, y);
+        grown++;
+        for (const [dx, dy] of NEIGHBOURS) {
+          const nx = x + dx;
+          const ny = y + dy;
+          const key = ny * MAP_W + nx;
+          if (taken.has(key)) continue;
+          taken.add(key);
+          frontier.push([nx, ny]);
+        }
       }
     }
   };
@@ -1219,27 +1354,69 @@ export function generateForestMap(): GeneratedMap {
         if (tile === 'rock') solid(x, y);
         continue;
       }
-      const pick = speckle(x * 2.7, y * 2.7);
+      /*
+       * LIKE GOES WITH LIKE, and this was the last per-tile coin flip left in the file.
+       *
+       * `speckle(x * 2.7, y * 2.7)` is white noise by construction -- `valueNoise2D` is sampled far
+       * enough apart that neighbouring tiles share nothing -- so an island of open cover came out
+       * as a confetti of five different opaque stickers, one per tile: a dark disc, then a bright
+       * white square, then a pink one, then a disc. Every one of those boundaries is a hard 32px
+       * edge between two unrelated images, which is both the busiest thing the tileset can do and
+       * the reason the mass never reads as a mass. The branch directly above this one already knows
+       * better -- it reads the stone drifts off `meadow(x / 2.3 + 17, ...)` "so the stones come in
+       * small drifts the way the scrub does" -- and this branch simply never got the same treatment.
+       *
+       * Two broad octaves instead, so a glade carries a mass of scrub HERE and a bed of white
+       * flowers THERE, each several tiles across, the way the board's clearings do. The shares are
+       * unchanged, so nothing about how much of each tile is on the map moves; only which of its
+       * neighbours each one sits next to.
+       *
+       * It also feeds the two sweeps at the foot of the file: once like sits with like, a bush with
+       * no bush beside it is genuinely a lone disc on grass rather than one sticker in a mixed bed,
+       * so "give it a companion" means what it says.
+       *
+       * ...AND THE SHARES MOVED WITH IT, which is the part that took two goes. Grouping alone, at
+       * the old 46/18/16/12/8 split, does not fix anything -- it just decides WHICH confetti you
+       * get. The first attempt used a four-tile field, and since the camera's glade is about eight
+       * tiles across, a single draw of that field took the whole hero frame over to flowers: the
+       * grid of dark discs became a scatter of bright squares, every axis in the score went up a
+       * notch, and the picture was no better. A sticker is a sticker whatever colour it is.
+       *
+       * So the open floor is a BUSH MATTER with beds set into it, and the beds are small. Three
+       * `clump` calls above already grow real flower beds of three to six; this sweep's job is
+       * cover, and a glade reads as a clearing in a wood when the cover in it is mostly leaf with
+       * flowers at the edges of it. A two-and-a-half-tile field at these shares puts a bed of two
+       * or three white or pink at the rim of most masses and leaves the middle of them dark, which
+       * is what the board's clearings show -- and it keeps the colour-variety axis, which is what
+       * the mix was here for, since the flowers are still placed, just gathered.
+       */
+      const pick =
+        meadow(x / 2.5 + 53, y / 2.5 + 53) * 0.74 + meadow(x / 1.3 + 7, y / 1.3 + 7) * 0.26;
       const coverTile =
-        pick < 0.46
+        pick < 0.7
           ? 'bush'
-          : pick < 0.64
+          : pick < 0.81
             ? 'flower-white'
-            : pick < 0.8
+            : pick < 0.89
               ? 'flower-pink'
-              : pick < 0.92
+              : pick < 0.95
                 ? 'flower-red'
                 : 'rock';
       set(below, x, y, gid(coverTile));
       if (coverTile === 'rock') solid(x, y);
     }
 
-  // Thickets of solid scrub out in the open, and beds of flowers in what is left of it.
-  clump('bush', 18, 3.4, 5, true);
-  clump('rock', 16, 2.6, 3, true);
-  clump('flower-white', 18, 2.4, 4);
-  clump('flower-pink', 15, 2.2, 3);
-  clump('flower-red', 12, 2.2, 3);
+  /*
+   * Thickets of solid scrub out in the open, and beds of flowers in what is left of it. The two
+   * numbers are now the smallest and largest a mass may grow to, not a spread and a count: a bed of
+   * three white flowers and a thicket of eleven bushes are both things the board has, and the point
+   * of the range is that the same call produces both.
+   */
+  clump('bush', 18, 3, 11, true);
+  clump('rock', 16, 2, 5, true);
+  clump('flower-white', 18, 3, 6);
+  clump('flower-pink', 15, 2, 5);
+  clump('flower-red', 12, 2, 4);
 
   // --- landmarks ---------------------------------------------------------------
   const landmarks: Record<string, { x: number; y: number }> = {};
@@ -2245,6 +2422,152 @@ export function generateForestMap(): GeneratedMap {
   console.log(
     `  connectivity: ${felled} tile(s) opened; ${open}/${walkable} walkable tiles reachable ` +
       `(${Math.round((open / walkable) * 100)}%)`,
+  );
+
+  /*
+   * ===========================================================================
+   * NO BUSH STANDS ALONE, AND NO SCRUB HAS A ONE-TILE HOLE IN IT.
+   * ===========================================================================
+   *
+   * WHAT THIS IS FOR. `bush` is a fully opaque 32x32 with its own dark ground and a hard outline, so
+   * a lone one is a dark disc on a lawn, and a dozen of them at a similar spacing is a polka dot --
+   * the texture of mould, as the product manager's report put it, rather than undergrowth. Measured
+   * on the committed map, 36% of the bushes visible on open ground had no bush on any of their four
+   * sides, the mean mass was 1.8 tiles, and only a quarter of them stood in a mass of four or more.
+   * The board has no lone discs at all: its scrub comes in masses of several tiles with ragged
+   * edges, usually against a path edge, a fence or the foot of a tree.
+   *
+   * WHY IT IS DOWN HERE, past the audit's own section marker and everything else. Shape is the one
+   * property of the undergrowth that no single pass can own: the forest floor, the open islands and
+   * five `clump` calls each lay their own tiles without seeing the others, and then the landmarks
+   * clear rectangles through the result, the garden plants a hedge, the banks strip cover off the
+   * shoreline and the verge and connectivity sweeps fell whatever is in the way. Sitting beside the
+   * `clump` calls -- which is where this started -- it answered three lone bushes out of
+   * twenty-four, because the lattice the title camera actually shows is assembled by the passes
+   * that come AFTER it. The mass the player looks at only exists once every one of them has
+   * finished, so this is the first line at which it can be measured, and the last at which it can
+   * be changed.
+   *
+   * IT IS SAFE BY CONSTRUCTION, which is the other half of why it can run after the collision layer
+   * has been signed off. Everything it writes is decor and nothing calls `solid` or `clear`, so the
+   * collision layer is bit-for-bit what the connectivity pass left: no pocket can be sealed, no
+   * obstacle demolished, no reachability test disturbed, and `map.test.ts` -- which floods from the
+   * spawn and checks that the notice cannot be walked around -- sees exactly the map it saw before.
+   * It also never removes a tile, so no shoreline can be uncovered and no landmark undressed.
+   */
+  /** A bush the player can actually see: one under a canopy is not part of the picture. */
+  const visibleBush = (x: number, y: number): boolean =>
+    inside(x, y) && (at(below, x, y) & BASE_GID) === gid('bush') && at(above, x, y) === 0;
+  /**
+   * Somewhere a soft bush may be added: empty, walkable-looking ground out in the open.
+   *
+   * The grass test is doing real work rather than being tidy. A shore tile that is the only
+   * shoreline its water will get must not end up under an opaque tile -- the audit below fails the
+   * build for it, because a waterline hidden under a bush is a hard seam between deep water and lit
+   * grass. Requiring plain grass underneath excludes every shore, every path tile, the bridge and
+   * the cottage floor in one test.
+   */
+  const mayBush = (x: number, y: number): boolean =>
+    inside(x, y) &&
+    !onBorder(x, y) &&
+    at(below, x, y) === 0 &&
+    at(above, x, y) === 0 &&
+    !isPath(x, y) &&
+    !isWater(x, y) &&
+    !inClearing(x, y) &&
+    (TILE_NAMES[(at(ground, x, y) & BASE_GID) - 1] ?? '').startsWith('grass');
+  const bushesBeside = (x: number, y: number): number =>
+    NEIGHBOURS.filter(([dx, dy]) => visibleBush(x + dx, y + dy)).length;
+  /** Planted already mirrored: the mirror pass is behind us, and an unflipped tile here is a seam. */
+  const plantBush = (x: number, y: number): void =>
+    set(below, x, y, gid('bush') + (heads(x, y, 1) ? FLIP_H : 0));
+
+  /*
+   * 1. CLOSE THE HOLES. A single tile of grass with scrub on three or four sides is not a glade, it
+   * is a gap in a mass -- and because every tile here is the same opaque disc, a regular field of
+   * one-tile gaps is exactly as conspicuous as a regular field of discs. Filling them merges
+   * neighbouring discs into one region with one outline, which is both what the board shows and
+   * what the edge-density axis wants: tiles that were each buying two high-contrast boundaries
+   * start sharing them.
+   *
+   * TWO SHAPES COUNT AS A HOLE, and the first version only caught one of them. Three sides out of
+   * four catches a bay bitten into the edge of a mass. It does not catch the shape that was
+   * actually on the title screen, which is a single tile of grass with scrub directly above and
+   * directly below it, or directly left and right, and nothing on the other pair: two neighbours,
+   * not three -- a LADDER, and a ladder of identical discs at a fixed two-tile pitch is the exact
+   * pattern the report called uncanny. A gap with cover on opposite sides is a gap whichever pair
+   * of sides it is, so both count.
+   *
+   * COMPUTED OFF A SNAPSHOT AND THEN APPLIED, which is what keeps it bounded. Filling as it scans
+   * lets one fill qualify the next, and on a chequer that cascades across a whole glade and carpets
+   * it -- the failure this file's notes warn about twice. Deciding every cell against the state at
+   * the START of the pass means one pass can only close the holes that were already there. Two
+   * passes, because closing a hole can leave a real bay beside it.
+   */
+  let closed = 0;
+  for (let pass = 0; pass < 2; pass++) {
+    const fill: [number, number][] = [];
+    for (let y = 2; y < MAP_H - 1; y++)
+      for (let x = 1; x < MAP_W - 1; x++) {
+        if (!mayBush(x, y)) continue;
+        const straddled =
+          (visibleBush(x, y - 1) && visibleBush(x, y + 1)) ||
+          (visibleBush(x - 1, y) && visibleBush(x + 1, y));
+        if (bushesBeside(x, y) >= 3 || straddled) fill.push([x, y]);
+      }
+    for (const [x, y] of fill) plantBush(x, y);
+    closed += fill.length;
+    if (fill.length === 0) break;
+  }
+
+  /*
+   * 2. ANSWER THE LONE ONES, which is the undergrowth's version of the sweep the trees already get
+   * a thousand lines above -- and it is the same fault underneath: a field cut near its own
+   * threshold plants one of a thing where it should plant three.
+   *
+   * IT ADDS AND NEVER REMOVES, and the first version of it got that wrong. Pulling a lone bush out
+   * looked like the tidy answer and it cost 26 tiles of dark cover on a map whose deep shade is
+   * 0.58 of the board's -- the axis that is furthest off. A companion fixes the shape and keeps the
+   * tile, so it is the better trade wherever there is anywhere to put one, and out on grass there
+   * always is. The lone ones with no free side are wedged against a trunk, a boulder, a wall or a
+   * verge, which is exactly where the board puts its scrub, so those are left where they are.
+   *
+   * The companion goes on whichever free side already has the most cover around it, so a pair grows
+   * towards the nearest mass rather than starting a second lone pair one tile over. Repeated,
+   * because a companion can itself land lonely.
+   */
+  let joined = 0;
+  let wedged = 0;
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = 0;
+    for (let y = 2; y < MAP_H - 1; y++)
+      for (let x = 1; x < MAP_W - 1; x++) {
+        if (!visibleBush(x, y) || bushesBeside(x, y) > 0) continue;
+        const spots = NEIGHBOURS.map(([dx, dy]) => [x + dx, y + dy] as const).filter(([nx, ny]) =>
+          mayBush(nx, ny),
+        );
+        if (spots.length === 0) {
+          if (pass === 0) wedged++;
+          continue;
+        }
+        let best = spots[0]!;
+        let bestScore = -1;
+        for (const [nx, ny] of spots) {
+          const score = bushesBeside(nx, ny);
+          if (score > bestScore) {
+            bestScore = score;
+            best = [nx, ny];
+          }
+        }
+        plantBush(best[0], best[1]);
+        joined++;
+        changed++;
+      }
+    if (changed === 0) break;
+  }
+  console.log(
+    `  undergrowth: ${closed} hole(s) closed, ${joined} lone bush(es) given a companion, ` +
+      `${wedged} left wedged against something`,
   );
 
   /*

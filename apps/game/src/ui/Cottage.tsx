@@ -31,10 +31,24 @@ const Caret = () => (
  * climax played out as a small card on an empty field with the cottage nowhere in sight — and the
  * wolf's portrait was shown on the very first approach line, giving the reveal away before the
  * sequence had begun. Red is at the door until the reveal; only then does the portrait change.
+ *
+ * Both halves of the sequence are now keyed on the ENDING, not on one flat script run for every
+ * outcome (docs/UX_REVIEW.md 3). Before this a flawless run read "There are paw prints in the soft
+ * earth by the step" and "The door is already open" on its way to "Grandma waves from her chair",
+ * and every ending — the clean one included — was captioned with a wolf in a bonnet.
+ *
+ * It is keyed through `strings`, as `arriveLines.<ending>` and `arrivePortrait.<ending>`, rather
+ * than through new fields on the ending itself: both are content, CLAUDE.md rule 3 wants content in
+ * data, and `strings` already takes any key, so a fifth ending needs no schema change and no code
+ * change here. An ending with neither key degrades to the shared opener and no portrait change,
+ * which says less than it could but never says anything false.
  */
 export function Cottage({ content, state, onFinish }: CottageProps) {
-  const approach = (content.strings['arriveLines'] ?? '').split('|').filter(Boolean);
   const chosen = ending(state, content);
+  const script =
+    content.strings[`arriveLines.${chosen.id}`] ?? content.strings['arriveLines'] ?? '';
+  const approach = script.split('|').filter(Boolean);
+  const face = content.strings[`arrivePortrait.${chosen.id}`] ?? 'portrait-red';
   const beats = [
     ...approach.map((line) => ({ line, reveal: false })),
     ...chosen.lines.map((line) => ({ line, reveal: true })),
@@ -62,9 +76,7 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
           <div
             class="otp-portrait"
             style={{
-              backgroundImage: `url("${assetUrl(
-                revealed ? 'portrait-wolf-grandma.png' : 'portrait-red.png',
-              )}")`,
+              backgroundImage: `url("${assetUrl(`${revealed ? face : 'portrait-red'}.png`)}")`,
             }}
             role="img"
             aria-label={revealed ? 'At the cottage door' : 'Red on the doorstep'}

@@ -1,5 +1,5 @@
 /*
- * The five portraits, the five items and the three effects, redrawn for the 32px standard.
+ * The six portraits, the five items and the three effects, redrawn for the 32px standard.
  *
  * The portraits are the one place in this game with room for a face. Everything else is read at a
  * 26-tile camera, where a character is an outline and two pixels of eye; these are shown in the DOM
@@ -20,7 +20,7 @@
  *   One light, from the top-left. Nearly every rounded mass here is built the same way, in three
  *   calls: the full shape in level 0, a slightly smaller copy up-left in level 2, then the base
  *   inset back over it. What survives is a dark rim down the bottom-right and a lit rim along the
- *   top-left, which is what a sphere looks like, consistently across thirteen frames. (A shared
+ *   top-left, which is what a sphere looks like, consistently across fourteen frames. (A shared
  *   helper for it was written and then not used -- every mass here tunes its own offsets -- so it
  *   has been removed rather than left as dead code claiming to be the house style.)
  *
@@ -115,7 +115,7 @@ function ring(img: Img, cx: number, cy: number, rx: number, ry: number, t: numbe
 
 /**
  * The niche every portrait sits in. Dark in the corners, a dome behind the head, one lit pixel of
- * rim up its left shoulder, so the subject has an edge to separate against and the five portraits
+ * rim up its left shoulder, so the subject has an edge to separate against and the six portraits
  * read as one set.
  */
 function backdrop(img: Img): void {
@@ -124,6 +124,73 @@ function backdrop(img: Img): void {
   img.rect(2, 32, 60, 32, shade('night', 2));
   img.ellipse(33, 33, 29, 29, shade('night', 1));
   img.rect(4, 33, 57, 31, shade('night', 1));
+}
+
+/*
+ * The costume, in two halves with a face drawn between them: the knitted shawl under the chin, and
+ * the bonnet with its scalloped band and its ribbons over the brow.
+ *
+ * It is ONE pair of functions shared by two portraits, which is the only place in this file that
+ * shares anything. The whole ending turns on the player not being sure which of the two they are
+ * looking at until they look (docs/GAME_DESIGN.md), so the wolf cannot be wearing a near-copy of
+ * Grandma's bonnet tuned to its own offsets, and nobody editing one of them later should be able to
+ * drift them apart by a pixel. Everything that differs between the two is the face in between --
+ * which is the honest difference, and the one the player is being asked to notice.
+ */
+
+/** The largest pale mass and the first thing read. Drawn before the face, so the chin laps it. */
+function shawl(img: Img): void {
+  img.ellipse(32, 86, 35, 34, shade('stone', 0));
+  img.ellipse(30.4, 84.6, 34, 33, shade('stone', 2));
+  img.ellipse(33, 87, 32.4, 32, shade('stone', 1));
+  // Knitted courses: two rows of chevrons, at the shoulders where they would show. A full field of
+  // them is a fishnet, which is what the first pass came back as.
+  for (let r = 0; r < 2; r++)
+    for (let c = 0; c < 4; c++) {
+      const x = 4 + c * 11 + (r % 2 ? 5.5 : 0) + (c > 1 ? 18 : 0);
+      const y = 59 + r * 4;
+      img.line(x, y, x + 3, y - 2, shade('stone', 0));
+      img.line(x + 3, y - 2, x + 6, y, shade('stone', 0));
+    }
+  img.ellipse(32, 60, 11, 6, shade('stone', 0)); // pulled closed at the throat
+}
+
+/**
+ * The bonnet, over whatever head was drawn between this and `shawl`. `brow` is the one pixel of it
+ * that belongs to the wearer rather than to the hat: the shadow the band drops on the forehead, in
+ * the dark of the fur or the skin it falls on.
+ */
+function bonnet(img: Img, brow: RGBA): void {
+  img.ellipse(32, 15, 19, 11.4, shade('wall', 0));
+  img.ellipse(30.6, 13.8, 18.2, 10.6, shade('wall', 3));
+  img.ellipse(33, 16, 17, 9.8, shade('wall', 1));
+  // Two short gathers near the crown. Three seams converging on a point drew a V across the cap
+  // and the bonnet came back looking like the envelope two cells along.
+  img.line(23, 9.5, 21.5, 15, shade('wall', 0));
+  img.line(36, 7, 37, 13, shade('wall', 0));
+  img.ellipse(28, 9.5, 6, 2.4, shade('wall', 3));
+  // The scalloped band: the Grandma tell, and the only shape here that is purely decorative.
+  img.rect(11, 22, 42, 2, shade('wall', 0));
+  img.rect(11, 22, 42, 1, shade('wall', 2));
+  for (let i = 0; i < 7; i++) {
+    img.ellipse(13.5 + i * 6, 26, 3.4, 2.8, shade('wall', 1));
+    img.ellipse(13 + i * 6, 25.4, 2.4, 1.9, shade('wall', 3));
+    img.px(13.5 + i * 6, 28.4, shade('wall', 0));
+  }
+  img.rect(13, 28, 38, 1, brow); // and what the band drops onto the brow
+
+  // Ribbons, down past the jaw to a bow tied on the shawl. Narrow: at two pixels of half-width the
+  // right-hand tie came back as a pale tube hanging off her ear.
+  leanEllipse(img, 11, 33, 1.4, 8, 0.2, shade('wall', 1));
+  leanEllipse(img, 10.6, 32, 0.7, 7, 0.2, shade('wall', 3));
+  leanEllipse(img, 53, 33, 1.4, 8, -0.2, shade('wall', 1));
+  leanEllipse(img, 50.4, 45, 1.3, 6, -0.26, shade('wall', 1));
+  img.ellipse(44, 55, 3.2, 3.2, shade('wall', 0));
+  img.ellipse(51, 55, 3.2, 3.2, shade('wall', 0));
+  img.ellipse(43.6, 54.6, 2.3, 2.3, shade('wall', 3));
+  img.ellipse(51.4, 54.6, 2.3, 2.3, shade('wall', 1));
+  img.ellipse(47.5, 55, 2, 2.4, shade('stone', 0));
+  img.ellipse(47.2, 54.6, 1.3, 1.7, shade('wall', 2));
 }
 
 // ----------------------------------------------------------------------------- portraits (64x64)
@@ -137,8 +204,9 @@ type Painter = (img: Img) => void;
  * ramp's trap is that levels 1 and 2 are 99 levels of luma apart (see paint.ts), so a broad level-2
  * hood and a level-1 shoulder would read as two garments; everything lit here is kept to a rim.
  *
- * She is the only character who gets a mouth. Section 6 bans one below 32px because it smears; at
- * 64px it is four pixels and it is the difference between a girl and a doll.
+ * She is one of the two characters who get a mouth, Grandma being the other, and for the same
+ * reason: section 6 bans one below 32px because it smears; at 64px it is four pixels and it is the
+ * difference between a girl and a doll. The animals do not get one.
  */
 const portraitRed: Painter = (img) => {
   backdrop(img);
@@ -480,21 +548,7 @@ const portraitKeeper: Painter = (img) => {
  */
 const portraitWolfGrandma: Painter = (img) => {
   backdrop(img);
-
-  // --- the shawl, the largest pale mass and the first thing read ---
-  img.ellipse(32, 86, 35, 34, shade('stone', 0));
-  img.ellipse(30.4, 84.6, 34, 33, shade('stone', 2));
-  img.ellipse(33, 87, 32.4, 32, shade('stone', 1));
-  // Knitted courses: two rows of chevrons, at the shoulders where they would show. A full field of
-  // them is a fishnet, which is what the first pass came back as.
-  for (let r = 0; r < 2; r++)
-    for (let c = 0; c < 4; c++) {
-      const x = 4 + c * 11 + (r % 2 ? 5.5 : 0) + (c > 1 ? 18 : 0);
-      const y = 59 + r * 4;
-      img.line(x, y, x + 3, y - 2, shade('stone', 0));
-      img.line(x + 3, y - 2, x + 6, y, shade('stone', 0));
-    }
-  img.ellipse(32, 60, 11, 6, shade('stone', 0)); // pulled closed at the throat
+  shawl(img);
 
   // --- ears, out from under the bonnet: LOW, leaning out, and the same near-black as the corners.
   //     Tall ears clear of the brim would give the whole thing away from across the room.
@@ -550,36 +604,100 @@ const portraitWolfGrandma: Painter = (img) => {
   }
 
   // --- the bonnet, over the skull and under the ear tips ---
-  img.ellipse(32, 15, 19, 11.4, shade('wall', 0));
-  img.ellipse(30.6, 13.8, 18.2, 10.6, shade('wall', 3));
-  img.ellipse(33, 16, 17, 9.8, shade('wall', 1));
-  // Two short gathers near the crown. Three seams converging on a point drew a V across the cap
-  // and the bonnet came back looking like the envelope two cells along.
-  img.line(23, 9.5, 21.5, 15, shade('wall', 0));
-  img.line(36, 7, 37, 13, shade('wall', 0));
-  img.ellipse(28, 9.5, 6, 2.4, shade('wall', 3));
-  // The scalloped band: the Grandma tell, and the only shape here that is purely decorative.
-  img.rect(11, 22, 42, 2, shade('wall', 0));
-  img.rect(11, 22, 42, 1, shade('wall', 2));
-  for (let i = 0; i < 7; i++) {
-    img.ellipse(13.5 + i * 6, 26, 3.4, 2.8, shade('wall', 1));
-    img.ellipse(13 + i * 6, 25.4, 2.4, 1.9, shade('wall', 3));
-    img.px(13.5 + i * 6, 28.4, shade('wall', 0));
-  }
-  img.rect(13, 28, 38, 1, shade('wolf', 0)); // and what the band drops onto the brow
+  bonnet(img, shade('wolf', 0));
+};
 
-  // Ribbons, down past the jaw to a bow tied on the shawl. Narrow: at two pixels of half-width the
-  // right-hand tie came back as a pale tube hanging off her ear.
-  leanEllipse(img, 11, 33, 1.4, 8, 0.2, shade('wall', 1));
-  leanEllipse(img, 10.6, 32, 0.7, 7, 0.2, shade('wall', 3));
-  leanEllipse(img, 53, 33, 1.4, 8, -0.2, shade('wall', 1));
-  leanEllipse(img, 50.4, 45, 1.3, 6, -0.26, shade('wall', 1));
-  img.ellipse(44, 55, 3.2, 3.2, shade('wall', 0));
-  img.ellipse(51, 55, 3.2, 3.2, shade('wall', 0));
-  img.ellipse(43.6, 54.6, 2.3, 2.3, shade('wall', 3));
-  img.ellipse(51.4, 54.6, 2.3, 2.3, shade('wall', 1));
-  img.ellipse(47.5, 55, 2, 2.4, shade('stone', 0));
-  img.ellipse(47.2, 54.6, 1.3, 1.7, shade('wall', 2));
+/**
+ * And this one is.
+ *
+ * The manifest never budgeted her (docs/ASSETS.md lists five portraits), so until now every ending
+ * was captioned with the wolf: "Clean arrival / Grandma waves from her chair" under a wolf in a
+ * bonnet, on a run where he never got near the house (docs/UX_REVIEW.md 3). The clean ending is the
+ * one the whole lesson is trying to earn, and it was being told it had failed.
+ *
+ * She wears the same costume as he does, literally -- `shawl` and `bonnet` are the same two calls,
+ * in the same order -- because that is the premise: he is wearing HERS. So the whole of the
+ * difference sits in the face between them, and all of it is the kind of thing you would notice
+ * from the doorstep and not from the garden gate:
+ *
+ *   a pale face on the warm `skin` ramp where his is near-black fur;
+ *   a round skull and a chin, with no muzzle hanging a third of the frame below it;
+ *   round dark eyes with a catchlight behind wire spectacles, not gold slits;
+ *   silver hair at the temples, where his bonnet has two low grey points that are ears;
+ *   and a mouth that is smiling, with nothing over the lip.
+ *
+ * She is the second face in the game to get a mouth, after Red's, and for the same reason: section
+ * 6 of docs/PIXEL_STANDARD.md bans one below 32px because it smears, and at 64px it is four pixels
+ * and it is the difference between a person and a doll. Both human faces here get those four
+ * pixels; none of the animals do.
+ */
+const portraitGrandma: Painter = (img) => {
+  backdrop(img);
+  shawl(img);
+
+  // --- hair: two silver locks at the temples, laid over the head's own edge and standing a little
+  //     proud of it. They sit INBOARD of where his ear tips are, so the frame's top corners stay
+  //     empty -- the shape he borrowed is hers, but the points in it are not.
+  for (const [hx, lean] of [
+    [19, -0.14],
+    [45, 0.14],
+  ] as const) {
+    leanEllipse(img, hx, 36, 3.8, 9.5, lean, shade('stone', 0));
+    leanEllipse(img, hx - lean * 7, 34.5, 2.4, 7.6, lean, shade('stone', 2));
+  }
+
+  // --- the head: round, and a good deal smaller than his, because nothing is hidden under it ---
+  img.ellipse(32, 38, 14.4, 13.4, shade('skin', 0));
+  img.ellipse(31, 37, 13.6, 12.6, shade('skin', 1));
+  img.ellipse(28.4, 33.6, 9, 7, shade('skin', 2));
+  // The lock in front of each temple again, so the hair reads over the face and not behind it.
+  for (const [hx, lean] of [
+    [20, -0.14],
+    [44, 0.14],
+  ] as const) {
+    leanEllipse(img, hx, 34, 2.6, 7, lean, shade('stone', 0));
+    leanEllipse(img, hx - lean * 5, 32.6, 1.5, 5.4, lean, shade('stone', 2));
+  }
+
+  /*
+   * Eyes first, spectacles over them, because that is the order they are in. Dark and round with
+   * one square of catchlight -- the same eye the rabbit has, two sizes down. His are gold with a
+   * vertical slit, and that is the tell nobody misses once they have seen hers.
+   */
+  for (const ex of [25, 39]) {
+    img.rect(Math.round(ex) - 4, 31, 8, 1, shade('stone', 0)); // brow, silver like the hair
+    img.ellipse(ex, 38.4, 2.9, 2.9, shade('skin', 0));
+    img.ellipse(ex, 38.4, 2.3, 2.3, shade('ink', 0));
+    img.px(ex - 1.2, 37.2, shade('wall', 3));
+  }
+  /*
+   * Wire rims, one pixel thick, in the tortoiseshell dark of the `wood` ramp. Two pixels of rim
+   * came back as sunglasses, which made her a stranger at the door, which is the one thing this
+   * portrait cannot be.
+   */
+  for (const ex of [25, 39]) ring(img, ex, 38.4, 6, 5.4, 1, shade('wood', 0));
+  img.rect(31, 38, 2, 1, shade('wood', 0)); // the bridge
+  img.line(19, 35.6, 19.6, 37, shade('wood', 0)); // and the arms, back into the hair
+  img.line(45, 35.6, 44.4, 37, shade('wood', 0));
+
+  // --- the rest of the face: a nose between the lenses, a smile under it, two warm cheeks ---
+  img.rect(31, 42, 2, 3, shade('skin', 0));
+  img.px(30, 44, shade('skin', 0));
+  /*
+   * The mouth: a flat line with its two end pixels lifted. Drawn as two converging strokes it came
+   * back as a shallow V -- a frown, on the one portrait in the game whose whole job is to be glad
+   * to see you. A raised corner is the only pixel that says smiling at this size.
+   */
+  img.rect(29, 48, 6, 1, shade('wood', 0));
+  img.px(28, 47, shade('wood', 0));
+  img.px(35, 47, shade('wood', 0));
+  img.rect(30, 49, 4, 1, shade('skin', 2)); // the lit lower lip
+  img.ellipse(32, 51.4, 4.6, 1.4, shade('skin', 0)); // and the chin, off the shawl behind it
+  img.rect(22, 45, 3, 1, shade('skin', 0));
+  img.rect(39, 45, 3, 1, shade('skin', 0));
+
+  // --- and the same bonnet, dropping the same shadow, on skin this time ---
+  bonnet(img, shade('skin', 0));
 };
 
 // ----------------------------------------------------------------------------- items (64x64)
@@ -1013,6 +1131,7 @@ export const FACE_PAINTERS: Record<string, Painter> = {
   'portrait-owl': portraitOwl,
   'portrait-keeper': portraitKeeper,
   'portrait-wolf-grandma': portraitWolfGrandma,
+  'portrait-grandma': portraitGrandma,
   'item-compass': compass,
   'item-translator': translator,
   'item-lantern': lantern,

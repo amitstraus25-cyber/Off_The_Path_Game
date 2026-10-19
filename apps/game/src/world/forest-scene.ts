@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { ending } from '@otp/core';
+import type { Phase } from '@otp/core';
 import type { Store } from '../store';
 import type { Bus } from '../bus';
 import type { Input } from './input';
@@ -33,6 +35,34 @@ const NPC_SPRITE = { width: TILE, height: TILE * 1.5 };
 const PROMPT_GAP = TILE * (3 / 8);
 
 /**
+ * The phases that happen at the cottage. From the first arrival beat to the end of the run the
+ * camera belongs to the door, not to Red, so Results does not pan the forest back behind itself.
+ */
+const AT_THE_COTTAGE: readonly Phase[] = ['cottage', 'results', 'leaderboard'];
+
+/**
+ * The wolf's trail, in world pixels from the top-left of the door lane: three prints walking NORTH
+ * up the lane to the step, left foot, right foot, left foot, zig-zagged half a tile either side of
+ * the lane's centre line and a tile apart.
+ *
+ * Frame order is chronological backwards. Frame 2 is the faded print, so it is the one furthest
+ * from the door -- the oldest step of a walk that ended at the step, where frame 0 is still sharp.
+ * All three sit inside the two sand tiles of the lane, which is why the offsets are measured from
+ * `trigger-cottage` rather than from the facade: the lane and the trigger are the same rectangle.
+ */
+const PAW_TRAIL: readonly { frame: 0 | 1 | 2; dx: number; dy: number }[] = [
+  { frame: 0, dx: TILE * 1.5, dy: TILE * 0.5 },
+  { frame: 1, dx: TILE, dy: TILE * 1.5 },
+  { frame: 2, dx: TILE * 1.5, dy: TILE * 2.5 },
+];
+
+/**
+ * How many rows of doorstep lane stay in the arrival shot below the facade. Three, because that is
+ * the lane: the step, and the two path rows the trail comes up.
+ */
+const LANE_ROWS = 3;
+
+/**
  * Anyone Red can walk up to. `character` offers a skill and opens the real encounter;
  * `bystander` offers nothing and only says a line. They share the prompt and the proximity
  * test so that one person is highlighted at a time, and differ only in what interacting emits.
@@ -57,6 +87,12 @@ export class ForestScene extends Phaser.Scene {
   private walking = false;
   private npcs: Npc[] = [];
   private cottage!: MapObject;
+  /** The building itself, which is what the arrival shot is framed on. */
+  private facade!: MapObject;
+  /** The wolf's prints on the lane outside the door. Hidden until an arrival that earned them. */
+  private paws: Phaser.GameObjects.Sprite[] = [];
+  /** True once the run has reached the cottage, so the arrival is staged exactly once. */
+  private arrived = false;
   private notices: MapObject[] = [];
   private promptBob = 0;
   private reducedMotion = false;
@@ -108,6 +144,10 @@ export class ForestScene extends Phaser.Scene {
     const cottage = findObject(this.map, 'trigger-cottage');
     if (!cottage) throw new Error('Map has no "trigger-cottage" object');
     this.cottage = cottage;
+    const facade = findObject(this.map, 'prop-cottage');
+    if (!facade) throw new Error('Map has no "prop-cottage" object');
+    this.facade = facade;
+    this.createPaws();
     // Objects named `notice-<id>` hand their id straight to the content's notices.
     this.notices = this.map.objects.filter((o) => o.name.startsWith('notice-'));
 
@@ -138,9 +178,30 @@ export class ForestScene extends Phaser.Scene {
     this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
     this.red.setDepth(this.red.y);
     for (const npc of this.npcs) npc.prompt.setVisible(false);
+    // The last run's trail is the last run's. A replay that kept it would promise an ending the
+    // new run has not earned, in the one place the game puts a fact on the ground.
+    this.arrived = false;
+    for (const paw of this.paws) paw.setVisible(false);
     // Snap, not ease: a replay should not pan across the forest from wherever the last run ended.
-    this.camera = this.focus();
+    this.camera = this.redFocus();
     this.syncCamera();
+  }
+
+  /**
+   * The prints on the lane, laid down hidden at boot. `fx-pawprints` has been drawn, three-framed
+   * and shipped to every player since the remaster and placed nowhere (docs/UX_REVIEW.md 3); it is
+   * the ending in one detail, so it belongs on the path outside the door and nowhere else.
+   *
+   * Depth 2 puts them above the ground and the decor painted into it and below every character,
+   * so Red walks over her own doorstep rather than behind it.
+   */
+  private createPaws(): void {
+    this.paws = PAW_TRAIL.map(({ frame, dx, dy }) =>
+      this.add
+        .sprite(this.cottage.x + dx, this.cottage.y + dy, 'fx-pawprints', frame)
+        .setDepth(2)
+        .setVisible(false),
+    );
   }
 
   private createNpcs(): void {
@@ -231,6 +292,8 @@ export class ForestScene extends Phaser.Scene {
     const exploring = state.phase === 'explore' && this.hasInput();
     const input = this.controls.read();
 
+    if (!this.arrived && AT_THE_COTTAGE.includes(state.phase)) this.stageArrival();
+
     if (exploring) {
       this.move(input.x, input.y, deltaMs);
       this.updatePrompts();
@@ -241,6 +304,48 @@ export class ForestScene extends Phaser.Scene {
       this.stopWalking();
     }
     this.syncCamera(deltaMs);
+  }
+
+  /**
+   * The arrival, staged once on the beat that says you reached the door.
+   *
+   * Before this, "You reach the door. The lamp is lit." played over whatever Red happened to be
+   * standing on -- open forest, with a market stall and a rabbit in shot and no cottage anywhere
+   * (docs/UX_REVIEW.md 3). It is the payoff frame of the whole asset and the approved board frames
+   * it one way: the facade filling the shot, the door centred, Red small on the step with her back
+   * to us, the prints on the path beside her (reference/mocks/gameplay-concepts.png, panel 04).
+   *
+   * So this is a CUT, not a pan: Red to the step, the camera to the door, the trail shown or not,
+   * all on one frame. Easing any of it would swoop a tile and a half across the garden on a held
+   * beat, and in the capture -- which dispatches ENTER_COTTAGE without walking -- would swoop the
+   * width of the map.
+   */
+  private stageArrival(): void {
+    this.arrived = true;
+
+    // On the doorstep, in the door's own column, facing the door. `trigger-cottage` IS the lane,
+    // so its first row is the step and its left edge is the door's left edge.
+    this.position = { x: this.cottage.x + TILE / 2, y: this.cottage.y + TILE };
+    this.stopWalking();
+    this.facing = 'up';
+    this.red.stop();
+    this.red.setFrame(`red-idle-${this.facing}-0`);
+    this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
+    this.red.setDepth(this.red.y);
+    for (const npc of this.npcs) npc.prompt.setVisible(false);
+
+    /*
+     * The trail is a claim about what happened, so it is content's to make and not this file's:
+     * `arrivePawEndings` names the endings on which something came up this path ahead of you. On
+     * the other endings the approach lines say the earth by the step is unmarked, and it must be.
+     */
+    const earned = (this.store.content.strings['arrivePawEndings'] ?? '')
+      .split('|')
+      .includes(ending(this.store.getState(), this.store.content).id);
+    for (const paw of this.paws) paw.setVisible(earned);
+
+    this.camera = this.doorFocus();
+    this.syncCamera();
   }
 
   private move(ix: number, iy: number, deltaMs: number): void {
@@ -335,9 +440,30 @@ export class ForestScene extends Phaser.Scene {
     this.cameras.main.setScroll(x, y);
   }
 
-  /** The camera frames Red's chest, not her feet, so the shot shows where she is going. */
+  /** Where the camera wants to be: Red on the walk, the door once she has reached it. */
   private focus(): Vec {
+    return this.arrived ? this.doorFocus() : this.redFocus();
+  }
+
+  /** The camera frames Red's chest, not her feet, so the shot shows where she is going. */
+  private redFocus(): Vec {
     return { x: this.position.x, y: this.position.y + CAMERA_FOCUS_Y };
+  }
+
+  /**
+   * The arrival frame, derived from the building rather than from Red, so the door is in shot
+   * whatever row she walked in on.
+   *
+   * What has to be in it: the chimney, which sits one row ABOVE `prop-cottage` and carries the
+   * smoke (see the note on it in tools/graybox/src/forest-map.ts); the facade with its door and
+   * two windows; and the three rows of lane below, which is where the prints are. Centring on the
+   * span of all three is what keeps the smoke off the top edge at 1280, where the camera is only
+   * ten tiles tall and the building is six of them.
+   */
+  private doorFocus(): Vec {
+    const top = this.facade.y - TILE;
+    const bottom = this.facade.y + this.facade.height + TILE * LANE_ROWS;
+    return { x: this.facade.x + this.facade.width / 2, y: (top + bottom) / 2 };
   }
 
   /** Test-only: where Red is standing right now. */
