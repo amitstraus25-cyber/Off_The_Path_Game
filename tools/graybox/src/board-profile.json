@@ -1,4 +1,66 @@
 {
+  "README": [
+    "The target profile for `pnpm score`. Rebuilt 2026-10-19 because the previous one was measured",
+    "off the board at the BOARD's resolution, not ours, and that made two of the six axes unreachable",
+    "by construction. Chasing them is what airbrushed the grass, the water and the wolf.",
+    "",
+    "THE BUG: reference/mocks/gameplay-concepts.png is a smooth illustration drawn at roughly three",
+    "to four image pixels per one of ours, and at that size the board's hard steps are smeared over",
+    "three or four pixels. The `edges` test (|dLuma| > 24 between neighbours) therefore missed nearly",
+    "all of them and reported 4.50% -- HALF our own figure. The score told every painter the art was",
+    "too busy when the board is in fact twice as crisp as ours. Round 2 obeyed, and softened.",
+    "",
+    "THE FIX: every crop is now decimated to OUR pixel density before it is profiled -- nearest only,",
+    "reading the centre of each cell, so no colour in a crop was invented by resampling. `edges` went",
+    "4.50 -> 18.91 and `texture` 28.32 -> 42.17. deep, keyline and spread barely moved, which is the",
+    "check that the method is sound: those three are distributional, they should not care about",
+    "resolution, and across decimation factors 1 to 6 they vary by under 2%.",
+    "",
+    "WHAT THIS MEANS FOR THE ART, and it is the opposite of what the last brief said: we are NOT too",
+    "busy. At edges 9.9 against 18.9 we sit at 0.52 -- too SMOOTH. The board is crisp pixel art with",
+    "hard, readable steps and a near-black keyline round everything. Use tone() to make a mass round",
+    "and lit, and keyline() on everything that meets the ground, but do not dissolve a step into a",
+    "gradient to chase a number. No number rewards that any more.",
+    "",
+    "To rebuild: cut each rect below from the board, take every nth pixel, run `--board <dir>`.",
+    "",
+    "REBUILDING IS NOW SAFE, and this paragraph replaces the warning that used to stand here. The",
+    "warning said: five of the six targets are the plain mean of `each`, but `variety` is a hand-set",
+    "2.60 standing in for a measured 93.91, so `--board` silently reverted it and every distance",
+    "ballooned past 0.8 with no change to a single pixel of art. Telling the next agent to put it",
+    "back by hand was never going to work -- the failure is silent, and the instruction to rebuild",
+    "sat two lines above the warning not to.",
+    "",
+    "So the rule is enforced in code instead of asked for in prose. `pinned` below names the axes",
+    "that are judgements rather than measurements; `--board` keeps the stored `target` for those and",
+    "prints the mean it declined, and `--world` marks them with a `*` so nobody reads 2.60 as the",
+    "board's own figure. A rebuild now also PRESERVES every key in this file rather than writing a",
+    "fresh three-key object over it -- the old one deleted the README, the scale, the method notes",
+    "and the warning itself, which is the larger half of the same bug.",
+    "",
+    "If you need to change a pinned value, change `target` here and say why in `pinned`. If you need",
+    "to unpin an axis, delete its entry and rebuild; that is a deliberate act and it will show up in",
+    "the diff, which is the whole point."
+  ],
+
+  "source": {
+    "board": "reference/mocks/gameplay-concepts.png",
+    "layout": "3072x2048, four 1536x1024 frames: Explore (0,0), Question (1536,0), Inspect (0,1024), Arrive (1536,1024)",
+    "sampling": "nearest decimation by `n`, reading the centre of each cell; fractional n is rounded per output pixel",
+    "rects-are": "x, y, w, h in board pixels, inside the world art and checked by eye to hold no HUD, dialogue or control chrome",
+    "inspect-frame": "excluded: almost entirely UI, and its slivers of world are too small to profile"
+  },
+
+  "scale": {
+    "how": "Red's cloak is the only object drawn on both sides at a known size, so she is the ruler. Her cloak silhouette was isolated as a connected scarlet blob in each board frame and compared with ours (24 px across the hood, 37 rows crown to hem).",
+    "measured": {
+      "explore": "cloak 64 x 101 board px -> 2.67 by width, 2.73 by height, n = 2.70",
+      "question": "cloak 87 x 130 -> 3.63 by width, 3.51 by height, n = 3.57",
+      "arrive": "cloak 94 x 132 -> 3.92 by width, 3.57 by height, n = 3.75"
+    },
+    "why-it-matters": "The three frames are NOT at one zoom -- Explore is framed ~30% wider than Question and Arrive. The old profile averaged all three at board resolution, mixing scales as well as mis-measuring them. Rounding n to integers 3 and 4 (a first pass of this rebuild) put `edges` at 20.88; the exact scales give 18.91. The 9% difference is why the fractional values are used."
+  },
+
   "from": [
     "arrive-garden.png",
     "explore-ne.png",
@@ -6,69 +68,130 @@
     "explore-south.png",
     "question-forest.png"
   ],
+
   "each": [
     {
       "file": "arrive-garden.png",
+      "rect": [1570, 1140, 1400, 500],
+      "n": 3.75,
+      "px": 49609,
       "p": {
-        "deep": 28.46,
-        "keyline": 17.74,
-        "spread": 56.44,
-        "edges": 4.37,
-        "texture": 28.84,
-        "variety": 24.43
+        "deep": 28.85,
+        "keyline": 18.2,
+        "spread": 57.67,
+        "edges": 24.22,
+        "texture": 46.59,
+        "variety": 95.55
       }
     },
     {
       "file": "explore-ne.png",
+      "rect": [760, 230, 700, 440],
+      "n": 2.7,
+      "px": 41958,
       "p": {
-        "deep": 19.21,
-        "keyline": 12.84,
-        "spread": 61.13,
-        "edges": 4.76,
-        "texture": 26.08,
-        "variety": 26.61
+        "deep": 20.86,
+        "keyline": 14.01,
+        "spread": 60.49,
+        "edges": 16.45,
+        "texture": 38.17,
+        "variety": 94.59
       }
     },
     {
       "file": "explore-nw.png",
+      "rect": [40, 200, 700, 500],
+      "n": 2.7,
+      "px": 47915,
       "p": {
-        "deep": 24.68,
-        "keyline": 16.45,
-        "spread": 55.56,
-        "edges": 4.52,
-        "texture": 28.14,
-        "variety": 23.93
+        "deep": 27.26,
+        "keyline": 19.31,
+        "spread": 56.78,
+        "edges": 17.0,
+        "texture": 41.66,
+        "variety": 93.94
       }
     },
     {
       "file": "explore-south.png",
+      "rect": [470, 640, 700, 370],
+      "n": 2.7,
+      "px": 35483,
       "p": {
-        "deep": 39.42,
-        "keyline": 34.44,
-        "spread": 74.24,
-        "edges": 3.16,
-        "texture": 28.93,
-        "variety": 21.83
+        "deep": 20.82,
+        "keyline": 14.04,
+        "spread": 61.38,
+        "edges": 13.17,
+        "texture": 36.0,
+        "variety": 90.3
       }
     },
     {
       "file": "question-forest.png",
+      "rect": [1570, 190, 1400, 500],
+      "n": 3.57,
+      "px": 54880,
       "p": {
-        "deep": 21.65,
-        "keyline": 13.3,
-        "spread": 58.76,
-        "edges": 5.71,
-        "texture": 29.6,
-        "variety": 31.9
+        "deep": 30.77,
+        "keyline": 22.19,
+        "spread": 64.28,
+        "edges": 23.7,
+        "texture": 48.42,
+        "variety": 95.19
       }
     }
   ],
+
+  "pinned": {
+    "variety": "Hand-set to 2.60, a reachable stretch from our own palette ceiling. The board measures 93.91 at our pixel density and 33.10 scaled to a camera frame, and both are unreachable by construction -- see `variety-is-not-the-board`. `--board` keeps this value and reports the mean it declined."
+  },
+
   "target": {
-    "deep": 26.68,
-    "keyline": 18.95,
-    "spread": 61.23,
-    "edges": 4.5,
-    "texture": 28.32,
-    "variety": 25.74
+    "deep": 25.71,
+    "keyline": 17.55,
+    "spread": 60.12,
+    "edges": 18.91,
+    "texture": 42.17,
+    "variety": 2.6
+  },
+
+  "per-axis": {
+    "deep": "25.71. Was 26.68; resolution barely touched it, so it was always trustworthy. We sit near 0.6-0.75 of it: the world wants more deep shade, chiefly a dark pool under every tree and object.",
+    "keyline": "17.55. Was 18.95. Also always trustworthy. This is the near-black outline the board puts round everything -- keyline(), which keeps the hue, not a darker shade().",
+    "spread": "60.12. Was 61.23. Real, and mostly downstream of deep and keyline.",
+    "edges": "18.91. Was 4.50, measured through the board's own blur, which inverted the advice. We are at ~9.9, so the art needs HARDER steps, not softer. See `resolution-relative` -- do not chase the last 5% of this.",
+    "texture": "42.17. Was 28.32, understated the same way. Local 16px variation inside a tile: what a keyline plus a real tonal ramp produces, and what a flat fill cannot fake.",
+    "variety": "2.60, and this one is deliberately NOT the board's figure. See `variety-is-not-the-board`."
+  },
+
+  "resolution-relative": {
+    "which": ["edges", "texture"],
+    "what": "Neither converges as the decimation factor grows -- they measure how different pixels n apart are, which keeps rising. On explore-nw, edges reads 4.18 / 11.92 / 19.23 / 25.50 / 30.48 / 35.15 at n = 1..6, and texture 27.4 / 37.5 / 43.2 / 45.3 / 47.7 / 49.9. Over the same range deep stays 27.5-28.0, keyline 19.5-20.0 and spread 56.9-57.6.",
+    "so": "These two targets are only meaningful because both sides are now at the same pixel density, and they inherit the ~5% uncertainty in the scale measurement above. Treat 18.91 and 42.17 as 19 +/- 1 and 42 +/- 2. Getting from 9.9 to ~17 is the real work and is unambiguous; grinding from 18.5 to 18.9 is fitting noise.",
+    "not-aliasing": "Checked: moving the sampling phase within the cell changes edges by under 0.3% (explore-nw 19.02/19.23/19.33 across three phases, question-forest 26.02-26.13 across four). Aliasing would swing. This is real structure."
+  },
+
+  "variety-is-not-the-board": {
+    "board-raw-at-our-density": 93.91,
+    "board-at-a-matched-399360px-frame": 33.1,
+    "why-the-two-differ": "The axis is distinct 5-bit colours per 1000 px, so it falls as area grows: the numerator saturates, the denominator does not. The crops are 35k-55k px and a camera frame is 399,360, so the raw figure is not comparable with anything we render. Fitting Heaps' law C(S) = 28.74 * S^0.4754 over the pooled board sample and evaluating at 399,360 px gives 33.10. The same fit on our own renders predicts their measured totals to within 0.6-18%.",
+    "why-even-33-is-unreachable": "33.10 per 1000px over a 399,360-px frame is 13,217 distinct 5-bit colours in one screen. Our entire tile set, rendered as the whole 60x42 map, contains about 805. The board reaches its figure because it is a smooth illustration in which nearly every pixel is a unique blend -- that is not a palette, it is the absence of one. Nor is it only blend noise in the tail: after discarding one-off blends, the board still needs 3,285 colours to cover 95% of its pixels against our 202.",
+    "what-2.60-is": "A reachable stretch set from our own ceiling instead of the board's. The whole map's palette is ~805 distinct 5-bit colours and our richest camera frame has reached 834 (2.09 per 1000px); 2.60 asks for roughly 1,040, about a 25% broadening of the ramps actually in use. tone() supplies that with no soft gradient anywhere, because `edges` at 18.91 now demands hard steps at the same time. The two axes brace each other: a richer ramp with crisp steps moves both, a blur moves one and wrecks the other.",
+    "do-not-score-the-whole-map-on-this-axis": "`--whole` renders 2,580,480 px, 6.5x a camera frame, so its variety reads ~0.31 however good the art is. Judge composition and density there; judge variety at camera size."
+  },
+
+  "superseded": {
+    "replaced-on": "2026-10-19",
+    "old-target": {
+      "deep": 26.68,
+      "keyline": 18.95,
+      "spread": 61.23,
+      "edges": 4.5,
+      "texture": 28.32,
+      "variety": 25.74
+    },
+    "old-method": "The same five views, cropped at the board's own resolution (700x500 and similar) and profiled directly, with the three frames' different zooms averaged together.",
+    "what-it-cost": "`edges` and `variety` were together ~60% of the spawn distance and ~73% of the whole-map distance, and both pointed the wrong way: edges said 'simplify' to art already softer than the board, and variety said 'add colours' in a way only a gradient could satisfy. Three agents independently found the measurement was off and optimised against it anyway.",
+    "distances-under-each-ruler": "Measured on identical renders, 2026-10-19; the art did not change, only the ruler. spawn-red 0.738 -> 0.351, cottage 0.796 -> 0.536, stall 0.776 -> 0.453, whole map 1.003 -> 0.611. The drop is not progress. It is the two impossible targets being removed. What matters is that all six axes now point the same way -- every ratio is below 1 -- where before `edges` fought the other five."
   }
 }

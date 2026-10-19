@@ -25,16 +25,26 @@
  * up, the cat's are short cones leaning out, and the cat's tail crosses in front of her feet.
  *
  * Colour, per the rebrand (docs/ART_PRODUCTION.md section 6a):
- *   - the toadstool's cap is `cloak`, because THE TILE IS THE REFERENCE. `toadstoolRing` in
- *     tiles/flora.ts paints its three caps dark/base/lit straight off `cloak`, and the map scatters
- *     that tile round a glade, so there are many more tile toadstools in the world than there are
- *     of him. He was built on `night` instead -- a dark plum two steps below the tile -- and the
- *     result was one species in two colours standing next to each other, which reads as a bug
- *     rather than as variety. (The old note here argued `night` kept `cloak` to Red alone; it did
- *     not, because the tile was already on `cloak`, and docs/PIXEL_STANDARD.md section 2 names the
- *     toadstools as one of the six things brand colour reaches the world through.) The stems agreed
- *     all along: both are the cottage's cream `wall`, and the tile's `fur` is only in its spots, so
- *     the spots here are `fur` too now.
+ *   - the toadstool's cap is RUSSET, because THE TILE IS THE REFERENCE -- the same rule as before,
+ *     applied to the tile that actually ships now. The reasoning that put `cloak` here was sound
+ *     when it was written and is simply out of date: it pointed at `toadstoolRing` in
+ *     `tiles/flora.ts`, and `tiles/flora.ts` is no longer in the build. `tiles.ts` assembles the
+ *     tileset from the `w-*`/`s-*` modules, and the live `toadstoolRing` in
+ *     `tiles/w-undergrowth.ts` paints its caps from a russet off `wood`. Until this was fixed the
+ *     world held a russet toadstool TILE and a purple toadstool BYSTANDER side by side -- one
+ *     species in two colours, which is the exact bug the old note was written to prevent. The
+ *     stems agreed all along (both the cottage's cream `wall`); the spots now follow the tile from
+ *     `fur` to `wall` for the same reason.
+ *
+ *     FLAGGED, NOT DECIDED HERE: docs/PIXEL_STANDARD.md section 2 still reads "Brand colour
+ *     reaches the world through Red, the wolf, the toadstools, the flowers, the stall awning and
+ *     the night, and nowhere else." Four of those six moved off brand colour this round -- the
+ *     flowers and toadstool caps in `w-undergrowth.ts`, the awning in `s-props.ts`, the wolf in
+ *     `cast.ts` -- on the director's "standard 3 inversion" note and on probes of the board. The
+ *     doc has not been updated to match, so the art and the standard now disagree, and that is a
+ *     call for the director rather than for this file. This change does not depend on how it goes:
+ *     a sprite and its own tile disagreeing is a bug under either policy. If purple toadstools are
+ *     reinstated, the tile and this sprite move back together.
  *   - the snail's shell is Clay with a Haze whorl: `fur` is the palette's warm pale neutral and the
  *     closest it holds to Clay, and the whorl is `cloak` level 3, which IS Haze. One line of it.
  *   - the magpie is black and white: `ink` and `fur`.
@@ -55,7 +65,7 @@
  * animals the blink carries a one-pixel bob of everything above the ground contact and nothing
  * below it, so they breathe instead of sliding.
  */
-import { Img, shade } from '../paint.ts';
+import { Img, keyline, shade } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
 
 // ----------------------------------------------------------------------------- shared brushes
@@ -158,6 +168,32 @@ function ground(img: Img, cx: number, cy: number, rx: number, ry: number): void 
 
 // ----------------------------------------------------------------------------- the toadstool
 
+/*
+ * The cap's russet, and why it is no longer Cyera purple.
+ *
+ * This file's header used to argue the cap had to be `cloak` "because THE TILE IS THE REFERENCE":
+ * `toadstoolRing` in `tiles/flora.ts` painted its three caps straight off `cloak`, so matching it
+ * was the consistent choice. That argument expired. `tiles/flora.ts` is no longer shipped -- the
+ * tileset is assembled from the `w-*`/`s-*` modules -- and the live `toadstoolRing`, now in
+ * `tiles/w-undergrowth.ts`, paints its caps from a russet built off `wood`. The sprite was left
+ * behind, so the game held a russet toadstool TILE and a bright purple toadstool BYSTANDER
+ * standing next to each other, in the one hue the brand reserves for Red.
+ *
+ * These two lines are the live tile's own recipe at `tiles/w-undergrowth.ts` (`rust` and
+ * `CAP_LINE`), restated against `shade()` because this sprite steps through discrete levels where
+ * the tile sweeps a continuous `t`. Levels 0..3 land on #6b260e / #9a3a17 / #c04f24 / #dc6537,
+ * inside the #6b2b12..#dc6e3a span the tile's dome actually covers, so the two read as one
+ * mushroom at two sizes -- which is what the old comment claimed and no longer delivered.
+ *
+ * Kept deliberately duplicated rather than exported from a tile module: a sprite reaching into
+ * `tiles/` would invert the layering. If a third caller ever wants it, it belongs in `paint.ts`.
+ */
+const rustPull = (c: RGBA): RGBA => [c[0], Math.round(c[1] * 0.55), Math.round(c[2] * 0.42), 255];
+const rust = (level: 0 | 1 | 2 | 3): RGBA => rustPull(shade('wood', level));
+const CAP_LINE = ((c: RGBA): RGBA => [c[0], Math.round(c[1] * 0.62), Math.round(c[2] * 0.52), 255])(
+  keyline('wood'),
+);
+
 /**
  * Convinced he is a signpost. Everything above the stem is cap, so the silhouette is a toadstool
  * before the face is read at all, and the face plus the pointing twig are what turn it into
@@ -194,40 +230,44 @@ function paintToadstool(img: Img, blink: boolean): void {
   }
 
   /*
-   * --- cap: full mass in shade, body inset up-left, Lilac kept to the lit quarter ---
+   * --- cap: full mass in shade, body inset up-left, the lit quarter kept to the top-left ---
    *
-   * The three levels are the tile's three levels, in the tile's order: `cloak` 0 for the dark a
-   * pixel proud of everything, `cloak` 1 for the cap proper, `cloak` 2 for the quarter facing the
-   * light. He and `toadstoolRing` are now the same mushroom at two sizes.
+   * The three levels are the tile's three levels, in the tile's order: `rust` 0 for the dark a
+   * pixel proud of everything, `rust` 1 for the cap proper, `rust` 2 for the quarter facing the
+   * light. He and `toadstoolRing` are now the same mushroom at two sizes -- which is what this
+   * comment said while the cap was still `cloak` and the tile had already moved to russet.
    */
-  dome(img, 16, 25, 14, 15, shade('cloak', 0));
-  dome(img, 15.2, 24.2, 13.2, 14.2, shade('cloak', 1)); // the cap proper
-  dome(img, 12.8, 20.4, 8.8, 9.6, shade('cloak', 2)); // the lit quarter only
+  dome(img, 16, 25, 14, 15, rust(0));
+  dome(img, 15.2, 24.2, 13.2, 14.2, rust(1)); // the cap proper
+  dome(img, 12.8, 20.4, 8.8, 9.6, rust(2)); // the lit quarter only
   // The shaded flank: a crescent down the low right, where the dome turns away from the light.
   for (let y = 12; y <= 22; y++) {
     const dy = (y + 0.5 - 24.2) / 14.2;
     const half = 13.2 * Math.sqrt(Math.max(0, 1 - dy * dy));
     const edge = Math.round(15.2 + half);
-    img.rect(edge - 2, y, 2, 1, shade('cloak', 0));
+    img.rect(edge - 2, y, 2, 1, rust(0));
   }
   // Rim light along the very top of the dome, one pixel thick and no more. The tile is too small
   // to carry a rim, so this is the one place the sprite says more than the tile does.
   for (let x = 6; x <= 19; x++) {
     const dx = (x + 0.5 - 15.2) / 13.2;
     const y = Math.round(24.2 - 14.2 * Math.sqrt(Math.max(0, 1 - dx * dx)));
-    img.px(x, y + 1, shade('cloak', 3));
+    img.px(x, y + 1, rust(3));
   }
 
   // Gills: short radial ticks under the brim, deepest in the middle where the brim is widest.
+  // CAP_LINE rather than `rust` 0: the tile takes its gills a full keyline under the cap's own
+  // darkest, and at this size the brim needs that gap or the ticks vanish into the flank.
   for (let x = 3; x <= 29; x += 2) {
     const dx = (x + 0.5 - 16) / 14;
     const depth = Math.round(3 * (1 - dx * dx));
-    for (let d = 0; d < depth; d++) img.px(x, 23 + d, shade('cloak', 0));
+    for (let d = 0; d < depth; d++) img.px(x, 23 + d, CAP_LINE);
   }
-  img.line(2, 23, 29, 23, shade('cloak', 0));
+  img.line(2, 23, 29, 23, CAP_LINE);
 
-  // Spots: a dark seat, a mid face, an Offwhite core inset up-left, so each one sits on the curve.
-  // Offwhite is `fur`, which is what the tile spots this cap with.
+  // Spots: a dark seat, a mid face, a cream core inset up-left, so each one sits on the curve.
+  // `wall` rather than `fur`, which is what the live tile spots this cap with: the cottage cream
+  // rather than a near-white, so the mushroom reads as one material at both sizes.
   for (const [sx, sy, r] of [
     [10, 14, 3.3],
     [21, 12, 2.9],
@@ -235,9 +275,9 @@ function paintToadstool(img: Img, blink: boolean): void {
     [14, 20, 2.2],
     [6, 20, 1.9],
   ] as const) {
-    img.ellipse(sx, sy, r, r * 0.9, shade('cloak', 0));
-    img.ellipse(sx - 0.3, sy - 0.4, r - 0.5, (r - 0.5) * 0.9, shade('fur', 2));
-    img.ellipse(sx - 0.7, sy - 0.8, r - 1.2, (r - 1.2) * 0.9, shade('fur', 3));
+    img.ellipse(sx, sy, r, r * 0.9, rust(0));
+    img.ellipse(sx - 0.3, sy - 0.4, r - 0.5, (r - 0.5) * 0.9, shade('wall', 1));
+    img.ellipse(sx - 0.7, sy - 0.8, r - 1.2, (r - 1.2) * 0.9, shade('wall', 2));
   }
 
   /*
@@ -248,10 +288,10 @@ function paintToadstool(img: Img, blink: boolean): void {
   for (const ex of [12, 18]) {
     img.rect(ex - 1, 31, 5, 1, shade('wall', 0));
     if (!blink) {
-      img.rect(ex, 33, 3, 3, shade('cloak', 0));
+      img.rect(ex, 33, 3, 3, CAP_LINE);
       img.px(ex, 33, shade('wall', 3));
     } else {
-      img.rect(ex, 35, 3, 1, shade('cloak', 0));
+      img.rect(ex, 35, 3, 1, CAP_LINE);
       img.px(ex, 36, shade('wall', 0));
       img.px(ex + 2, 36, shade('wall', 0));
     }
@@ -272,11 +312,11 @@ function paintToadstool(img: Img, blink: boolean): void {
   // --- a sprout at the foot, so the silhouette is not symmetrical ---
   img.rect(4, 41, 3, 5, shade('wall', 1));
   img.rect(4, 41, 1, 5, shade('wall', 2));
-  dome(img, 5.5, 41, 4.4, 3.8, shade('cloak', 0));
-  dome(img, 5, 40.4, 3.8, 3.2, shade('cloak', 1));
+  dome(img, 5.5, 41, 4.4, 3.8, rust(0));
+  dome(img, 5, 40.4, 3.8, 3.2, rust(1));
   img.ellipse(4, 38.6, 1.2, 1, shade('wall', 3));
 
-  img.outline(shade('cloak', 0));
+  img.outline(CAP_LINE);
   ground(img, 17, 46.5, 11.5, 2.4);
 }
 

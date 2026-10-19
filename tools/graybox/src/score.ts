@@ -12,7 +12,7 @@
  *
  * The target lives in board-profile.json beside this file, so scoring needs no crops to hand.
  */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readPng } from './png-read.ts';
@@ -108,6 +108,22 @@ export function profile(img: Raster): Profile {
 
 const load = (p: string): Raster => readPng(readFileSync(p));
 
+const AXES: (keyof Profile)[] = ['deep', 'keyline', 'spread', 'edges', 'texture', 'variety'];
+
+/**
+ * The stored profile. Only `target` and `pinned` are read; every other key is documentation that a
+ * rebuild must carry across untouched.
+ */
+interface Stored {
+  target?: Partial<Profile>;
+  /** Axis name -> why it is hand-set. A rebuild keeps `target[axis]` instead of writing the mean. */
+  pinned?: Partial<Record<keyof Profile, string>>;
+  [k: string]: unknown;
+}
+
+const readStored = (): Stored =>
+  existsSync(TARGET_FILE) ? (JSON.parse(readFileSync(TARGET_FILE, 'utf8')) as Stored) : {};
+
 const profileArg = arg('profile');
 const boardArg = arg('board');
 const worldArg = arg('world');
@@ -118,18 +134,73 @@ if (profileArg) {
   const files = readdirSync(boardArg).filter((f) => f.endsWith('.png'));
   if (!files.length) throw new Error(`no PNGs in ${boardArg}`);
   const each = files.map((f) => ({ file: f, p: profile(load(join(boardArg, f))) }));
-  const keys: (keyof Profile)[] = ['deep', 'keyline', 'spread', 'edges', 'texture', 'variety'];
+  const keys = AXES;
   const mean = {} as Profile;
   for (const k of keys) {
     mean[k] = +(each.reduce((a, e) => a + e.p[k], 0) / each.length).toFixed(2);
   }
-  writeFileSync(TARGET_FILE, JSON.stringify({ from: files, each, target: mean }, null, 2) + '\n');
+
+  /*
+   * A rebuild REVISES the measurement; it does not get to reset the document or the judgements.
+   *
+   * Two things used to be lost here, both silently, because this branch wrote a fresh three-key
+   * object over the file:
+   *
+   * 1. Every explanatory key -- README, source, scale, per-axis, resolution-relative,
+   *    variety-is-not-the-board, superseded -- INCLUDING the warning that told you to put the
+   *    hand-set axis back. The instruction to rebuild and the note explaining what a rebuild
+   *    breaks lived in the same file the rebuild deleted.
+   *
+   * 2. Any hand-set target. `variety` is deliberately not the board's figure: the board's 93.91 is
+   *    unreachable by construction (see `variety-is-not-the-board`), so it stands at a reachable
+   *    2.60. Overwriting it with the mean balloons every distance past 0.8 with no change to a
+   *    single pixel of art, which on this project reads as somebody's art regressing.
+   *
+   * So: spread the prior document first, which keeps every key it owns in its original position,
+   * and replace only the three this branch actually measures. For each axis listed in `pinned`,
+   * keep the stored target and report the mean that was declined rather than hiding it.
+   */
+  const prior = readStored();
+  const pinned = prior.pinned ?? {};
+  const target = { ...mean };
+  const kept: string[] = [];
+  for (const k of keys) {
+    if (!(k in pinned)) continue;
+    const held = prior.target?.[k];
+    if (typeof held !== 'number') {
+      console.warn(`  ! ${k} is pinned but has no stored target; writing the measured ${mean[k]}`);
+      continue;
+    }
+    target[k] = held;
+    kept.push(`${k}: kept the pinned ${held}; this rebuild measured ${mean[k]}`);
+  }
+
+  writeFileSync(
+    TARGET_FILE,
+    JSON.stringify(
+      {
+        ...prior,
+        from: files,
+        each,
+        target,
+        'last-rebuild': {
+          on: new Date().toISOString().slice(0, 10),
+          'pinned-axes-kept': kept.length ? kept : 'none',
+        },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
   for (const e of each) console.log(`  ${e.file}: ${JSON.stringify(e.p)}`);
-  console.log(`\ntarget written to ${TARGET_FILE}:\n${JSON.stringify(mean, null, 2)}`);
+  for (const k of kept) console.log(`\n  PINNED, not overwritten -- ${k}`);
+  console.log(`\ntarget written to ${TARGET_FILE}:\n${JSON.stringify(target, null, 2)}`);
 } else if (worldArg) {
-  const target = (JSON.parse(readFileSync(TARGET_FILE, 'utf8')) as { target: Profile }).target;
+  const stored = readStored();
+  const target = stored.target as Profile;
+  const pinned = stored.pinned ?? {};
   const mine = profile(load(worldArg));
-  const keys: (keyof Profile)[] = ['deep', 'keyline', 'spread', 'edges', 'texture', 'variety'];
+  const keys = AXES;
   const label: Record<keyof Profile, string> = {
     deep: 'deep shade  (% under luma 81)',
     keyline: 'keyline     (% under luma 60)',
@@ -144,14 +215,24 @@ if (profileArg) {
   for (const k of keys) {
     const ratio = target[k] ? mine[k] / target[k] : 1;
     total += Math.abs(Math.log(Math.max(ratio, 0.01)));
+    // A pinned axis is not the board's own figure, so say so in the column that claims it is.
+    const column = k in pinned ? `${target[k]}*` : String(target[k]);
     const flag = ratio < 0.6 ? '  <-- far too low' : ratio > 1.7 ? '  <-- far too high' : '';
     console.log(
-      `  ${label[k].padEnd(30)} ${String(mine[k]).padStart(7)} ${String(target[k]).padStart(8)} ${ratio.toFixed(2).padStart(7)}${flag}`,
+      `  ${label[k].padEnd(30)} ${String(mine[k]).padStart(7)} ${column.padStart(8)} ${ratio.toFixed(2).padStart(7)}${flag}`,
     );
   }
   const distance = +(total / keys.length).toFixed(3);
   console.log(
     `\n  distance from the board: ${distance}   (0 is a match; under 0.20 is close; over 0.50 is a different look)`,
+  );
+  for (const [k, why] of Object.entries(pinned)) {
+    console.log(`\n  * ${k} is PINNED -- not the board's own figure. ${why}`);
+  }
+  console.log(
+    `\n  The distance is six axes, and the board is more than six axes. It does not see repetition,` +
+      `\n  cast shadow or composition, so a falling distance is necessary and not sufficient: look at` +
+      `\n  the PNG beside a crop of the board before you call anything finished.`,
   );
 } else {
   console.log('usage: --profile <png> | --board <dir of board crops> | --world <render.png>');

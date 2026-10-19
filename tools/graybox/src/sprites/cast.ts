@@ -1,69 +1,116 @@
 /*
- * The cast: the four characters who offer Red something, redrawn at 32 x 48.
+ * The cast: the four characters who offer Red something, drawn at 32 x 48.
  *
- * These are not the 16px sprites scaled up. The 16px versions had to spend every pixel on the
- * silhouette, so each of them is a stack of ellipses with two dots for a face, and three of the
- * four end up sharing the same lollipop outline. The 4x budget here goes entirely on STRUCTURE
- * (docs/PIXEL_STANDARD.md section 1): separate leaf-shaped ears with a lit rim and a shaded rim,
- * layered wing coverts, a lantern with a frame and panes and a flame behind the mullions, a muzzle
- * that actually projects out of the skull. No extra speckle anywhere.
+ * Revised 2026-10-19 against the approved board (reference/mocks/gameplay-concepts.png) and the
+ * director's review of the previous pass. The previous pass was right about the palette and wrong
+ * about the finish, and this one keeps the first and reverses the second.
  *
- * The brief every one of them answers: at a 26-tile camera you read the OUTLINE before anything
- * inside it, so each of the four has to be identifiable with the fill removed.
+ * 1. KEEP: `tone()` and `keyline()`. Four flat steps could not hold a rounded mass and the ramps
+ *    had nothing dark enough to outline with, so every character now rounds along its ramp and
+ *    finishes in its own near-black. That is the board's defining device and it stays.
  *
- *   rabbit  -- round, two tall upright leaf ears, cotton tail
- *   owl     -- squat barrel, flat top, two small out-leaning tufts, talons on the ground
- *   keeper  -- a bell-shaped hooded coat with a lantern hanging off a pole to one side
- *   wolf    -- sitting predator: long muzzle thrust down and forward out of a low skull,
- *              tall notched ears, hackles along the back, heavy tail along the ground
+ * 2. REVERSE: the continuous gradient. Measured, the cast came back at 27.26 distinct colours per
+ *    thousand pixels, which is the board's number almost exactly -- and it got there by airbrushing.
+ *    The board is crisp pixel art: crop its rabbit and the white body turns through three or four
+ *    readable values with hard boundaries between them, inside a hard black line. A smooth ramp
+ *    hits the same colour count while reading as soft focus, which is off-style beside a world of
+ *    pixel tiles. So `orb` and `taper` now SNAP to `STEPS` levels. That keeps the colour count an
+ *    order of magnitude above the old four-stop fills and gets the crispness back; it costs some
+ *    edge density, which is the one axis of the six that the director's review found unreachable
+ *    (the board profile is measured off a mock drawn at roughly 3 image pixels to one of ours, so
+ *    its conceptual edges are smeared by interpolation and counted at a third weight).
  *
- * Colour comes only from shade(ramp, level) -- the 16px rabbit carried two raw pink literals for
- * its inner ears, which is exactly the kind of pixel that would have survived the rebrand. The
- * inner ear is `skin` here, which is the palette's warm pale ramp and is already Red's own face.
+ * 3. NO BAKED GROUND. Every character used to finish with a `ground()` contact shadow painted from
+ *    the `shadow` ramp -- which is grass in shade, a dark GREEN. Those pixels are part of the
+ *    sprite, so they travelled with the rabbit onto the sand and with the keeper onto the bridge
+ *    and left a green smudge under the feet on both. The contact is now made the way the board
+ *    makes it: a hard bar of the character's own keyline under the feet, filling the gaps between
+ *    the toes, so the figure is planted and nothing of the lawn is carried around with it.
  *
- * The wolf takes the `wolf` ramp (now near-black Deep Purple) on frames 0 and 1 and is painted
- * flat in `ink` on frames 2 and 3, which are him in shadow: 2 is the shape in the lit window, 3 is
- * the same shape wearing Grandma's bonnet and shawl. That pair IS the game's title, so the bonnet
- * stays bright (`wall`, luma 175) over fur that is nearly black, and his ear tips stay above the
- * brim where you cannot miss them.
+ * SILHOUETTE. All four have to be told apart as flat black shapes at a 20-tile camera.
  *
- * `ink` IS the wolf's, and only his (docs/PIXEL_STANDARD.md section 4). Until 2026-10-18 every
- * painter in this file finished with outline(ink 0), which meant the one treatment reserved for the
- * predator was shared with a rabbit, an owl and a lamplighter and so distinguished him from nobody.
- * Each character is now ringed in its OWN dark -- `fur` 0 on the rabbit, `trunk` 0 on the owl,
- * `roof` 0 on the keeper -- and the wolf is the only thing in the forest edged in Cyera Black.
- * The rabbit's and the owl's pupils stay on `ink`: a pupil is a black dot on an eye, not a ring
- * round a silhouette, and nine pixels of it take nothing away from the wolf.
+ *   rabbit  -- a big round head on a small body, two broad leaf ears, arms at the sides, a satchel
+ *   owl     -- a wide squat barrel, 22 px across, with two out-leaning tufts
+ *   keeper  -- a bell with a dome on top and a bright box hanging off a stick, clear of the body
+ *   wolf    -- low shoulder, heavy haunch, four legs under him, long muzzle thrust out over air
+ *
+ * LIGHT. One source, up and to the left, for every character (docs/PIXEL_STANDARD.md section 3).
+ * `lightAt` is the only place that is written down, so no painter can disagree with another.
+ *
+ * ALPHA. Every colour here is opaque. `tone` and `keyline` both take an alpha argument and neither
+ * is ever passed one: a partly-transparent colour drawn onto a transparent pixel leaves partial
+ * alpha in the file, which docs/ASSETS.md forbids. Soft edges are built out of a darker tone.
  */
-import { Img, shade } from '../paint.ts';
-import type { RGBA } from '../paint.ts';
+import { Img, keyline, shade, tone } from '../paint.ts';
+import type { Ramp, RGBA } from '../paint.ts';
 
 /**
- * A filled ellipse whose centre slides sideways as it descends. Ears, tufts and hackles are cones
- * that lean away from the body; drawn as upright ellipses they come back as matching lollipops,
- * which is most of the reason the old rabbit and the old cat shared an outline.
+ * How many values a shaded mass is allowed to use between `lo` and `hi`.
+ *
+ * Six is the number the board's own masses use once you stop counting the interpolation its
+ * upscale introduced: the rabbit's body is white, two greys and a keyline; the owl's back is three
+ * browns and a keyline. Six leaves room for a rim and a core without the boundaries disappearing.
+ * Raise it and the shading goes smooth again; drop it to four and we are back to flat `shade`.
  */
-function leanEllipse(
+const STEPS = 6;
+
+/** Snap a 0..1 shading parameter to one of `n` evenly spaced levels. */
+const snap = (t: number, n: number): number =>
+  n <= 1 ? t : Math.round(Math.max(0, Math.min(1, t)) * (n - 1)) / (n - 1);
+
+/**
+ * How lit a point on a rounded surface is, 0 (full shade) to 1 (full light), from its offset
+ * within the shape. `dx`/`dy` are normalised so that the rim is at distance 1.
+ *
+ * The light is up and to the left, so `-dx - dy` is the surface facing it. The cubic term darkens
+ * the last pixel or two of the rim on every side, which is what gives a mass a soft dark edge for
+ * the keyline to sit against -- the board's trick, and the reason its shapes read as round rather
+ * than as stickers.
+ */
+const lightAt = (dx: number, dy: number): number => {
+  const d = Math.min(1, Math.hypot(dx, dy));
+  const face = (-dx - dy) * 0.5 + 0.5;
+  return Math.max(0, Math.min(1, face * 0.88 + 0.12 - 0.42 * d * d * d));
+};
+
+/**
+ * A ball: an ellipse lit from up-left that turns along `ramp` between `lo` and `hi` in `steps`
+ * readable bands rather than either four flat stops or a continuous blur.
+ */
+function orb(
   img: Img,
   cx: number,
   cy: number,
   rx: number,
   ry: number,
-  lean: number,
-  c: RGBA,
+  ramp: Ramp,
+  lo = 0.05,
+  hi = 1,
+  lean = 0,
+  steps = STEPS,
 ): void {
   for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
     const dy = (y + 0.5 - cy) / ry;
     if (Math.abs(dy) > 1) continue;
+    const ox = cx + lean * (y + 0.5 - cy);
     const half = rx * Math.sqrt(1 - dy * dy);
-    const x = cx + lean * (y + 0.5 - cy);
-    for (let i = Math.floor(x - half); i <= Math.ceil(x + half); i++)
-      if (i + 0.5 >= x - half && i + 0.5 <= x + half) img.px(i, y, c);
+    for (let x = Math.floor(ox - half); x <= Math.ceil(ox + half); x++) {
+      const dx = (x + 0.5 - ox) / rx;
+      if (dx * dx + dy * dy > 1) continue;
+      img.px(x, y, tone(ramp, lo + (hi - lo) * snap(lightAt(dx, dy), steps)));
+    }
   }
 }
 
-/** A thick line with round caps, tapering along its length: limbs, muzzles, tails, sleeves. */
-function limb(
+/**
+ * A tapering rounded stroke that turns ACROSS its width: limbs, muzzles, tails, ears, poles.
+ *
+ * The shading is computed from the offset perpendicular to the stroke's axis, not per-disc, so the
+ * tone stays consistent down the whole length. Stamping shaded discs along a line instead -- the
+ * obvious implementation -- bands the stroke, because each disc re-shades the pixels the last one
+ * already covered.
+ */
+function taper(
   img: Img,
   x0: number,
   y0: number,
@@ -71,572 +118,740 @@ function limb(
   y1: number,
   w0: number,
   w1: number,
-  c: RGBA,
+  ramp: Ramp,
+  lo = 0.05,
+  hi = 1,
+  steps = STEPS,
 ): void {
-  const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 2;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  // Which side of the stroke faces the light; +1 means the +n side is the lit one.
+  const facing = -(nx + ny) / Math.SQRT2;
+  const stamps = Math.ceil(len * 3);
+  for (let i = 0; i <= stamps; i++) {
+    const t = i / stamps;
     const r = (w0 + (w1 - w0) * t) / 2;
-    img.ellipse(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, r, r, c);
+    const cx = x0 + dx * t;
+    const cy = y0 + dy * t;
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
+      for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+        const ax = x + 0.5 - cx;
+        const ay = y + 0.5 - cy;
+        if (ax * ax + ay * ay > r * r) continue;
+        const s = r > 0 ? Math.max(-1, Math.min(1, (ax * nx + ay * ny) / r)) : 0;
+        const k = Math.max(
+          0,
+          Math.min(1, (s * facing * 0.5 + 0.5) * 0.9 + 0.1 - 0.3 * Math.abs(s) ** 3),
+        );
+        img.px(x, y, tone(ramp, lo + (hi - lo) * snap(k, steps)));
+      }
   }
 }
 
 /**
- * The contact shadow every standing thing owes the ground (section 3), painted ONLY where the
- * sprite is not. It runs after `outline`, so the ink edge never wraps round the shadow and leaves
- * the character standing in a dark puddle with a keyline round it.
+ * The contact the ground is owed, made out of the character's own keyline instead of out of the
+ * lawn.
+ *
+ * Runs BEFORE `outline`, so the outline then wraps it and the base reads as two dark pixels thick
+ * where the feet touch and one everywhere else. It only paints transparent pixels that have
+ * something of the sprite within three rows above them, which is what closes the gaps between the
+ * toes into one planted line without drawing a puddle out to the edges of the frame.
  */
-function ground(img: Img, cx: number, cy: number, rx: number, ry: number): void {
-  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++)
-    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
-      if (x < 0 || y < 0 || x >= img.w || y >= img.h) continue;
-      if (img.get(x, y)[3] !== 0) continue;
-      const dx = (x + 0.5 - cx) / rx;
-      const dy = (y + 0.5 - cy) / ry;
-      const d = dx * dx + dy * dy;
-      if (d > 1) continue;
-      img.px(x, y, shade('shadow', d > 0.5 ? 1 : 0));
-    }
+function base(img: Img, x0: number, x1: number, y: number, c: RGBA): void {
+  for (let x = Math.round(x0); x <= Math.round(x1); x++) {
+    if (x < 0 || x >= img.w || y < 0 || y >= img.h) continue;
+    if (img.get(x, y)[3] !== 0) continue;
+    let near = false;
+    for (let k = 1; k <= 3 && !near; k++) if (y - k >= 0 && img.get(x, y - k)[3] !== 0) near = true;
+    if (near) img.px(x, y, c);
+  }
 }
 
 // ----------------------------------------------------------------------------- the rabbit
 
+/** The rabbit's own near-black: eyes, mouth, and the keyline. `fur` starts at luma 195. */
+const RABBIT_DARK: RGBA = keyline('fur', 165);
+
 /**
- * Soft, round, and the only one of the four with the mass up top: two leaf ears that take up a
- * third of the frame. Everything else about him is a circle, so the ears are the whole read.
+ * Rebuilt to the board's rabbit, which is a different animal from the one this file had.
  *
- * The breath moves the head and ears only; the front paws stay planted, which is what makes a
- * one-pixel bob look like breathing rather than like the sprite sliding.
+ * Crop the board at the stall and what is there is a CHIBI: a head nearly as wide as the body is
+ * tall, two broad rounded ears leaning apart with a wide pink inner, two arms hanging clear of the
+ * flanks, two feet, a round tail, and a face -- black oval eyes, a pink nose, a small "w" mouth, a
+ * blush on each cheek. The previous version had 19-pixel ears two pixels wide with a pink hairline
+ * down each, which read as antennae, and no arms at all, so the body was an egg. Both are fixed by
+ * proportion rather than by detail: the ears are now 12 px long and 6 wide, the head is r 8.2 where
+ * the body is r 6.2, and the arms are drawn after the body so a keyline groove separates them.
+ *
+ * The satchel is his, and it is the point of him: he is the character who hands Red a thing. It
+ * hangs on the near hip on a strap across the chest, drawn in `wood` so it is the one warm mass on
+ * an otherwise white animal.
+ *
+ * The breath moves the head, ears and face only; the body, arms and paws stay planted, which is
+ * what makes a one-pixel bob look like breathing rather than like the sprite sliding.
  */
 function paintRabbit(img: Img, blink: boolean): void {
   const b = blink ? 1 : 0;
 
-  // --- ears: shaded leaf, lit leaf inset up-left, warm inner channel ---
-  const ear = (cx: number, cy: number, lean: number): void => {
-    leanEllipse(img, cx, cy, 3.4, 9.6, lean, shade('fur', 0));
-    leanEllipse(img, cx - 0.7, cy - 0.7, 2.7, 8.6, lean, shade('fur', 2));
-    leanEllipse(img, cx + 0.1, cy + 1.2, 1.5, 6.4, lean, shade('skin', 0));
-    leanEllipse(img, cx - 0.3, cy + 1.0, 0.9, 5.4, lean, shade('skin', 2));
+  // --- ears: short, broad, rounded, leaning apart, with a wide warm inner ---
+  const ear = (xb: number, xt: number): void => {
+    taper(img, xb, 19 + b, xt, 7.5 + b, 6.6, 5.2, 'fur', 0.12, 1);
+    taper(img, xb + (xt - xb) * 0.1, 17.5 + b, xt, 9.5 + b, 3.8, 2.8, 'skin', 0.0, 0.5);
   };
-  ear(11.5, 13 + b, -0.26);
-  ear(21.0, 12 + b, 0.26);
+  ear(12.6, 10.0);
+  ear(19.4, 22.0);
+
+  // --- body: small, below a big head, and narrow enough to leave the arms outside it ---
+  orb(img, 16, 38.0, 5.8, 7.6, 'fur', 0.0, 1);
+  // The turn down his right side. The board's rabbit is white with one grey side, and `fur` is so
+  // pale that the rim's own falloff cannot supply it: it has to be painted as its own mass.
+  orb(img, 18.6, 38.6, 4.2, 6.6, 'fur', 0.0, 0.3);
+
+  // Feet, planted, and never bobbing with the breath.
+  for (const fx of [12.6, 19.4]) orb(img, fx, 45.0, 3.0, 2.4, 'fur', 0.18, 0.9);
+  img.line(16, 43.4, 16, 46.4, RABBIT_DARK); // the groove that makes them two feet, not a base
+
+  // Cotton tail, out to the right: the one thing on him allowed to be at the top of the ramp.
+  orb(img, 23.0, 40.0, 3.0, 2.8, 'fur', 0.5, 1);
 
   /*
-   * Body: the full mass in shade, then the base inset two pixels up-left so a broad crescent of
-   * shade survives down the bottom-right, then the lit chest. A white animal on `fur` is the
-   * hardest thing in this file to give form to -- levels 1 and 2 are nine levels of luma apart --
-   * so nearly all of the modelling has to come from how much level 0 is left showing.
+   * Arms, pushed out past the flanks so each has open air on its outer side, and separated from the
+   * body by a groove on its inner one. Drawn inside the silhouette they vanished entirely -- `fur`
+   * has 60 luma of range in total, so an arm on a body can only be told from the body by a line.
    */
-  img.ellipse(16, 36, 9.6, 10, shade('fur', 0));
-  img.ellipse(14.6, 34.6, 8.8, 9.2, shade('fur', 1));
-  img.ellipse(12.4, 32.2, 6, 6.4, shade('fur', 2));
-  img.ellipse(17, 42, 7.4, 3.4, shade('fur', 0)); // the belly, sitting in its own shadow
+  taper(img, 9.6, 33.8, 9.0, 41.2, 4.4, 3.8, 'fur', 0.05, 0.8);
+  taper(img, 22.4, 33.8, 23.0, 41.2, 4.4, 3.8, 'fur', 0.0, 0.42);
+  img.line(11.6, 34.4, 11.2, 41.4, RABBIT_DARK);
+  img.line(20.4, 34.4, 20.8, 41.4, RABBIT_DARK);
 
-  // Haunch: one curved seam, not a field of speckle. It is what says the body has a leg in it.
-  limb(img, 10.2, 33, 13.4, 43, 2, 2.4, shade('fur', 0));
+  // --- the satchel: strap over the far shoulder, pouch on the near hip, in front of the arm ---
+  taper(img, 21.0, 31.6, 12.2, 39.2, 2.4, 2.4, 'wood', 0.06, 0.5);
+  orb(img, 10.0, 41.6, 3.4, 3.2, 'wood', 0.0, 0.46); // the bag
+  taper(img, 7.0, 39.6, 12.8, 38.8, 2.6, 2.6, 'wood', 0.4, 0.95); // its lid, a band lighter
+  img.px(10, 41, shade('gold', 2)); // and its buckle
 
-  // Cotton tail, the one place level 3 is allowed to sit as a shape of its own.
-  img.ellipse(25.4, 38, 3.6, 3.4, shade('fur', 0));
-  img.ellipse(24.9, 37.4, 2.9, 2.7, shade('fur', 3));
+  // --- head, big and round, in front of the ear bases ---
+  orb(img, 16, 24 + b, 8.2, 7.0, 'fur', 0.08, 1);
+  orb(img, 19.4, 24.8 + b, 4.6, 5.2, 'fur', 0.0, 0.34); // the same turn, on the head
 
-  // Front paws, planted; two toe grooves each so they are paws and not pebbles.
-  for (const px0 of [11.5, 19]) {
-    img.ellipse(px0, 43.6, 3.4, 2.6, shade('fur', 0));
-    img.ellipse(px0 - 0.5, 43, 2.7, 1.9, shade('fur', 2));
-    img.rect(Math.round(px0) - 1, 43, 1, 2, shade('fur', 0));
-    img.rect(Math.round(px0) + 1, 43, 1, 2, shade('fur', 0));
+  // Eyes: the board's are solid dark ovals with no highlight.
+  for (const ex of [12.6, 19.4]) {
+    if (blink) img.rect(Math.round(ex) - 1, 24 + b, 3, 1, RABBIT_DARK);
+    else img.ellipse(ex, 23.6 + b, 1.6, 2.0, RABBIT_DARK);
   }
+  // Blush, in `skin` rather than a pink of its own: the palette has no pink, and purple is Red's.
+  for (const cx of [10.4, 21.6]) img.ellipse(cx, 26.6 + b, 1.9, 1.2, shade('skin', 1));
+  // Nose: a small warm wedge, and the one place `skin` appears on his face.
+  img.rect(15, 27 + b, 3, 1, shade('skin', 0));
+  img.px(16, 28 + b, shade('skin', 0));
+  // Mouth: the board's little "w" under the nose, three pixels of it.
+  for (const [mx, my] of [
+    [14, 29],
+    [15, 30],
+    [16, 29],
+    [17, 30],
+    [18, 29],
+  ] as const)
+    img.px(mx, my + b, RABBIT_DARK);
 
-  // The head throws a shadow across the chest, or the two whites merge into one egg.
-  img.ellipse(16, 29 + b, 7.8, 2.8, shade('fur', 0));
-
-  // --- head, in front of the ear bases ---
-  img.ellipse(16, 21 + b, 7.6, 6.6, shade('fur', 0));
-  img.ellipse(15.2, 20.2 + b, 6.9, 5.9, shade('fur', 1));
-  img.ellipse(13, 18.2 + b, 4.6, 3.8, shade('fur', 2));
-  // Cheek puffs: the rabbit's jaw, and the reason the face is wider than the skull.
-  img.ellipse(10.4, 24 + b, 3.4, 2.7, shade('fur', 1));
-  img.ellipse(21.6, 24 + b, 3.4, 2.7, shade('fur', 0));
-  img.ellipse(10, 23.4 + b, 2.6, 2, shade('fur', 2));
-  // Muzzle, so the nose has something to sit on instead of floating on the cheek.
-  img.ellipse(16, 25.4 + b, 3.4, 2.4, shade('fur', 2));
-  // Where each ear goes behind the skull, so they read as behind and not glued on.
-  img.ellipse(12, 15 + b, 2.6, 1.6, shade('fur', 0));
-  img.ellipse(20.6, 14.6 + b, 2.6, 1.6, shade('fur', 0));
-
-  // Eyes: three pixels across with a single highlight; no mouth at this size (section 6).
-  for (const ex of [10, 19]) {
-    if (blink) {
-      img.rect(ex, 21 + b, 3, 1, shade('ink', 0));
-      img.px(ex, 22 + b, shade('fur', 0));
-      img.px(ex + 2, 22 + b, shade('fur', 0));
-    } else {
-      img.rect(ex, 19 + b, 3, 3, shade('ink', 0));
-      img.px(ex, 19 + b, shade('fur', 3));
-    }
-  }
-  // Nose: four pixels in a wedge. A filled rectangle at this size reads as a sticker.
-  img.rect(15, 24 + b, 3, 1, shade('skin', 0));
-  img.px(16, 25 + b, shade('skin', 0));
-  img.px(15, 24 + b, shade('skin', 2));
-  img.px(14, 26 + b, shade('fur', 0));
-  img.px(18, 26 + b, shade('fur', 0));
-
-  // His own dark, not a key line. A Clay rim round a white animal is a quieter edge than the ink
-  // one he used to wear, which is the correct trade: the wolf keeps the hard black silhouette, and
-  // the rabbit keeps the soft one that goes with being the friendliest thing in the game. Against
-  // the grass field (luma ~117) the Clay rim still separates by about 80 levels.
-  img.outline(shade('fur', 0));
-  ground(img, 16, 45, 10, 2.6);
+  base(img, 8, 24, 47, RABBIT_DARK);
+  img.outline(RABBIT_DARK);
 }
 
 // ----------------------------------------------------------------------------- the owl
 
 /**
- * A barrel with a flat top. Where the rabbit is tall and narrow the owl is wide and low, and the
- * two facial discs push the width out past the body, so nothing else in the cast has this outline.
+ * A wide squat barrel, 22 pixels across where the rabbit is 15, which is the whole silhouette
+ * difference between them. The two ear tufts lean out past the head and are the only things
+ * breaking the dome.
  *
- * The wings carry the 32px budget: four layered coverts each, lit on the left and in shade on the
- * right, which is a wing rather than a dark smudge down the side.
+ * The board's owl is one brown turning through a few values with a cream breast laid over it, and
+ * that is how this is built: two `orb`s for the mass, a `wall` orb for the breast, two `taper`s for
+ * the folded wings. He is the one character here the review left alone, so the only changes are the
+ * two this pass makes everywhere -- the shading snaps to `STEPS` instead of blurring, and the green
+ * contact shadow under the talons is gone.
  */
 function paintOwl(img: Img, blink: boolean): void {
   const b = blink ? 1 : 0;
 
+  // --- ear tufts, behind the head so the dome overlaps their bases ---
+  taper(img, 9.6, 15 + b, 6.4, 5 + b, 5.2, 1.4, 'trunk', 0.08, 0.8);
+  taper(img, 22.4, 15 + b, 25.6, 5 + b, 5.2, 1.4, 'trunk', 0.05, 0.6);
+
   // --- body and head, one merged mass: an owl has no neck ---
-  img.ellipse(16, 31 + b, 10.6, 12.4, shade('trunk', 0));
-  img.ellipse(15.4, 30.4 + b, 10, 11.8, shade('trunk', 1));
-  img.ellipse(16, 19 + b, 9.4, 7.8, shade('trunk', 0));
-  img.ellipse(15.4, 18.4 + b, 8.9, 7.3, shade('trunk', 1));
-  img.ellipse(12.8, 16 + b, 6, 4.8, shade('trunk', 2));
+  orb(img, 16, 31 + b, 11, 12.6, 'trunk', 0.06, 0.92);
+  orb(img, 16, 20 + b, 10, 8.4, 'trunk', 0.1, 1);
 
-  /*
-   * The pale breast, which the two dark wings then frame. Without this field the wings and the
-   * body are both `trunk` and the coverts read as bands running right across the bird -- which is
-   * exactly how the first pass came out.
-   */
-  img.ellipse(15.6, 31 + b, 6.4, 10.4, shade('trunk', 2));
-  // Barring: nine chevrons in three courses. Nine, not ninety: barring is structure, speckle is dirt.
-  for (let r = 0; r < 3; r++)
-    for (let c = 0; c < 3; c++) {
-      const y = 27 + r * 5 + b;
-      const x = 12 + c * 4 + (r % 2 ? 2 : 0);
-      img.line(x - 1, y, x, y + 1, shade('trunk', 0));
-      img.line(x, y + 1, x + 1, y, shade('trunk', 0));
-    }
-
-  /*
-   * Wings, folded down the sides. Four courses of coverts each, the lit edge on the left wing and
-   * nothing but shade on the right, plus three primaries overhanging the tail.
-   */
-  const wing = (cx: number, dir: 1 | -1): void => {
-    leanEllipse(img, cx, 30 + b, 4.4, 12, dir * 0.05, shade('trunk', 0));
-    for (let i = 0; i < 4; i++) {
-      const y = 23 + i * 4.4 + b;
-      img.ellipse(cx + dir * 0.6, y, 3.6 - i * 0.3, 2.5, shade('trunk', dir < 0 ? 1 : 0));
-      if (dir < 0) img.ellipse(cx - 1.4, y - 0.4, 2, 1.4, shade('trunk', 2));
-      img.line(cx - 3.4, y + 2, cx + 3.4, y + 2.4, shade('trunk', 0));
-    }
+  // Wings folded down the sides, dark, with three primaries overhanging the tail on each.
+  taper(img, 6.8, 21 + b, 8.4, 40 + b, 7, 5.4, 'trunk', 0.04, 0.58);
+  taper(img, 25.2, 21 + b, 23.6, 40 + b, 7, 5.4, 'trunk', 0.0, 0.34);
+  for (const [wx, dir] of [
+    [7.4, -1],
+    [24.6, 1],
+  ] as const)
     for (let i = 0; i < 3; i++)
-      img.rect(Math.round(cx - 2.5 + i * 2), 40 + b, 2, 5 - i, shade('trunk', 0));
-  };
-  wing(6.6, -1);
-  wing(25.4, 1);
+      taper(
+        img,
+        wx + dir * i * 1.8,
+        38 + b,
+        wx + dir * i * 2.2,
+        44 - i * 1.4 + b,
+        2.6,
+        1.8,
+        'trunk',
+        0.02,
+        0.3,
+      );
+
+  // The cream breast the wings then frame. `wall` is the only pale warm ramp in the palette and it
+  // is what the board puts here; on `trunk` the breast and the wings are one brown.
+  orb(img, 15.6, 32 + b, 6.4, 9.8, 'wall', 0.05, 0.62);
 
   // Tail wedge between the primaries.
-  img.ellipse(16, 43 + b, 4.4, 2.6, shade('trunk', 0));
-  img.ellipse(16, 42 + b, 3.6, 1.6, shade('trunk', 1));
+  orb(img, 16, 43.6 + b, 4.2, 2.6, 'trunk', 0.04, 0.4);
 
   // Talons, gripping the ground in front of the tail, and never bobbing with the breath.
   for (const fx of [10, 18]) {
-    img.rect(fx, 42, 5, 2, shade('gold', 0));
-    img.rect(fx, 42, 5, 1, shade('gold', 1));
-    for (let t = 0; t < 3; t++) {
-      img.rect(fx + t * 2, 44, 1, 2, shade('gold', 1));
-      img.px(fx + t * 2, 45, shade('gold', 0));
-    }
-  }
-
-  // --- ear tufts: narrow, pointed and leaning out. Rounded ones turn him into a cat ---
-  for (const [tx, lean] of [
-    [9.4, -0.42],
-    [22.6, 0.42],
-  ] as const) {
-    for (let i = 0; i < 8; i++) {
-      const w = Math.max(1, Math.round(1 + i * 0.42));
-      img.rect(Math.round(tx - w / 2 + lean * i), 7 + i + b, w, 1, shade('trunk', 0));
-      if (i > 2 && w > 1)
-        img.px(Math.round(tx - w / 2 + lean * i), 7 + i + b, shade('trunk', lean < 0 ? 2 : 1));
-    }
+    taper(img, fx, 42.5, fx + 4, 42.5, 2.4, 2.4, 'gold', 0.1, 0.9);
+    for (let t = 0; t < 3; t++)
+      taper(img, fx + t * 2, 43.5, fx + t * 2, 45.5, 1.6, 1.2, 'gold', 0.05, 0.6);
   }
 
   // --- the facial discs, which are the owl ---
-  for (const dx of [-4.9, 4.9]) {
+  for (const dx of [-4.8, 4.8]) {
     const cx = 16 + dx;
-    img.ellipse(cx, 20 + b, 5.6, 5.6, shade('trunk', 0));
-    img.ellipse(cx, 20 + b, 4.8, 4.8, shade('wall', 1));
-    img.ellipse(cx - 0.8, 19.2 + b, 3.7, 3.7, shade('wall', 2));
+    orb(img, cx, 20.4 + b, 5.0, 5.2, 'trunk', 0.0, 0.2);
+    orb(img, cx, 20.4 + b, 4.3, 4.5, 'wall', 0.35, 1);
     if (blink) {
       // Lid down, with the lash line above it: a closed eye, not a missing one.
-      img.ellipse(cx, 21.4 + b, 4.1, 2.4, shade('trunk', 1));
-      img.line(cx - 3.6, 20 + b, cx + 3.6, 20 + b, shade('trunk', 0));
+      orb(img, cx, 21.4 + b, 3.7, 2.2, 'wall', 0.0, 0.3);
+      img.line(cx - 3.3, 19.6 + b, cx + 3.3, 19.6 + b, keyline('trunk'));
     } else {
-      img.ellipse(cx, 20 + b, 2.7, 2.7, shade('ink', 0));
-      img.rect(Math.round(cx) - 2, 18 + b, 2, 2, shade('wall', 3));
+      img.ellipse(cx, 20.4 + b, 2.5, 2.6, keyline('trunk'));
+      img.rect(Math.round(cx) - 2, 18.6 + b, 2, 2, shade('wall', 3));
     }
   }
 
-  // Beak between the discs: four courses, lit on the left, dark at the tip.
-  img.rect(14, 23 + b, 4, 1, shade('gold', 0));
-  img.rect(14, 24 + b, 4, 2, shade('gold', 1));
-  img.rect(14, 24 + b, 1, 2, shade('gold', 2));
-  img.rect(15, 26 + b, 2, 1, shade('gold', 0));
-  img.px(16, 27 + b, shade('gold', 0));
+  // Beak between the discs.
+  taper(img, 16, 23.4 + b, 16, 27 + b, 4.4, 1.4, 'gold', 0.08, 0.85);
 
-  // Bark-dark, which is his own ramp and 60 levels under the grass field: the owl loses nothing by
-  // giving the black keyline back to the wolf.
-  img.outline(shade('trunk', 0));
-  ground(img, 16, 45, 10.5, 2.4);
+  base(img, 7, 25, 47, keyline('trunk'));
+  img.outline(keyline('trunk'));
 }
 
 // ----------------------------------------------------------------------------- the lantern keeper
 
+/** His near-black: the hood's inside, the badger's mask, the grip, and the keyline. */
+const KEEPER_DARK: RGBA = keyline('roof');
+
 /**
  * No reference exists for this character anywhere (docs/ART_PRODUCTION.md section 5), so this is
- * the design pass that file asks for, built to its recommendation: a badger in a hooded coat
- * carrying the lantern on a short pole.
+ * the design that file asks for: a badger in a hooded coat carrying the lantern on a short pole.
  *
- * Two things drive every decision here. First, the LANTERN is the skill, so the lantern is what
- * the silhouette is about -- it hangs clear of the body on a pole, out in the frame's left column
- * where nothing else in the cast puts anything, and it is the only bright object on the sprite.
- * Second, the face must not compete with it, so the badger reads by its head stripes alone.
+ * The review found him unreadable -- "a grey tombstone with two white chevrons that look like
+ * origami birds, no head distinct from the body, and a lantern pole with no hand gripping it" --
+ * and it was right on all three counts. The previous pass had deliberately shrunk the badger to a
+ * snout and an ear on the theory that a face would steal attention from the lantern. What it
+ * actually produced was two disconnected pale marks floating on a grey bell. Both marks are gone
+ * and there is now a HEAD: a pale badger skull filling the hood's opening, with the hood's brim
+ * casting a hard band of shade across the top of it, the black mask running down through the eyes
+ * on both sides, and the snout coming out of the bottom of the mask. A face in a hood reads as a
+ * person at a glance; two white smears never will, however carefully they are placed.
  *
- * The coat is `roof`, and the comment that used to sit here was wrong in a way worth recording.
- * It claimed the coat was "the forest's night ramp rather than anything that could be mistaken for
- * Red's purple". `night` 2 is #441363 and `night` 3 is #6D2D93 -- those ARE `cloak` 0 and `cloak` 1,
- * so the rim light down his coat, his creases and his hood's lit dome were painted in Red's own two
- * tokens, 63 pixels of Aubergine per frame. At a 26-tile camera the forest held two purple-hooded
- * figures, which is the exact competition the rebrand exists to prevent, and docs/PIXEL_STANDARD.md
- * section 2 does not list him among the things brand colour reaches the world through.
+ * The HAND is the other half of the same fault. The pole used to pass through the coat untouched,
+ * so the lantern was a prop floating beside him rather than something he was carrying. There is now
+ * a cuff where the sleeve ends and a paw closed round the pole, with two keyline grooves across it
+ * for fingers, which is the smallest mark that says "gripped" at this size.
  *
- * `roof` is the one ramp in the palette no character owns -- it was added for the cottage's slate,
- * a building he is never beside -- so it is the only place he can have an identity of his own
- * without borrowing another cast member's. It is also a warm NEUTRAL, which is what finally makes
- * the lantern the loudest thing on him: gold against grey is the only saturated colour in the
- * frame, where gold against a purple coat was just one bright thing among two. `roof` 0 (luma 69)
- * is a proper own-dark against the grass field at 117, which is what `stone` could never be.
+ * The LANTERN is still what the silhouette is about: the lantern body occupies x 0..8 and the coat
+ * does not begin before x 11, so as a flat black shape he is a bell with a box held away from it on
+ * a stick -- a shape no other character here can be confused with.
  *
- * The lantern is up and to the left, which is exactly where the world's one light comes from
- * (section 3), so the warm pixels it throws onto the hood and the snout are consistent with every
- * other sprite rather than a second light source. They are solid `gold` 1 pixels, never a
- * translucent halo: the 16px keeper painted its glow at alpha 45 over transparency, which left
- * partly-transparent pixels in the file that docs/ASSETS.md forbids.
+ * COAT COLOUR. He is painted from `roof`, the one ramp in the palette no character owns and a warm
+ * neutral, which is what makes gold the only saturated colour on him. He was once `night`, whose
+ * top two steps are byte-identical to Red's cloak, so the forest held two purple-hooded figures.
  */
 function paintKeeper(img: Img, blink: boolean): void {
   const b = blink ? 1 : 0;
-  const CX = 19;
+  const CX = 20;
 
   // Boots under the hem, planted.
-  for (const fx of [15, 21]) {
-    img.rect(fx, 42, 4, 4, shade('wood', 0));
-    img.rect(fx, 42, 4, 1, shade('wood', 1));
-  }
+  for (const fx of [17, 22.5]) taper(img, fx, 43, fx, 45.5, 4, 3.4, 'wood', 0.08, 0.7);
 
-  // --- the coat: a bell, widening to the hem, with a lit edge facing the lantern ---
-  for (let y = 23; y <= 44; y++) {
-    const half = Math.round(8.5 + ((y - 23) / 21) * 2.5);
-    const left = CX - half;
-    img.rect(left, y + b, half * 2, 1, shade('roof', 1));
-    img.rect(left, y + b, 2, 1, shade('roof', 2)); // rim towards the lantern
-    // Five pixels of flank turning away, not three. `roof` 1 is within a few levels of the grass
-    // field, so the bell only becomes a bell -- and only stays darker than the ground it stands on
-    // -- if a wide band of it has gone over into shade. Level 3 appears nowhere on the cloth: what
-    // sparkles on this sprite is the lantern, and the gold pixels it lands are the whole budget.
-    img.rect(CX + half - 5, y + b, 5, 1, shade('roof', 0));
-  }
-  /*
-   * Two creases, falling away from the belt the way a belted bell-coat actually folds. A seam has
-   * to be a lit edge with a shadow beside it, because a fold drawn in level 0 alone barely exists
-   * at this size -- but straight vertical ones every few pixels turned the coat into corduroy, so
-   * these lean and there are two.
-   */
-  for (const [fx0, fx1] of [
-    [CX - 4, CX - 7],
-    [CX + 3, CX + 6],
-  ] as const)
-    for (let y = 37; y <= 43; y++) {
-      const x = Math.round(fx0 + ((fx1 - fx0) * (y - 37)) / 6);
-      img.px(x, y + b, shade('roof', 2));
-      img.px(x + 1, y + b, shade('roof', 0));
+  // --- the coat: a bell widening to the hem, lit on the side the lantern is on ---
+  for (let y = 24; y <= 45; y++) {
+    const half = 7.6 + ((y - 24) / 21) * 2.9;
+    for (let x = Math.ceil(CX - half); x <= Math.floor(CX + half); x++) {
+      const s = (x + 0.5 - CX) / half;
+      // Across the bell only: a cylinder turns in x, and shading it in y as well would make the
+      // hem glow. The cubic darkens both rims so the keyline has something to sit against.
+      const k = Math.max(0, Math.min(1, (-s * 0.56 + 0.5) * 0.94 + 0.06 - 0.4 * Math.abs(s) ** 3));
+      img.px(x, y + b, tone('roof', 0.02 + 0.9 * snap(k, STEPS)));
     }
-  img.rect(CX - 12, 44 + b, 24, 1, shade('roof', 0)); // hem
+  }
 
-  // Belt: a dark strap with one lit edge. The first pass made it tan and full width, and it read
-  // as a plank the keeper was carrying across his middle.
-  img.rect(CX - 7, 34 + b, 14, 2, shade('wood', 0));
-  img.rect(CX - 7, 34 + b, 14, 1, shade('wood', 1));
-  img.rect(CX - 2, 33 + b, 4, 4, shade('gold', 0));
-  img.px(CX - 1, 34 + b, shade('gold', 2));
+  // Belt: a dark strap with a gold buckle, and the only horizontal on the coat.
+  taper(img, CX - 7.5, 35 + b, CX + 7.5, 35 + b, 3, 3, 'wood', 0.05, 0.55);
+  orb(img, CX - 0.5, 35 + b, 2.2, 2.2, 'gold', 0.25, 1);
 
-  // --- the arm that holds the pole, reaching down-left out of the coat ---
-  limb(img, 14, 27 + b, 12, 34 + b, 6, 4.6, shade('roof', 1));
-  limb(img, 13.2, 27 + b, 11.2, 34 + b, 2.4, 2, shade('roof', 2));
+  // --- the sleeve that holds the pole, reaching down-left out of the coat ---
+  taper(img, 15.5, 28 + b, 12.8, 33 + b, 5.4, 4.2, 'roof', 0.1, 0.58);
 
-  /*
-   * Hood: shade dome, a rim-light dome barely larger than the body, then the body inset
-   * down-right. The rim stays about a pixel wide -- level 2 is a lit edge, and a broad band of it
-   * turns the hood into a lit dome and stops being a highlight (section 2).
-   */
-  img.ellipse(CX - 0.5, 25.6 + b, 8.6, 2.4, shade('roof', 0)); // collar, under the hood
-  img.ellipse(CX + 0.5, 15 + b, 8.6, 7.6, shade('roof', 0));
-  img.ellipse(CX - 0.1, 14.4 + b, 8.4, 7.4, shade('roof', 2));
-  img.ellipse(CX + 1.1, 15.6 + b, 8.3, 7.3, shade('roof', 1));
-  // The opening, cut low and towards the lantern, with the head set down into it.
-  img.ellipse(17.6, 20.5 + b, 6.8, 5.2, shade('roof', 0));
+  // Hood: a dome, with a back-swept point. Without the point the dome is a bald head, and in
+  // silhouette it is the one mark that says the grey mass is cloth he is wearing.
+  orb(img, CX - 0.4, 26 + b, 8.2, 2.6, 'roof', 0.02, 0.3); // collar, under the hood
+  orb(img, CX + 0.2, 16.0 + b, 8.4, 8.2, 'roof', 0.1, 0.96);
+  taper(img, 24.5, 14 + b, 27.8, 10.4 + b, 5, 1.6, 'roof', 0.02, 0.5);
 
   /*
-   * --- the badger, in three-quarter view, looking down towards his own lantern ---
+   * --- the badger, three-quarter, looking down at his own lantern ---
    *
-   * The head sits low in the dome, so the hood frames it overhead and down both sides without a
-   * separate brim shape having to be drawn at all; only the muzzle comes out below.
-   *
-   * It took three passes to get the badger to read. The animal's two black stripes run down the
-   * outside of a white head and through the eyes, and painted straight-on at this size that fails
-   * twice: the right-hand stripe merges into the inside of the hood, and a round white face with
-   * two big symmetrical dark patches on it is not a badger, it is a skull. Turning the head
-   * three-quarter solves both. One wedge, one stripe along the crown, one eye -- and because he is
-   * now looking down at his lantern rather than out at the player, the lantern stays the loudest
-   * thing on the sprite, which is the entire brief for this character.
+   * The opening is cut first and deep, then the head is set into it. The head is a real mass with
+   * its own rounding, not a flat patch, so it sits INSIDE the hood rather than on it.
    */
-  limb(img, 20.2, 22.2 + b, 13.8, 27.6 + b, 8, 5, shade('fur', 0));
-  limb(img, 19.8, 21.8 + b, 13.6, 27.1 + b, 6.6, 3.8, shade('fur', 1));
-  limb(img, 19.2, 21.2 + b, 14.2, 25.8 + b, 4.4, 2.4, shade('fur', 2));
+  orb(img, 18.6, 20.8 + b, 7.0, 5.8, 'roof', 0.0, 0.06); // the opening, and it stays deep
+  orb(img, 18.2, 21.8 + b, 4.6, 4.0, 'fur', 0.12, 0.74); // the skull, lit only to three-quarters
+
   /*
-   * The crown stripe, from the ear to just short of the nose, with the eye set into it. It reads as
-   * black at this size without being Cyera Black: `roof` 0 is a dark warm charcoal 162 levels under
-   * the white of his head, it is the dark of the coat he is wearing, and it leaves `ink` to the
-   * wolf. A badger needs a near-black marking, and `fur` 0 -- the only dark his own white ramp has
-   * -- is Clay, which on a white head is no marking at all.
+   * The brim's shade: a hard band across the top of the face. This is what the review asked for by
+   * name and it does two jobs -- it stops the pale skull reading as a bald dome stuck on the coat,
+   * and it keeps a visible ring of hood between the face and the hood's lit outside, without which
+   * the two pale masses merge and the whole head reads as hair.
    */
-  limb(img, 20.6, 20.2 + b, 14.4, 24.8 + b, 3.6, 2, shade('roof', 0));
-  img.ellipse(22.6, 19.6 + b, 2.2, 2, shade('fur', 0)); // the ear the hood lets through
-  img.ellipse(22.7, 19.8 + b, 1.2, 1, shade('roof', 0));
-  img.ellipse(13.1, 27.9 + b, 2.2, 1.6, shade('roof', 0)); // nose
-  img.px(12.2, 27.1 + b, shade('fur', 3));
-  if (!blink) img.rect(16, 23 + b, 2, 1, shade('wall', 3));
+  orb(img, 18.2, 18.6 + b, 4.6, 2.2, 'roof', 0.0, 0.1);
+
+  // The hood's own edge, round the top of the opening: one dark arc is what puts the face INSIDE
+  // the hood rather than on the front of it, and without it the whole head reads as hair.
+  for (let a = -2.5; a <= 0.6; a += 0.08)
+    img.px(18.6 + 6.6 * Math.cos(a), 20.8 + b + 5.6 * Math.sin(a), KEEPER_DARK);
+
+  // Snout, out of the bottom of the face and pointing down at the lantern, nose first. The shade
+  // under the brow is what lets it read as something projecting rather than as more of the face.
+  orb(img, 18.6, 23.0 + b, 3.6, 1.6, 'roof', 0.0, 0.14);
+  taper(img, 18.2, 23.6 + b, 15.0, 26.0 + b, 4.0, 2.8, 'fur', 0.34, 1);
+  orb(img, 14.5, 26.2 + b, 1.9, 1.5, 'roof', 0.0, 0.04);
+
+  /*
+   * EYES, and they are the whole fix.
+   *
+   * The previous two passes drew the badger's mask -- a black stripe down each side of a white
+   * blaze -- and both times the result was a pale smear with dark marks on it rather than a face.
+   * At a head ten pixels across the mask is simply too fine a marking to survive; what reads at
+   * this size is the oldest signal there is, two dark eyes on a pale field. So the stripes are
+   * gone, each eye is a solid 2x2 of his own near-black with a brow bar over it, and the badger
+   * identity is carried by the shape of the snout and by nothing else. A face appears at once.
+   */
+  if (blink) {
+    img.rect(15, 22 + b, 3, 1, KEEPER_DARK);
+    img.rect(20, 21 + b, 3, 1, KEEPER_DARK);
+  } else {
+    img.rect(15, 21 + b, 2, 2, KEEPER_DARK);
+    img.rect(20, 20 + b, 2, 2, KEEPER_DARK);
+    img.px(15, 21 + b, shade('wall', 2)); // the lantern, caught in the near eye
+  }
 
   // --- the pole, and the lantern that is the whole point of him ---
-  limb(img, 11, 34 + b, 4.6, 11, 2.4, 2, shade('wood', 1));
-  limb(img, 10.4, 34 + b, 4, 11, 1, 1, shade('wood', 2));
-  // His paw closed round it.
-  img.ellipse(10.8, 34 + b, 2.8, 2.3, shade('fur', 1));
-  img.ellipse(10.4, 33.4 + b, 2.2, 1.7, shade('fur', 2));
-  img.line(9, 34 + b, 12, 34 + b, shade('fur', 0));
+  taper(img, 12, 34 + b, 4.2, 12, 2.4, 2, 'wood', 0.12, 0.8);
 
-  img.frame(4, 9, 3, 3, shade('wood', 0)); // hanging ring
-  img.rect(1, 12, 9, 2, shade('wood', 0)); // cap
-  img.rect(2, 11, 7, 1, shade('wood', 1));
-  img.px(2, 11, shade('wood', 2));
-  img.rect(1, 14, 9, 9, shade('gold', 0)); // the frame, then the panes inside it
-  img.rect(2, 15, 7, 7, shade('gold', 1));
-  img.rect(2, 15, 7, 3, shade('gold', 2));
-  img.rect(5, 15, 1, 7, shade('gold', 0)); // mullions, which the flame passes in front of
-  img.rect(2, 18, 7, 1, shade('gold', 0));
-  img.ellipse(5.5, 19, 1.8, 2.8, shade('gold', 3));
-  img.ellipse(5.5, 20, 1, 1.4, shade('wall', 3));
-  img.rect(1, 23, 9, 2, shade('wood', 0)); // base
-  img.rect(2, 25, 7, 1, shade('wood', 0));
-  img.px(1, 23, shade('wood', 1));
+  /*
+   * The hand. A cuff where the sleeve ends, then the paw closed over the pole, then two grooves
+   * across the paw: at five pixels wide that is as much as fingers can be, and it is enough --
+   * without it the pole passes through him and he is standing next to a lantern rather than
+   * carrying one.
+   */
+  orb(img, 13.6, 32.6 + b, 3.0, 2.6, 'roof', 0.06, 0.42); // cuff
+  img.line(12.0, 30.8 + b, 12.6, 34.6 + b, KEEPER_DARK); // where the cuff ends and the paw begins
+  orb(img, 11.0, 33.4 + b, 2.6, 2.2, 'fur', 0.12, 0.72); // paw, closed over the pole
+  orb(img, 12.4, 31.8 + b, 1.4, 1.3, 'fur', 0.3, 0.9); // thumb, over the top of it
+  img.line(9.4, 33.4 + b, 12.6, 33.4 + b, KEEPER_DARK); // one groove: at five pixels that is fingers
 
-  // What the lantern lands on: the hood's left edge, the badger's cheek, the coat's lit rim.
-  // Solid pixels on the objects, never a halo in the air (see this painter's note above).
-  for (const [lx, ly] of [
-    [12, 12],
-    [10, 15],
-    [10, 18],
-    [11, 22],
-    [13, 26],
-    [10, 29],
-    [9, 33],
-    [9, 38],
-    [8, 43],
-  ] as const)
-    img.px(lx, ly + b, shade('gold', 1));
+  img.frame(3, 10, 3, 3, shade('wood', 0)); // hanging ring
+  taper(img, 0.5, 13.5, 7.5, 13.5, 3, 3, 'wood', 0.1, 0.8); // cap
+  orb(img, 4, 19, 4.4, 5.4, 'gold', 0.05, 0.6); // the frame
+  orb(img, 4, 19, 3.3, 4.3, 'gold', 0.55, 1); // the panes
+  img.rect(4, 15, 1, 8, shade('gold', 0)); // mullions, which the flame passes in front of
+  img.rect(1, 19, 7, 1, shade('gold', 0));
+  orb(img, 4, 19.4, 1.7, 2.6, 'wall', 0.6, 1); // the flame, the brightest thing in the frame
+  taper(img, 0.5, 24.5, 7.5, 24.5, 3, 3, 'wood', 0.08, 0.7); // base
 
-  img.outline(shade('roof', 0));
-  ground(img, 19, 45, 11, 2.6);
+  /*
+   * What the lantern lands on: a contiguous rim up the coat's lit contour and across the hood,
+   * solid gold pixels on the objects, never a halo in the air. Walking the silhouette's own left
+   * edge means the rim always lands on the sprite and never needs an alpha to fade out.
+   */
+  for (let y = 12; y <= 44; y++) {
+    for (let x = 6; x < 20; x++) {
+      if (img.get(x, y + b)[3] === 0) continue;
+      if (x > 6 && img.get(x - 1, y + b)[3] !== 0) break;
+      img.px(x, y + b, tone('gold', 0.26 + 0.22 * Math.cos(y * 0.4)));
+      break;
+    }
+  }
+
+  base(img, 12, 29, 47, KEEPER_DARK);
+  img.outline(KEEPER_DARK);
 }
 
 // ----------------------------------------------------------------------------- the wolf
 
 /**
- * The predator. He gets the vocabulary nothing else in the cast uses: he is seated in
- * three-quarter view with his head LOW and forward, a muzzle that projects a third of the frame's
- * width out of the skull, tall ears with a wide notch between them, a ridge of raised hackles down
- * the back, and a heavy tail laid along the ground. Every other character here is bilaterally
- * symmetrical and faces straight out; he is the only one turned, which is most of why he reads as
- * something with intent rather than something waiting to be spoken to.
+ * The predator, and the title of the game.
  *
- * `frame` 0 is him lit and watching, 1 is the same with the eyes narrowed and the chest dropped a
- * pixel. 2 and 3 are him flat in `ink`: the shape in the lit window, then the shape in Grandma's
- * bonnet and shawl. The lit pair uses `wolf` 0 and 1 for nearly all of the mass -- he stays at the
- * bottom of his ramp on purpose, because 2 and 3 only work if the lit frames are not already dark
- * enough to be mistaken for the silhouette.
+ * The review had two findings and they pull in opposite directions, so they are answered
+ * separately. The LIT frames "read as a seal": no legs, no paws, no ground contact, one airbrushed
+ * mass. The DARK frames are flat on purpose -- that is the point of them -- but the disguise did
+ * not read: the bonnet was a white blob with no brim and the shawl a grey cone.
+ *
+ * LIT, and revised again. The previous pass gave him four legs and the review found that none of
+ * them read: "the lower half is a solid dark mass with a few vertical grooves in it". Measured, it
+ * was not a drawing problem but an arithmetic one -- 98.95 per cent of the lit frame sits under
+ * luma 81 and 84.18 per cent under luma 60, because `wolf` tops out at #6a5789 (luma 95) and the
+ * lower half of the body never climbs past the middle of that. Four limbs cannot be told apart
+ * inside 30 levels of range. So this pass takes the review's SECOND option and simplifies: the far
+ * foreleg is gone, there is one near foreleg and one hind leg with five pixels of open air between
+ * them, and the near foreleg's floor is lifted a third of the way up the ramp so it is genuinely
+ * lighter than the chest it crosses rather than nominally so. The keyline then wraps each leg on
+ * three sides, which is how the board's own figures read their legs -- crop Red on the board and
+ * her two boots are four pixels each, told apart by nothing but the black line around them.
+ *
+ * DARK. Frame 2 -- the shape in the lit window -- stays genuinely flat, because that is the one
+ * the board actually draws and the board draws it as one unbroken silhouette with a single amber
+ * mark in it. Frame 3 does NOT, and that is this pass's main change; see the note on `head` below.
+ *
+ * SILHOUETTE. Short broad ears (a rabbit's are the tall ones), the muzzle driven a third of the
+ * frame clear of the skull over open air, a heavy haunch behind, hackles raised along the back, and
+ * the tail laid along the ground. He is the only character here turned three-quarter rather than
+ * facing out, which is most of why he reads as something with intent.
  */
 function paintWolf(img: Img, frame: 0 | 1 | 2 | 3): void {
   const dark = frame >= 2;
   const b = frame === 1 ? 1 : 0;
+  const INK = shade('ink', 0);
 
-  const dk = dark ? shade('ink', 0) : shade('wolf', 0);
-  const base = dark ? shade('ink', 0) : shade('wolf', 1);
-  const mid = dark ? shade('ink', 0) : shade('wolf', 2);
-  const lit = dark ? shade('ink', 1) : shade('wolf', 3);
-
-  /*
-   * The tail: heavy, down behind the haunch and laid along the ground, its tip coming out past
-   * the far side of the forelegs. Drawn FIRST so the legs and the body stand in front of it --
-   * curled over them it read as a log across his feet, and tucked behind the haunch it did not
-   * read at all. The long horizontal it lays under the frame is a silhouette none of the other
-   * three has.
-   */
-  limb(img, 25.5, 32, 28.5, 40, 6, 6, dk);
-  limb(img, 28.5, 40, 18, 45.6, 6, 5, dk);
-  limb(img, 18, 45.6, 6.4, 44, 5, 3.6, dk);
-  limb(img, 27.6, 39.4, 18, 44.2, 2, 1.8, mid);
-  limb(img, 16, 44.2, 7, 43, 1.8, 1.4, mid);
-  img.px(6, 43, lit);
-
-  // Forelegs, straight and propped: a seated wolf holds himself up on them.
-  for (const [hx, px0] of [
-    [12, 11],
-    [18.4, 18.4],
-  ] as const) {
-    limb(img, hx, 31, px0, 40, 5.4, 4.4, dk);
-    limb(img, hx - 0.7, 31, px0 - 0.7, 40, 3.2, 2.6, base);
-    img.ellipse(px0, 41.4, 3.4, 2.1, dk);
-    img.ellipse(px0 - 0.5, 40.8, 2.7, 1.5, base);
-    for (let t = 0; t < 2; t++) img.px(px0 - 1 + t * 2, 42, dk);
-  }
-
-  // --- haunch and chest: wide and heavy behind, narrow in front. A rabbit is the other way round ---
-  img.ellipse(22.4, 34 + b, 7.2, 8.4, dk);
-  img.ellipse(21.8, 33.4 + b, 6.6, 7.8, base);
-  // Set low and back, which is what leaves the muzzle hanging out over clear air. Drawn any
-  // higher, the chest meets the jaw and frames 2 and 3 lose the long nose into one black mass.
-  img.ellipse(16, 33 + b, 6.6, 9, dk);
-  img.ellipse(15.4, 32.4 + b, 6, 8.4, base);
-  img.ellipse(14.2, 29.8 + b, 3.8, 5.2, mid);
-  // Shoulder blade, which is what makes a hunched animal look boned rather than stuffed.
-  limb(img, 18, 27 + b, 20, 33 + b, 2, 2, dk);
+  /** The BODY: flat ink on frames 2 and 3, a stepped `wolf` tone on the lit pair. */
+  const mass = (fn: (ramp: Ramp, lo: number, hi: number) => void): void =>
+    dark ? fn('ink', 0, 0) : fn('wolf', 0.04, 1);
 
   /*
-   * Hackles: six raised spikes down the back, lit along the top. They have to be drawn as mass
-   * standing proud of the back line, not as a dark marking, so that frames 2 and 3 -- which are
-   * flat ink and have no internal shading at all -- keep them in the silhouette.
+   * The HEAD, which is the one group frame 3 does not paint flat, and the whole fix for it.
+   *
+   * The review's verdict on frame 3 was that the gag does not land: "a pale bonnet and a grey-blue
+   * bib floating on a black mass with no face between them", with the muzzle, cheek and eyes all
+   * swallowed. The measurement says the same thing in one line -- on frame 3, `deep` (share under
+   * luma 81) and `keyline` (share under luma 60) came back IDENTICAL at 65.50, which means not one
+   * pixel of the frame sat in the midtone band between them. A face is exactly what lives in that
+   * band. The frame was two bright cloth shapes and a hole.
+   *
+   * Flat ink cannot be the answer here even though it is the right answer for frame 2, because the
+   * two frames are doing opposite jobs. Frame 2 is a shape seen THROUGH a lit window from outside,
+   * where a silhouette is the truth. Frame 3 is the reveal, and the player has to read WOLF and
+   * GRANDMA'S THINGS in the same glance or the title of the game is not on screen. So frame 3
+   * lights the head -- ears, skull, muzzle, jaw -- almost to the lit frames' own range, and leaves
+   * the body flat. Read as lighting rather than as a cheat, that is a lamp inside the cottage on
+   * his face and his back to the dark, which is where the scene puts him anyway.
    */
-  for (let i = 0; i < 6; i++) {
-    const hx = 17 + i * 2.1;
-    const hy = 24.4 + i * 1.5 + b;
-    leanEllipse(img, hx, hy, 1.7, 3, 0.42, dk);
-    leanEllipse(img, hx - 0.6, hy - 0.4, 0.9, 2.4, 0.42, mid);
-  }
+  const head = (fn: (ramp: Ramp, lo: number, hi: number) => void): void =>
+    frame === 2 ? fn('ink', 0, 0) : fn('wolf', frame === 3 ? 0.06 : 0.04, frame === 3 ? 0.92 : 1);
+
+  /**
+   * Raise a mass's FLOOR as well as its ceiling, staying flat on the ink frames.
+   *
+   * `mass` hands a painter `lo` and `hi`, and scaling `hi` alone only ever darkens: it pulls the
+   * lit side down while the shaded side stays where it was, so a limb drawn that way is uniformly
+   * duller than the body rather than separated from it. Lifting the floor is what makes the near
+   * foreleg a lighter object. On an ink frame `hi === lo`, and both ends stay pinned to 0.
+   */
+  const lift = (lo: number, hi: number, floor: number, ceil: number): [number, number] =>
+    hi === lo ? [lo, hi] : [lo + (hi - lo) * floor, lo + (hi - lo) * ceil];
+
+  /*
+   * The tail: heavy, down behind the haunch, curling under it and stopping at x 21.
+   *
+   * The previous version swept it the whole way across the frame to x 7.6, and that single stroke
+   * is most of why the review read him as a seal: a wide horizontal skirt along the base, with the
+   * legs nowhere, is a flipper. It now ends behind the hind paw, which leaves the front half of the
+   * base as open air for the forelegs to stand in.
+   */
+  mass((r, lo, hi) => {
+    taper(img, 25.5, 32, 29.5, 38.5, 6, 6, r, lo, hi * 0.58);
+    taper(img, 29.5, 38.5, 26.5, 44.5, 6, 5, r, lo, hi * 0.6);
+    taper(img, 26.5, 44.5, 22.6, 45.8, 5, 3.4, r, lo, hi * 0.7);
+  });
+
+  /*
+   * --- haunch and chest ---
+   *
+   * Both end at about y 41 rather than running to the bottom of the frame. That is the structural
+   * half of the seal fix: while the body reached the base there was no room for a leg to exist, so
+   * the legs could only ever be grooves drawn on a mass. Lifting the body four pixels gives the
+   * legs somewhere to be, and the paws then stand against the background with the keyline round
+   * them, which is the only way four legs read at this size.
+   */
+  mass((r, lo, hi) => {
+    orb(img, 23.6, 33.4, 7.0, 7.8, r, lo, hi * 0.72);
+    orb(img, 17.0, 32.8 + b, 6.2, 8.0, r, lo, hi);
+    // Shoulder blade, which is what makes a hunched animal look boned rather than stuffed.
+    taper(img, 19.4, 28 + b, 21.4, 34 + b, 2.2, 2.2, r, lo, hi * 0.5);
+  });
+
+  /*
+   * The hind leg: a thigh laid over the haunch with its own rounding, then a shin and a paw. The
+   * thigh is what turns the back end from a bag into a hip, and the arc of ink down its front edge
+   * is what the eye actually reads.
+   */
+  mass((r, lo, hi) => {
+    orb(img, 23.8, 35.6, 5.2, 5.6, r, lo, hi * 0.9);
+    taper(img, 22.6, 39.4, 22.0, 43.4, 4.8, 4.0, r, lo, hi * 0.56);
+    orb(img, 22.0, 44.2, 3.2, 2.2, r, lo, hi * 0.5);
+  });
+  img.line(20.3, 33.4, 19.8, 39.6, INK); // the hip's front arc
+
+  /*
+   * ONE foreleg, and that is the change.
+   *
+   * There were two, the near one propped forward and the far one set behind it a band darker, and
+   * the review could see neither: "the thigh arc, the two forelegs and the toes are not visible at
+   * sprite scale". The far leg was the reason. It filled x 16..21 all the way to y 43, so the only
+   * thing separating the two forelegs was a one-pixel ink groove drawn ON a mass -- and a groove on
+   * a mass is a scratch, not an edge. Removing it opens five pixels of real background between the
+   * near foreleg and the hind leg, which lets `outline` wrap each limb on three sides. That is the
+   * board's own method and it is the only one that survives at 32 px: a leg reads because the world
+   * is visible on both sides of it, not because it is a slightly different purple.
+   *
+   * The survivor is then lifted a third of the way up the ramp by `lift`, so its lit edge is a real
+   * value above the chest it crosses instead of a nominal one, and the old groove is kept on its
+   * inner edge where it now does honest work -- body, dark line, lit limb, air.
+   */
+  mass((r, lo, hi) => {
+    taper(img, 13.2, 31.0 + b, 11.9, 43.0, 5.0, 4.2, r, ...lift(lo, hi, 0.34, 1));
+    orb(img, 11.3, 44.2, 3.3, 2.3, r, ...lift(lo, hi, 0.26, 0.92));
+  });
+  img.line(15.3, 34.6, 14.6, 43.6, INK); // where the foreleg crosses the chest
+  for (const [px0, py] of [
+    [10.4, 45.4],
+    [12.4, 45.6],
+  ] as const)
+    img.px(px0, py, INK); // toes
+
+  /*
+   * Hackles: five raised spikes down the back, drawn as mass standing proud of the back line rather
+   * than as a dark marking, so that frames 2 and 3 -- flat ink, no internal shading at all -- keep
+   * them in the silhouette.
+   */
+  mass((r, lo, hi) => {
+    for (let i = 0; i < 5; i++)
+      orb(img, 19 + i * 1.9, 25.6 + i * 1.3 + b, 1.5, 2.1, r, lo, hi * 0.96, 0.42);
+  });
+
+  /*
+   * --- ears: short, broad-based triangles, leaning out. Tall ones made him a rabbit ---
+   *
+   * On `head`, not `mass`, so that on frame 3 the two tips standing clear above the bonnet are lit
+   * fur rather than black. They are the tell that the thing in the bonnet is not Grandma, the
+   * review found them the one part of that frame still working, and giving them the head's colour
+   * makes them say "wolf" rather than merely "something pointed".
+   *
+   * They need `lift` as well as `head`, and the reason is a property of `taper` worth knowing
+   * before using it for anything thin. Its shading comes from the offset perpendicular to the
+   * stroke, and the cubic rim term takes the outermost pixels down hard. On a six-pixel limb that
+   * is a soft edge; on an ear tapering to 1.4 px there IS nothing but rim, so every pixel of the
+   * tip gets the full darkening and the ear comes out near-black however bright its ceiling is.
+   * Against a cream bonnet that read as two notches cut out of the hat rather than as ears.
+   * Raising the floor is the only thing that reaches a stroke this thin.
+   */
+  head((r, lo, hi) => {
+    taper(img, 11.8, 18 + b, 9.4, 9.6 + b, 5.6, 2.6, r, ...lift(lo, hi, 0.3, 0.9));
+    taper(img, 18.6, 17.6 + b, 21.1, 9.2 + b, 5.6, 2.6, r, ...lift(lo, hi, 0.2, 0.68));
+  });
+
+  /*
+   * Skull held low, and the muzzle driven a third of the frame's width out of it over clear air.
+   * The muzzle is the single feature doing the work: shorten it by three pixels and he is a dog.
+   *
+   * The jaw is kept at half the muzzle's ceiling on purpose. A muzzle is only legible as something
+   * projecting if the plane under it is darker than the plane on top of it, and on frame 3 that
+   * one step is the difference between a snout and a smear.
+   */
+  head((r, lo, hi) => {
+    orb(img, 15.4, 20.4 + b, 5.6, 4.8, r, lo, hi);
+    taper(img, 13.4, 22.6 + b, 3.2, 27.4 + b, 7.2, 3.4, r, lo, hi * 0.92);
+    taper(img, 13, 25.6 + b, 5.2, 28.8 + b, 4.2, 2.6, r, lo, hi * 0.5); // the jaw, under the muzzle
+  });
+  img.ellipse(2.9, 27.2 + b, 2.0, 1.6, INK); // nose
 
   // Ruff: the chest fringe, pointing down and out over the chest edge.
-  for (let i = 0; i < 4; i++) leanEllipse(img, 10.4 + i * 0.5, 29 + i * 3 + b, 1.9, 2.5, -0.42, dk);
-
-  // --- ears: tall, pointed, wide apart, and leaning out. Nothing else here has a notch ---
-  const ear = (cx: number, lean: number): void => {
-    for (let i = 0; i < 10; i++) {
-      const w = Math.max(1, Math.round(1 + i * 0.62));
-      img.rect(Math.round(cx - w / 2 + lean * i), 3 + i + b, w, 1, dk);
-    }
-    for (let i = 3; i < 9; i++) {
-      const w = Math.max(1, Math.round(i * 0.4));
-      img.rect(Math.round(cx - w / 2 + lean * i), 3 + i + b, w, 1, mid);
-    }
-  };
-  ear(10.4, -0.4);
-  ear(19.2, 0.34);
-
-  /*
-   * Skull held low and forward, and the muzzle driven a third of the frame's width out of it.
-   * The muzzle is the single feature doing the work: shorten it by three pixels and he is a dog.
-   */
-  img.ellipse(14.6, 18 + b, 5.8, 5, dk);
-  img.ellipse(14, 17.4 + b, 5.3, 4.5, base);
-  img.ellipse(12.6, 15.8 + b, 3.6, 2.8, mid);
-  limb(img, 12.6, 21 + b, 4.4, 25.6 + b, 7.4, 4, base);
-  limb(img, 12.2, 20.4 + b, 4.2, 24.9 + b, 4.8, 2.2, mid);
-  limb(img, 12, 24 + b, 5.6, 27 + b, 4.2, 2.6, dk); // the jaw, hanging under the muzzle
-  img.ellipse(4.1, 25.6 + b, 2.2, 1.7, shade('ink', 0)); // nose
-  img.px(3.3, 24.8 + b, lit);
-
-  // Rim light down the top-left contour, one pixel wide, which is all a highlight ever is.
-  for (const [rx0, ry0] of [
-    [10.6, 13.6],
-    [12, 13],
-    [13.6, 13.2],
-    [9.6, 19.8],
-    [8.4, 20.8],
-    [7.2, 21.6],
-    [6, 22.4],
-    [11.8, 26],
-    [10, 29],
-    [9.4, 32],
-  ] as const)
-    img.px(rx0, ry0 + b, lit);
-
-  // --- eyes: amber, the only warm thing about him, and the one colour the silhouette keeps ---
-  for (const [ex, ey] of [
-    [10.4, 17],
-    [16, 16.2],
-  ] as const) {
-    const x = Math.round(ex);
-    const y = Math.round(ey) + b;
-    img.rect(x - 2, y - 1, 4, 1, dk); // brow ridge: the glare, and it costs four pixels
-    if (frame === 1) img.rect(x, y + 1, 2, 1, shade('gold', 1));
-    else {
-      img.rect(x, y, 2, 2, shade('gold', dark ? 1 : 3));
-      img.rect(x, y + 1, 2, 1, shade('gold', 0));
-    }
-  }
+  mass((r, lo, hi) => {
+    for (let i = 0; i < 3; i++)
+      orb(img, 12.6 + i * 0.6, 31.5 + i * 3.2 + b, 1.8, 2.2, r, lo, hi * 0.94, -0.42);
+  });
 
   if (frame === 3) {
     /*
-     * Grandma's things, worn by something that is not Grandma.
+     * Grandma's things, worn by something that is not Grandma. This frame IS the title of the game,
+     * and the review's verdict on the last version was that the gag did not read: "a white wig and
+     * a grey CONE that looks like a traffic cone or a party hat". Both rebuilt.
      *
-     * Two bands only, and a clear gap of wolf between them: the bonnet across the crown with both
-     * ear tips standing clear above it, and the shawl across the shoulders, pushed right and kept
-     * narrow. What runs through that gap is the muzzle, nose and all, and the whole frame exists
-     * so that you see it. The first pass stacked three tones of grey into one lumpy mass that
-     * swallowed the muzzle entirely, which threw the joke away.
+     * The rule the pair has to obey is that a clear gap of wolf runs between them, and what runs
+     * through that gap is the muzzle, nose and all. Everything below is kept off x < 12.5 and
+     * y 20..28 for that reason.
+     *
+     * The cloth is the one thing on these two frames that is toned rather than flat: it is not the
+     * silhouette, it is what the silhouette is WEARING, and the joke only lands if it reads as soft
+     * bright fabric over something hard and black.
      */
-    // The shawl, drawn as a draped triangle rather than stacked ellipses, which is what turned it
-    // into a grey stone on his chest for two passes running.
-    img.ellipse(20, 29.6, 8.8, 3.6, shade('stone', 2));
-    img.ellipse(20.8, 30.4, 8.6, 3.4, shade('stone', 1)); // level 2 survives as a lit top-left rim
-    for (let y = 31; y <= 36; y++) {
-      const half = Math.round(6 - (y - 31) * 0.8);
-      img.rect(20 - half, y, half * 2, 1, shade('stone', 1));
-      img.rect(20 - half, y, 2, 1, shade('stone', 2));
-      img.px(20 + half - 1, y, shade('stone', 0));
-    }
-    img.line(20, 27.4, 20.6, 33, shade('stone', 0)); // the neckline it was folded over
-    img.line(23.6, 28.6, 21.6, 34, shade('stone', 0));
-    for (let i = 0; i < 5; i++)
-      img.rect(15.4 + i * 2.4, 36 - Math.abs(i - 2) * 0.7, 1, 2, shade('stone', 0));
 
-    img.ellipse(14.6, 10.4, 6.8, 4.2, shade('wall', 0));
-    img.ellipse(14, 9.6, 6.2, 3.6, shade('wall', 1));
-    img.ellipse(12.4, 8.6, 3.2, 1.9, shade('wall', 3));
-    // The frill: four scallops, spaced so the dark head shows in the dips between them.
-    for (let i = 0; i < 4; i++) {
-      img.ellipse(9.4 + i * 3.6, 13.8, 2.1, 2.1, shade('wall', 1));
-      img.ellipse(9.4 + i * 3.6, 13.2, 1.3, 1.3, shade('wall', 3));
+    /*
+     * THE SHAWL: a triangle draped over BOTH shoulders, not a cone hung off one.
+     *
+     * Four things stop it being a cone, and each answers a specific way the last one failed:
+     *   - it is 16 px wide at the shoulders, which is the whole width of him, so it starts as a
+     *     band across the back rather than as a point on the chest;
+     *   - a notch is cut out of the top centre, so what sits on the shoulders is two lapels that
+     *     meet lower down -- the single most legible sign of draped cloth there is;
+     *   - both sloping edges are scalloped on a four-row round, and a fringe of beads hangs off
+     *     them, which is a shawl's edge and nothing else's;
+     *   - it ends on a scalloped hem rather than on a point, because a point is a cone.
+     *
+     * COLOUR, and this is the second half of this pass. It was painted from `stone` -- the ramp the
+     * ROCKS use -- and the review read it exactly as the palette says it should be read: "grey
+     * metal, a breastplate rather than cloth". It is now the top half of `wood`: a tan, the warmest
+     * ramp here that is still a fibre colour.
+     *
+     * `skin` was tried first and rendered, because the review named that family and it is the
+     * obvious reading of "warm it". It is wrong, and worth recording so nobody spends a round
+     * rediscovering it. At luma 150..230 on a near-black animal, a peach mass with a V cut out of
+     * the top and two fold lines down the middle does not read as a shawl -- it reads as a BARE
+     * CHEST, ribcage and all, which is a stranger thing to have put on screen than the breastplate
+     * was. The failure is not the hue, it is the hue plus the value: cloth that pale over a dark
+     * body reads as the body. `wood` held between 0.44 and 0.90 lands at luma 126..177, which is
+     * plainly a woven thing lying ON him -- dark enough to be a garment, far enough above `stone`'s
+     * floor to stop competing with the keyline for the darkest mass, and a clear step below the
+     * near-white bonnet so the two never merge into one pale shape.
+     */
+    const SHAWL_TOP = 28;
+    const SHAWL_HEM = 38;
+
+    /*
+     * The hem is SCALLOPED PER COLUMN, not cut flat, and the fringe is then hung from wherever
+     * each column actually ended.
+     *
+     * This is the third shape this garment has had and the reason for the change is worth keeping.
+     * As a bib reaching to y 42 it covered the torso from jaw to legs, so there was no wolf left
+     * around it -- and a tan trapezoid with two hard creases down it and a straight cut across the
+     * bottom is a BARREL. Ending it ten rows down turns it into what it should always have been,
+     * a cape over the shoulders, and leaves a band of black animal between the hem and the paws.
+     * Four bands then stack the whole way down the sprite and each says one word: cream bonnet,
+     * lit wolf face, tan wool, black body. That is the read the frame has to deliver in a glance.
+     */
+    const hemAt = (x: number): number => SHAWL_HEM + 1.1 * Math.cos(((x - 13.4) * Math.PI) / 4);
+    const lowest = new Map<number, number>();
+
+    for (let y = SHAWL_TOP; y <= SHAWL_HEM + 2; y++) {
+      const t = (y - SHAWL_TOP) / (SHAWL_HEM - SHAWL_TOP);
+      // The scallop: a round bump every four rows along both sloping edges.
+      const scallop = 1.3 * (0.5 - 0.5 * Math.cos(((y - SHAWL_TOP) * Math.PI) / 2));
+      const xl = 13.2 + (16.6 - 13.2) * t - scallop;
+      const xr = 29.2 + (26.2 - 29.2) * t + scallop;
+      // The neckline, a shallow notch between two lapels. It was a V four and a half pixels deep,
+      // and over a dark body that is not a neckline, it is a sternum -- most of why the warm
+      // version first read as a bare chest rather than as something worn.
+      const neck = Math.max(0, 2.0 * (1 - (y - SHAWL_TOP) / 3.5));
+      for (let x = Math.ceil(xl); x <= Math.floor(xr); x++) {
+        if (y > hemAt(x)) continue;
+        if (Math.abs(x + 0.5 - 21.2) < neck) continue;
+        const s = (x + 0.5 - 21.2) / ((xr - xl) / 2);
+        const k = Math.max(0, Math.min(1, (-s * 0.5 + 0.5) * 0.9 + 0.1 - 0.34 * Math.abs(s) ** 3));
+        img.px(x, y, tone('wood', 0.44 + 0.46 * snap(k, 5)));
+        lowest.set(x, y);
+      }
+    }
+
+    /*
+     * Two creases where the cloth gathers out of the neckline, and they are deliberately SOFT.
+     * Drawn in the ramp's keyline they were near-black on tan, which at this size is not a fold in
+     * wool, it is a stave on a barrel -- hard dark lines read as structure, not as drape. A tone a
+     * quarter of the way up the ramp is about 50 luma under the cloth around it, which is a crease.
+     */
+    img.line(18.6, 31.4, 19.4, 36.4, tone('wood', 0.24));
+    img.line(23.8, 31.4, 23.0, 36.4, tone('wood', 0.24));
+
+    // The fringe, hung from the hem the scallop actually produced rather than from a list of
+    // guessed positions, so a bead always lands ON cloth and the two can never drift apart.
+    for (let fx = 14; fx <= 29; fx += 3) {
+      const fy = lowest.get(fx);
+      if (fy !== undefined) orb(img, fx, fy + 2.6, 1.1, 1.2, 'wood', 0.3, 0.74);
+    }
+
+    /*
+     * THE BONNET: a crown on the skull, a brim across the brow, a frill down the back, a ribbon by
+     * the jaw -- and, doing most of the work, a hard groove of keyline between crown and brim.
+     *
+     * Two earlier attempts failed in opposite directions and both are worth recording, because the
+     * obvious third try is one of them. Drawing the crown and the brim as two tones of cream was
+     * not enough separation: `wall` spans 60 luma in total, so the two merged into one amorphous
+     * lump and the review called it a wig and a party hat. Then drawing it as a RING -- cloth over
+     * the whole skull with the face punched back out, which is what a bonnet physically is -- ate
+     * the ears and left a cream crescent round a black hole.
+     *
+     * What works is the hat, with the groove. One dark line across cream at the brim's edge is
+     * worth more than any amount of tonal modelling: it is the same device the board uses to tell a
+     * roof course from the course below it, and the brim reads at once. The crown is then kept to
+     * the skull's own width so both ear tips stand clear above it, which is the tell that the thing
+     * wearing it is not Grandma.
+     *
+     * The whole hat is lifted nine tenths of a pixel from where it sat, and that small move is the
+     * third thing this pass fixes. The brim's lens reached y 18.7 and the near eye's top row was
+     * y 18, so the eye was drawn INTO the brim: a gold square half-buried in cream, which is why
+     * the review read the pair as beads hanging off a hat rather than as eyes. Lifted, the brim
+     * stops at y 17.5 and there is a clear row of lit brow between it and the eye beneath.
+     */
+    orb(img, 15.6, 12.7, 6.2, 3.8, 'wall', 0.5, 1); // the crown
+    // The brim: a flat lens, thickest in the middle and thinning to nothing at both ends, which is
+    // what a brim looks like head-on. Drawn as a straight band of even width it came out as a
+    // wooden stick laid across his face.
+    orb(img, 14.9, 15.9, 7.0, 1.6, 'wall', 0.08, 0.46);
+    img.line(8.6, 14.6, 21.0, 13.6, keyline('wall')); // and the groove that makes it a brim
+    for (const fx of [9.4, 11.6]) orb(img, fx, 17.2, 1.3, 1.2, 'wall', 0.06, 0.3); // its frill
+    for (const [fx, fy] of [
+      [21.6, 11.3],
+      [22.4, 13.9],
+    ] as const)
+      orb(img, fx, fy, 1.8, 1.7, 'wall', 0.5, 1); // the frill, down the back edge only
+    taper(img, 21.6, 16.3, 23.4, 22.0, 2.4, 1.8, 'wall', 0.06, 0.4); // the ribbon, by the jaw
+  }
+
+  /*
+   * --- eyes: amber, the only warm thing about him, and the one colour the silhouette keeps ---
+   *
+   * Drawn LAST, after the bonnet, so that on frame 3 they look out from under the brim rather than
+   * being covered by it. On the other three frames nothing overlaps them and the order is moot.
+   *
+   * Frame 3 now takes the LIT frames' eye, not frame 2's. The two dark frames used to share one
+   * dim amber (`gold` level 1) because a silhouette wants a single muted mark -- which is right for
+   * frame 2, where the board itself puts exactly one amber pixel-cluster in a flat navy shape, and
+   * wrong for frame 3, which is no longer flat. A full-brightness eye on a lit muzzle is what the
+   * review asked for by name, and with the face behind it now in the midtones it reads as an eye in
+   * a head rather than as a light switched on in a cellar.
+   */
+  for (const [ex, ey] of [
+    [11.8, 20.4],
+    [17.2, 19.4],
+  ] as const) {
+    const x = Math.round(ex);
+    const y = Math.round(ey) + b;
+    img.rect(x - 2, y - 2, 4, 1, INK); // brow ridge: the glare, and it costs four pixels
+    if (frame === 1) img.rect(x, y, 2, 1, shade('gold', 1));
+    else {
+      img.rect(x, y - 1, 2, 2, shade('gold', frame === 2 ? 1 : 3));
+      img.rect(x, y, 2, 1, shade('gold', 0));
     }
   }
 
-  img.outline(shade('ink', 0));
-  ground(img, 18, 45.6, 12, 2.2);
+  base(img, 7, 30, 47, INK);
+  img.outline(INK);
 }
 
 /**

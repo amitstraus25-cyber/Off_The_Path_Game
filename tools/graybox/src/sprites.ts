@@ -11,7 +11,7 @@
  * turn those into one image per texture, in the frame order the scene's animations index into.
  */
 import { Img } from './paint.ts';
-import { RED_FRAMES, RED_FRAME_H, RED_FRAME_W } from './sprites/red-sprite.ts';
+import { RED_FRAMES, RED_FRAME_H, RED_FRAME_W } from './sprites/char-red.ts';
 import { CAST_FRAMES } from './sprites/cast.ts';
 import { BYSTANDER_FRAMES } from './sprites/bystanders.ts';
 import {

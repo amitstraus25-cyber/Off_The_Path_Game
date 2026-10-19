@@ -31,21 +31,61 @@ four times the speckle just reads as dirt.
 
 ## 2. Colour
 
-**Only `shade(ramp, level)`.** No raw hex in any painter, ever. If a colour you need is not in
-`PALETTE`, that is a palette decision and belongs in `paint.ts` with a comment saying why — not a
-literal at the call site. The rebrand of 2026-10-18 worked precisely because every frame painted
-from shared ramps; a single hardcoded colour would have survived it.
+**Never a raw hex in any painter, ever.** If a colour you need is not reachable from `PALETTE`,
+that is a palette decision and belongs in `paint.ts` with a comment saying why — not a literal at
+the call site. The rebrand of 2026-10-18 worked precisely because every frame painted from shared
+ramps; a single hardcoded colour would have survived it.
 
-Each ramp is four steps: `0` dark, `1` base, `2` light, `3` highlight.
+Three functions reach a ramp, and which one you pick is a drawing decision:
 
-- **Base is the subject.** Most of any object is level 1.
-- **Level 0 is its own outline and its contact shadow**, not a black key line.
+| Use                | For                                                                  |
+| ------------------ | -------------------------------------------------------------------- |
+| `shade(ramp, 0–3)` | flat faces and single-pixel marks — the four stops, unchanged        |
+| `tone(ramp, t)`    | anything that should read as round or lit; `t` runs 0→1 continuously |
+| `keyline(ramp)`    | the outline of anything that meets the ground                        |
+
+Each ramp is still four steps — `0` dark, `1` base, `2` light, `3` highlight — and `tone` reads
+between them, so `tone(r, 0)` is `shade(r, 0)` and `tone(r, 1)` is `shade(r, 3)`.
+
+- **Base is the subject.** Most of any object is level 1. The one documented exception is Red,
+  whose cloak is Lilac-led so she stays findable at a 26-tile camera; the reasoning is on `cloak`
+  in `paint.ts` and it is confined to her.
+- **Level 0 is the shaded face, and `keyline()` is the outline.** This reverses what this section
+  used to say. The board rings every object in a near-black of _its own hue_ and that is most of
+  why it reads as one illustrated world, so a tree is ringed in `keyline('canopy')` (#113b1f) and
+  a trunk in `keyline('trunk')` (#18100a). It is not black — `keyline` scales the ramp's darkest
+  down and keeps the ratios, so a dark purple outlines in dark purple. Reserve literal `ink` for
+  the wolf, who is meant to read as a silhouette.
 - **Level 3 is a highlight, not a fill.** If more than about a fifth of a shape is level 3, it has
   stopped being a highlight.
+- **Reach for `tone` before you reach for more marks.** A mass that rounds off through a dozen
+  values reads as round; four hard steps plus speckle to cover the banding reads as noise. More
+  detail is almost never the answer — see section 5.
 
 **The forest stays a forest.** Cyera's palette has no green, no brown and no water blue, so grass,
-water, wood, stone and sand keep their own ramps. Brand colour reaches the world through Red, the
-wolf, the toadstools, the flowers, the stall awning and the night, and nowhere else.
+water, wood, stone and sand keep their own ramps.
+
+**Brand colour is Red, the wolf, and dusk — not an accent scattered through the world.** This list
+was longer and the three that left are worth knowing about, because the old wording still reads as
+permission to paint props purple:
+
+- **Red** (`cloak`, Lilac-led) and **the wolf** (`wolf`, Deep Purple at level 1) carry it, and they
+  are the point: the protagonist and the attacker are the only saturated figures in frame.
+- **`night`** is Deep Purple and Aubergine at levels 2 and 3. It backs every portrait, and it now
+  also paints the cottage chimney flue in `s-cottage.ts` — so, unlike the note on `night` in
+  `paint.ts` says, it is no longer DOM-only.
+- **The toadstools, the flowers and the stall awning have moved off brand colour**, in
+  `w-undergrowth.ts` and `s-props.ts`. They painted from `cloak`, which put a dozen-plus Lilac
+  objects a camera in Red's exact hue at her exact luma and inverted the standard they were meant
+  to serve. The caps are now `rust`, the blooms `rose` and `ember`, the awning cream `wall` with a
+  warm sand stripe. Those three families are derived from `wood`, `skin` and `gold` at their call
+  site in `w-undergrowth.ts`; that file flags that they want to live in `PALETTE`, and they do —
+  it is a palette decision sitting in a painter, and the next person to touch `paint.ts` should
+  move them.
+
+The awning's stripe going off purple contradicts `docs/ART_PRODUCTION.md` section 6a and is still
+awaiting a brand reviewer's yes or no (`PALE_HI` in `s-props.ts`). Until that lands, treat this
+paragraph as describing the code, which it does, rather than settling the question.
 
 **Lime appears nowhere in world art.** It is one call to action per screen, in the DOM
 (`docs/UI_FOUNDATIONS.md` section 2).
@@ -73,8 +113,10 @@ floats.
   _transparent_ pixel leaves a partly-transparent pixel in the file, which `docs/ASSETS.md`
   forbids. Build soft shading by picking a darker ramp level, not by lowering alpha over nothing.
   (`fx-dust`, `fx-pawprints` and `npc-lantern-keeper` currently break this and need fixing.)
-- **Outline with the object's own dark**, so a tree is outlined in canopy-dark and a wall in
-  stone-dark. Reserve `ink` for the wolf, who is meant to read as a silhouette.
+- **Outline with `keyline(ramp)`**, the object's own darkest taken down with the hue kept — so a
+  tree is ringed in `keyline('canopy')` and a wall in `keyline('stone')`. Level 0 is the shaded
+  face now, not the outline; see section 2. Reserve `ink` for the wolf, who is meant to read as a
+  silhouette.
 
 ---
 

@@ -2,56 +2,98 @@
  * Ground: grass and path at 32x32, redrawn against the approved concept board.
  *
  * This is the floor of the whole game -- forty of these are on screen at once -- so it is the group
- * that decides whether the world looks drawn or generated. Everything below was measured off
- * `reference/mocks/gameplay-concepts.png` with a quantising histogram rather than described, and the
- * numbers in the comments are the board's own, in Rec.709 luma.
+ * that decides whether the world looks drawn or generated.
  *
- * WHAT THE BOARD ACTUALLY DOES, and what the previous pass got wrong:
+ * THE BOARD'S OPEN LAWN. Re-probed this round on a bigger and cleaner sample than before: the
+ * largest unbroken square on the Explore frame with no tree, bush, path or figure in it, found by
+ * search rather than by eye, 63x63 board pixels at (1156,700). At our own pixel density:
  *
- * 1. The lawn is a BRIGHT field, not a mid green. The board's lawn is `#98d050` at L187, with a
- *    tight spread of L185-189. The old painter filled at `grass[1]`, L129, which is 58 levels down,
- *    and that one number is why every bush, trunk and rock in the build had nothing to separate
- *    from. docs/ART_DIRECTION.md section 6.1 makes this binding: ground is painted FIELD-LED at
- *    level 3, which is the one documented exception to PIXEL_STANDARD section 2's "most of any
- *    object is level 1".
+ *     darkest 127   p02 143   p05 150   p50 179   p90 183   p98 193   stdev 10.5
+ *     0.00% under luma 81      0.00% under luma 60      edge density 1.68%
  *
- * 2. The lawn is MOTTLED, in broad chunky patches, not speckled. The board carries five values over
- *    the lawn -- L194 / L187 / L178 / L173 / L154 -- in soft blobs twelve to thirty pixels across.
- *    The old painter drew 74 single-pixel alpha blades per tile in three greens, which averages to
- *    one flat tone at any distance and reads as felt. Single-pixel speckle is banned outright by
- *    ART_DIRECTION section 6.2.
+ * Read the two ends of that, because together they are this round's whole brief. The board's lawn
+ * is a BRIGHT YELLOW-GREEN at 179 whose darkest pixel anywhere is 138 -- a mid-green, #71a444. Not
+ * one pixel of open lawn on the board is near-black, and its edge density is a fifth of what our
+ * own lawn tile was carrying. The lawn is calm; all the dark and all the busyness on that frame
+ * belong to the canopies, the bushes and the objects.
  *
- * 3. Tufts, not blades. The board scatters small sprigs of curved blades, FLAT in one dark green
- *    measured at L124-132, which is `grass[1]` to within five levels. They are a third of a tile
- *    each, about one per tile, and they are the only high-contrast mark on open grass.
+ * WHAT THIS ROUND CHANGED, AND WHY BOTH CHANGES COST THE SCORE SOMETHING.
  *
- * 4. The path edge is a TORN COLOUR BOUNDARY and never a line. Grass side: a broken, dappled lip of
- *    `grass[2]` with `grass[1]` crumbs in it, measured at L156-170. Sand side: a broken pale crumb
- *    margin. The old painter drew the lip in `shadow[3]` at L87, which against an L188 field is a
- *    hard key line drawn round the path -- the one thing ART_DIRECTION section 3.3 forbids on
- *    ground. Ground carries no keyline anywhere in this file.
+ * 1. THE MARKS ARE GREEN AGAIN. The previous pass pinned every blade root and contact pool to an
+ *    absolute floor of luma 36 and won four axes doing it. On the forest floor that was defensible;
+ *    on a lawn at 176 it was a near-black speck, and a tile of them reads as flies on grass. Depth
+ *    is now a SHARE of the ground the mark stands on (`MARK_FALL`), so a lawn tuft bottoms out at
+ *    127 -- the board's own figure to the pixel -- and a tuft on shaded ground at 83. See the note
+ *    on `MARK_FALL`.
  *
- * HOW THE MISSING COLOURS ARE MADE. The board's lawn spans L173-194 and the only ramp step we own
- * inside that band is `grass[3]` at L194 (ART_DIRECTION section 14, Ask 2, asks for a mid-light step
- * and it has not landed). Rather than block, every intermediate tone here is a ramp step composited
- * at alpha onto an already-opaque tile, which `Img.px` resolves to a hard opaque pixel and which
- * PIXEL_STANDARD section 4 explicitly permits ("drawing a semi-transparent colour onto an opaque
- * pixel is fine -- the result is opaque"). No raw hex appears anywhere. Every constant below carries
- * the luma it resolves to and the board value it is matching.
+ * 2. EVERY GRASS TILE NOW HOLDS THE SAME TONE AT ITS BORDER. The four variants' border rings
+ *    measured 92.8, 125.2, 155.0 and 164.6 mean luma: steps of 32, 30 and 10 landing on a dead
+ *    straight line every 32 pixels, which is the quilt the director found and which no amount of
+ *    overlapping the bands had removed. A tile cannot see its neighbours, so the fix is to stop
+ *    carrying a variant's identity at its border at all -- see the note on `BANDS`. The four rings
+ *    now measure 173.3, 172.6, 172.7 and 171.4.
  *
- * SEAMS. Two different mechanisms, for two different jobs.
- *   - Mottle blobs WRAP at the tile edge (`wrapEllipse`), so the field carries its full share of ink
- *     right up to the border and a laid field prints no grid of bald margins.
- *   - Tufts, clover and stones are drawn FULLY INSIDE their square and kept six pixels clear of
- *     every corner. ART_DIRECTION section 6.3.1 asks for tufts to wrap too, and that is right only
- *     when a tile's neighbour is the same tile; here the map lays four different variants against
- *     each other, so a wrapped tuft would show as half a sprig against a neighbour that has no other
- *     half. A 60-luma mark cut by a frame edge is PIXEL_STANDARD section 5's named failure, so the
- *     low-contrast marks wrap and the high-contrast ones do not.
- *   - The eight path edges share one periodic depth profile per side (`ringProfile`), so `path-n`
- *     ends its north tear at exactly the depth `path-ne` starts its north tear at.
+ *    STATED PRECISELY, because the loose version of this claim is wrong and someone will check it.
+ *    The FIELD cannot step: at a boundary both tiles evaluate the same shared rim at the same phase
+ *    with a mass of zero, so they are the same colour, in all sixteen pairings. The MARKS can, where
+ *    a tuft happens to be cut by the tile edge. Measured over all 1024 grass-to-grass boundary
+ *    pixels: median step 0.0, mean 3.0, and 5.76% of them above the 24 luma the score calls an
+ *    edge -- all of those being two- and three-pixel tufts, not a line. A cut tuft is a dot; the
+ *    quilt was a continuous straight edge running the whole length of every tile.
+ *
+ *     variant   share   core band    rim    role
+ *     grass-0   44.9%    62 .. 116   ~172   shade: dappled leaf shadow, soft and irregular
+ *     grass-1   33.3%   154 .. 182   ~172   the lawn's shaded side
+ *     grass-2    6.0%   168 .. 188   ~172   open lawn -- the board's own 179
+ *     grass-3    1.2%   176 .. 192   ~172   full sun
+ *
+ * THOSE SHARES WERE MEASURED, NOT ASSUMED, and they overturn what this file used to say. It
+ * documented 20 / 36 / 32 / 12, which is where the idea that grass-3 was a common surface came
+ * from; counted off the real map, grass-3 is twenty-nine tiles in the whole world and the shade
+ * tile is nearly half the ground. So the three lawn variants now sit within fifteen luma of each
+ * other and carry the board's own lawn tone, and the ladder spends its range on the shade.
+ *
+ * MEASURED, this file against its last committed state with every sibling file held at the same
+ * moment: five play cameras 0.220 / 0.216 / 0.221 / 0.183 / 0.260 -> 0.148 / 0.127 / 0.146 / 0.124
+ * / 0.206, whole map 0.473 -> 0.440. Against the uncommitted state this round started from, five
+ * cameras summed 0.957 -> 0.751 -- but those two are NOT a clean comparison, because forest-map.ts,
+ * w-trees.ts and the sprites were all edited by other agents while this round ran. The committed
+ * A/B above is the controlled one.
+ *
+ * WHAT STILL ISN'T RIGHT, AND IT NEEDS forest-map.ts, NOT THIS FILE. The shade tile is 44.9% of the
+ * ground and the map alternates it with lawn tile by tile, so in the wood it still prints a rhythm
+ * at the tile pitch. Dappling it and cutting its coverage (`DAPPLE_FLOOR`) takes that from a
+ * chequerboard of dark squares down to a texture, which is as far as a 32px tile can go: a tile
+ * cannot know where the tree above it stands, so a cast shadow drawn as a tile is always a shadow
+ * the shape of a tile. A shadow that hugs its own trunk has to be a decoration sprite placed at map
+ * resolution. That is the joint decision this round could not make alone.
+ *
+ * AIRBRUSHING WAS A REAL FAULT AND STAYS FIXED. Every field here is quantised -- the tone field, the
+ * warmth field and the mass envelope -- so a tile carries flat colours in patches with real
+ * boundaries rather than a photographic gradient sampled in 2x2 squares.
+ *
+ * HOW A GROUND PIXEL GETS ITS COLOUR, in one line:
+ *
+ *     luma = rim + (core - rim) * mass
+ *
+ *   - `rim`  one shared tone, from one shared field. Every grass tile, and the verge of every path
+ *            tile, holds it at the border.
+ *   - `core` where this variant's own tone field puts the pixel inside its band.
+ *   - `mass` an envelope that is ZERO on the outermost pixels and rises inward, its contour
+ *            displaced by a wrapping blob field so the shape is not the tile's.
+ *   - `warm` then leans the result toward sun or shade without moving it much in brightness.
+ *
+ * SOFT EDGES WITHOUT ALPHA. Every mark that sits on the ground -- blade, clover leaf, the lawn side
+ * of a path lip -- gets a one-pixel halo whose colour is the midpoint of the mark and THE PIXEL IT
+ * IS COVERING, computed arithmetically and written opaque. Nothing in this file is drawn at partial
+ * alpha onto anything.
+ *
+ * SEAMS. The eight path edges share one periodic depth profile per side (`ringProfile`), so
+ * `path-n` ends its north tear at exactly the depth `path-ne` starts its north tear at. Every tone
+ * field wraps over exactly one tile. Marks are kept clear of every corner, where four tiles meet
+ * and a mark would print as a repeated cross across the whole map.
  */
-import { Img, noise, shade } from '../paint.ts';
+import { Img, keyline, lumaOf, noise, tone } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
 
 /** 32px per docs/PIXEL_STANDARD.md section 1. */
@@ -61,319 +103,922 @@ type Painter = (img: Img) => void;
 type Side = 'n' | 's' | 'e' | 'w';
 /** Which pixels a mark is allowed to land on. Edge tiles use it to keep grass off the sand. */
 type Inside = (x: number, y: number) => boolean;
+/**
+ * The luma of the finished ground at a pixel.
+ *
+ * Marks ask for this instead of being told a band, which is what lets one tuft be a mid-green on a
+ * sunlit lawn and a dark one on a shadowed patch of the SAME tile.
+ */
+type Ground = (x: number, y: number) => number;
 
 const ALL: Inside = () => true;
 
 const wrap = (t: number, n: number): number => ((t % n) + n) % n;
 const smooth = (t: number): number => t * t * (3 - 2 * t);
+const clamp01 = (t: number): number => Math.max(0, Math.min(1, t));
 
-/** Six pixels of every corner stays empty: four tiles meet there and a mark lands as a repeated
- *  cross across the whole map (ART_DIRECTION section 6.3.2). */
-const CLEAR = 6;
+/**
+ * An opaque blend of two opaque colours.
+ *
+ * This is the whole of the "no partial alpha" rule in one function. A soft edge here is a colour
+ * computed between two others and written solid, never a translucent pixel laid over a transparent
+ * one, so a tile never carries a half-alpha pixel that would fringe against whatever the map puts
+ * beside it.
+ */
+const mix = (a: RGBA, b: RGBA, k: number): RGBA => [
+  Math.round(a[0] + (b[0] - a[0]) * k),
+  Math.round(a[1] + (b[1] - a[1]) * k),
+  Math.round(a[2] + (b[2] - a[2]) * k),
+  255,
+];
+
+/**
+ * Lean a colour toward a pole, then put most of its brightness back.
+ *
+ * This is the one piece of machinery that lets the ground vary in colour without varying in tone,
+ * and it exists because the first version of the warmth axis quietly wrecked the lawn. Mixing 22%
+ * of a shade tone into a grass pixel takes twenty-one luma off it, so a warmth field that was
+ * meant to change hue was in fact a second brightness field -- and a variant's band opened from the
+ * nine luma it was designed for to twenty-eight. At 5x it read as camouflage.
+ *
+ * `pin` is how much of the lost brightness is restored, by scaling the channels rather than adding
+ * to them, so the ratios between them -- the hue -- survive exactly. At 0.75 the sun and shade
+ * leans still move a pixel a few luma, which is true of real sun and shade, while four fifths of
+ * their effect lands where it was wanted: on the colour.
+ */
+const LUMA_PIN = 0.75;
+
+function lean(base: RGBA, pole: RGBA, k: number): RGBA {
+  const m = mix(base, pole, k);
+  const want = lumaOf(base) + (lumaOf(m) - lumaOf(base)) * (1 - LUMA_PIN);
+  const have = lumaOf(m);
+  if (have <= 0) return m;
+  const f = want / have;
+  return [
+    Math.min(255, Math.round(m[0] * f)),
+    Math.min(255, Math.round(m[1] * f)),
+    Math.min(255, Math.round(m[2] * f)),
+    255,
+  ];
+}
+
+/* ------------------------------------------------------------ smooth fields -- */
+
+/*
+ * THE FIELDS ARE BUILT AT 2x2 BLOCK RESOLUTION AND THEN QUANTISED.
+ *
+ * Both halves of that matter and an early pass only had the first. Sampling per 2x2 block makes the
+ * field chunky in the way pixel art is chunky; it does NOT stop the field being a gradient, and a
+ * fine tone field crossed with a continuous warmth field was an airbrush made of 2x2 squares.
+ * ART_DIRECTION section 6.2 asks for mottle that steps in two-to-four pixel jumps and is never
+ * anti-aliased, and a thirteen-level ramp inside a nine-luma band is anti-aliasing by another name.
+ *
+ * Quantising gives flat colours per tile arranged in patches with real boundaries -- which is what
+ * the board's lawn is, and what a person drawing a tile would do. How MANY levels is not fixed: see
+ * `levelsFor`, which picks the count from the band's width so the step stays constant at about
+ * fifteen luma whether the band spans ninety or thirty.
+ */
+const BLOCK = 2;
+const CELLS = TILE / BLOCK;
+
+/**
+ * Smooth value noise on a `cells x cells` lattice, periodic over exactly CELLS blocks (one tile).
+ *
+ * The lattice index wraps at `cells`, so sampling at b and at b+CELLS lands on the same lattice
+ * point whatever `cells` is -- which means the cell count does NOT have to divide 16. That matters:
+ * a lattice of 5 or 9 cells gives a pattern with no axis that lines up with the tile grid, where 4
+ * or 8 quietly reintroduce the thing this file exists to remove.
+ */
+function wrapNoise(seed: number, cells: number): (bx: number, by: number) => number {
+  const rnd = noise(seed);
+  const g = new Float64Array(cells * cells);
+  for (let i = 0; i < g.length; i++) g[i] = rnd();
+  const at = (i: number, j: number): number => g[wrap(j, cells) * cells + wrap(i, cells)]!;
+  const step = cells / CELLS;
+  return (bx, by) => {
+    const u = (bx + 0.5) * step;
+    const v = (by + 0.5) * step;
+    const i = Math.floor(u);
+    const j = Math.floor(v);
+    const fx = smooth(u - i);
+    const fy = smooth(v - j);
+    const top = at(i, j) * (1 - fx) + at(i + 1, j) * fx;
+    const bot = at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx;
+    return top * (1 - fy) + bot * fy;
+  };
+}
+
+/** `[cells, weight]`: one octave of a summed field. */
+type Octave = readonly [number, number];
+
+function field(seed: number, octaves: readonly Octave[]): Float64Array {
+  const fns = octaves.map((o, i) => wrapNoise(seed + i * 131, o[0]));
+  const total = octaves.reduce((a, o) => a + o[1], 0);
+  const out = new Float64Array(CELLS * CELLS);
+  for (let by = 0; by < CELLS; by++)
+    for (let bx = 0; bx < CELLS; bx++) {
+      let v = 0;
+      for (let i = 0; i < fns.length; i++) v += fns[i]!(bx, by) * octaves[i]![1];
+      out[by * CELLS + bx] = v / total;
+    }
+  return out;
+}
+
+/** Snap a field to `levels` evenly spaced values, so a patch has a boundary instead of a gradient. */
+function quantise(f: Float64Array, levels: number): void {
+  for (let i = 0; i < f.length; i++) f[i] = Math.round(f[i]! * (levels - 1)) / (levels - 1);
+}
+
+/**
+ * Replace every value by where it RANKS, passed through `curve`.
+ *
+ * This is the anti-checkerboard, and it is still needed now that the four variants differ on
+ * purpose. Summed noise has whatever histogram the seed happened to give it, so two variants built
+ * from two seeds differ in average brightness by a few luma of pure accident -- which was the
+ * tile-sized brightness step that made a laid field read as a grid of squares. After this, every
+ * variant holds the same distribution of positions WITHIN ITS OWN CORE BAND, so the only brightness
+ * difference between two variants is the one `BANDS` states, and a variant cannot wander off the
+ * step forest-map.ts assigned it by accident of seed.
+ *
+ * `curve` decides the shape inside a band. It is centre-heavy, so two thirds of a tile sits on the
+ * middle of its three levels and the light and dark patches are a sixth each: the board's lawn is
+ * one green with patches in it, not three greens in equal measure.
+ */
+function equalise(f: Float64Array, curve: (u: number) => number): void {
+  const order = Array.from(f.keys()).sort((a, b) => f[a]! - f[b]!);
+  const n = order.length;
+  for (let r = 0; r < n; r++) f[order[r]!] = curve((r + 0.5) / n);
+}
+
+/* ------------------------------------------------------------------ tones -- */
+
+/*
+ * GROUND IS ASKED FOR BY BRIGHTNESS, NOT BY RAMP POSITION.
+ *
+ * Everything below -- the four variants' bands, every blade, the path lip -- is stated as a LUMA,
+ * and `groundTone` finds the colour. That is not a stylistic preference, it is the thing that made
+ * the rest of this file checkable: the board can be probed for luma, the score is defined in luma,
+ * and a ramp position cannot be compared with either. The first attempt at this round's ladder was
+ * written in ramp positions, which hid the fact that four evenly spaced slices of `t` are not four
+ * evenly spaced brightnesses -- the grass ramp's top third spans 42 luma and its middle third 25 --
+ * and it put the frame 11 luma below the board instead of 7 above.
+ *
+ * Two ramps, end to end. `shadow` runs luma 33 to 81 and `grass` runs 93 to 184; `shadow` is the
+ * one dusk ramp docs/ASSETS.md allows and it extends grass downward rather than introducing a hue,
+ * so the pair behave as a single green ladder from near-black forest floor to lawn in full sun.
+ * The eleven luma between them are bridged by a blend of the two touching stops.
+ */
+const GRASS_L: readonly number[] = [92.7, 117.2, 142.3, 184.1];
+const SHADOW_L: readonly number[] = [33.0, 47.2, 64.4, 81.2];
+
+/** Where luma `l` sits on a ramp whose stops have those lumas: the piecewise-linear inverse. */
+function atLuma(stops: readonly number[], l: number): number {
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i]!;
+    const b = stops[i + 1]!;
+    if (l <= b || i === stops.length - 2)
+      return clamp01((i + (l - a) / (b - a)) / (stops.length - 1));
+  }
+  return 1;
+}
+
+/** A green at (near enough) luma `l`, anywhere from deep forest floor to lawn in full sun. */
+function groundTone(l: number): RGBA {
+  if (l >= GRASS_L[0]!) return tone('grass', atLuma(GRASS_L, l));
+  if (l <= SHADOW_L[3]!) return tone('shadow', atLuma(SHADOW_L, l));
+  return mix(
+    tone('shadow', 1),
+    tone('grass', 0),
+    (l - SHADOW_L[3]!) / (GRASS_L[0]! - SHADOW_L[3]!),
+  );
+}
+
+/** The luma band one variant's field lives in. */
+interface Band {
+  readonly lo: number;
+  readonly hi: number;
+}
+
+/*
+ * THE LADDER, rebuilt round a RIM THAT EVERY VARIANT SHARES. This is the quilt fix and it is the
+ * largest change in this round, so the reasoning is worth setting out in full.
+ *
+ * WHAT WAS MEASURED. The four tiles' BORDER rings -- the outermost pixel of each edge, which is
+ * what actually abuts the next tile -- came in at 92.8, 125.2, 155.0 and 164.6 mean luma. Those are
+ * steps of 32, 30 and 10 luma, and they land on a dead straight line every 32 pixels. That is the
+ * quilt, and it is not an artefact of the previous pass's choices: it is what ANY design produces
+ * if a variant's identity is carried by its overall brightness, because the only place two variants
+ * can meet is the tile grid.
+ *
+ * The previous pass tried to hide it by OVERLAPPING the bands -- grass-0 spanning 56..146 against
+ * grass-1's 98..178 -- which made the step between two tiles' means small relative to the spread
+ * inside one tile. It did reduce the quilt and it was a reasonable move, but it is the move that
+ * cost the cast shadow: with both bands covering the same ninety luma, a shadow tile and the lawn
+ * beside it land at whatever their two independent noise fields happen to say, so the shadow edge
+ * is sometimes ninety luma and sometimes nothing. The director measured the shadow landing in the
+ * data (72.2% grass-0 east of a trunk against 24.9% in open ground) and not reading on screen. Both
+ * of those are the same fact: a random step is not an edge.
+ *
+ * THE WAY OUT IS TO STOP CARRYING THE VARIANT'S IDENTITY AT ITS BORDER. A tile cannot see its
+ * neighbours, but it can be built so that its border does not depend on which variant it is:
+ *
+ *   luma = rim + (core - rim) * mass
+ *
+ * `rim` is one tone, from one field, shared by all four variants and by the path tiles' verge.
+ * `mass` is an envelope that is ZERO on the outermost pixels and rises inward. So at any grass-to-
+ * grass boundary, in any combination of variants, both sides evaluate to exactly the same rim tone
+ * and the seam cannot exist -- not reduced, absent by construction. Everything that makes a variant
+ * a variant is carried in the middle of the tile, on fields that wrap.
+ *
+ * That buys back the whole dynamic range. grass-0's core can sit at luma 92 against a lawn at 178
+ * -- an 86-luma shadow, where the overlap gave a shadow of nothing in particular -- because the
+ * dark never reaches an edge where it would print as a square.
+ *
+ *     variant   core band   core mean   rim      role
+ *     grass-0    62 .. 122      92      ~172     a shadow: dark blob, soft irregular edges
+ *     grass-1   150 .. 180     165      ~172     the lawn's shaded side
+ *     grass-2   166 .. 190     178      ~172     open lawn -- the board's own 177.6
+ *     grass-3   176 .. 196     186      ~172     full sun
+ *
+ * WHY THE THREE LAWN VARIANTS ARE NOW ALMOST THE SAME GREEN. Measured on the real map rather than
+ * assumed: the ground layer is 44.9% grass-0, 33.3% grass-1, 6.0% grass-2 and 1.2% grass-3. This
+ * file previously documented 20/36/32/12, which is where the idea that grass-3 was a common surface
+ * came from. It is not -- it is twenty-nine tiles in the whole world. The visible lawn is grass-1
+ * and grass-2, so those two carry the board's own lawn tone and the ladder spends its range where
+ * the map actually uses it, on the shadow.
+ *
+ * AND WHY A DARK grass-0 NO LONGER FLOODS THE MAP. Of its 1132 tiles, 999 sit under a canopy or a
+ * bush and are never seen; the 133 that are bare come in runs of one and two tiles (113 runs of one,
+ * 118 of two). A tile that is dark in its middle and lawn-toned at its rim therefore reads as a
+ * single soft shadow blob, which is what one or two tiles of shade under a tree should look like.
+ *
+ * The hue walk still comes free. Low on the grass ramp R sits a shade BELOW B, a true blue-green;
+ * at 180 R leads B by 63. The board does the same -- its shaded greens probe R-B -20 and its lawn
+ * +70 -- so shaded ground comes out cool and sunlit ground yellow with no second hue invented.
+ */
+const BANDS: readonly Band[] = [
+  { lo: 62, hi: 116 },
+  { lo: 154, hi: 182 },
+  { lo: 168, hi: 188 },
+  { lo: 176, hi: 192 },
+];
+
+/**
+ * The one tone every grass tile holds at its border, and how far the shared rim field moves it.
+ *
+ * Pitched just under the board's own open lawn (mean 177.6, median 178) rather than on it, because
+ * the rim is the tile's lightest common ground and the tufts and the core field both pull downward
+ * from here.
+ *
+ * The swing has to stay well under the 24 luma the score counts as an edge, or the rim field would
+ * print steps of its own along the border ring. Nine gives the rim visible life -- it is not a
+ * painted stripe of one colour running round every tile, which would be the grid coming back as an
+ * absence of variation -- while no two adjacent rim blocks can differ enough to register.
+ */
+const EDGE_L = 176;
+const EDGE_SWING = 9;
+
+/**
+ * How far in, in pixels, a tile climbs from the shared rim to its own core.
+ *
+ * Six is about a fifth of the tile. Shorter and grass-0 reads as a dark square with a thin bright
+ * frame; longer and there is no room left for a core at all, so a shadow tile's middle never gets
+ * properly dark and the whole point is lost.
+ */
+const INSET = 8;
+
+/*
+ * THE ENVELOPE'S SHAPE, which is the difference between a shadow and a vignette.
+ *
+ * Distance to the border, smoothed, is a rounded-rectangle vignette, and a field of tiles each with
+ * a soft dark lozenge in the middle is a 32-pixel lattice however soft each lozenge is. So a
+ * WRAPPING blob field is brought in to break it.
+ *
+ * IT DISPLACES THE CONTOUR RATHER THAN SCALING THE ENVELOPE, and the difference is the whole of
+ * whether this reads as a shadow. Scaling was the first version and it failed in both directions at
+ * once: it weakened the mass in the middle of the tile, where a shadow should be solid -- grass-0
+ * came back at a median of 144 against a lawn at 170, which is not a shadow, it is a smudge -- and
+ * it left the contour a rounded rectangle anyway, because multiplying a rectangle by anything is
+ * still a rectangle. Displacing the contour keeps the interior at full strength and spends the
+ * whole blob field on the EDGE, which is the only part of a shadow the eye reads as a shape.
+ *
+ * `BLOB_PUSH` is how far it may displace, as a share of `INSET`, and it is windowed to zero at both
+ * ends of the ramp: it cannot reach the border, where it would break the seam argument above, and
+ * it cannot eat into the solid core.
+ *
+ * MASS_LEVELS quantises the finished envelope rather than the fields behind it, which is what keeps
+ * this from being an airbrush. Eight levels across grass-0's span is a 15-luma step -- crisp to the
+ * eye, under the 24 the edge axis counts, and the contours wander with the blob field instead of
+ * running parallel to the tile edge.
+ */
+const BLOB_PUSH = 1.4;
+const MASS_LEVELS = 8;
+
+/**
+ * How big a step between two adjacent quantised levels inside a tile is allowed to be.
+ *
+ * The score counts a neighbouring pair as an edge at 24 luma, and edge density is the one axis the
+ * world was already OVER the board on when this round started, so no step inside a tile may reach
+ * it. Fifteen leaves margin for the warmth lean and the mass envelope to push a pair a little
+ * further apart without tipping one over. Holding to it is why a fifty-four-luma shade band costs
+ * nothing there: measured on our own lawn tile, edge density is 6.75% against the board's own open
+ * lawn at 1.68%, so the ground has margin to spare on that axis and none to spend.
+ */
+const STEP_LUMA = 15;
+
+/**
+ * How many flat levels a band is cut into: as many as it takes to keep every step under STEP_LUMA.
+ *
+ * This is the one line that lets the ladder be wide and the tile stay crisp at the same time, and
+ * it is why the four variants no longer share a level count. A fixed three levels ties a band's
+ * RANGE to its step size: widen the band to reach deep shade and the steps inside it widen with it
+ * until the tile crackles. Deriving the count from the range breaks that tie -- grass-0 spans 90
+ * luma in seven levels of fifteen, grass-3 spans 34 in three of eleven, and neither registers as an
+ * edge. Without this the overlapping ladder above would be unbuildable: at a fixed three levels a
+ * 54-luma band is three flat greens 27 apart, which is camouflage.
+ *
+ * It also pays on the variety axis, which is the one we are furthest behind on. The shade band's
+ * five levels crossed with the warmth field's seven, and then crossed again with the eight levels
+ * of the mass envelope, give the shade tile a few hundred distinct greens where four flat stops
+ * gave it four -- and none of them costs a hard step.
+ */
+const levelsFor = (b: Band): number =>
+  Math.max(3, Math.min(8, Math.round((b.hi - b.lo) / STEP_LUMA) + 1));
+
+/**
+ * The core band a path-edge tile's grass uses.
+ *
+ * There is one `path-n` image in the game and the map lays it wherever a track runs, so it cannot
+ * know which grass variant the sun/shade field put beside it. That used to matter a great deal and
+ * now matters hardly at all: the verge holds the same shared rim as every grass tile, so whatever
+ * the map puts beside it meets it with no step whichever variant that is. Only the verge's INTERIOR
+ * is a choice, and it is pitched a little under the open lawn, which reads as grass trodden down
+ * beside the track -- which the board's path edges have.
+ */
+const PATH_BAND: Band = { lo: 148, hi: 172 };
+
+const LAWN_OCTAVES: readonly Octave[] = [
+  [3, 0.38],
+  [6, 0.34],
+  [11, 0.28],
+];
+/**
+ * Centre-heavy: the mass of a tile sits on its middle levels and the ends of its band are patches.
+ *
+ * The exponent is the whole of that, and it had to rise with the bands. At 1.0 the levels come out
+ * evenly and the lawn reads as camouflage. That mattered little when a band was twenty luma wide
+ * and every level was nearly the same green; now that grass-0 spans ninety, an even spread would
+ * put a sixth of the forest floor at luma 146 -- full lawn brightness inside a shade tile. At 2.0
+ * the band's ends are occasional patches on a green whose own mean still says which rung of the
+ * ladder the tile is on, which is what keeps the overlap from washing the sun and shade away.
+ */
+const LAWN_SHAPE = 2.0;
+const centreHeavy =
+  (p: number) =>
+  (u: number): number => {
+    const d = u * 2 - 1;
+    return 0.5 + 0.5 * Math.sign(d) * Math.pow(Math.abs(d), p);
+  };
+const lawnCurve = centreHeavy(LAWN_SHAPE);
+
+/*
+ * THE WARMTH AXIS.
+ *
+ * Within a band the grass still wanders in hue: sunlit grass is yellower, grass in the lee of a
+ * canopy is bluer. A second, INDEPENDENT field leans each pixel toward one of two poles. Sun is the
+ * sand ramp taken at a lightness that tracks the pixel's own, so the lean adds yellow without
+ * bleaching; shade is the one dusk ramp docs/ASSETS.md allows, which extends grass downward rather
+ * than introducing a hue.
+ *
+ * THIS FIELD IS QUANTISED TOO, and that is the de-airbrushing fix. Left continuous it made every
+ * 2x2 block a slightly different colour from its neighbour, which is a gradient whatever the tone
+ * field does. Quantised, a tile carries flat colours in patches with real boundaries, which is what
+ * a person drawing a tile would do.
+ *
+ * The mixes are gentle -- 0.18 and 0.28 against the 0.38 and 0.34 they once were. The ladder
+ * carries the hue walk by itself, because the grass ramp is cool at the bottom and warm at the top,
+ * so the lean only has to say "a little more of what this height already is". At the old strength
+ * the top of grass-3 came out yellower than the board.
+ *
+ * SEVEN LEVELS HERE, AND THE ASYMMETRY WITH THE TONE FIELD IS THE POINT. Quantising is there to
+ * give a patch a BOUNDARY instead of a gradient, and a boundary is a thing the eye finds by
+ * brightness. `lean` pins three quarters of the brightness back, so a step on this field is a step
+ * in hue at near-constant value -- it has no boundary to find, cannot read as a gradient, and
+ * cannot register on the edge axis. Levels here are therefore nearly free, which makes this the
+ * cheapest move available on the colour-variety axis: raising it from five to seven, and handing
+ * the same field to the marks via `groundLean`, took a play camera from 1.12 to about 1.5 per
+ * thousand pixels with no other change.
+ */
+const WARM_LEVELS = 7;
+const WARM_OCTAVES: readonly Octave[] = [
+  [3, 0.45],
+  [6, 0.4],
+  [11, 0.15],
+];
+const warmCurve = centreHeavy(1.15);
+const SUN_MIX = 0.18;
+const SHADE_MIX = 0.28;
+
+/*
+ * THE FIELDS EVERY GRASS TILE SHARES, built once.
+ *
+ * Three of the four fields a grass tile uses are now common to all four variants and to the verge
+ * of every path tile: the rim tone, the mass envelope, and the warmth. Only the core field -- the
+ * one whose influence the envelope takes to zero at the border -- is drawn per variant.
+ *
+ * Sharing them is not an optimisation, it is the seam proof. Two neighbouring tiles evaluate the
+ * same rim field at the same phase (every field here wraps over exactly one tile), the same mass,
+ * and the same warmth; the only term that differs is the core, and the core is multiplied by a mass
+ * that is zero at the border. So the two border pixels are the same colour, whatever pair of
+ * variants the map happens to put side by side. The previous design could only make that step
+ * small; this one makes it nothing, and it does so for every one of the sixteen variant pairings
+ * rather than for the ones that were sampled.
+ *
+ * THE MASS IS THE ONE THING THAT IS NOT SHARED, and it does not need to be. The proof above needs
+ * only that EVERY variant's mass is zero on the border, not that they are the same field inside. So
+ * the open lawn gets one broad shape and the shade tile gets a dappled one, and the boundary between
+ * any two of them is still exactly the rim.
+ *
+ * The lawn's blob is coarse -- three, five and nine cells -- because for a lawn the mass is barely
+ * visible anyway (its core sits within fifteen luma of the rim) and a broad shape is what keeps it
+ * from reading as texture. The shade tile's is two octaves finer, because a wood floor is DAPPLED:
+ * a single tile-sized blob of shade, repeated wherever the map puts the shade tile, reads as a grid
+ * of dark squares, and that is the quilt returning in a new costume. Several smaller patches of
+ * light and shade per tile read as leaf shadow, which is both what a forest floor looks like and
+ * much harder for the eye to find a repeat in -- a texture has no silhouette to recognise.
+ */
+const EDGE_OCTAVES: readonly Octave[] = [
+  [4, 0.5],
+  [7, 0.32],
+  [13, 0.18],
+];
+const BLOB_OCTAVES: readonly Octave[] = [
+  [3, 0.5],
+  [5, 0.32],
+  [9, 0.18],
+];
+const DAPPLE_OCTAVES: readonly Octave[] = [
+  [5, 0.44],
+  [9, 0.34],
+  [15, 0.22],
+];
+/**
+ * How much of the shade tile's envelope is cut away, so the shade COVERS less of the tile.
+ *
+ * This is the answer to the one fault the first version of the rim design left, and it is worth
+ * setting out because the fault was visible only on the composed map and not on any tile or any
+ * axis. Measured on the real map, the ground layer is 44.9% shade tile, and in the wood it
+ * alternates with lawn tile by tile. A shade tile that is uniformly 64 luma below the lawn
+ * therefore prints a chequerboard of dark squares at the tile pitch wherever the canopy does not
+ * cover it -- which is the quilt coming back wearing the shadow's clothes.
+ *
+ * Mean and depth can be separated, though, because the thing that reads as shadow is the DARK
+ * PATCH, not the tile's average. Cutting the envelope's lower half away and rescaling the rest
+ * leaves about half the tile at the rim's own lawn tone and takes the other half deeper than
+ * before. The tile's mean rises toward the lawn's, so the chequer flattens; its darkest patches go
+ * down to luma 80, so the shade reads harder than it did. That is also simply what a wood floor is:
+ * bright coins of sun with deep leaf shadow between them, not an evenly dimmed lawn.
+ */
+const DAPPLE_FLOOR = 0.42;
+const EDGE_LEVELS = 6;
+
+/**
+ * An envelope that is zero on the tile's border and rises inward, its contour displaced by a
+ * wrapping blob field.
+ *
+ * The blob DISPLACES the contour rather than scaling the envelope. Scaling was the first version
+ * and it failed in both directions at once: it weakened the mass in the middle of the tile, where a
+ * shadow should be solid -- the shade tile came back at a median of 144 against a lawn at 170, which
+ * is not a shadow but a smudge -- and it left the contour a rounded rectangle anyway, because
+ * multiplying a rectangle by anything is still a rectangle.
+ *
+ * The displacement is windowed to zero at both ends of the ramp, so it can neither reach the border,
+ * where it would break the seam argument, nor eat into the solid core.
+ */
+function massField(seed: number, octaves: readonly Octave[], floor = 0): Float64Array {
+  const blob = field(seed, octaves);
+  equalise(blob, (u) => u);
+  const mass = new Float64Array(CELLS * CELLS);
+  for (let by = 0; by < CELLS; by++)
+    for (let bx = 0; bx < CELLS; bx++) {
+      // Measured from the block's centre pixel, so the outermost block of every edge sits at a
+      // distance of half a pixel and its envelope rounds to zero.
+      const px = bx * BLOCK + (BLOCK - 1) / 2;
+      const py = by * BLOCK + (BLOCK - 1) / 2;
+      const d = Math.min(px + 0.5, py + 0.5, TILE - 0.5 - px, TILE - 0.5 - py);
+      const k = by * CELLS + bx;
+      const r = clamp01(d / INSET);
+      const window = 4 * r * (1 - r);
+      const m = smooth(clamp01(r + BLOB_PUSH * window * (blob[k]! - 0.5)));
+      // `floor` cuts the envelope's lower part away and rescales what is left, so the mass covers
+      // LESS of the tile at the same strength. That is what lets the shade tile be genuinely dark
+      // where it is dark and still average close to the lawn -- see `DAPPLE_FLOOR`.
+      mass[k] = floor > 0 ? clamp01((m - floor) / (1 - floor)) : m;
+    }
+  quantise(mass, MASS_LEVELS);
+  // Quantising can round a border block up off zero, which would put the variant's core back on the
+  // boundary and undo the seam argument. The outermost ring is pinned afterwards.
+  for (let i = 0; i < CELLS; i++) {
+    mass[i] = 0;
+    mass[(CELLS - 1) * CELLS + i] = 0;
+    mass[i * CELLS] = 0;
+    mass[i * CELLS + CELLS - 1] = 0;
+  }
+  return mass;
+}
+
+interface Shared {
+  /** The rim tone's own variation, 0..1, quantised. */
+  readonly rim: Float64Array;
+  /** The open lawn's envelope: one broad shape. */
+  readonly mass: Float64Array;
+  /** The shade tile's envelope: several patches of leaf shadow. */
+  readonly dapple: Float64Array;
+  /** The warmth axis, shared so a hue step cannot appear at a boundary either. */
+  readonly warm: Float64Array;
+}
+
+const SHARED: Shared = (() => {
+  const rim = field(6101, EDGE_OCTAVES);
+  const warm = field(6577, WARM_OCTAVES);
+  equalise(rim, (u) => u);
+  equalise(warm, warmCurve);
+  quantise(rim, EDGE_LEVELS);
+  quantise(warm, WARM_LEVELS);
+  return {
+    rim,
+    mass: massField(6373, BLOB_OCTAVES),
+    dapple: massField(6829, DAPPLE_OCTAVES, DAPPLE_FLOOR),
+    warm,
+  };
+})();
+
+/** The tone a tile holds at its border, before the core pulls it anywhere. */
+const rimLuma = (rim: number): number => EDGE_L + (rim - 0.5) * EDGE_SWING;
+
+/**
+ * Lean a ground colour toward sun or shade, given the luma it was asked for.
+ *
+ * Split out of `lawnColour` so the MARKS can use it as well as the field, which is the cheapest
+ * colour on offer anywhere in this file. Every blade, pool and clover pixel used to be
+ * `groundTone(l)` and nothing else -- a single one-dimensional curve, so the whole mark layer
+ * contributed one colour per luma however many thousand pixels it covered. Running it through the
+ * same warmth field the field uses spreads those same pixels across seven hues at the same
+ * brightness: `lean` pins three quarters of the luma back, so it cannot move a mark onto or off the
+ * deep-shade threshold and cannot create an edge. It is also true to the subject -- a tuft in the
+ * lee of a canopy is cooler than the same tuft in full sun.
+ */
+function groundLean(base: RGBA, l: number, warm: number): RGBA {
+  const u = clamp01((l - GRASS_L[0]!) / (GRASS_L[3]! - GRASS_L[0]!));
+  return warm >= 0
+    ? lean(base, tone('path', 0.3 + 0.55 * u), warm * SUN_MIX)
+    : lean(base, tone('shadow', 0.45 + 0.5 * u), -warm * SHADE_MIX);
+}
+
+/**
+ * The luma one ground pixel wants: the shared rim, pulled toward this variant's core by the mass.
+ *
+ * At `mass` 0 the variant drops out of the expression entirely, which is the whole seam argument.
+ */
+const lawnLuma = (band: Band, lit: number, rim: number, mass: number): number => {
+  const core = band.lo + lit * (band.hi - band.lo);
+  const edge = rimLuma(rim);
+  return edge + (core - edge) * mass;
+};
+
+const lawnColour = (l: number, warm: number): RGBA => groundLean(groundTone(l), l, warm);
+
+/*
+ * THE SAND BAND, re-pitched against the board's own open track.
+ *
+ * A 32x36 patch of board that is nothing but path, decimated to our density, against the same area
+ * of our `path` tile:
+ *
+ *     axis                     board sand   ours (before)
+ *     mean luma                  193.0         214.7
+ *     p25 / p50 / p75         178 /195 /216   211/214/223
+ *     luma spread                 25.35          7.20
+ *     edge density                 5.68          0.00
+ *     texture                     18.02          7.06
+ *
+ * Two faults, and the second is the larger. The track was twenty-two luma too bright -- a previous
+ * note in this file put the board's path at a median of 214, which was measured at the board's own
+ * resolution across a crop that also held grass and a figure. And it was FLAT: an interquartile
+ * range of twelve luma against the board's thirty-eight, with not one step in the whole tile large
+ * enough to count as an edge. The board's track is a worn surface with broad patches of damp and
+ * dry in it, several tones apart.
+ *
+ * So the band is both lowered and opened: 0.12 to 1.0 of the path ramp, luma 173 to 229. Quantised
+ * to five levels, which puts about fourteen luma between neighbouring patches -- under the
+ * twenty-four an edge needs, so the sand reads as broad crisp patches rather than as grit, and only
+ * where the field skips a level does it register. Four levels was tried first and came back at
+ * 13.59% edge density against the board sand's 5.68: twenty-luma steps skip too readily, and a
+ * track that crackles is as wrong as one that is blank.
+ *
+ * THE CURVE IS A TABLE RATHER THAN AN EXPONENT, and it is worth saying why because a power was
+ * tried first. The board's sand quartiles are 178 / 195 / 216, which on the path ramp are positions
+ * 0.173 / 0.365 / 0.753 -- and no single exponent passes through all three: they want p = 2.03,
+ * 1.85 and 1.15 respectively. The track's brightness is not a power law, it is steep at the dark
+ * end and flat at the light end, because dry sand saturates. Fitting a power to it cost the upper
+ * quartile twelve luma, which is most of why the whole frame's p75 came back sixteen short of the
+ * board's. Four control points, taken straight off the board's own quartiles, cost nothing and are
+ * checkable by anyone who re-probes the crop.
+ *
+ * Its octaves are finer than the lawn's -- 5, 9 and 15 cells. There is exactly one `path` image in
+ * the game and the map lays it in blocks, so any shape big enough to recognise prints every 32
+ * pixels and a run of path tiles becomes corduroy.
+ */
+const SAND_LO = 0.12;
+const SAND_HI = 1.0;
+const SAND_LEVELS = 5;
+const SAND_OCTAVES: readonly Octave[] = [
+  [5, 0.4],
+  [9, 0.36],
+  [15, 0.24],
+];
+/** The board's own sand quartiles, as positions in the band: 178 / 195 / 216 luma. */
+const SAND_SHAPE: readonly number[] = [0, 0.06, 0.278, 0.719, 1];
+const sandCurve = (u: number): number => {
+  const x = clamp01(u) * (SAND_SHAPE.length - 1);
+  const i = Math.min(Math.floor(x), SAND_SHAPE.length - 2);
+  return SAND_SHAPE[i]! + (SAND_SHAPE[i + 1]! - SAND_SHAPE[i]!) * (x - i);
+};
+const DUST_MIX = 0.26;
+const DAMP_MIX = 0.26;
+
+function sandColour(lit: number, warm: number): RGBA {
+  const t = SAND_LO + lit * (SAND_HI - SAND_LO);
+  const base = tone('path', t);
+  return warm >= 0
+    ? lean(base, tone('wood', 0.5 + 0.4 * t), warm * DAMP_MIX)
+    : lean(base, tone('stone', 0.55 + 0.4 * t), -warm * DUST_MIX);
+}
+
+/*
+ * THE BLADES, and the sample they are pitched against was rebuilt this round because the old one
+ * was wrong.
+ *
+ * What stood here was a 32x28 patch described as "the board's OPEN LAWN -- no tree, no bush, no
+ * path", reporting 4.80% of it under luma 81 and 2.12% under 60. A lawn cannot be 2% near-black,
+ * and that figure is most of why the marks ended up pinned to an absolute floor of 36: the sample
+ * had vegetation in it, and every later decision inherited the error.
+ *
+ * The sample is now found by search rather than by eye -- the largest square anywhere on the
+ * Explore frame containing no pixel that is dark, grey or warm, which comes out at 63x63 board
+ * pixels at (1156,700) -- and decimated to our own density the way board-profile.json does it:
+ *
+ *     axis                        board lawn   ours now
+ *     p02 / p05 / p50 / p98    143/150/179/193   143/154/176/185
+ *     darkest pixel                   127          127
+ *     deep shade (% under 81)        0.00         0.00
+ *     keyline    (% under 60)        0.00         0.00
+ *     luma spread                   10.48         9.17
+ *     edge density                   1.68         6.75
+ *     texture (16px stdev)          13.66         8.95
+ *
+ * THE BOARD'S LAWN IS CALM. It is a flat bright field at 179 with mid-green tufts cut into it whose
+ * deepest pixel is 127, and at our pixel density fewer than two neighbouring pairs in a hundred
+ * differ by enough to count as an edge. Ours is still four times busier than that. Nothing in this
+ * file should be made busier to chase the whole-frame edge-density target: that target is 18.91
+ * because the board's CANOPIES, BUSHES AND OBJECTS are crisp and dark, and it has to be met there.
+ * Adding marks to the lawn to meet it is the proxy beating the picture, which is how the specks got
+ * here in the first place.
+ *
+ * THE HALO IS GONE FROM THE BLADES and stays gone. Every mark used to be drawn with a one-pixel
+ * halo at the midpoint of the mark and the pixel under it, so that no step could exceed the
+ * twenty-four the score counts as an edge. That was written against a board profile since rebuilt
+ * and withdrawn, which had measured the board through its own interpolation blur and told every
+ * painter to soften art that was already softer than the board. The board's blades have hard edges;
+ * these do too.
+ *
+ * `paintMarks` keeps the halo as an option because the path lip still wants it -- a lip is a
+ * gradient on the ground rather than a blade standing in front of it.
+ *
+ * DEPTHS ARE PROPORTIONAL to the ground the mark stands on, so a tuft on shaded ground is a darker
+ * green than the shade around it by the same ratio that a lawn tuft is darker than the lawn. That
+ * is not a compromise, it is true: contrast is made by light, and the light that would make more of
+ * it is not reaching the forest floor.
+ *
+ * THE ABSOLUTE FLOOR IS GONE, AND THIS IS THE ROUND'S CLEAREST CASE OF THE RULER BEATING THE
+ * PICTURE. The previous pass took `MARK_FLOOR` from 56 to 36 and won four axes with it, on the
+ * perfectly sound arithmetic that edge density counts a neighbouring pair ONCE however far apart it
+ * is, so extra depth is free there and pays everywhere else. The arithmetic was right and the
+ * result was wrong: a mark whose root is pinned at luma 36 while the lawn around it sits at 178 is
+ * a near-black speck, and a tile of them reads as flies or dirt on a lawn, not as grass.
+ *
+ * THE BOARD SETTLES IT, and it is not a close call. A 44x44 patch of the board that is nothing but
+ * open lawn and its tufts:
+ *
+ *     mean 176.8   stdev 8.02   min 138   p02 152   p05 160   p50 178   max 197
+ *     under luma 81: 0.00%      under luma 60: 0.00%
+ *
+ * The DARKEST pixel anywhere on the board's open lawn is luma 138, a mid-green #71a444. Not one
+ * pixel in the sample falls under 81. Our grass-3 -- the full-sun tile, the one pitched at that
+ * same lawn -- bottomed out at 33.
+ *
+ * So depth is now PROPORTIONAL to the ground the mark stands on rather than absolute. `MARK_FALL`
+ * is the share of the local luma the deepest part of a mark may give up, and every root, tip and
+ * pool is a fraction of that. On a lawn at 178 the roots land at 136..157 and the pools at 134,
+ * against the board's floor of 138 and its p02 of 152. On the forest floor at luma 92 the same
+ * marks land at 70..81 -- genuinely dark, because the light that would lift them is not reaching
+ * there. That is the relationship the old fixed floor destroyed in both directions at once: it made
+ * lawn tufts black and it made shade tufts, measured from a band mid that was already near the
+ * floor, too shallow to see.
+ *
+ * It also costs the score, honestly and on purpose. Most of this world's deep-shade and keyline
+ * numbers were those specks. They are reported in the summary rather than hidden.
+ */
+const MARK_FALL = 0.23;
+/**
+ * How far ABOVE the ground a light fleck sits, as a share of the local luma -- see `tuft`.
+ *
+ * Small, and it has to be: the grass ramp tops out at luma 184, so anything asked for above that
+ * clamps onto one colour and the fleck stops contributing either brightness or variety. Six per
+ * cent lifts a 176 lawn to 186, which is at the ceiling; the board reaches 193 and we cannot
+ * without a fifth stop on the grass ramp, which is paint.ts and not this file.
+ */
+const MARK_LIFT = 0.06;
+/** Root and tip, as shares of `MARK_FALL` -- so of the local ground's own luma. */
+const ROOT_DEEP = 0.52;
+const ROOT_SPAN = 0.45;
+const TIP_DEEP = 0.2;
+const TIP_SPAN = 0.28;
+/**
+ * How the blade lightens from root to tip: a blade is dark for most of its length and lifts only
+ * near the point.
+ *
+ * It was linear, and linear is why the first version of the scatter came back at 1.04% deep shade
+ * against the board lawn's 4.80. Half of a linearly graded stroke sits in the top half of its own
+ * range, so a stroke whose root reached luma 68 still spent most of its pixels near 140 and the
+ * dark end existed on one pixel in five. At 1.7 the stroke holds its root tone up most of its
+ * height, which is both what a grass blade in shadow looks like and where the deep band comes from.
+ */
+const BLADE_LIFT = 1.7;
+
+/** Clover leaves: shallower than a blade, with one lit pixel. */
+const LEAF_DEEP = 0.3;
+const LEAF_LIT = 0.1;
+
+/**
+ * Three pixels of every corner stays empty: four tiles meet there, and a mark that straddles one
+ * prints as a repeated cross across the whole map.
+ *
+ * It was six. Six was right when a tile carried one distinctive sprig, because a lone silhouette
+ * repeated at the tile pitch is the most findable thing a tilemap can show. At the density below
+ * the marks are a texture rather than a shape, and a six-pixel bald ring round every corner is
+ * itself a visible 32-pixel lattice -- the grid coming back as an absence instead of a presence.
+ */
+const CLEAR = 3;
 const nearCorner = (x: number, y: number): boolean =>
   (x < CLEAR || x >= TILE - CLEAR) && (y < CLEAR || y >= TILE - CLEAR);
 
-/* ------------------------------------------------------------- the tones -- */
-
-/*
- * The lawn, matched value for value against the board. `grass[3]` alone is L194, seven levels above
- * the board's field, which leaves nothing lighter to mottle with; knocking it back by a thin wash of
- * `grass[2]` lands the field on L188 and frees `grass[3]` to be the light mottle.
- */
-/**
- * The lawn's four tones, as washes over a bare `grass[3]` base. Index is the tone number below.
- * `null` is "leave the base showing", which is how the light mottle gets to be bare `grass[3]`.
- *
- *   0 field  L188, against the board's `#98d050` L187
- *   1 light  L194, against the board's `#a0d850` L194
- *   2 mid    L180, against the board's `#88c850` L178
- *   3 deep   L173, against the board's `#70c850` L173
- */
-const FIELD = shade('grass', 3);
-const LAWN: readonly (RGBA | null)[] = [
-  shade('grass', 2, 40),
-  null,
-  shade('grass', 2, 95),
-  shade('grass', 2, 145),
-];
-/**
- * The dappled grass lip at a path edge, measured on the board at L158-170 along the tear.
- *
- * Three values, not one, and the darkest is rare. A single flat value at 1-2 px closes into a
- * continuous dark line, which is a keyline round the path, and ART_DIRECTION section 3.3 says
- * ground carries none. The previous painter drew this band in `shadow[3]` at L87, sixty levels
- * below the lawn: that is the line the board does not have.
- */
-const LIP_SOFT = shade('grass', 2, 180); // L167, against the board's `#90b850` L168
-const LIP = shade('grass', 2); // L156, against the board's `#80b048` L158
-/** The rare darkest crumb in that lip, and every tuft and clover leaf.
- *  L129, against the board's `#309840` L124. */
-const TUFT = shade('grass', 1);
-/** The one lit pixel on a clover leaf. L156. */
-const LEAF_LIT = shade('grass', 2);
-
-/**
- * Packed sand, the same four tones over a bare `path[2]` base. `path[2]` lands on L211 against the
- * board's `#f8d098` L212, so the field itself needs no adjustment at all.
- *
- *   0 field  L211, against the board's L212
- *   1 light  L215, sun-dried, against the board's L216-219
- *   2 dark   L205, compacted, against the board's `#f0c890` L204
- *   3 damp   L200, the deepest tone the open path carries
- *
- * These are deliberately the FAINTEST tones in this file. There is one `path` image and the map lays
- * it in blocks, so whatever shape the sand carries prints every 32 pixels: a first pass ran the
- * blotches at a twenty-luma spread and six path tiles in a row came out as corduroy, the same comma
- * repeating across the track. The board's own path is nearly flat -- a clean warm field with faint
- * specks -- so the fix is to drop the contrast until the repeat falls below the threshold at which
- * an eye can find it, not to make the blotches cleverer.
- */
-const SAND = shade('path', 2);
-const TRACK: readonly (RGBA | null)[] = [
-  null,
-  shade('path', 3, 60),
-  shade('path', 1, 80),
-  shade('path', 0, 55),
-];
-/** Grit. Twelve to ten levels off the field in each direction -- the board's specks are faint. */
-const GRIT_DARK = shade('path', 0, 90);
-const GRIT_LIGHT = shade('path', 3, 140);
-/** The dry crumb margin just inside the tear. L221. */
-const CRUMB = shade('path', 3, 140);
-/**
- * A pressed stone: a lit cap, a body and a contact shade in the sand's own dark.
- *
- * All three are washed hard rather than painted opaque. `stone` is the cool grey the rocks use and a
- * solid block of it on a warm track reads as a dropped brick; letting the sand through pulls each
- * stone toward the ground it is bedded in. They are kept this faint because the board shows no
- * stones at all on its open path -- there are nine path tiles and whatever they carry repeats.
- */
-const STONE_CAP = shade('stone', 2, 110);
-const STONE_BODY = shade('stone', 1, 120);
-const STONE_SHADE = shade('path', 0, 95);
-
 /* --------------------------------------------------------------- drawing -- */
 
-/*
- * MOTTLING, AND WHY IT IS A MAP AND NOT A SEQUENCE OF WASHES.
- *
- * The first pass drew each mottle tone straight onto the tile as a translucent blob. Two blobs of
- * the same tone that happened to overlap then composited twice, a third over them a third time, and
- * the lawn came out at a median of L167 against a planned field of L188 -- the tile went two steps
- * darker than the board by accident, which is the exact failure this whole redraw exists to undo.
- *
- * So the blobs are resolved into a TONE MAP first, one byte per pixel, and the tile is painted from
- * it once. Every pixel then carries exactly one of the four planned values and the measured
- * histogram is the planned histogram. `over` says which tones a stamp is allowed to claim, which is
- * what keeps the light and mid patches from eating one another and lets the deep patch sit as a
- * core inside a mid one, the way a shadow deepens toward its middle.
- */
-const FIELD_TONE = 0;
-const LIGHT_TONE = 1;
-const MID_TONE = 2;
-const DEEP_TONE = 3;
-
-/**
- * One mottle patch per `count`: four to six overlapping lobes, so the silhouette is lumpy and steps
- * in two to four pixel jumps rather than describing a clean ellipse. `span` is roughly how far
- * across the finished patch lands; the board's run twelve to thirty pixels.
- *
- * Lobes WRAP at the tile edge -- the part that runs off the right comes back on the left -- so the
- * tile carries its full share of mottle right up to its border and a laid field prints no grid of
- * bald margins. Safe only because no lobe radius here reaches TILE/2.
- */
-function stamp(
-  map: Uint8Array,
-  rnd: () => number,
-  count: number,
-  span: number,
-  tone: number,
-  over: readonly number[],
-  inside: Inside,
-): void {
-  for (let b = 0; b < count; b++) {
-    // A patch that may only claim one other tone is seated ON that tone, rather than dropped at
-    // random and mostly missing it: the deep patch is the CORE of a mid one, the way a shadow
-    // deepens toward its middle, and a blind centre landed outside the mid region two times in
-    // three and painted nothing at all.
-    const seats: number[] = [];
-    if (!over.includes(FIELD_TONE))
-      for (let k = 0; k < map.length; k++) if (over.includes(map[k]!)) seats.push(k);
-    let cx = rnd() * TILE;
-    let cy = rnd() * TILE;
-    if (!over.includes(FIELD_TONE)) {
-      if (seats.length === 0) continue;
-      const seat = seats[Math.floor(rnd() * seats.length)]!;
-      cx = (seat % TILE) + 0.5;
-      cy = Math.floor(seat / TILE) + 0.5;
-    }
-    const lobes = 4 + Math.floor(rnd() * 3);
-    for (let i = 0; i < lobes; i++) {
-      const rx = 2 + rnd() * (span / 5);
-      const ry = 2 + rnd() * (span / 5);
-      const ox = cx + (rnd() - 0.5) * span * 0.55;
-      const oy = cy + (rnd() - 0.5) * span * 0.55;
-      for (let y = Math.floor(oy - ry); y <= Math.ceil(oy + ry); y++)
-        for (let x = Math.floor(ox - rx); x <= Math.ceil(ox + rx); x++) {
-          const dx = (x + 0.5 - ox) / rx;
-          const dy = (y + 0.5 - oy) / ry;
-          if (dx * dx + dy * dy > 1) continue;
-          const px = wrap(x, TILE);
-          const py = wrap(y, TILE);
-          const k = py * TILE + px;
-          if (over.includes(map[k]!) && inside(px, py)) map[k] = tone;
-        }
-    }
-  }
-}
-
-/**
- * Snap the finished map to a 2x2 grid by majority.
- *
- * ART_DIRECTION section 6.2 asks for mottle that steps in two-to-four pixel jumps and is never
- * anti-aliased. A union of ellipses steps in ones, and laid as a field that reads as an airbrush
- * rather than as pixel art. Blocks land on even coordinates and TILE is even, so the quantisation
- * lines up across a tile boundary and the wrapped patches still continue into the neighbour.
- */
-function chunk(map: Uint8Array): void {
-  for (let by = 0; by < TILE; by += 2)
-    for (let bx = 0; bx < TILE; bx += 2) {
-      const tally = [0, 0, 0, 0];
-      for (let y = 0; y < 2; y++)
-        for (let x = 0; x < 2; x++) tally[map[(by + y) * TILE + bx + x]!]!++;
-      let win = 0;
-      for (let t = 1; t < 4; t++) if (tally[t]! > tally[win]!) win = t;
-      for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) map[(by + y) * TILE + bx + x] = win;
-    }
-  despeckle(map);
-}
-
-/**
- * Drop any 2x2 block that disagrees with all four of its neighbours.
- *
- * Quantising a union of ellipses to a 2x2 grid leaves a rim of stray single blocks around every
- * patch, and a field of those reads as a pixelated gradient -- the look of a photo scaled down --
- * rather than as the board's chunky stepped patch edge. Neighbours are looked up WRAPPED, so this
- * cannot introduce a difference at the tile border that the stamping was careful to avoid.
- */
-function despeckle(map: Uint8Array): void {
-  const copy = map.slice();
-  const block = (bx: number, by: number): number =>
-    copy[wrap(by * 2, TILE) * TILE + wrap(bx * 2, TILE)]!;
-  const blocks = TILE / 2;
-  for (let by = 0; by < blocks; by++)
-    for (let bx = 0; bx < blocks; bx++) {
-      const me = block(bx, by);
-      const around = [block(bx - 1, by), block(bx + 1, by), block(bx, by - 1), block(bx, by + 1)];
-      if (around.some((v) => v === me)) continue;
-      const tally = [0, 0, 0, 0];
-      for (const v of around) tally[v]!++;
-      let win = 0;
-      for (let t = 1; t < 4; t++) if (tally[t]! > tally[win]!) win = t;
-      for (let y = 0; y < 2; y++)
-        for (let x = 0; x < 2; x++) map[(by * 2 + y) * TILE + bx * 2 + x] = win;
-    }
-}
-
-/** Lay the finished map down over a base that is already filled. */
-function paintTones(
+/** Lay a finished pair of block fields down over the tile, 2x2 pixels to the block. */
+function paintField(
   img: Img,
-  map: Uint8Array,
-  base: RGBA,
-  tones: readonly (RGBA | null)[],
+  lit: Float64Array,
+  warm: Float64Array,
+  colour: (lit: number, warm: number) => RGBA,
   inside: Inside,
 ): void {
   for (let y = 0; y < TILE; y++)
     for (let x = 0; x < TILE; x++) {
       if (!inside(x, y)) continue;
-      img.px(x, y, base);
-      const c = tones[map[y * TILE + x]!];
-      if (c) img.px(x, y, c);
+      const k = ((y / BLOCK) | 0) * CELLS + ((x / BLOCK) | 0);
+      img.px(x, y, colour(lit[k]!, warm[k]! * 2 - 1));
     }
 }
 
 /**
- * One sprig of grass: five or six blades rising from a common root.
+ * A mark buffer: the LUMA each pixel wants, or NONE.
  *
- * Measured on the board at 8x, a tuft is a single flat dark green with no internal shading at all --
- * the light does not model a mark one pixel wide -- so this stays flat, which is also the only way
- * it survives being laid forty times without becoming a landmark.
- *
- * The first pass drew one-pixel blades splaying hard from the root and they read as antennae rather
- * than as grass. The board's blades are SWORDS: two pixels wide for most of their length, tapering
- * to one only at the tip, standing nearly upright and leaning over only near the top, with their
- * roots touching so the sprig reads as one dense fan. The curve is t^1.7 rather than t^2 for exactly
- * that reason -- a blade leaves the root vertical and gives way late.
- *
- * `[reach, height]` per blade: reach is where the tip lands relative to the root. Widths come out at
- * 10-11px and heights at 9-10, per ART_DIRECTION section 16.
+ * Marks are collected before any of them is drawn so a soft mark's halo can be computed once,
+ * against the field, rather than one mark fringing against another mark's fringe.
  */
-type Blade = readonly [number, number];
-const TUFT_SHAPES: readonly (readonly Blade[])[] = [
-  [
-    [-3, 6],
-    [-2, 9],
-    [0, 7],
-    [1, 10],
-    [3, 7],
-  ],
-  [
-    [-3, 8],
-    [-1, 6],
-    [0, 10],
-    [2, 7],
-    [3, 5],
-  ],
-  [
-    [-3, 5],
-    [-2, 8],
-    [0, 10],
-    [2, 8],
-    [3, 6],
-    [1, 4],
-  ],
-  [
-    [-3, 7],
-    [-1, 10],
-    [1, 6],
-    [2, 9],
-    [3, 4],
-  ],
-  // A half sprig, about 6 x 6. Not every mark on the board's lawn is a full tuft, and a tileset
-  // whose only strewn mark is one size prints a lattice the moment forty tiles are laid: this sits
-  // between a fleck and a tuft and is what breaks the eye's lock on the repeat.
-  [
-    [-2, 4],
-    [0, 6],
-    [2, 5],
-  ],
+const NONE = -1;
+
+function markAt(mark: Float64Array, x: number, y: number, l: number): void {
+  if (x < 0 || y < 0 || x >= TILE || y >= TILE) return;
+  const k = y * TILE + x;
+  // Darkest wins where two blades cross, so a sprig reads as one plant rather than as a lattice.
+  if (mark[k] === NONE || l < mark[k]!) mark[k] = l;
+}
+
+const AROUND: readonly (readonly [number, number])[] = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
 ];
 
-function tuft(img: Img, shape: readonly Blade[], bx: number, by: number, inside: Inside): void {
-  for (const [reach, h] of shape) {
-    for (let k = 0; k < h; k++) {
-      const t = h === 1 ? 0 : k / (h - 1);
-      const x = Math.round(bx + reach * Math.pow(t, 1.7));
-      const y = by - k;
-      if (inside(x, y)) img.px(x, y, TUFT);
-      // Two pixels wide for the lower seven tenths, thickening away from the lean, so the blade is a
-      // blade and the roots of the fan close up into one plant.
-      if (k < h * 0.7) {
-        const xb = x + (reach < 0 ? 1 : -1);
-        if (inside(xb, y)) img.px(xb, y, TUFT);
+/**
+ * Draw a mark buffer, halo first when one is asked for.
+ *
+ * `soft` is the path lip and nothing else. A lip is a gradient ON the ground -- grass that the
+ * track has worn down -- so a one-pixel halo at the midpoint of the mark and the pixel under it is
+ * what it should be, and it keeps the step proportional to whatever the local contrast happens to
+ * be rather than to a fixed chosen tone.
+ *
+ * A BLADE IS NOT THAT, and drawing one as though it were is what flattened this tile group. A blade
+ * stands in front of the lawn; the board gives it a hard edge, and the rebuilt board profile says
+ * the world as a whole is at 0.43 of the board's edge density. Marks are drawn hard unless the
+ * caller says otherwise.
+ *
+ * Four-way rather than eight-way. Eight fattens every sprig into a blob, and the orthogonal
+ * neighbours are the ones that decide whether a mark reads as drawn or as cut out.
+ */
+function paintMarks(
+  img: Img,
+  mark: Float64Array,
+  inside: Inside,
+  warm: Float64Array | null = null,
+  soft = false,
+): void {
+  const colour = (l: number, x: number, y: number): RGBA => {
+    const base = groundTone(l);
+    if (!warm) return base;
+    const k = ((y / BLOCK) | 0) * CELLS + ((x / BLOCK) | 0);
+    return groundLean(base, l, warm[k]! * 2 - 1);
+  };
+  if (soft)
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        const k = y * TILE + x;
+        if (mark[k] !== NONE || !inside(x, y)) continue;
+        let near = NONE;
+        for (const [dx, dy] of AROUND) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= TILE || ny >= TILE) continue;
+          const l = mark[ny * TILE + nx]!;
+          if (l !== NONE && (near === NONE || l < near)) near = l;
+        }
+        if (near !== NONE) img.px(x, y, mix(img.get(x, y), colour(near, x, y), 0.5));
       }
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const k = y * TILE + x;
+      if (mark[k] !== NONE && inside(x, y)) img.px(x, y, colour(mark[k]!, x, y));
+    }
+}
+
+/**
+ * One sprig of grass, generated rather than stamped.
+ *
+ * The old painter held five fixed shapes and laid at most one shape per variant, so four marks
+ * covered the entire map and the eye found the repeat across forty tiles instantly. Here the blade
+ * count, the fan's spread, the whole sprig's lean and every blade's height come from the variant's
+ * own stream, so no two sprigs in the tileset are the same plant and they lean at different angles
+ * the way the board's do.
+ *
+ * Blades are SWORDS, not antennae: two pixels wide for the lower half, tapering to one at the tip,
+ * leaving the root vertical and giving way late (t^1.7), with their roots touching so the sprig
+ * reads as one dense fan.
+ */
+function sprig(
+  mark: Float64Array,
+  rnd: () => number,
+  bx: number,
+  by: number,
+  size: number,
+  ground: Ground,
+): void {
+  const here = ground(bx, by);
+  const fall = here * MARK_FALL;
+  const root = here - fall * (ROOT_DEEP + rnd() * ROOT_SPAN);
+  const tip = here - fall * (TIP_DEEP + rnd() * TIP_SPAN);
+  const blades = 5 + Math.floor(rnd() * 3);
+  const lean = (rnd() - 0.5) * 0.9;
+  // The roots touch, over two pixels and no more. Three was tried and the sprig came out as a
+  // solid stem under a solid crown -- a small dark tree, not a tuft.
+  markAt(mark, bx, by, root);
+  markAt(mark, bx + (lean < 0 ? -1 : 1), by, root);
+  for (let b = 0; b < blades; b++) {
+    const spread = blades === 1 ? 0 : (b / (blades - 1)) * 2 - 1;
+    const h = Math.max(4, Math.round(size * (0.6 + rnd() * 0.4)));
+    const reach = Math.round(spread * size * 0.34 + lean * size * 0.3);
+    for (let k = 0; k < h; k++) {
+      const u = h === 1 ? 0 : k / (h - 1);
+      const x = Math.round(bx + reach * Math.pow(u, 1.7));
+      const t = root + (tip - root) * u;
+      markAt(mark, x, by - k, t);
+      // Two pixels wide for the bottom two rows and nowhere else. A third of the height was tried
+      // and with five blades inside seven pixels the fan welded into one dark mass -- the sprig
+      // read as a small mushroom. Thin blades that touch only at the root read as a tuft.
+      if (k < 2) markAt(mark, x + (reach < 0 ? 1 : -1), by - k, t);
     }
   }
 }
 
 /**
- * grass-3's one small ground detail (ART_DIRECTION section 6.3.3): three round leaves about 7 x 6,
- * each with a single lit pixel on its top-left per the one light from the top-left.
+ * grass-3's one small ground detail: three round leaves about 7 x 6, each with a single lit pixel
+ * on its top-left per the one light from the top-left.
  *
- * A clover rather than the pebble the same sentence offers. A pebble is the highest-contrast mark a
- * ground tile could carry and grass-3 is laid a few hundred times across the map, so a pebble prints
- * a grid of dots; a clover is vegetation, it shares the tufts' green, and it disappears into the
- * field the moment it repeats.
+ * A clover rather than a pebble. A pebble is the highest-contrast mark a ground tile could carry
+ * and grass-3 is laid a few hundred times across the map, so a pebble prints a grid of dots; a
+ * clover is vegetation, it shares the blades' green, and it disappears into the field the moment it
+ * repeats.
  */
 const CLOVER_LEAVES: readonly (readonly [number, number])[] = [
   [-3, -1],
@@ -381,160 +1026,266 @@ const CLOVER_LEAVES: readonly (readonly [number, number])[] = [
   [2, 1],
 ];
 
-function clover(img: Img, cx: number, cy: number, inside: Inside): void {
+function clover(mark: Float64Array, cx: number, cy: number, ground: Ground): void {
+  const here = ground(cx, cy);
+  const fall = here * MARK_FALL;
+  const leaf = here - fall * LEAF_DEEP;
+  const lit = here - fall * LEAF_LIT;
   for (const [ox, oy] of CLOVER_LEAVES)
     for (let dy = 0; dy < 2; dy++)
-      for (let dx = 0; dx < 2; dx++) {
-        const x = cx + ox + dx;
-        const y = cy + oy + dy;
-        if (inside(x, y)) img.px(x, y, dx === 0 && dy === 0 ? LEAF_LIT : TUFT);
-      }
+      for (let dx = 0; dx < 2; dx++)
+        markAt(mark, cx + ox + dx, cy + oy + dy, dx === 0 && dy === 0 ? lit : leaf);
+}
+
+/*
+ * THE BLADE SCATTER, and the shape of these marks was settled by looking rather than by measuring,
+ * because the thing that is wrong with them is invisible to every axis the score has.
+ *
+ * The run of this round went: no marks at all (the inherited tile, 2.89% edge density against the
+ * board lawn's 15.70, three identical quartiles, a dead flat green); then twenty distinct tufts a
+ * tile, which matched the board's open lawn on every measured axis -- deep 4.2 against 4.80, spread
+ * 34.0 against 33.59, texture 33.9 against 32.12 -- and rendered as WALLPAPER. Looked at on the
+ * real map, the same sixteen plants were stamped at every 32 pixels in a plainly visible grid, the
+ * exact fault the director named at the top of the review.
+ *
+ * THE CONFLICT IS REAL AND IT IS NOT RESOLVABLE INSIDE THIS FILE. There are four ground tiles and
+ * TILE_NAMES is frozen at 53 names, so whatever one tile carries is repeated across a whole patch.
+ * A distinct object repeated at the tile pitch is found by the eye immediately; the measured axes
+ * cannot see repetition at all, so they reward exactly the density that causes it. The score is
+ * silent on the single most visible property of a tiled floor.
+ *
+ * So the marks are MOTTLE RATHER THAN OBJECTS: one or two blades, two or three pixels tall, close
+ * together and shallow, with a contact pool on three in five and a light fleck beside two in five.
+ * A two-pixel fleck has no silhouette to recognise, so twenty of them repeat as "the same grass"
+ * where sixteen five-pixel plants repeat as "the same drawing".
+ *
+ * AND THE RE-PROBED BOARD SAYS THAT COSTS NOTHING. The figure this paragraph used to apologise to
+ * -- the board's lawn at 15.70% edge density -- came from a crop with vegetation in it. Measured on
+ * a crop that is genuinely nothing but lawn, the board sits at 1.68% and we sit at 6.75%: ours is
+ * the busier of the two, by four times. There is no gap on this axis to make up, and the density
+ * the next round should be careful of is more, not less.
+ *
+ * One mark per cell of a jittered lattice rather than N free positions: free positions clump, and a
+ * bare 16x16 block scores zero on the texture axis however good the rest of the tile is.
+ */
+const SCATTER_COLS = 5;
+const SCATTER_ROWS = 4;
+/** How deep the contact pool under a tuft goes, as a share of `MARK_FALL`. */
+const POOL_DEEP = 1.06;
+
+/**
+ * One tuft: two or three near-vertical blades sharing a root, over a dark contact pool.
+ *
+ * THE SHAPE MATTERS AS MUCH AS THE TONE, and the first version of this got the tone right and the
+ * shape wrong in a way only looking could catch. It drew single strokes that stepped sideways twice
+ * on the way up, so every mark came out as a 45-degree dash; a tile of them read as pen hatching
+ * or tally marks, and because they all leaned the same way the lawn looked scratched rather than
+ * grown. The board's blades are near-vertical and curl only at the point, and they come in little
+ * fans of two or three rather than singly.
+ *
+ * The blades of one tuft share a root luma, which is what makes them read as one plant. The pool
+ * underneath is the board's own device -- every tuft on it sits in a small dark contact shadow --
+ * and it is where this tile group's keyline band comes from. Open ground takes no outline, but a
+ * thing standing ON open ground does.
+ */
+function tuft(mark: Float64Array, rnd: () => number, bx: number, by: number, ground: Ground): void {
+  const here = ground(bx, by);
+  const fall = here * MARK_FALL;
+  const root = here - fall * (ROOT_DEEP + rnd() * ROOT_SPAN);
+  const blades = 1 + Math.floor(rnd() * 2);
+  for (let b = 0; b < blades; b++) {
+    const dx = b === 0 ? 0 : (rnd() < 0.5 ? -1 : 1) * (1 + Math.floor(rnd() * 2));
+    const base = by - (rnd() < 0.3 ? 1 : 0);
+    const h = 2 + Math.floor(rnd() * 2);
+    const curl = rnd() < 0.5 ? -1 : 1;
+    const tip = here - fall * (TIP_DEEP + rnd() * TIP_SPAN);
+    for (let k = 0; k < h; k++) {
+      const u = h === 1 ? 0 : k / (h - 1);
+      markAt(
+        mark,
+        bx + dx + (u > 0.75 ? curl : 0),
+        base - k,
+        root + (tip - root) * u ** BLADE_LIFT,
+      );
+    }
+  }
+  /*
+   * The contact pool: the deepest pixel of the tuft, under its root.
+   *
+   * It used to be described here as a near-black pixel, and that was the trouble. It is now the
+   * deepest point of a PROPORTIONAL fall, so on a lawn at 176 it lands at 133 -- the board's own
+   * lawn bottoms out at 127 -- and on the shaded ground at 110 it lands at 83. A tuft sits in a
+   * small darker patch of its own green, which is what the board does; it does not sit in ink.
+   *
+   * At three in five rather than on all of them, because a pool on every tuft reads as a dotted
+   * grid at the tile pitch, and on none the tufts float.
+   */
+  if (rnd() < 0.6) {
+    markAt(mark, bx, by + 1, here - fall * POOL_DEEP);
+    if (rnd() < 0.45) markAt(mark, bx + (rnd() < 0.5 ? -1 : 1), by + 1, here - fall * POOL_DEEP);
+  }
+  /*
+   * THE LIGHT FLECK, which the board has and this file did not.
+   *
+   * Probed on the board's largest unbroken patch of open lawn (63x63 at 1156,700, the biggest
+   * square on the Explore frame with no tree, bush, path or figure in it), the lawn runs:
+   *
+   *     darkest 127   p02 143   p05 150   p50 179   p90 183   p98 193
+   *
+   * Note the TOP of that distribution as well as the bottom. Every tuft on the board carries a
+   * lighter yellow-green catch beside it as well as a darker blade, and together they are what
+   * makes the board's lawn read as lit rather than as a flat fill -- fourteen luma above the median
+   * where the blade is fifty below it. Ours had only the dark half, so the lawn's own p98 sat nine
+   * luma under the board's.
+   *
+   * `markAt` keeps the darkest where two marks meet, so a fleck can only land on ground no mark has
+   * claimed. That is exactly right: it is a catch of light on open grass, not a highlight painted
+   * onto a blade.
+   */
+  if (rnd() < 0.45) {
+    const fx = bx + (rnd() < 0.5 ? -2 : 2);
+    const fy = by - 2 - Math.floor(rnd() * 2);
+    const lit = here * (1 + MARK_LIFT);
+    markAt(mark, fx, fy, lit);
+    if (rnd() < 0.5) markAt(mark, fx + 1, fy, lit);
+  }
 }
 
 /**
- * The scattered two-and-three pixel sprigs the board drops between its tufts. Not speckle: each one
- * is a deliberate little V with a root, there are only a handful, and they are the smallest mark in
- * the tuft vocabulary rather than noise in a third green.
+ * One tuft per cell of a jittered 5x4 lattice.
+ *
+ * One per cell rather than twenty free positions. Free positions clump: with twenty draws on a
+ * 32x32 tile several cells come out bare, and a bare 16x16 block scores zero on the texture axis
+ * however good the rest of the tile is. The jitter is wide enough that no row or column of roots
+ * survives.
  */
-function flecks(img: Img, rnd: () => number, count: number, inside: Inside): void {
-  for (let i = 0; i < count; i++) {
-    const x = 1 + Math.floor(rnd() * (TILE - 2));
-    const y = 1 + Math.floor(rnd() * (TILE - 1));
-    const wide = rnd() < 0.55;
-    if (nearCorner(x, y)) continue;
-    const cells: readonly (readonly [number, number])[] = wide
-      ? [
-          [0, 0],
-          [-1, -1],
-          [1, -1],
-        ]
-      : [
-          [0, 0],
-          [0, -1],
-        ];
-    for (const [dx, dy] of cells) if (inside(x + dx, y + dy)) img.px(x + dx, y + dy, TUFT);
-  }
+function scatter(mark: Float64Array, rnd: () => number, ground: Ground, inside: Inside): void {
+  const cw = TILE / SCATTER_COLS;
+  const ch = TILE / SCATTER_ROWS;
+  for (let r = 0; r < SCATTER_ROWS; r++)
+    for (let c = 0; c < SCATTER_COLS; c++) {
+      // Clamped, because `c * cw + rnd() * cw` reaches TILE exactly when the last cell draws near
+      // 1 -- and `inside` is a lookup into a 32x32 table for a path tile, so an off-tile root threw
+      // rather than being quietly ignored the way `markAt` would have.
+      const bx = Math.min(TILE - 1, Math.round(c * cw + rnd() * cw));
+      const by = Math.min(TILE - 1, Math.round(r * ch + rnd() * ch));
+      if (nearCorner(bx, by) || !inside(bx, by)) continue;
+      tuft(mark, rnd, bx, by, ground);
+    }
+  // A tuft is drawn without reference to the mask, so anything that strayed onto sand is cleared
+  // here rather than inside the shape, where the test would have to be repeated nine times.
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) if (!inside(x, y)) mark[y * TILE + x] = NONE;
 }
 
 /* ----------------------------------------------------------------- grass -- */
 
 /**
- * The four variants, per ART_DIRECTION section 6.3.3: grass-0 the shade variant with the heaviest
- * mottle and one tuft, grass-1 two tufts and moderate mottle, grass-2 the quiet one with no tuft so
- * the map can breathe, grass-3 one tuft plus one ground detail. Tuft count averages one per tile.
+ * The four variants.
  *
- * THE ONE DEPARTURE, and it is deliberate. Section 6.3.4 also asks for about 38 luma of field tone
- * between grass-0 and grass-3. Every variant here shares ONE field tone instead, and the variants
- * differ by how much dark mottle covers them -- grass-0 is covered heavily enough to average several
- * levels darker, grass-2 barely at all. The reason is that a mottle blob cannot cross a tile
- * boundary into a different variant, so any difference in FIELD tone shows up as a dead straight
- * edge exactly on the tile grid, which is the rectangle artefact the board has nowhere and which the
- * previous painter's own comment records having hit twice. Coverage gets the board's broad sun and
- * shade patches without drawing the grid for the player.
+ * They differ in their CORE BAND -- which is the map's sun and shade -- and in where their marks
+ * sit. They do NOT differ at the border: the rim tone, the warmth field and (for the three lawn
+ * variants) the mass envelope are shared, so the only brightness difference between two variants is
+ * the one `BANDS` states, and it is carried entirely inside the tile.
+ *
+ * EVERY VARIANT NOW CARRIES THE FULL SCATTER plus one larger sprig for character, where the
+ * previous pass carried 0.75 sprigs a tile and nothing else. The reasoning for that cut is in
+ * `scatter` above and it is worth not losing: a distinctive silhouette repeated at the tile pitch
+ * is the most findable thing a tilemap can show. The cut was the wrong remedy, though, because it
+ * left the tile with no texture at all -- three identical quartiles, 2.89% edge density against the
+ * board lawn's 15.70 -- and a lawn with no texture is a lawn with nothing to repeat, which is a
+ * different way of being obviously generated.
  */
 interface Variant {
-  /** How many mottle patches of each tone, and how far across each lands. */
-  readonly light: number;
-  readonly mid: number;
-  readonly deep: number;
-  readonly flecks: number;
-  /** Root position of each tuft, and which shape it takes. All six pixels clear of every corner. */
-  readonly tufts: readonly (readonly [number, number, number])[];
+  /** Root position and size of each sprig. All of it stays clear of every corner. */
+  readonly sprigs: readonly (readonly [number, number, number])[];
   readonly clover: readonly [number, number] | null;
 }
 
 const VARIANTS: readonly Variant[] = [
-  { light: 0, mid: 3, deep: 1, flecks: 2, tufts: [[10, 24, 0]], clover: null },
-  {
-    light: 1,
-    mid: 1,
-    deep: 0,
-    flecks: 1,
-    tufts: [
-      [22, 12, 1],
-      [9, 28, 4],
-    ],
-    clover: null,
-  },
-  { light: 2, mid: 0, deep: 0, flecks: 1, tufts: [], clover: null },
-  { light: 1, mid: 1, deep: 0, flecks: 1, tufts: [[16, 20, 2]], clover: [11, 7] },
+  { sprigs: [[11, 24, 9]], clover: null },
+  { sprigs: [[22, 12, 8]], clover: null },
+  { sprigs: [[26, 25, 6]], clover: null },
+  { sprigs: [[19, 27, 9]], clover: [12, 10] },
 ];
 
 /**
- * Field, then mottle. Shared by the grass tiles and by the grass band of an edge tile, so an edge
- *  tile sits correctly against whichever variant the map's noise puts beside it.
+ * Rim, core, mass, warmth -- the one expression at the top of this file -- and the luma field it
+ * came out as. Shared by the grass tiles and by the grass band of an edge tile.
  *
- * The patches are BROAD -- a span of 26 against ART_DIRECTION section 6.2's twelve-to-thirty -- and
- * there are only one or two of them. An earlier pass used four and five patches at half the span and
- * the lawn came out as camouflage: enough small patches in one tile stop being mottle and become a
- * texture, and a texture laid forty times is a pattern.
+ * The core field is built and equalised over the WHOLE tile even when `inside` masks most of it
+ * away. That is deliberate: a full grass tile and the grass band of a path-edge tile then draw from
+ * the same distribution, where equalising only the masked part would give the band its own
+ * histogram and put a brightness step exactly along the path.
+ *
+ * The luma is handed back because the MARKS now measure themselves against the ground they stand
+ * on rather than against an absolute floor -- see `MARK_FALL`. That is also what makes the marks
+ * seam-free for free: they track a field that is identical on both sides of every boundary.
  */
-function lawn(img: Img, rnd: () => number, v: Variant, inside: Inside): void {
-  const map = new Uint8Array(TILE * TILE);
-  stamp(map, rnd, v.light, 26, LIGHT_TONE, [FIELD_TONE], inside);
-  stamp(map, rnd, v.mid, 24, MID_TONE, [FIELD_TONE], inside);
-  stamp(map, rnd, v.deep, 12, DEEP_TONE, [MID_TONE], inside);
-  chunk(map);
-  paintTones(img, map, FIELD, LAWN, inside);
+function lawn(
+  img: Img,
+  seed: number,
+  band: Band,
+  inside: Inside,
+  mass = SHARED.mass,
+): Float64Array {
+  const lit = field(seed, LAWN_OCTAVES);
+  equalise(lit, lawnCurve);
+  quantise(lit, levelsFor(band));
+  const lum = new Float64Array(CELLS * CELLS);
+  for (let k = 0; k < lum.length; k++) lum[k] = lawnLuma(band, lit[k]!, SHARED.rim[k]!, mass[k]!);
+  paintField(img, lum, SHARED.warm, lawnColour, inside);
+  return lum;
 }
+
+/** Read the luma field back at pixel resolution, for the marks. */
+const groundAt =
+  (lum: Float64Array): Ground =>
+  (x, y) =>
+    lum[
+      Math.min(CELLS - 1, Math.max(0, (y / BLOCK) | 0)) * CELLS +
+        Math.min(CELLS - 1, Math.max(0, (x / BLOCK) | 0))
+    ]!;
 
 const grass =
   (n: number): Painter =>
   (img) => {
     const v = VARIANTS[n]!;
-    const rnd = noise(4100 + n * 977);
-    lawn(img, rnd, v, ALL);
-    flecks(img, rnd, v.flecks, ALL);
-    for (const [bx, by, shape] of v.tufts) tuft(img, TUFT_SHAPES[shape]!, bx, by, ALL);
-    if (v.clover) clover(img, v.clover[0], v.clover[1], ALL);
+    const band = BANDS[n]!;
+    const seed = 4100 + n * 977;
+    // grass-0 is the shade tile, and only it takes the dappled envelope. See `massField`.
+    const lum = lawn(img, seed, band, ALL, n === 0 ? SHARED.dapple : SHARED.mass);
+    const ground = groundAt(lum);
+    const rnd = noise(seed + 31);
+    const mark = new Float64Array(TILE * TILE).fill(NONE);
+    scatter(mark, rnd, ground, ALL);
+    for (const [bx, by, size] of v.sprigs) sprig(mark, rnd, bx, by, size, ground);
+    if (v.clover) clover(mark, v.clover[0], v.clover[1], ground);
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) if (nearCorner(x, y)) mark[y * TILE + x] = NONE;
+    paintMarks(img, mark, ALL, SHARED.warm);
   };
 
 /* ------------------------------------------------------------------ sand -- */
 
 /**
- * Packed sand: sun-dried blotches and damp compacted hollows, then grit worked into the whole thing.
+ * Packed sand, and nothing else on it.
  *
- * The blotches are placed per tile and wrapped rather than sampled from a field shared between the
- * nine path tiles -- a shared field printed the same comma shape into every tile and a laid path
- * became a grid of identical paisleys. The grit is only the last ten per cent, and it is faint on
- * purpose: the board's path is a clean warm field with a few specks, not dirt.
+ * The previous painter scattered thirteen grit pixels and three pressed stones into every path
+ * tile. Measured, the board's open path carries neither: its pure-sand crop comes back at 0.00%
+ * edge density and a luma spread of 18.3, where ours came back at 6.06% and 31.6. Thirteen isolated
+ * pixels a tile is twenty-six hard steps a tile for a texture that averages out to nothing at a
+ * 26-tile camera, and there is one `path` image, so whatever scatter it carries prints every 32
+ * pixels. The sand's life now comes from the tone and warmth fields.
  */
-function sand(img: Img, rnd: () => number, inside: Inside): void {
-  const map = new Uint8Array(TILE * TILE);
-  stamp(map, rnd, 2, 18, LIGHT_TONE, [FIELD_TONE], inside);
-  stamp(map, rnd, 2, 16, MID_TONE, [FIELD_TONE], inside);
-  stamp(map, rnd, 1, 9, DEEP_TONE, [MID_TONE], inside);
-  chunk(map);
-  paintTones(img, map, SAND, TRACK, inside);
-  for (let i = 0; i < 13; i++) {
-    const x = Math.floor(rnd() * TILE);
-    const y = Math.floor(rnd() * TILE);
-    if (inside(x, y)) img.px(x, y, rnd() > 0.45 ? GRIT_DARK : GRIT_LIGHT);
-  }
-}
-
-/**
- * Small stones pressed into the track: a lit cap, a body, and a contact shadow in the sand's own
- * dark. `shadow` is a grass-at-dusk ramp and would read as a green smear on a warm track, so the
- * contact shadow is taken in `path` level 0 instead (ART_DIRECTION section 4).
- *
- * Three per tile, two to three pixels wide. The board shows no stones at all on its open path, so
- * these stay small and low-contrast; any more and nine path tiles laid end to end start printing a
- * recognisable scatter.
- */
-function stones(img: Img, rnd: () => number, count: number, inside: Inside): void {
-  for (let i = 0; i < count; i++) {
-    const w = 2 + Math.floor(rnd() * 2);
-    const x = 1 + Math.floor(rnd() * (TILE - w - 2));
-    const y = 1 + Math.floor(rnd() * (TILE - 4));
-    let clear = !nearCorner(x, y);
-    for (let j = 0; j < 3 && clear; j++)
-      for (let k = 0; k <= w && clear; k++) if (!inside(x + k, y + j)) clear = false;
-    if (!clear) continue;
-    img.rect(x, y, w, 1, STONE_CAP);
-    img.rect(x, y + 1, w, 1, STONE_BODY);
-    img.rect(x + 1, y + 2, w, 1, STONE_SHADE);
-  }
+function sand(img: Img, seed: number, inside: Inside): void {
+  const lit = field(seed, SAND_OCTAVES);
+  const warm = field(seed + 577, WARM_OCTAVES);
+  equalise(lit, sandCurve);
+  equalise(warm, warmCurve);
+  quantise(lit, SAND_LEVELS);
+  quantise(warm, WARM_LEVELS);
+  paintField(img, lit, warm, sandColour, inside);
 }
 
 /* ------------------------------------------------------------ path edges -- */
@@ -547,9 +1298,6 @@ function stones(img: Img, rnd: () => number, count: number, inside: Inside): voi
  * function for its tear depth at column x, so `path-n` ends its top edge at the depth `path-ne`
  * starts its top edge at, and a run of edge tiles reads as one wandering boundary rather than a row
  * of squares each with its own idea of where the grass stops.
- *
- * At `cells = TILE` the interpolation collapses and the profile becomes one independent value per
- * column, which still rings. That is how the per-pixel tear is built.
  */
 function ringProfile(seed: number, cells: number): (t: number) => number {
   const rnd = noise(seed);
@@ -563,130 +1311,221 @@ function ringProfile(seed: number, cells: number): (t: number) => number {
 }
 
 /**
- * How far through the grass-to-sand transition a pixel is. The ranks run in one direction, grass to
- * sand, which is what lets a corner tile take the MINIMUM across its two sides and get a correct
- * merge for free: grass beats sand, and the two ragged boundaries fuse into one L.
+ * How far through the grass-to-sand transition a pixel is, per PIXEL_STANDARD section 5: lawn, a
+ * darker grass lip, a damp dirt shoulder, open path, and never a straight line.
  *
- * 0 lawn | 1 the dappled grass lip | 2 the dry sand crumb | 3 open path.
+ * The ranks run in one direction, grass to sand, which is what lets a corner tile take the MINIMUM
+ * across its two sides and get a correct merge for free: grass beats sand, and the two ragged
+ * boundaries fuse into one L.
  */
 type Zone = 0 | 1 | 2 | 3;
 
 const SIDES: readonly Side[] = ['n', 's', 'e', 'w'];
 
 /**
- * One depth profile, one lip profile and one crumb profile per side, built once and shared by every
- * tile that carries that side.
+ * One depth profile and one lip-width profile per side, built once and shared by every tile that
+ * carries that side.
  *
  * There is exactly one `path-n` image in the whole game, so whatever this profile does, it does
- * every 32 pixels along every path edge on the map, and the amplitude and frequency are chosen
- * against that. A slow nine-cell wander of about two pixels carries the shape, a sixteen-cell jitter
- * breaks it up, and a sixteen-cell tear of up to two pixels on top makes the teeth -- measured on
- * the board, the boundary wanders three or four pixels over seventy and tears one to three pixels
- * locally, which is exactly this.
+ * every 32 pixels along every path edge on the map. A slow nine-cell wander of about two pixels
+ * carries the shape and a sixteen-cell tear of up to two pixels on top makes the teeth -- measured
+ * on the board, the boundary wanders three or four pixels over seventy and tears one to three
+ * pixels locally.
  *
  * The tear rides a SIXTEEN-cell ring rather than one cell per column, which is what makes a tooth
- * two pixels wide. A per-column tear was tried first and it came out as one-pixel salt and pepper
- * along the boundary; the board's teeth are chunky two-to-four pixel tabs of grass overhanging the
- * sand, and chunkiness is the whole difference between a torn edge and a noisy one.
- *
- * The lip runs one to three pixels and the crumb nought to two, both dappled, so neither ever closes
- * into a constant-width line. A constant dark line round the path is a keyline, and ART_DIRECTION
- * section 3.3 says ground carries none.
+ * two pixels wide. A per-column tear was tried first and it came out as one-pixel salt and pepper;
+ * the board's teeth are chunky two-to-four pixel tabs of grass overhanging the sand, and chunkiness
+ * is the whole difference between a torn edge and a noisy one.
  */
 const EDGE = (() => {
   const depth = {} as Record<Side, (t: number) => number>;
   const lip = {} as Record<Side, (t: number) => number>;
-  const crumb = {} as Record<Side, (t: number) => number>;
   SIDES.forEach((s, i) => {
     const slow = ringProfile(900 + i * 37, 9);
     const fine = ringProfile(960 + i * 37, 16);
     const tear = ringProfile(1020 + i * 37, 16);
     const lipRing = ringProfile(1080 + i * 37, 16);
-    const crumbRing = ringProfile(1140 + i * 37, TILE);
     depth[s] = (t) => {
       const v = tear(t);
       const base = 7.0 + slow(t) * 2.2 + (fine(t) - 0.5) * 2.0;
       return Math.round(base) + (v < 0.1 ? -2 : v < 0.42 ? -1 : v > 0.9 ? 2 : v > 0.58 ? 1 : 0);
     };
+    // Width 0 is the important one, and it has to be COMMON. A lip that is merely thin somewhere
+    // is still a band running round the path, which is a key line however dark it is, and
+    // PIXEL_STANDARD section 5 asks for a torn boundary instead. At one stretch in seven the lip
+    // still read as an unbroken outline at 5x; at three in ten it reads as what the board actually
+    // has, clumps of darker grass overhanging the sand with clean gaps between them where the lawn
+    // runs straight down onto the track.
     lip[s] = (t) => {
       const v = lipRing(t);
-      return v < 0.16 ? 1 : v > 0.72 ? 3 : 2;
-    };
-    crumb[s] = (t) => {
-      const v = crumbRing(t);
-      return v < 0.3 ? 0 : v > 0.8 ? 2 : 1;
+      return v < 0.3 ? 0 : v < 0.44 ? 1 : v < 0.62 ? 2 : v < 0.82 ? 3 : 4;
     };
   });
-  return { depth, lip, crumb };
+  return { depth, lip };
 })();
 
 /**
- * Which of the three lip values a lip pixel takes, as a function of position along the edge.
+ * The shoulder: two pixels of slightly deeper tan on the sand side of the boundary.
  *
- * It is a ring of sixteen cells read at `x + y`, which gives runs two to four pixels long whichever
- * direction the edge runs in, and which still meets itself across a tile boundary because the ring's
- * period is TILE. Choosing per pixel at random was tried first and the lip came out as salt and
- * pepper; the board's fringe is a continuous band of chunky tabs that CHANGE VALUE along their
- * length, not a dither.
+ * What was here before was two pixels of LIGHTENED sand, and that was wrong in direction as well as
+ * degree -- the track was being haloed in near-white along its whole length, so the one thing
+ * standing between bright lawn and bright sand was brighter than either. The brief called it "a
+ * hard 1px step straight from tan to green"; it was worse than that, it was a step the boundary was
+ * actively widening.
+ *
+ * FOUR PIXELS OF BROWN WAS ALSO WRONG, and it took looking at the board at our own pixel density to
+ * see it. The first version of this fix graded four pixels of damp earth from luma 131 up to the
+ * open track, reasoning that no step should exceed the twenty-four the score counts as an edge.
+ * Rendered, it was a dark brown band running round every path on the map, and the board has nothing
+ * like it: its track edge is a torn boundary with ONE OR TWO pixels of marginally deeper tan on the
+ * sand side, and the step from grass to sand is left hard. That hard step is not a defect to be
+ * softened -- it is a large part of why the board measures 20.88% edge density where we measure 9.
+ *
+ * So: two pixels, gently. The earth is `keyline('path')` -- the sand ramp's own darkest taken down
+ * with the hue preserved -- mixed into the sand pixel already there, so the shoulder keeps the
+ * track's own mottling instead of flattening it into a painted stripe.
  */
-const LIP_RUN = ringProfile(1200, 16);
-const lipTone = (x: number, y: number): RGBA => {
-  const v = LIP_RUN(x + y);
-  return v < 0.16 ? TUFT : v < 0.58 ? LIP : LIP_SOFT;
-};
+const SHOULDER = 2;
+const SHOULDER_MIX: readonly number[] = [0.3, 0.13];
+const SHOULDER_EARTH = keyline('path', 56);
 
-function zoneOf(sides: readonly Side[], x: number, y: number): Zone {
-  let z: Zone = 3;
+/**
+ * Where a pixel sits, and how deep into the lip or the shoulder it is.
+ *
+ * `lipT` runs 0 at the lawn side of the lip to 1 at the sand side, and the lip is painted as a
+ * gradient across it rather than as a band of one colour. That is the difference between a darker
+ * lip and a key line drawn round the path: no single step on the grass side is large enough to cut,
+ * and the board has no hard dark line round its paths anywhere.
+ *
+ * `out` is the same thing for the shoulder: 0 next to the grass, SHOULDER-1 next to the open track.
+ */
+interface Place {
+  readonly zone: Zone;
+  readonly lipT: number;
+  readonly out: number;
+}
+
+function placeOf(sides: readonly Side[], x: number, y: number): Place {
+  let zone: Zone = 3;
+  let lipT = 0;
+  let out = 0;
   for (const s of sides) {
     const t = s === 'n' || s === 's' ? x : y;
     const j = s === 'n' ? y : s === 's' ? TILE - 1 - y : s === 'w' ? x : TILE - 1 - x;
     const g = EDGE.depth[s](t);
-    const here: Zone = j < g - EDGE.lip[s](t) ? 0 : j < g ? 1 : j < g + EDGE.crumb[s](t) ? 2 : 3;
-    if (here < z) z = here;
+    const w = EDGE.lip[s](t);
+    const here: Zone = j < g - w ? 0 : j < g ? 1 : j < g + SHOULDER ? 2 : 3;
+    if (here < zone) {
+      zone = here;
+      if (here === 1) lipT = w <= 1 ? 0.5 : (j - (g - w)) / (w - 1);
+      if (here === 2) out = j - g;
+    }
   }
-  return z;
+  return { zone, lipT, out };
 }
 
 /**
- * Grass on the named sides, sand in the middle. Read outward from the lawn: field, the dappled lip,
- * the torn boundary, the dry crumb margin, open sand. No line anywhere, and the grass band is
- * painted with the same field and mottle the four grass variants use, so an edge tile sits
- * correctly against whichever of them the map's noise puts beside it.
+ * The lip's gradient, lawn side to sand side, with a little wander along its length.
+ *
+ * Stated as a DROP below the GROUND AT THAT PIXEL rather than below the tile's band, for the same
+ * reason the marks are: it is the only form that stays right wherever the rim and mass fields put
+ * the verge, and it cannot invent a step the ground beneath it does not have.
  */
-const EDGE_MOTTLE: Variant = {
-  light: 1,
-  mid: 1,
-  deep: 0,
-  flecks: 2,
-  tufts: [],
-  clover: null,
-};
+const LIP_RUN = ringProfile(1200, 16);
+const LIP_TOP = 8;
+const LIP_BOTTOM = 22;
+const lipTone = (here: number, x: number, y: number, lipT: number): number =>
+  here - LIP_TOP - (LIP_BOTTOM - LIP_TOP) * lipT + (LIP_RUN(x + y) - 0.5) * 8;
 
+/**
+ * Grass on the named sides, sand in the middle. Read outward from the lawn: field, a one-pixel
+ * softening, the graded grass lip, the torn boundary, two pixels of damp dirt shoulder, open track.
+ *
+ * The grass band is painted with the same fields the four grass variants use, at `PATH_BAND`, so an
+ * edge tile sits within one step of 86% of the ground the map could put beside it.
+ */
 const pathTile =
   (sides: readonly Side[], seed: number): Painter =>
   (img) => {
-    const rnd = noise(seed);
-    const zone = (x: number, y: number): Zone => zoneOf(sides, x, y);
-    const on =
-      (want: Zone): Inside =>
-      (x, y) =>
-        x >= 0 && y >= 0 && x < TILE && y < TILE && zone(x, y) === want;
+    const place: Place[] = [];
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) place.push(placeOf(sides, x, y));
+    const zone = (x: number, y: number): Zone => place[y * TILE + x]!.zone;
 
-    sand(img, rnd, (x, y) => zone(x, y) >= 2);
-    stones(img, rnd, 2, on(3));
-
-    // The grass band, mottled exactly as a grass tile is. It reaches under the lip as well, so the
-    // lip is a shade ON grass rather than a stripe between two materials.
-    lawn(img, rnd, EDGE_MOTTLE, (x, y) => zone(x, y) <= 1);
-    // The lip, dappled a second time: roughly a third of it drops to the tufts' dark green, which is
-    // what the board's broken fringe of darker clumps along a path edge actually is.
+    sand(img, seed, (x, y) => zone(x, y) >= 2);
+    // The shoulder. Taken off the pixel already there rather than from a fixed tone, so it still
+    // carries the track's own mottling instead of flattening it.
     for (let y = 0; y < TILE; y++)
       for (let x = 0; x < TILE; x++) {
-        const z = zone(x, y);
-        if (z === 1) img.px(x, y, lipTone(x, y));
-        else if (z === 2 && rnd() > 0.45) img.px(x, y, CRUMB);
+        const p = place[y * TILE + x]!;
+        if (p.zone !== 2) continue;
+        const k = SHOULDER_MIX[Math.min(p.out, SHOULDER - 1)]!;
+        img.px(x, y, mix(img.get(x, y), SHOULDER_EARTH, k));
       }
-    flecks(img, rnd, EDGE_MOTTLE.flecks, on(0));
+
+    // The grass band reaches under the lip, so the lip is a shade ON grass rather than a stripe
+    // between two materials. It uses the same shared rim, mass and warmth fields the four grass
+    // variants use, so the verge of a path tile meets whatever grass the map puts beside it with
+    // no step at all -- the seam argument covers this boundary too, not only grass to grass.
+    const lum = lawn(img, seed + 911, PATH_BAND, (x, y) => zone(x, y) <= 1);
+    const ground = groundAt(lum);
+
+    // The lip is soft -- a gradient on the ground -- and goes down first, so the blades above can
+    // stand on it.
+    const lip = new Float64Array(TILE * TILE).fill(NONE);
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        const p = place[y * TILE + x]!;
+        if (p.zone === 1) lip[y * TILE + x] = lipTone(ground(x, y), x, y, p.lipT);
+      }
+    paintMarks(img, lip, (x, y) => zone(x, y) <= 1, SHARED.warm, true);
+
+    // The verge gets the same blades the open lawn does. Without them an edge tile's grass was the
+    // one smooth green left on the map, and it ran along every track on it.
+    const mark = new Float64Array(TILE * TILE).fill(NONE);
+    scatter(mark, noise(seed + 31), ground, (x, y) => zone(x, y) === 0);
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) if (nearCorner(x, y)) mark[y * TILE + x] = NONE;
+    paintMarks(img, mark, (x, y) => zone(x, y) === 0, SHARED.warm);
+  };
+
+/* ----------------------------------------------------------------- stones -- */
+
+/**
+ * The one object the ground itself carries: a pebble pressed into the verge of a corner tile.
+ *
+ * It exists because `keyline()` is right exactly once on open ground. Ground takes no outline --
+ * measured, the board's lawn holds nothing below luma 147 except its tufts -- but a thing SITTING
+ * on the ground does, and a pebble with no contact shade floats. The shade is `keyline('path')`,
+ * the sand's own darkest taken down with the hue kept, so it reads as damp sand under a stone
+ * rather than as ink.
+ *
+ * Two per corner tile and no more: the board shows no stones at all on its open path, and there is
+ * one image per corner, so anything commoner prints a recognisable scatter.
+ */
+function pebble(img: Img, rnd: () => number, count: number, inside: Inside): void {
+  for (let i = 0; i < count; i++) {
+    const w = 2 + Math.floor(rnd() * 2);
+    const x = 2 + Math.floor(rnd() * (TILE - w - 4));
+    const y = 2 + Math.floor(rnd() * (TILE - 6));
+    let clear = !nearCorner(x, y);
+    for (let j = 0; j < 3 && clear; j++)
+      for (let k = -1; k <= w && clear; k++) if (!inside(x + k, y + j)) clear = false;
+    if (!clear) continue;
+    for (let k = 0; k < w; k++) {
+      const bed = img.get(x + k, y);
+      img.px(x + k, y, mix(bed, tone('stone', 0.78), 0.5));
+      img.px(x + k, y + 1, mix(bed, tone('stone', 0.42), 0.6));
+      img.px(x + k + 1, y + 2, mix(img.get(x + k + 1, y + 2), keyline('path', 26), 0.45));
+    }
+  }
+}
+
+const cornerTile =
+  (sides: readonly Side[], seed: number): Painter =>
+  (img) => {
+    pathTile(sides, seed)(img);
+    const rnd = noise(seed + 71);
+    pebble(img, rnd, 2, (x, y) => placeOf(sides, x, y).zone === 3);
   };
 
 export const GROUND_TILES: Record<string, Painter> = {
@@ -699,8 +1538,8 @@ export const GROUND_TILES: Record<string, Painter> = {
   'path-s': pathTile(['s'], 2417),
   'path-e': pathTile(['e'], 2521),
   'path-w': pathTile(['w'], 2633),
-  'path-ne': pathTile(['n', 'e'], 2741),
-  'path-nw': pathTile(['n', 'w'], 2851),
-  'path-se': pathTile(['s', 'e'], 2963),
-  'path-sw': pathTile(['s', 'w'], 3079),
+  'path-ne': cornerTile(['n', 'e'], 2741),
+  'path-nw': cornerTile(['n', 'w'], 2851),
+  'path-se': cornerTile(['s', 'e'], 2963),
+  'path-sw': cornerTile(['s', 'w'], 3079),
 };

@@ -29,30 +29,74 @@ const OUT = arg('out', '/tmp/world.png');
 const ZOOM = Math.max(1, Number(arg('zoom', '1')));
 const WHOLE = flag('whole');
 
+/*
+ * Tiled keeps a tile's mirror state in the top three bits of its gid, and Phaser's
+ * `tilemapTiledJSON` loader honours them. So this renderer has to honour them too, or the
+ * instrument we judge the art with and the game people actually play would disagree about the
+ * same map file -- which is precisely how a change gets reported as landed when it has not.
+ *
+ * Unmasked it is worse than a disagreement: the first mirrored tile the map writes indexes
+ * `TILE_NAMES` past the end of a 53-entry array, `tileName` comes back undefined and the tile
+ * vanishes from the render with no warning.
+ */
+const FLIP_H = 0x80000000;
+const FLIP_V = 0x40000000;
+const FLIP_D = 0x20000000;
+const GID_MASK = 0x1fffffff;
+
+/*
+ * Tiled's own order of operations: the diagonal flip (an x/y transpose) first, then horizontal,
+ * then vertical. Walking the destination and reading back from the source applies all three in
+ * that order in one pass, with no intermediate buffers to get the order wrong in.
+ *
+ * Pixels are copied rather than drawn through `px`, so a mirrored tile is the same bytes as the
+ * original: compositing a semi-transparent source pixel onto an empty destination would quietly
+ * darken it, and a mirror must not change a colour.
+ */
+function mirror(src: Img, flips: number): Img {
+  const h = (flips & FLIP_H) !== 0;
+  const v = (flips & FLIP_V) !== 0;
+  const d = (flips & FLIP_D) !== 0;
+  if (!h && !v && !d) return src;
+  const out = new Img(d ? src.h : src.w, d ? src.w : src.h);
+  for (let dy = 0; dy < out.h; dy++)
+    for (let dx = 0; dx < out.w; dx++) {
+      const ax = h ? out.w - 1 - dx : dx;
+      const ay = v ? out.h - 1 - dy : dy;
+      out.data.set(src.get(d ? ay : ax, d ? ax : ay), (dy * out.w + dx) * 4);
+    }
+  return out;
+}
+
 /* Painters are pure and the map lays the same tile hundreds of times, so paint each once. */
 const cache = new Map<string, Img>();
-function tile(name: string): Img | undefined {
-  const hit = cache.get(name);
+function tile(name: string, flips = 0): Img | undefined {
+  const key = flips ? `${name}#${flips}` : name;
+  const hit = cache.get(key);
   if (hit) return hit;
   const painter = TILE_PAINTERS[name];
   if (!painter) return undefined;
-  const img = new Img(TILE, TILE);
-  painter(img);
-  cache.set(name, img);
+  let base = cache.get(name);
+  if (!base) {
+    base = new Img(TILE, TILE);
+    painter(base);
+    cache.set(name, base);
+  }
+  const img = mirror(base, flips);
+  cache.set(key, img);
   return img;
 }
 
 const map = generateForestMap();
 const data = JSON.parse(map.json) as {
-  layers: { name: string; type: string; data?: number[] }[];
-  objects?: unknown;
+  layers: {
+    name: string;
+    type: string;
+    data?: number[];
+    objects?: { name: string; x: number; y: number }[];
+  }[];
 };
-const objects =
-  (
-    JSON.parse(map.json) as {
-      layers: { type: string; objects?: { name: string; x: number; y: number }[] }[];
-    }
-  ).layers.find((l) => l.type === 'objectgroup')?.objects ?? [];
+const objects = data.layers.find((l) => l.type === 'objectgroup')?.objects ?? [];
 
 /* Where to frame. A landmark name centres the camera on it, as the game would. */
 let vx = Number(arg('x', '-1'));
@@ -84,20 +128,25 @@ const board = new Img(vw * TILE, vh * TILE);
 const DRAWN = ['ground', 'decor-below', 'decor-above'];
 
 let missing = 0;
+let mirrored = 0;
 for (const name of DRAWN) {
   const layer = data.layers.find((l) => l.name === name);
   if (!layer?.data) continue;
   for (let ty = 0; ty < vh; ty++) {
     for (let tx = 0; tx < vw; tx++) {
-      const gid = layer.data[(vy + ty) * MAP_W + (vx + tx)];
+      const raw = layer.data[(vy + ty) * MAP_W + (vx + tx)];
+      if (!raw) continue;
+      const flips = (raw & ~GID_MASK) >>> 0;
+      const gid = raw & GID_MASK;
       if (!gid) continue;
       const tileName = TILE_NAMES[gid - 1];
       if (!tileName) continue;
-      const img = tile(tileName);
+      const img = tile(tileName, flips);
       if (!img) {
         missing++;
         continue;
       }
+      if (flips) mirrored++;
       board.blit(img, tx * TILE, ty * TILE);
     }
   }
@@ -114,7 +163,12 @@ const out =
       })();
 
 writeFileSync(OUT, out.png());
+/*
+ * `mirrored` is printed because it is the cheapest possible check that a map which claims to
+ * mirror tiles actually does: zero here means no flip bit reached the renderer, whatever the
+ * generator reports.
+ */
 console.log(
-  `${OUT}  ${out.w}x${out.h}  tiles (${vx},${vy}) ${vw}x${vh}` +
+  `${OUT}  ${out.w}x${out.h}  tiles (${vx},${vy}) ${vw}x${vh}  mirrored ${mirrored}` +
     (missing ? `  WARNING: ${missing} tiles had no painter` : ''),
 );
