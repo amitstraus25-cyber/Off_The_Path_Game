@@ -425,8 +425,37 @@ const BANDS: readonly Band[] = [
  * painted stripe of one colour running round every tile, which would be the grid coming back as an
  * absence of variation -- while no two adjacent rim blocks can differ enough to register.
  */
-const EDGE_L = 176;
-const EDGE_SWING = 9;
+/*
+ * Reopened 2026-10-19, after the lattice fix above cost the ground its shade.
+ *
+ * Killing the vignette moved grass-0 from a dark 62..116 to a bright 164..182 on 53.7 per cent of
+ * the ground, which removed the tile grid and, with it, every dark green in the world. Measured
+ * against the board: 42 per cent of every green pixel on screen landed in ONE luma bucket against
+ * the board's 24, and the mid-range (luma 96-160) was 28 per cent against 42. That reads as dark
+ * objects sitting on a flat bright field rather than as a wood, and it is what a viewer called
+ * creepy before anyone measured it.
+ *
+ * THE TWO AXES ARE NOT THE SAME AXIS, and this is the whole lesson of the round. Variation INSIDE a
+ * tile is a lattice, because every tile carries the same one. Variation ACROSS tiles is sun and
+ * shade, because the field is low-frequency and a patch spans many tiles. The cap in
+ * ART_DIRECTION 6.2 is about the first; this constant is the second, and widening it does not bring
+ * the grid back -- the tile-lag autocorrelation stays negative at every setting swept, -0.157 at 9
+ * and -0.160 at 34.
+ *
+ * Swept 176/9 (26% middle, 44% peak), 170/22 (29/50), 164/34 (42/40), 158/46 (52/31), 152/58
+ * (54/28) against the board's 42/24. 164/34 matches the board's mid-range exactly.
+ *
+ * 158/46 scored BETTER on concentration and is not used, because it looks worse: at that swing the
+ * rim field moves enough between neighbours that the border ring itself prints a faint rectangular
+ * mesh over the lawn. The column autocorrelation cannot see it -- it averages whole columns, and
+ * this is a thin line on a tile edge -- so the number said -0.156 and the eye said grid. Look at the
+ * render before trusting this file's own metrics.
+ *
+ * EDGE_LEVELS makes no difference here: 6, 9 and 12 all give the same 31 per cent peak, so the
+ * remaining concentration is not quantisation and is somewhere else.
+ */
+const EDGE_L = 164;
+const EDGE_SWING = 34;
 
 /**
  * How far in, in pixels, a tile climbs from the shared rim to its own core.
