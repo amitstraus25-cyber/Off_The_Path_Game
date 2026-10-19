@@ -41,14 +41,20 @@
 
   --otp-panel-border: 3px;
   /*
-   * The inset ring UI_FOUNDATIONS asks for, in Whisper rather than Haze.
+   * The 2px inset ring from docs/UI_FOUNDATIONS.md section 4, in Haze, as section 4 writes it.
    *
-   * Every surface that carries it in this build is Shell, a warm cream, and Haze is a tint of
-   * purple: at 2px on cream it does not read as an inset edge, it reads as a lilac band drawn
-   * round the card, which is what it was mistaken for twice. Haze belongs on the dark panels of
-   * the design deck. Whisper keeps the 2px inset the spec asks for and lets it behave like depth.
+   * SETTLED -- do not re-derive this. It was Whisper for a while, on the argument that Haze is a
+   * purple tint and these surfaces are cream, so a lilac band round a cream card reads as a
+   * rendering fault. The argument is about hue; the defect was contrast. Whisper #F6E8FF on Shell
+   * #F6F5F1 measures 1.075:1, so there was no ring: section 4 forbids separating a panel by
+   * elevation and this build had nothing else, which left the panels with no separation device at
+   * all. Whisper is also a ninth colour, and section 1 closes the palette at eight.
+   *
+   * Haze on Shell measures 1.38:1 -- still quiet, which is the point of an inset hairline, but
+   * visible. If it ever reads as a band again the answer is a thinner ring or a darker ground,
+   * never a colour from outside section 1. e2e/css-contract.spec.ts holds the floor.
    */
-  --otp-ring: inset 0 0 0 2px var(--cyera-whisper);
+  --otp-ring: inset 0 0 0 2px var(--cyera-haze);
   --otp-header-h: 44px;
   /*
    * The world frame's header does NOT scale with --otp-ui: ui/stage.ts reserves exactly this many
@@ -166,7 +172,9 @@ body {
   height: 40px;
   border-radius: 50%;
   background: var(--cyera-lilac);
-  border: 3px solid var(--cyera-offwhite);
+  /* Shell, not Offwhite: section 1 lists Offwhite as text-on-dark only and leaves it out of the
+     palette block, and at #F6F5F1 against #FBFBFB the rim is the same rim. */
+  border: 3px solid var(--cyera-shell);
 }
 
 .otp-stick-arrow {

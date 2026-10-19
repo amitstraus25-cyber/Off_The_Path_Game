@@ -663,9 +663,65 @@ const down = (y: number): number => clamp01((y - CROWN_SKY) / 58);
  *
  * Note what is NOT being done to get any of this: nothing is darkened past the ladder's existing
  * rungs, and no mark, speckle or dither is added. The pixels move along the ladder they were on.
+ *
+ * ----------------------------------------------------------------------------------------------
+ * **THE SHOULDER, 2026-10-19 -- UX_REVIEW finding 17, and it is the sentence three paragraphs up
+ * that was not being honoured.** This note already said the board's "bright greens run right across
+ * the cap rather than gathering in the upper-left corner", and then the curve gathered them in the
+ * upper-left corner anyway.
+ *
+ * Here is the mechanism, because it is not obvious from reading the line. For the top third of the
+ * crown `smooth(0.35, 1.15, down(y))` is exactly ZERO -- that is the flat cap the paragraph above
+ * argues for -- so over rows 2..22 the only thing varying at all was `-0.11 * ((x - 32) / 30)`, a
+ * clean monotonic tilt. A flat plateau with a monotonic tilt on it is a wedge: every cluster on the
+ * left half came out a sixth of a rung above its neighbour, `snap()` put the whole left side on the
+ * top rung, and the clusters there merged into ONE bright patch instead of reading as several.
+ *
+ * Measured on a whole-map render (`pnpm world --whole`), at luma 150 and over:
+ *
+ *                                       before           after
+ *   crown pixels at luma >= 150          17.8%            13.5%
+ *   biggest CONNECTED patch of them      428px            123px
+ *   that patch's share of all of them       72%             27%
+ *   separate patches of 8px or more          5                7
+ *
+ * 428 pixels is 12.8 per cent of the whole crown in one connected blob, in the same place on all
+ * 318 of them, which is what makes a treeline read as one stamp repeated: the eye does not match
+ * two crowns by their silhouette, it matches them by the brightest thing in them.
+ *
+ * So the tilt is cut to a quarter -- the sun still has a direction, which section 3.2 requires --
+ * and the rest of the plateau's variation comes from `CAP_FIELD` instead, which is irregular. The
+ * clusters' base values at the cap then differ from their neighbours' without a bias to any one
+ * corner, which is both what breaks the blob and what the board does.
+ *
+ * Two things about it that are measured rather than chosen, and both cost a render each to find:
+ *
+ * **It is gated off before the hem.** Ungated, the same field lifted the hem's 98th percentile from
+ * 104 to 120 and its median from 47 to 52 -- which is precisely the defect the `paintDapple` note
+ * below records fixing, hem clusters carried up onto the cap's own green. The board's hem is a
+ * narrow band near the bottom of the ladder. The field is full over the plateau and gone by the
+ * time the hem's own lobes take over.
+ *
+ * **The plateau came down from 0.93 to 0.92, and only that far.** Adding variation under a hard
+ * ceiling clips the up-excursions and keeps the down ones, so it darkens the median: at 0.905 the
+ * blob broke completely (91px, 23 per cent) and the cap's median luma fell from 136 to 124 against
+ * a board at 155, which is trading finding 17 for the axis the curve above was fitted on. At 0.92
+ * the cap holds 131 and the waist 114. The board distance falls 0.353 -> 0.339 either way; the
+ * median is the reason to stop at 0.92.
+ *
+ * **The seed is shopped, like every other seed in this file.** Ten were rendered and measured. This
+ * one is the one that breaks the blob AND leaves the lit centroid 2.7px off the crown's middle, so
+ * the 57 per cent of canopy tiles the map lays mirrored still move it 5.1px -- the review measured
+ * 1.6 and called mirroring worthless on this object, and a field that happened to centre the light
+ * would have made that worse while passing every other number here.
  */
+const CAP_FIELD = valueNoise2D(10607);
+
 const grade = (x: number, y: number): number =>
-  0.93 - 0.68 * smooth(0.35, 1.15, down(y)) - 0.11 * ((x - 32) / 30);
+  0.92 -
+  0.68 * smooth(0.35, 1.15, down(y)) -
+  0.03 * ((x - 32) / 30) +
+  0.3 * (CAP_FIELD(x / 18, y / 24.3) - 0.5) * (1 - smooth(0.3, 0.9, down(y)));
 
 /**
  * The crown's local tonal SPAN: how far below the lit clusters the dark matrix sits at this row.
@@ -1437,3 +1493,119 @@ export const TREE_TILES: Record<string, (img: Img) => void> = {
   'canopy-bl': canopyTile(0, 1),
   'canopy-br': canopyTile(1, 1),
 };
+
+/* ------------------------------------------------------------------- the shoulder, guarded */
+
+/**
+ * How the crown's light is DISTRIBUTED, over the 64x64 window the four canopy tiles cut from --
+ * which is the stamp the map lays 318 times, and therefore the only thing a player ever sees.
+ *
+ * `share` is how much of the crown is lit at all. The other three are about whether that light is
+ * one landmark or several marks: `biggest` is the largest 4-connected run of it, `patches` counts
+ * the separate runs worth seeing, and `concentration` is the fraction of all the lit pixels that
+ * the biggest run holds. 150 is the threshold because it is a rung boundary -- the gap between the
+ * ladder's top two rungs straddles it -- so a cluster is either in or out and nothing sits on the
+ * line.
+ *
+ * Exported so a test can read the numbers rather than only learn that they were wrong.
+ */
+export function crownSignature(): {
+  share: number;
+  biggest: number;
+  patches: number;
+  concentration: number;
+} {
+  const img = crown();
+  const w = img.w;
+  const h = TILE * 2;
+  const hot = new Uint8Array(w * h);
+  let body = 0;
+  let area = 0;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const c = img.get(x, y);
+      if (c[3] === 0) continue;
+      body++;
+      if (lumaOf(c) >= 150) {
+        hot[y * w + x] = 1;
+        area++;
+      }
+    }
+  const seen = new Uint8Array(w * h);
+  let biggest = 0;
+  let patches = 0;
+  for (let start = 0; start < w * h; start++) {
+    if (hot[start] === 0 || seen[start] === 1) continue;
+    const stack = [start];
+    seen[start] = 1;
+    let size = 0;
+    while (stack.length > 0) {
+      const p = stack.pop()!;
+      size++;
+      const x = p % w;
+      const y = (p / w) | 0;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const q = ny * w + nx;
+        if (hot[q] === 1 && seen[q] === 0) {
+          seen[q] = 1;
+          stack.push(q);
+        }
+      }
+    }
+    if (size >= 8) patches++;
+    if (size > biggest) biggest = size;
+  }
+  return {
+    share: body > 0 ? area / body : 0,
+    biggest,
+    patches,
+    concentration: area > 0 ? biggest / area : 1,
+  };
+}
+
+/*
+ * UX_REVIEW finding 17's regression guard, and it is checked at import time for the same reason the
+ * painter/name agreement in `tiles.ts` is: a crown that has quietly grown its shoulder back is
+ * silent at runtime. Every tool that paints a tile loads this module, so `pnpm graybox`, `pnpm
+ * world`, `pnpm score` and `pnpm preview` all run it, and `crown()` memoises, so the check costs the
+ * one crown the tiles were going to need anyway.
+ *
+ * It is deliberately TWO-SIDED on `share`, which is the half a one-sided guard would have missed.
+ * The cheapest way to pass "no big bright patch" is to stop painting bright patches, and a crown
+ * with no lit cap satisfies every bound on `biggest`, `patches` and `concentration` at once. That
+ * is the shape of guard this project has shipped before and been caught by, so the lower bound is
+ * the load-bearing line here, not the upper one.
+ *
+ * Measured, on this crown: share 0.135, biggest 123, patches 7, concentration 0.27. Before the
+ * shoulder was broken up: 0.178, 428, 5, 0.72. The bounds sit between the two, closer to the
+ * failure, so there is room to retune the ladder without tripping them and none to put the wedge
+ * back. `patches` is the thin one -- 5 before against 7 now, so the bound of 6 has a margin of one
+ * either side; `concentration` and `biggest` are the two that discriminate with room to spare.
+ *
+ * If this throws, the thing to look at is `grade` -- a monotonic term across a flat plateau is what
+ * welds neighbouring clusters onto one rung. Read the note on `grade` before moving a bound.
+ */
+{
+  const s = crownSignature();
+  const say = `share ${s.share.toFixed(3)}, biggest ${s.biggest}px, ${s.patches} patches, concentration ${s.concentration.toFixed(2)}`;
+  if (s.share < 0.08 || s.share > 0.16)
+    throw new Error(
+      `Crown lit share out of band (want 0.08..0.16, see UX_REVIEW 17): ${say}. Under the floor the crown has no lit cap left; over the ceiling it is brighter than the board's own.`,
+    );
+  if (s.concentration > 0.45 || s.biggest > 230)
+    throw new Error(
+      `Crown's highlight has welded into one patch again (want concentration <= 0.45 and biggest <= 230px, see UX_REVIEW 17): ${say}.`,
+    );
+  if (s.patches < 6)
+    throw new Error(
+      `Crown's highlight is too few separate marks to read as foliage (want >= 6, see UX_REVIEW 17): ${say}.`,
+    );
+}

@@ -341,7 +341,9 @@
 
 .otp-field {
   flex: 1 1 200px;
-  background: var(--cyera-offwhite);
+  /* Natural, the palette's own "icon wells" ground. Offwhite is text-on-dark only and is not in
+     the section 1 palette block at all (UI_FOUNDATIONS section 1). */
+  background: var(--cyera-natural);
   /* Clay on Shell is 1.39:1; the boundary of an input has to clear 3:1. */
   border: 2px solid var(--cyera-ash);
   border-radius: var(--otp-r-pill);
@@ -470,9 +472,10 @@ h2.otp-section-label {
 }
 
 /* A Haze reveal inside an already-Haze missed row is invisible, so it takes the light ground
-   there instead. The left bar and the words still carry the status. */
+   there instead. The left bar and the words still carry the status.
+   Natural rather than Offwhite, for the reason on .otp-field above: Offwhite is text-on-dark. */
 .otp-recap__row--missed .otp-recap__hidden {
-  background: var(--cyera-offwhite);
+  background: var(--cyera-natural);
 }
 
 /* ---------------------------------------------------------------------------

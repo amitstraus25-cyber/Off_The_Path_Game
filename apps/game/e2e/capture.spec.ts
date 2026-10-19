@@ -94,6 +94,14 @@ test.describe('capture', () => {
       await shot('00-title');
 
       await startGame(page);
+      /*
+       * startGame clicks "Begin the walk", and the pointer stays where it was clicked -- which at
+       * 375 is inside the stacked verdict pills, so every capture showed one pill filled and two
+       * outlined. Three reviewers filed that as a design defect against a product that is correct
+       * (docs/UX_REVIEW.md, "where the lenses over-reached"). Park the pointer off-screen so the
+       * shots show the resting state.
+       */
+      await page.mouse.move(0, 0);
       await shot('01-explore');
 
       // Question: the typewriter needs a beat, or the line is caught mid-type.
@@ -130,8 +138,13 @@ test.describe('capture', () => {
       await page.evaluate(() => window.__otp!.store.dispatch({ type: 'FINISH' }));
       await shot('06-results', 600);
 
-      await page.evaluate(() => window.__otp!.store.dispatch({ type: 'LEADERBOARD' }));
-      await shot('07-leaderboard');
+      /*
+       * No 07-leaderboard shot. The leaderboard is unstarted Phase 6, so `LEADERBOARD` leaves
+       * Results on screen and this emitted a file byte-identical to 06-results at every width --
+       * which three separate review lenses then reported as a leaderboard screen that "has no
+       * design". The review asked for the shot to be dropped or renamed; dropping it stops a
+       * screen that does not exist from being reviewed. Put it back when the API lands.
+       */
     });
   }
 });

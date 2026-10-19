@@ -67,11 +67,15 @@ export function Trifecta({
         a warning paragraph dropped into that strip pushed the three discs out through the top of
         the frame and hung a dark slab over the forest. In the world the warning is rendered by
         App.tsx as its own line over the canvas instead.
+
+        No `role="status"` on it (UX_REVIEW finding 14). This paragraph only ever exists in a panel
+        that has just been mounted with it already inside, and a live region inserted with its text
+        is not announced -- it is announced as a MUTATION or not at all. The warning is spoken by
+        the permanent region in App.tsx, on the beat it becomes true; here it is ordinary panel
+        copy, read when the player reads the panel.
       */}
       {all && !compact && (
-        <p class="otp-trifecta__warning" role="status">
-          {content.strings['trifectaWarning'] ?? ''}
-        </p>
+        <p class="otp-trifecta__warning">{content.strings['trifectaWarning'] ?? ''}</p>
       )}
     </div>
   );

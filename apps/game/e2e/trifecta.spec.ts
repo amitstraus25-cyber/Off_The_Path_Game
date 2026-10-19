@@ -229,8 +229,20 @@ test('the careful reader keeps the boundary and scores 1,000', async ({ page }) 
   // One of Grandma's three, and that is the top score: the other two need a messenger and a
   // lantern this line deliberately refused. Carrying out all three means running all three at
   // once, which costs more than the goals are worth -- that trade is the whole game.
+  //
+  // This line used to assert that the two refused goals carried `--missed`, which is the Haze
+  // ground and the Black "!" that UI_FOUNDATIONS section 5 reserves for a mistake. That was the
+  // bug docs/UX_REVIEW.md 15 describes -- the one run that understands the lesson being told
+  // twice that it had failed -- committed as an expectation, so the assertion had to invert when
+  // the bug was fixed. A goal given up to keep the boundary now takes the Restrict glyph on the
+  // Natural ground; nothing on a flawless run wears the failure treatment.
   const errand = page.locator('.otp-recap__row--errand');
   await expect(errand).toHaveCount(3);
   await expect(errand.first()).not.toHaveClass(/--missed/);
-  await expect(page.locator('.otp-recap__row--errand.otp-recap__row--missed')).toHaveCount(2);
+  await expect(page.locator('.otp-recap__row--errand.otp-recap__row--missed')).toHaveCount(0);
+  const badges = await errand.locator('.otp-recap__badge').allTextContents();
+  expect(
+    badges.map((b) => b.trim()),
+    'one done, two withheld on purpose, none failed',
+  ).toEqual(['✓', '⊖', '⊖']);
 });

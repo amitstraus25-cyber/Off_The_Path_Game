@@ -28,8 +28,21 @@
    */
   --otp-px: 2;
   --otp-slot-px: 1;
-  /* Panels match the world's width, so they sit over the canvas rather than over the window. */
-  --otp-panel-w: min(var(--otp-canvas-w, 92vw), 748px);
+  /*
+   * Panels match the world's width, so they sit over the canvas rather than over the window --
+   * but never wider than the box they are actually in.
+   *
+   * --otp-canvas-w is the canvas, and ui/stage.ts sizes the canvas in whole pixel-art steps, so
+   * it can be WIDER than the viewport: at 320 the modal panel hung 41.8px past the right edge,
+   * and 3.8px at 375, with nothing to scroll because .otp-layer is position: fixed. On Results
+   * the same value put a 748px panel inside a 722px column at 768 and a 369px one inside 353px at
+   * 375, where .otp-panel's own `overflow: hidden` quietly clipped it.
+   *
+   * The `100%` resolves at the point of use -- against .otp-layer's content box for the modal
+   * panel and .otp-screen__inner's for Results -- which is the only place that knows how much
+   * room there really is, and it shrinks again when the layer puts up a scrollbar.
+   */
+  --otp-panel-w: min(var(--otp-canvas-w, 92vw), 748px, 100%);
   font-family: var(--cyera-font-sans);
 }
 
@@ -158,17 +171,31 @@
   color: var(--cyera-offwhite);
 }
 
+/*
+ * The section 3 type table, honoured as written. Four of its five measurable roles had drifted --
+ * panel numeral 26px at weight 600 for a specified 24 at Medium, panel title 18 for 14, card title
+ * 27 at 600 for 25 at Medium, the dialogue line 20 at 500 for 18 Regular -- and every leading was
+ * whatever reference/brand/cyera-theme.css set on `body`, which is 1.55, because none of these
+ * rules declared one. Tracking is in `em` now, so it scales with the type instead of staying at a
+ * fixed pixel count while the size shrinks to 0.7 of itself.
+ *
+ * Panel numeral: 24 / 93% / -3% / Medium.
+ */
 .otp-panel__number {
-  font-size: calc(26px * var(--otp-ui));
-  font-weight: 600;
+  font-size: calc(24px * var(--otp-ui));
+  line-height: 0.93;
+  font-weight: 500;
   color: var(--cyera-lilac);
-  letter-spacing: -0.5px;
+  letter-spacing: -0.03em;
 }
 
+/* Panel title: 14 / +18% tracking / Medium. The floor rule still applies under it -- 14 x 0.7 is
+   9.8px -- so the caption floor holds it at 11px on the smallest phones. */
 .otp-panel__title {
-  font-size: calc(18px * var(--otp-ui));
+  font-size: max(11px, calc(14px * var(--otp-ui)));
+  line-height: 1.2;
   font-weight: 500;
-  letter-spacing: 2.5px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
@@ -518,10 +545,12 @@
   image-rendering: pixelated;
 }
 
+/* Dialogue: 18 / 120% / 0% / Regular. 18 is the largest base that still clears the 12px body
+   floor at --otp-ui 0.7, which is why it needs no max() of its own. */
 .otp-dialogue__text {
   flex: 1;
   min-width: 0;
-  font-size: calc(20px * var(--otp-ui));
+  font-size: calc(18px * var(--otp-ui));
   line-height: 1.2;
   color: var(--cyera-black);
   padding-top: 6px;
@@ -531,15 +560,18 @@
 .otp-dialogue__speaker {
   margin: 0 0 calc(4px * var(--otp-ui));
   font-size: max(10px, calc(10px * var(--otp-ui)));
+  line-height: 1.2;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 500;
   color: var(--cyera-ash);
 }
 
+/* Regular, not Medium: the table sets the spoken line at the body weight and lets the panel
+   around it do the emphasising. */
 .otp-dialogue__line {
   margin: 0 0 calc(3px * var(--otp-ui));
-  font-weight: 500;
+  font-weight: 400;
 }
 
 /* The caret that says "there is more to read". */
@@ -558,28 +590,49 @@
   }
 }
 
+/*
+ * The questions. These are the game's primary choice control and they were 21px tall on a 21px
+ * pitch -- `padding: 2px 8px`, no min-height, no gap -- which is 20.8px at 375 and fails WCAG
+ * 2.5.8 on size and on spacing at once. The 6px focus halo also landed inside the next option, so
+ * keyboard focus looked like it covered two rows.
+ *
+ * Same treatment the verdict pills already have: the project's own 44px minimum, the label
+ * centred in it, and a gap wide enough to keep the halo out of the neighbour.
+ */
 .otp-options {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  gap: max(8px, calc(10px * var(--otp-ui)));
 }
 
 .otp-option {
-  display: block;
-  width: 100%;
+  display: flex;
+  align-items: center;
+  min-height: var(--otp-touch-min);
   text-align: left;
   font: inherit;
+  /*
+   * The questions carry their own size rather than inheriting the Dialogue role. Section 3 sets
+   * that role for the spoken line; inheriting it would put the choices at 12.6px on a 375 phone,
+   * and they must stay comfortably readable while staying subordinate to the line (17 under 18).
+   */
+  font-size: max(14px, calc(17px * var(--otp-ui)));
   color: var(--cyera-black);
   background: none;
   border: 0;
-  padding: 2px 8px;
+  padding: calc(4px * var(--otp-ui)) calc(10px * var(--otp-ui));
   border-radius: var(--otp-r-pill);
+  /* The selected pill's fill bleeds into the text column's padding, as the board draws it. */
   margin: 0 -4px;
   cursor: pointer;
 }
 
 .otp-option__tri {
   display: inline-block;
+  /* A flex item now, so it has to be told not to give up its 22px when a label wraps. */
+  flex: none;
   width: 22px;
   color: var(--cyera-deep-purple);
   font-size: max(12px, calc(15px * var(--otp-ui)));
@@ -595,21 +648,48 @@
   color: var(--cyera-ash);
 }
 
-/* Below a Clay hairline: the inspect action at the left, questions left at the right. */
+/*
+ * Below a Clay hairline: the inspect action at the left, questions left at the right.
+ *
+ * This was a four-child `nowrap` flex row, and the only child carrying `white-space: nowrap` was
+ * the passive counter -- so the two ACTIONS absorbed the whole of the squeeze. In a 258px column
+ * at 375 "Show me the skill ->" came out over three lines and "Take it as offered" over three,
+ * each a stack of underlined fragments with an orphan word on its own underlined row; at 320 the
+ * primary action ran to four lines. It wrapped at 320, 360, 375, 390, 393, 414, 430 AND 641: the
+ * row never actually fitted anywhere, because a one-line row was being asked to hold a sentence
+ * ("You will not see the card.") alongside three other things.
+ *
+ * It reads as broken text, and it is the control that opens the skill card -- the whole mechanic
+ * the asset exists to demonstrate.
+ *
+ * So the wrapping is designed instead of emergent. A two-column grid: the primary action and the
+ * counter share the first row, exactly as the deck draws them; the quiet action takes a row of its
+ * own; and the hint sits under it as a caption. Nothing shares a line with a sentence any more, so
+ * nothing has to shrink to fit, and the design's one device for keeping the unsafe path quiet --
+ * relative visual weight -- survives.
+ */
 .otp-dialogue__foot {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  column-gap: calc(12px * var(--otp-ui));
+  row-gap: calc(6px * var(--otp-ui));
   margin-top: calc(10px * var(--otp-ui));
   padding-top: calc(9px * var(--otp-ui));
   border-top: 1px solid var(--cyera-clay);
 }
 
 .otp-dialogue__show {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  text-align: left;
   border: 0;
   background: none;
   padding: 4px 0;
+  /* The project's own touch minimum, which 17px of type does not reach on its own. The card's
+     back link has carried this for the same reason. */
+  min-height: var(--otp-touch-min);
   font: 500 max(13px, calc(17px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
   color: var(--cyera-deep-purple);
   text-decoration: underline;
@@ -618,9 +698,35 @@
 }
 
 .otp-dialogue__left {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
   font-size: max(11px, calc(14px * var(--otp-ui)));
   color: var(--cyera-ash);
   white-space: nowrap;
+}
+
+/*
+ * Below ~420px even two columns are too many: the counter alone is 72px of a 199px row, which
+ * leaves the primary action short of the 125px its own label needs. So the footer becomes one
+ * column and the counter goes last, which is also the reading order the review asked for --
+ * primary action, the quiet way past it, its caption, then the count.
+ */
+@media (max-width: 420px) {
+  .otp-dialogue__foot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Full width, so the whole row is the target, with the label still at the left edge. */
+  .otp-dialogue__show {
+    justify-self: stretch;
+  }
+
+  .otp-dialogue__left {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
 }
 
 /* ---------------------------------------------------------------- skill card */
@@ -703,16 +809,19 @@
 .otp-card__eyebrow {
   margin: 0 0 2px;
   font-size: max(10px, calc(10px * var(--otp-ui)));
+  line-height: 1.2;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 500;
   color: var(--cyera-ash);
 }
 
+/* Card title: 25 / 105% / -2% / Medium. */
 .otp-card__title {
-  font-size: calc(27px * var(--otp-ui));
-  font-weight: 600;
-  letter-spacing: -0.4px;
+  font-size: calc(25px * var(--otp-ui));
+  line-height: 1.05;
+  font-weight: 500;
+  letter-spacing: -0.02em;
   color: var(--cyera-deep-purple);
   margin: 2px 0 calc(8px * var(--otp-ui));
 }
@@ -755,6 +864,7 @@
 .otp-row__eyebrow {
   margin: 0 0 2px;
   font-size: max(10px, calc(10px * var(--otp-ui)));
+  line-height: 1.2;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 500;
@@ -868,8 +978,19 @@
 }
 
 .otp-slot {
-  flex: none;
-  width: calc(var(--otp-slot-w) * var(--otp-ui));
+  /*
+   * Shrinkable, but never below the icon it holds.
+   *
+   * `flex: none` at five slots needed 319px of a 289px basket at 375 and a 272px one at 320, and
+   * the overflow was painted outside the panel and clipped -- the other half of UX_REVIEW 21's
+   * "Results clips worse". Shrinking rather than wrapping is deliberate: a second row of slots
+   * would add ~55px to the Inspect group, which is the tallest thing in the game and only just
+   * fits at a landscape phone's height.
+   *
+   * The floor is the icon plus its two 2px borders, so the well can never crop the item in it.
+   */
+  flex: 0 1 calc(var(--otp-slot-w) * var(--otp-ui));
+  min-width: calc(64px * var(--otp-slot-px) + 4px);
   height: calc(var(--otp-slot-h) * var(--otp-ui));
   border-radius: var(--otp-r-inset);
   background: var(--cyera-natural);
@@ -891,10 +1012,12 @@
  * so it reads as a skip link rather than as the thing to press. No new radius.
  */
 .otp-dialogue__trust {
+  /* Its own row in the footer grid, so a three-word label never has to wrap. */
+  grid-column: 1 / -1;
+  justify-self: start;
   background: none;
   border: none;
   padding: 0;
-  margin-left: calc(16px * var(--otp-ui));
   color: var(--cyera-ash);
   font: 400 max(12px, calc(14px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
   text-decoration: underline;
@@ -906,9 +1029,11 @@
 }
 
 /* The whole of the warning the game gives, and it is a statement of fact, not advice. Shown on
-   the first encounter only; after that it stays for screen readers. */
+   the first encounter only; after that it stays for screen readers.
+   A caption under the action it describes, on its own footer row: it is a sentence, and a sentence
+   inline in a one-line row is what forced both actions to wrap. */
 .otp-dialogue__hint {
-  margin-left: calc(8px * var(--otp-ui));
+  grid-column: 1 / -1;
   color: var(--cyera-ash);
   font-size: max(12px, calc(13px * var(--otp-ui)));
 }
@@ -946,8 +1071,20 @@
   cursor: pointer;
 }
 
+/*
+ * The last two lines of docs/UX_REVIEW.md finding 10, which went to nobody: the designer who found
+ * it owned the markup and the behaviour, not this file.
+ *
+ * Stone #787771 here measured 4.26:1 against the Black header at 14.76px -- below the 4.5:1 that
+ * WCAG AA asks of normal text, and a straight breach of UI_FOUNDATIONS section 1, which says Stone
+ * is foreground only and does not appear in this UI, and of section 7 change 4, which replaced it
+ * with Ash for every size under 24px. The spec's own remedy does not work on this ground: Ash on
+ * Black is 2.53:1, worse than what it replaces. Haze holds, and it is already the ON state's colour
+ * one rule above, so the off state now reads as the same control dimmed rather than as a different
+ * one -- which is what an off state should be.
+ */
 .otp-music[aria-checked='false'] {
-  color: var(--cyera-stone);
+  color: color-mix(in srgb, var(--cyera-haze) 72%, transparent);
 }
 
 .otp-music:hover {

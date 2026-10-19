@@ -1,6 +1,6 @@
-import { useState } from 'preact/hooks';
-import { exposedNotices, recap, score } from '@otp/core';
-import type { Content, GameState, Verdict } from '@otp/core';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { VERDICTS, exposedNotices, recap, score } from '@otp/core';
+import type { Content, GameState, GoalResult, SkillId, Verdict } from '@otp/core';
 import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
 
@@ -23,6 +23,51 @@ const VERDICT_WORD: Record<Verdict, string> = {
   restrict: 'verdictRestricted',
   reject: 'verdictRejected',
 };
+
+/**
+ * How an errand row should read. Three states, not two.
+ *
+ * Two of Grandma's three errands need a capability that the best verdict withholds: "Leave word at
+ * the post" needs the Word Weaver's sending, whose best verdict is Reject, and "Read the note she
+ * pinned to her door" needs Night Light left listening to strangers, whose best verdict is Restrict.
+ * A player who gets all three skills right therefore arrives with one errand done and two given up
+ * -- and the screen marked both of those with the Haze ground and the Black "!" disc that
+ * UI_FOUNDATIONS section 5 reserves for "Missed it". The one run that understands the lesson was
+ * told twice that it had failed, on the screen that carries the argument (docs/UX_REVIEW.md 15).
+ *
+ * `recap()` is right about the skills themselves -- content lint pins the best verdict to
+ * `maxPerSkill`, so a correct Reject already scores full marks and renders as "Caught it" -- so
+ * this is a view question about the errand rows, not a scoring one, and nothing here changes a
+ * number the server recomputes.
+ */
+export type ErrandState = 'met' | 'traded' | 'missed';
+
+export function errandState(
+  goal: GoalResult,
+  verdicts: Readonly<Record<SkillId, Verdict>>,
+  content: Content,
+): ErrandState {
+  if (goal.met) return 'met';
+  // Every verdict actually given on a skill that could have granted what this errand needed.
+  const chosen = content.skills.flatMap((skill) => {
+    if (!VERDICTS.some((v) => skill.outcomes[v].grants.includes(goal.needs))) return [];
+    const given = verdicts[skill.id];
+    return given === undefined
+      ? []
+      : [{ outcome: skill.outcomes[given], best: given === skill.bestVerdict }];
+  });
+  /*
+   * The capability was handed over cleanly and the errand still went undone, so what was missing
+   * was the walk, not the verdict: holding the Word Weaver on Restrict and never going to the post
+   * is a miss, and saying "traded for the boundary" there would be the same kind of lie as finding
+   * 1. A grant that comes with a flag is not clean -- that errand was run for the wolf.
+   */
+  if (chosen.some((c) => c.outcome.grants.includes(goal.needs) && c.outcome.flagsSet.length === 0))
+    return 'missed';
+  // Given up because every skill that could have granted it was played the way the game says is
+  // right. Refusing Cottage Finder outright loses the same errand for nothing, and stays a miss.
+  return chosen.length > 0 && chosen.every((c) => c.best) ? 'traded' : 'missed';
+}
 
 export interface ResultsProps {
   content: Content;
@@ -54,6 +99,23 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
   const rows = recap(state.log, content);
   const fired = exposedNotices(state.log, content);
 
+  /*
+   * Results is the only long panel that skipped the project's own fix for this. `Dialogue`,
+   * `SkillCard` and `Notice` all focus their body on mount; Results did not, so on arrival
+   * `activeElement` was BODY -- and because `.otp-screen` is a `position: fixed` scroller, the
+   * document itself has zero overflow, which left PageDown, End, Space and the arrows all no-ops
+   * over a panel 1,680px long in an 860px viewport. The keyboard could reach the call to action by
+   * tabbing and no other way (docs/UX_REVIEW.md 9).
+   *
+   * No focus trap here: Results is a whole screen, not a modal, and there is nothing behind it to
+   * tab into. `preventScroll` because the body starts at the top of its own scroller and a focus
+   * jump would be the player's first frame of the screen.
+   */
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    body.current?.focus({ preventScroll: true });
+  }, []);
+
   const [handle, setHandle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -74,7 +136,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
     <div class="otp-screen">
       <div class="otp-screen__inner">
         <Panel number="05" title={s('resultsTitle')} aside={<CyeraMark />}>
-          <div class="otp-screen__body">
+          <div class="otp-screen__body" ref={body} tabIndex={-1} data-autofocus>
             <div class="otp-hero">
               <div>
                 <p class="otp-section-label">{s('scoreLabel')}</p>
@@ -172,35 +234,71 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
               "errand failed" line read as a mistake when it was the trade the game is about.
             */}
             <p class="otp-section-label">{s('errandHeading')}</p>
-            {result.goals.map((goal) => (
-              <div
-                key={goal.id}
-                class={`otp-recap__row otp-recap__row--errand${goal.met ? '' : ' otp-recap__row--missed'}`}
-              >
-                <span class="otp-recap__badge" aria-hidden="true">
-                  {goal.met ? '✓' : '!'}
-                </span>
-                <div>
-                  <p class="otp-recap__heading">
-                    {goal.label} <span>{goal.met ? `+${goal.points}` : 'not met'}</span>
-                  </p>
+            {result.goals.map((goal) => {
+              const errand = errandState(goal, state.verdicts, content);
+              return (
+                <div
+                  key={goal.id}
+                  class={`otp-recap__row otp-recap__row--errand${errand === 'missed' ? ' otp-recap__row--missed' : ''}`}
+                >
                   {/*
-                    On its own line, and as a sentence. Gluing "needed" to a capability label built
-                    "Find the cottage before dark needed reaches into your basket" -- a run-on at
-                    every width, because the labels are verb phrases ("Reaches into your basket").
+                    A goal forgone to keep the boundary takes the Restrict glyph from the verdict
+                    pills -- the one mark in this product's vocabulary that means "withheld on
+                    purpose" -- on the Natural ground, not Haze. The "!" disc stays for a goal
+                    genuinely dropped.
                   */}
-                  {!goal.met && (
-                    <p class="otp-recap__detail">
-                      {s('errandNeeded')}{' '}
-                      {content.capabilities[goal.needs]?.label.toLowerCase() ?? goal.needs}.
+                  <span class="otp-recap__badge" aria-hidden="true">
+                    {errand === 'met' ? '✓' : errand === 'traded' ? '⊖' : '!'}
+                  </span>
+                  <div>
+                    <p class="otp-recap__heading">
+                      {goal.label}{' '}
+                      <span>
+                        {errand === 'met'
+                          ? `+${goal.points}`
+                          : errand === 'traded'
+                            ? s('errandTraded')
+                            : 'not met'}
+                      </span>
                     </p>
-                  )}
+                    {/*
+                      On its own line, and as a sentence. Gluing "needed" to a capability label built
+                      "Find the cottage before dark needed reaches into your basket" -- a run-on at
+                      every width, because the labels are verb phrases ("Reaches into your basket").
+                    */}
+                    {errand !== 'met' && (
+                      <p class="otp-recap__detail">
+                        {errand === 'traded' ? s('errandTradedDetail') : s('errandNeeded')}{' '}
+                        {content.capabilities[goal.needs]?.label.toLowerCase() ?? goal.needs}.
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* The Basket component carries its own label. */}
             <Basket basket={state.basket} items={content.items} />
+
+            {/*
+              The screen's one Lime lives on this button, and it comes before the score form.
+              "Who wrote the instructions your agent follows?" is the sentence this whole asset
+              exists to ask, and it sat below a form that cannot work until the Phase 6 API exists
+              and says so when you press it -- 1,412px down a panel in an 860px viewport, past the
+              only dead control on the screen. Band first, so the first thing the keyboard reaches
+              and the first thing a scroll finds is the question (docs/UX_REVIEW.md 9).
+            */}
+            <div class="otp-band">
+              <p class="otp-band__question">
+                <Highlighted text={s('ctaPrompt')} word="agent" />
+              </p>
+              <button type="button" class="otp-cta" onClick={onReadResearch}>
+                {s('cta')}
+                <span class="otp-cta__disc" aria-hidden="true">
+                  →
+                </span>
+              </button>
+            </div>
 
             <p class="otp-section-label">{s('postHeading')}</p>
             <form class="otp-post" onSubmit={submit} noValidate>
@@ -234,19 +332,6 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                 {notice}
               </p>
             )}
-
-            {/* The screen's one Lime lives on this button. */}
-            <div class="otp-band">
-              <p class="otp-band__question">
-                <Highlighted text={s('ctaPrompt')} word="agent" />
-              </p>
-              <button type="button" class="otp-cta" onClick={onReadResearch}>
-                {s('cta')}
-                <span class="otp-cta__disc" aria-hidden="true">
-                  →
-                </span>
-              </button>
-            </div>
 
             <div class="otp-actions">
               <button type="button" class="otp-button otp-button--quiet" onClick={onReplay}>

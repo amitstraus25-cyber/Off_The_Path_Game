@@ -401,12 +401,44 @@ export function generateForestMap(): GeneratedMap {
         solid(x, y);
       }
   // Banks.
+  /*
+   * ALL FOUR NEIGHBOURS, which is the whole difference between a bank and a bank that stops.
+   *
+   * This asked `x - 1` and `x + 1` and nothing else. The river runs diagonally -- it enters at the
+   * top right and leaves at the bottom left -- so every row where its column range steps sideways
+   * leaves a tile whose water is to the NORTH or the SOUTH while its east and west neighbours are
+   * dry. The bank reached a corner and simply stopped: deep water met flat lit grass across a hard
+   * 32px tile edge, with no shoreline, no foam and no boulders in between. Counted on the generated
+   * map, 29 water-to-land seams carried no shore tile at all and 25 of them were vertical -- 14
+   * against open grass, two on the track just west of the deck -- and `shore-n` and `shore-s`, both
+   * painted in `w-water.ts`, both in `TILE_NAMES`, both exported into the tileset, were placed
+   * exactly zero times.
+   *
+   * THE HORIZONTAL CASES STILL WIN A CORNER, and that is a decision rather than an accident. The
+   * river is broadly north-south, so `shore-w` and `shore-e` run in long unbroken columns down the
+   * two banks, and `w-water.ts` phases its waterline (`PHASE`) so that those columns join tile to
+   * tile. A tile that put its land along the TOP in the middle of such a column would read as a
+   * notch bitten out of the bank. So the vertical tiles take only what the columns cannot reach:
+   * the steps between them. A tile with water on two sides keeps the horizontal tile and still
+   * shows water along part of its second wet edge; four side tiles cannot draw an inside corner,
+   * and inventing a fifth is a painter's change, not this file's.
+   *
+   * The side in the name is the LAND, which is how the painter reads it: `shore-w` is land to the
+   * west with the water lapping at its eastern edge.
+   */
   for (let y = 0; y < MAP_H; y++)
     for (let x = 0; x < MAP_W; x++) {
       if (isWater(x, y)) continue;
-      const nextToWater = isWater(x - 1, y) || isWater(x + 1, y);
-      if (!nextToWater) continue;
-      set(ground, x, y, isWater(x + 1, y) ? gid('shore-w') : gid('shore-e'));
+      const bank = isWater(x + 1, y)
+        ? 'shore-w'
+        : isWater(x - 1, y)
+          ? 'shore-e'
+          : isWater(x, y + 1)
+            ? 'shore-n'
+            : isWater(x, y - 1)
+              ? 'shore-s'
+              : null;
+      if (bank !== null) set(ground, x, y, gid(bank));
     }
   // A waterfall spilling in at the north end.
   for (let y = 0; y < 4; y++)
@@ -787,6 +819,15 @@ export function generateForestMap(): GeneratedMap {
   const FLIP_V = 0x40000000;
   /** The transpose. Only safe on a square texture with no up and no light in it: ground and water. */
   const FLIP_D = 0x20000000;
+  /*
+   * The gid with the three mirror bits taken off, and every pass that READS a tile back by name
+   * has to use it. This lives up here, with the bits it undoes, because the passes that need it run
+   * both before the mirroring and after it -- `clearArea` is called from the verge and connectivity
+   * sweeps at the very bottom of the file -- and a comparison that forgot the mask is silent: the
+   * tile is simply never recognised, so a felled tree keeps its trunk on the map and loses its
+   * collision, which is the one thing this file warns about in three separate places.
+   */
+  const BASE_GID = 0x1fffffff;
   const coin = valueNoise2D(20261041);
   /** Independent per-tile bits: `valueNoise2D` hashes exactly on integer coordinates. */
   const heads = (x: number, y: number, which: number): boolean => coin(x + which * 97, y) > 0.5;
@@ -817,7 +858,20 @@ export function generateForestMap(): GeneratedMap {
     [1, -1, 'canopy-br', 'canopy-bl'],
   ] as const;
   const CANOPY_GIDS = new Set(CROWN.map(([, , name]) => gid(name)));
-  const isCanopy = (x: number, y: number): boolean => CANOPY_GIDS.has(at(above, x, y));
+  /** Masked, because the canopy is re-stamped mirrored and a flipped gid is not that gid. */
+  const isCanopy = (x: number, y: number): boolean => CANOPY_GIDS.has(at(above, x, y) & BASE_GID);
+  const TRUNK_GIDS = new Set([gid('trunk-l'), gid('trunk-r')]);
+  /**
+   * The tile a tree stands on, whichever way round it faces.
+   *
+   * The mirror pass swaps the two halves as well as flipping them, so a mirrored tree carries
+   * `trunk-r` on its LEFT cell. Asking "is there a trunk here" rather than "is this the left half"
+   * is the only form of the question that survives that.
+   */
+  const isTrunk = (x: number, y: number): boolean => TRUNK_GIDS.has(at(below, x, y) & BASE_GID);
+  /** Whether a tree still on the register has a crown over this cell. */
+  const crownsOver = (t: { x: number; y: number }, x: number, y: number): boolean =>
+    CROWN.some(([dx, dy]) => t.x + dx === x && t.y + dy === y);
 
   const plantTree = (x: number, y: number): boolean => {
     /*
@@ -994,18 +1048,35 @@ export function generateForestMap(): GeneratedMap {
     if (changed === 0) break;
   }
 
-  // The border must be solid even where a tree could not be planted.
-  for (let x = 0; x < MAP_W; x++)
-    for (const y of [0, 1, MAP_H - 1]) {
-      solid(x, y);
-      if (at(below, x, y) === 0 && at(ground, x, y) !== gid('waterfall'))
-        set(below, x, y, gid('bush'));
-    }
-  for (let y = 0; y < MAP_H; y++)
-    for (const x of [0, MAP_W - 1]) {
-      solid(x, y);
-      if (at(below, x, y) === 0) set(below, x, y, gid('bush'));
-    }
+  /*
+   * THE EDGE OF THE WORLD. The border must be solid even where a tree could not be planted.
+   *
+   * It is a function, and it is called twice, because sealing it once was not enough. A tree may
+   * straddle column 0 -- planting offers every x from 0 up -- and `clearArea` strikes a tree off
+   * with BOTH of its cells, so a sweep at the bottom of the file that cuts through the half at
+   * column 1 clears the half at column 0 with it, after this seal has already run. That is exactly
+   * what had happened at (0,36): one walkable tile on the border of the map, with a tree trunk
+   * drawn on it. Sealing again after the last pass that can open a tile cannot leave one behind,
+   * and it is idempotent, so running it twice costs nothing but the second pass.
+   */
+  /** The two rows and two columns of sealed scrub that stop the player seeing the end of the map. */
+  const onBorder = (x: number, y: number): boolean =>
+    x === 0 || x === MAP_W - 1 || y <= 1 || y === MAP_H - 1;
+  const sealBorder = (): void => {
+    for (let x = 0; x < MAP_W; x++)
+      for (const y of [0, 1, MAP_H - 1]) {
+        solid(x, y);
+        // Masked: by the second call the waterfall carries its mirror bits.
+        if (at(below, x, y) === 0 && (at(ground, x, y) & BASE_GID) !== gid('waterfall'))
+          set(below, x, y, gid('bush'));
+      }
+    for (let y = 0; y < MAP_H; y++)
+      for (const x of [0, MAP_W - 1]) {
+        solid(x, y);
+        if (at(below, x, y) === 0) set(below, x, y, gid('bush'));
+      }
+  };
+  sealBorder();
 
   // --- undergrowth ------------------------------------------------------------
   /*
@@ -1137,26 +1208,30 @@ export function generateForestMap(): GeneratedMap {
          * edge-density axis that is already exactly at the board's.
          */
         const floor = meadow(x / 2.3 + 17, y / 2.3 + 17);
-        set(below, x, y, gid(floor > 0.86 ? 'rock' : floor > 0.8 ? 'flower-white' : 'bush'));
+        const tile = floor > 0.86 ? 'rock' : floor > 0.8 ? 'flower-white' : 'bush';
+        set(below, x, y, gid(tile));
+        // A BOULDER IS NOT UNDERGROWTH. The note above this sweep says Red pushes through fern and
+        // still cannot walk through "a trunk, a boulder or the river", and the stone drifts were
+        // the one thing here contradicting it: `rock` is solid on the gorge banks and solid in
+        // `clump`, and was soft in the only two places it was drawn as scatter. It is drawn as a
+        // boulder, so it stops her. The verge sweep at the foot of the file fells any that end up
+        // beside the track, and the connectivity sweep opens any pocket one of them happens to seal.
+        if (tile === 'rock') solid(x, y);
         continue;
       }
       const pick = speckle(x * 2.7, y * 2.7);
-      set(
-        below,
-        x,
-        y,
-        gid(
-          pick < 0.46
-            ? 'bush'
-            : pick < 0.64
-              ? 'flower-white'
-              : pick < 0.8
-                ? 'flower-pink'
-                : pick < 0.92
-                  ? 'flower-red'
-                  : 'rock',
-        ),
-      );
+      const coverTile =
+        pick < 0.46
+          ? 'bush'
+          : pick < 0.64
+            ? 'flower-white'
+            : pick < 0.8
+              ? 'flower-pink'
+              : pick < 0.92
+                ? 'flower-red'
+                : 'rock';
+      set(below, x, y, gid(coverTile));
+      if (coverTile === 'rock') solid(x, y);
     }
 
   // Thickets of solid scrub out in the open, and beds of flowers in what is left of it.
@@ -1181,6 +1256,22 @@ export function generateForestMap(): GeneratedMap {
    * that catches the crown leaves a trunk that is still solid and, once the canopy is rebuilt,
    * invisible. The old sweep inferred the pairing from the tiles, which stops working the moment
    * crowns are allowed to overlap. Striking the tree off the register instead cannot be fooled.
+   *
+   * ...EXCEPT BY THE MIRROR BITS, WHICH IS WHAT IT WAS BEING FOOLED BY.
+   *
+   * The register was right and the two tile comparisons underneath it were wrong, and because they
+   * only ever failed to RECOGNISE a tile, they failed silently. The mirror pass flips a tree by
+   * swapping its halves as well as setting `FLIP_H`, so a mirrored tree carries `trunk-r` + the
+   * flip bit on its left cell -- which is neither `gid('trunk-l')` nor equal to anything this
+   * function was testing for. The two sweeps at the bottom of the file run AFTER that pass, so
+   * every tree they felled kept its trunk and its crown on the map and lost only its collision.
+   * Counted on the generated map: 61 trunk tiles the player walked straight through, 17 of them
+   * standing on the main track, and one of them on the map's own border, where striking the tree
+   * cleared the seal at (0,36) and left a walkable tile at the edge of the world.
+   *
+   * So both comparisons ask the masked gid, and the crown asks the register rather than the tile
+   * for ownership. The cause was a comparison that could not match, not bookkeeping: the comment
+   * above was true, and the code below it did not implement it.
    */
   const clearArea = (x: number, y: number, w: number, h: number): void => {
     for (let dy = 0; dy < h; dy++)
@@ -1195,13 +1286,34 @@ export function generateForestMap(): GeneratedMap {
       const hitsRows = t.y >= y && t.y - 2 <= y + h - 1;
       if (!hitsColumns || !hitsRows) continue;
       trees.splice(i, 1);
+      /*
+       * ...AND IT ONLY EVER TAKES ITS OWN TILE, collision included.
+       *
+       * This used to `clear()` both trunk cells unconditionally, which is a loaded gun pointing at
+       * the one invariant the level cannot lose. Later passes write over a trunk cell and make it
+       * solid for their own reasons -- the garden fence runs along row 12 through planted wood --
+       * and clearing the collision under a fence rail opens a way round the notice post. So a cell
+       * that no longer holds a trunk is somebody else's now: it keeps its tile and its collision,
+       * and the tree simply goes off the register. Cells inside the rectangle have already had
+       * both wiped by the sweep above.
+       */
       for (const dx of [0, 1]) {
-        if (at(below, t.x + dx, t.y) === gid(dx === 0 ? 'trunk-l' : 'trunk-r'))
-          set(below, t.x + dx, t.y, 0);
+        if (!isTrunk(t.x + dx, t.y)) continue;
+        set(below, t.x + dx, t.y, 0);
         clear(t.x + dx, t.y);
       }
-      for (const [dx, dy, name] of CROWN)
-        if (at(above, t.x + dx, t.y + dy) === gid(name)) set(above, t.x + dx, t.y + dy, 0);
+      /*
+       * A shared cell belongs to its neighbour, asked of the REGISTER rather than of the tile. The
+       * tile cannot answer it -- two crowns write the same cell and the second one wins -- and `t`
+       * is already struck off above, so anything still covering this cell is somebody else's tree.
+       */
+      for (const [dx, dy] of CROWN) {
+        const tx = t.x + dx;
+        const ty = t.y + dy;
+        if (!isCanopy(tx, ty)) continue;
+        if (trees.some((other) => crownsOver(other, tx, ty))) continue;
+        set(above, tx, ty, 0);
+      }
     }
   };
 
@@ -1282,7 +1394,14 @@ export function generateForestMap(): GeneratedMap {
     solid(cx + i, cy);
     solid(cx + i, cy + 1);
   }
+  /*
+   * The chimney is part of the building, so it stops her like the rest of it. It sits a row above
+   * the roof peak, outside the `prop-cottage` rectangle, and it was the one tile of the cottage
+   * with no collision under it: a player walking the strip between the garden's north fence and the
+   * roof passed straight through the chimney stack, drawn over her as she went.
+   */
   set(below, cx + 4, cy - 1, gid('chimney'));
+  solid(cx + 4, cy - 1);
   for (let row = 2; row <= 4; row++)
     for (let i = 0; i < 6; i++) {
       set(below, cx + i, cy + row, gid('wall'));
@@ -1411,7 +1530,20 @@ export function generateForestMap(): GeneratedMap {
     at(below, x, y) === 0 &&
     at(above, x, y) === 0 &&
     !inClearing(x, y);
-  /** Mixed, because a ring of one repeated tile is a different kind of wallpaper. */
+  /**
+   * Mixed, because a ring of one repeated tile is a different kind of wallpaper -- and soft, every
+   * tile of it.
+   *
+   * `rock` used to take the last fifth of this mix, and it was the one tile here that cannot be
+   * soft. A boulder is solid everywhere else on the map: the gorge banks and `clump('rock', ...)`
+   * both make theirs solid, and a boulder is drawn as a boulder -- it reads as a thing you walk
+   * round. Seventeen of them stood on the verge of the track and in the rings around the well, the
+   * signpost and the forest notice, and the player walked straight through every one. The dressing
+   * cannot answer that by going solid: these rings sit ON the road, the gate approach among them,
+   * and it has to stay exactly as walkable as it was or the zero-click beat has a way round it. So
+   * the stone comes out of the mix instead and the scrub takes its share. Four tiles still, and
+   * nothing in this pass now draws a thing it does not mean.
+   */
   const tuft = (x: number, y: number, flowers: number): void => {
     const pick = rnd();
     set(
@@ -1425,9 +1557,7 @@ export function generateForestMap(): GeneratedMap {
             ? 'flower-pink'
             : pick < flowers * 0.85
               ? 'flower-red'
-              : pick < flowers * 0.85 + (1 - flowers) * 0.65
-                ? 'bush'
-                : 'rock',
+              : 'bush',
       ),
     );
   };
@@ -1484,6 +1614,64 @@ export function generateForestMap(): GeneratedMap {
       if (verge(x / 1.9 + 11, y / 1.9 + 11) < 0.62) continue;
       tuft(x, y, 0.75);
     }
+
+  /*
+   * ...AND NOTHING OPAQUE STANDS WHERE THE WATERLINE HAS NOWHERE ELSE TO BE DRAWN.
+   *
+   * Teaching the bank pass its other two neighbours puts the right tile on the ground and does not
+   * finish the job, because every decor tile in this set paints its own full 32x32 of ground --
+   * that is why half this file is about fields rather than coin flips. A bush or a boulder dropped
+   * on a bank tile does not stand beside the waterline, it ERASES it. Measured straight after that
+   * change, 10 of the 18 new `shore-n` and `shore-s` tiles came out under a bush or a rock, which
+   * put eight of the eighteen mid-air river ends back exactly as they were: an opaque green square
+   * meeting deep water across a hard tile edge, which is the finding, not the gid under it.
+   *
+   * WHICH TILES, and the rule is the same sentence in both halves: a tile whose shoreline nothing
+   * else can carry.
+   *   - A STEP (`shore-n` or `shore-s`) is one tile long by construction -- it is the tile where
+   *     the bank column jogs sideways -- so covering it covers the whole shoreline there.
+   *   - A CORNER (water on two or more sides) carries the only waterline its second wet edge will
+   *     ever get, because the tileset has four side tiles and no inside corner.
+   *   - A tile in the middle of a long `shore-w` or `shore-e` COLUMN is left alone. The drawn
+   *     waterline runs above and below it, so the river still reads as a river and the boulder
+   *     reads as standing in it -- the gorge the board draws, which nobody has complained about.
+   *
+   * Trunks stay. A trunk tile is opaque over barely half its area, so the waterline still shows
+   * under a tree standing on the bank, and the tree is solid either way.
+   */
+  const OPAQUE_FLOOR = new Set([
+    'bush',
+    'rock',
+    'flower-white',
+    'flower-pink',
+    'flower-red',
+    'toadstool-ring',
+  ]);
+  /** A bank tile that is the only shoreline its water will get: a step, or a corner. */
+  const soleShoreline = (x: number, y: number): boolean => {
+    const bank = TILE_NAMES[at(ground, x, y) - 1];
+    if (bank === undefined || !bank.startsWith('shore')) return false;
+    if (bank === 'shore-n' || bank === 'shore-s') return true;
+    return NEIGHBOURS.filter(([dx, dy]) => isWater(x + dx, y + dy)).length > 1;
+  };
+  let uncovered = 0;
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++) {
+      // ...except on the border, where the seal wins. The edge of the world is two rows of solid
+      // scrub so the player cannot see the end of it, and `sealBorder` runs last and would put the
+      // bush straight back anyway. A shoreline she can see and cannot walk onto is worse than one
+      // under a bush: it is an invisible wall at the top of the frame.
+      if (onBorder(x, y) || !soleShoreline(x, y)) continue;
+      const standing = TILE_NAMES[at(below, x, y) - 1];
+      if (standing === undefined || !OPAQUE_FLOOR.has(standing)) continue;
+      set(below, x, y, 0);
+      // Whatever it was is gone, and its collision goes with it -- `clump` and the stone drifts
+      // both plant solid, and a solid tile with nothing drawn on it is the invisible wall this
+      // file keeps warning about.
+      clear(x, y);
+      uncovered++;
+    }
+  console.log(`  banks: ${uncovered} shoreline tile(s) cleared of opaque cover`);
 
   // --- NPC positions, each on walkable ground beside its landmark ---------------
   const npc = (name: string, x: number, y: number) => {
@@ -1905,7 +2093,6 @@ export function generateForestMap(): GeneratedMap {
    * The flip flags are already baked into the gids by the pass above, so the base gid has to be
    * masked out before it can be compared with anything.
    */
-  const BASE_GID = 0x1fffffff;
   const treeTrunkAt = (x: number, y: number): boolean =>
     trees.some((t) => t.y === y && (t.x === x || t.x + 1 === x));
   const fellable = (x: number, y: number): boolean =>
@@ -2049,12 +2236,236 @@ export function generateForestMap(): GeneratedMap {
     felled += cut;
   }
 
+  // The last pass that can open a tile has run, so the edge of the world is re-sealed (see
+  // `sealBorder`): felling a tree that straddles column 0 clears the border cell with it.
+  sealBorder();
+
   const walkable = collision.filter((v) => v === 0).length;
   const open = reachableFromSpawn().size;
   console.log(
     `  connectivity: ${felled} tile(s) opened; ${open}/${walkable} walkable tiles reachable ` +
       `(${Math.round((open / walkable) * 100)}%)`,
   );
+
+  /*
+   * ===========================================================================
+   * THE TRAVERSAL AND SHORELINE AUDIT, checked rather than hoped for.
+   * ===========================================================================
+   *
+   * WHY IT IS HERE AND NOT ONLY IN A TEST. `apps/game/test/map.test.ts` is the safety net for the
+   * committed map and it floods from the spawn, so it catches a map that drifted from the
+   * generator. It cannot catch a GENERATOR that writes a bad map: it reads what this file produced
+   * and the bad map is what it reads. Everything below is a property of this file's own passes, so
+   * this file is where it fails -- loudly, at `pnpm graybox`, before the map reaches the repo.
+   *
+   * Each of these has a bug behind it that shipped:
+   *   - the shoreline, which stopped dead in 29 places because the bank pass tested two neighbours;
+   *   - 61 tree trunks you could walk through and 17 boulders you could walk through, because a
+   *     comparison forgot the mirror bits and because the dressing drew stone it did not mean;
+   *   - a walkable tile on the map border, from a felled tree straddling column 0;
+   *   - and the notice post, which a verge pass once walked round by clearing a panel of fence.
+   *
+   * The last one is the level's whole zero-click lesson, so it is asserted twice on purpose: here,
+   * where the fence and the collision layer are built, and again in `map.test.ts` against the
+   * shipped artefact.
+   */
+  const nameAt = (layer: Layer, x: number, y: number): string =>
+    TILE_NAMES[(at(layer, x, y) & BASE_GID) - 1] ?? '';
+  const walkableAt = (x: number, y: number): boolean => inside(x, y) && at(collision, x, y) === 0;
+  const faults: string[] = [];
+  const fault = (what: string, where: [number, number][]): void => {
+    if (where.length === 0) return;
+    const shown = where
+      .slice(0, 8)
+      .map(([x, y]) => `(${x},${y})`)
+      .join(' ');
+    faults.push(`${where.length} ${what}: ${shown}${where.length > 8 ? ' ...' : ''}`);
+  };
+
+  /*
+   * 1. NO BANK ENDS IN MID-AIR. Water may meet the deck, the waterfall or the track -- a bridge
+   * crosses water, the fall IS water, and the one place the sand meets the river is the ford west
+   * of the deck, where a shore tile would break the bridge approach `map.test.ts` measures. Water
+   * meeting GRASS is the bank that stopped.
+   */
+  const bare: [number, number][] = [];
+  const miszoned: [number, number][] = [];
+  const smothered: [number, number][] = [];
+  const shores: Record<string, number> = {};
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++) {
+      const here = nameAt(ground, x, y);
+      if (here.startsWith('shore')) {
+        shores[here] = (shores[here] ?? 0) + 1;
+        // The side in the name is the land, so the water must be on the other one.
+        const wetSide: Record<string, [number, number]> = {
+          'shore-w': [1, 0],
+          'shore-e': [-1, 0],
+          'shore-n': [0, 1],
+          'shore-s': [0, -1],
+        };
+        const [dx, dy] = wetSide[here]!;
+        if (!isWater(x + dx, y + dy)) miszoned.push([x, y]);
+        // A one-tile step has nothing either side to carry the waterline, so an opaque tile on it
+        // hides the whole shoreline and the seam is bare again however good the ground tile is.
+        if (!onBorder(x, y) && soleShoreline(x, y) && OPAQUE_FLOOR.has(nameAt(below, x, y)))
+          smothered.push([x, y]);
+      }
+      if (!here.startsWith('grass') || isWater(x, y)) continue;
+      if (NEIGHBOURS.some(([dx, dy]) => isWater(x + dx, y + dy))) bare.push([x, y]);
+    }
+  fault('grass tile(s) meeting the water with no shore on them', bare);
+  fault('shore tile(s) with the water on the wrong side', miszoned);
+  fault('shoreline(s) with no second tile to carry them, hidden under an opaque tile', smothered);
+
+  // 2. EVERY WALKABLE TILE IS REACHABLE, and nothing walkable is in the river or over the edge.
+  const stranded: [number, number][] = [];
+  const inTheRiver: [number, number][] = [];
+  const onTheEdge: [number, number][] = [];
+  const reached = reachableFromSpawn();
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++) {
+      if (!walkableAt(x, y)) continue;
+      if (!reached.has(y * MAP_W + x)) stranded.push([x, y]);
+      const g = nameAt(ground, x, y);
+      if (g === 'water' || g === 'water-2' || g === 'waterfall') inTheRiver.push([x, y]);
+      if (x === 0 || y === 0 || y === 1 || x === MAP_W - 1 || y === MAP_H - 1)
+        onTheEdge.push([x, y]);
+    }
+  fault('walkable tile(s) sealed off from the spawn', stranded);
+  fault('walkable tile(s) standing in the water', inTheRiver);
+  fault('walkable tile(s) on the border of the map', onTheEdge);
+
+  /*
+   * 3. WHAT IS DRAWN AND WHAT IS SOLID AGREE. A trunk or a boulder you can walk through, and a
+   * solid tile with nothing drawn on it, are the same bug seen from either side.
+   */
+  /*
+   * Everything drawn as a thing you walk round. `bush` is deliberately not on this list and cannot
+   * be: the sealed border and `clump(..., true)` plant it solid while the forest floor plants it
+   * soft, on purpose, so the same picture means two different things depending on where it stands.
+   * That is a real ambiguity and a design decision, not something a generator can assert its way
+   * out of -- it is written up in the review notes rather than fixed here.
+   */
+  const MUST_STOP_HER = new Set([
+    'trunk-l',
+    'trunk-r',
+    'rock',
+    'fence-h',
+    'fence-post',
+    'wall',
+    'wall-window',
+    'door',
+    'roof-l',
+    'roof-m',
+    'roof-r',
+    'roof-peak',
+    'chimney',
+    'stall-counter',
+    'well',
+    'fountain',
+    'signpost',
+    'lantern-post',
+  ]);
+  const soft: [number, number][] = [];
+  const undrawn: [number, number][] = [];
+  const hanging: [number, number][] = [];
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++) {
+      const b = nameAt(below, x, y);
+      if (MUST_STOP_HER.has(b) && walkableAt(x, y)) soft.push([x, y]);
+      const g = nameAt(ground, x, y);
+      const wetTile = g === 'water' || g === 'water-2' || g === 'waterfall';
+      if (!walkableAt(x, y) && b === '' && nameAt(above, x, y) === '' && !wetTile)
+        undrawn.push([x, y]);
+      // A crown is stamped from the register, so one with no trunk under it is half a tree.
+      if (!nameAt(above, x, y).startsWith('canopy')) continue;
+      if (!trees.some((t) => crownsOver(t, x, y))) hanging.push([x, y]);
+    }
+  fault('solid-looking tile(s) the player walks through', soft);
+  fault('solid tile(s) with nothing drawn on them', undrawn);
+  fault('canopy tile(s) with no tree on the register under them', hanging);
+
+  /*
+   * 4. THE NOTICE POST SPANS THE GATE APPROACH. The garden is enclosed on three sides by the fence
+   * and on the fourth by the map border, so the gate is the only way in and the notice covers every
+   * tile of its approach. Flood the map again while refusing to step on the notice: the gate must
+   * not be reachable. This is the level's zero-click lesson and it must never become optional.
+   */
+  const rectOf = (name: string): { x0: number; x1: number; y0: number; y1: number } => {
+    const o = objects.find((candidate) => candidate.name === name);
+    if (!o) throw new Error(`the map has no "${name}" to check`);
+    return {
+      x0: Math.floor(o.x / TILE),
+      x1: Math.floor((o.x + o.width) / TILE) - 1,
+      y0: Math.floor(o.y / TILE),
+      y1: Math.floor((o.y + o.height) / TILE) - 1,
+    };
+  };
+  const notice = rectOf('notice-forest-post');
+  const gap = rectOf('gate-fence-gap');
+  if (notice.x1 !== gap.x0 - 1 || notice.y0 > gap.y0 || notice.y1 < gap.y1)
+    faults.push('the notice post does not span the gate approach');
+  {
+    const start = spawnY * MAP_W + spawnX;
+    const seen = new Set([start]);
+    const queue = [start];
+    for (let head = 0; head < queue.length; head++) {
+      const key = queue[head]!;
+      const x = key % MAP_W;
+      const y = (key - x) / MAP_W;
+      for (const [dx, dy] of STEPS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!walkableAt(nx, ny)) continue;
+        if (nx >= notice.x0 && nx <= notice.x1 && ny >= notice.y0 && ny <= notice.y1) continue;
+        const next = ny * MAP_W + nx;
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+    for (let y = gap.y0; y <= gap.y1; y++)
+      for (let x = gap.x0; x <= gap.x1; x++)
+        if (seen.has(y * MAP_W + x))
+          faults.push(`the gate at (${x},${y}) can be reached without reading the notice`);
+  }
+
+  /*
+   * 5. EVERY OBJECT STANDS WHERE IT SAYS IT DOES. Anything the player or a traveller occupies has
+   * to be walkable over its whole rectangle -- a bystander carved out of a tree is never met, and
+   * a notice whose tiles are solid can never be stood on -- and every `prop-` is solid over its
+   * whole rectangle, because each one is a thing in the way.
+   */
+  for (const o of objects) {
+    const r = rectOf(o.name);
+    const bad: [number, number][] = [];
+    const wantsSolid = o.name.startsWith('prop-');
+    for (let y = r.y0; y <= r.y1; y++)
+      for (let x = r.x0; x <= r.x1; x++) if (walkableAt(x, y) === wantsSolid) bad.push([x, y]);
+    fault(`tile(s) of "${o.name}" that are ${wantsSolid ? 'not solid' : 'not walkable'}`, bad);
+    if (wantsSolid) continue;
+    const onWater = [];
+    for (let y = r.y0; y <= r.y1; y++)
+      for (let x = r.x0; x <= r.x1; x++) {
+        const g = nameAt(ground, x, y);
+        const b = nameAt(below, x, y);
+        if (g === 'water' || g === 'water-2' || g === 'waterfall' || b.startsWith('trunk'))
+          onWater.push([x, y] as [number, number]);
+      }
+    fault(`tile(s) of "${o.name}" standing in the water or inside a tree`, onWater);
+  }
+
+  console.log(
+    `  shoreline: ${Object.entries(shores)
+      .map(([k, v]) => `${k.slice(6)}=${v}`)
+      .sort()
+      .join(' ')}; 0 grass tiles left against the water`,
+  );
+  if (faults.length > 0)
+    throw new Error(
+      `the generated map breaks ${faults.length} invariant(s):\n  - ${faults.join('\n  - ')}`,
+    );
 
   const json = JSON.stringify({
     compressionlevel: -1,

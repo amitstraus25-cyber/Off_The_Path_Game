@@ -53,6 +53,14 @@ export function CyeraMark({ on = 'dark' }: { on?: 'dark' | 'light' }) {
   );
 }
 
+/** What the sound control calls itself and its two states. Content, so it reads from `strings`. */
+export interface MusicLabels {
+  /** The control's accessible name. Never changes with the state. */
+  name: string;
+  on: string;
+  off: string;
+}
+
 export interface WorldFrameProps {
   number: string;
   title: string;
@@ -60,7 +68,7 @@ export interface WorldFrameProps {
   /** Anything that sits over the world itself, such as the controls hint. */
   children?: ComponentChildren;
   /** Music state and the control for it. Absent on screens that do not carry the frame. */
-  music?: { on: boolean; onToggle(): void };
+  music?: { on: boolean; onToggle(): void; labels: MusicLabels };
 }
 
 /**
@@ -75,7 +83,7 @@ export function WorldFrame({ number, title, aside, children, music }: WorldFrame
         <span class="otp-panel__number">{number}</span>
         <span class="otp-panel__title">{title}</span>
         {aside && <span class="otp-panel__aside otp-hud">{aside}</span>}
-        {music && <MusicToggle on={music.on} onToggle={music.onToggle} />}
+        {music && <MusicToggle on={music.on} onToggle={music.onToggle} labels={music.labels} />}
         <CyeraMark />
       </header>
       {children}
@@ -83,14 +91,70 @@ export function WorldFrame({ number, title, aside, children, music }: WorldFrame
   );
 }
 
+/*
+ * A speaker, drawn rather than typed, for the same reason as the verdict glyphs on the skill card:
+ * Haffer carries neither U+266A nor U+1F507, so a text glyph falls through to whatever the UA has
+ * and lands at a foreign weight and baseline. The off state is a different SHAPE -- a crossed-out
+ * cone -- not the same shape in a paler colour.
+ */
+const SpeakerGlyph = ({ on }: { on: boolean }) => (
+  <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
+    <path d="M3.5 7.5h3L10.5 4v12L6.5 12.5h-3z" fill="currentColor" />
+    {on ? (
+      <path
+        d="M13 7.6a3.6 3.6 0 010 4.8M15.4 5.4a7 7 0 010 9.2"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+      />
+    ) : (
+      <path
+        d="M12.8 7.2l5 5.6M17.8 7.2l-5 5.6"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+      />
+    )}
+  </svg>
+);
+
 /**
  * The music control. Sound is off until this is pressed: the game embeds in an iframe on the
  * research page, and audio that starts by itself in someone else's page is how an embed gets
- * pulled. It carries its state in a word as well as a glyph, because UI_FOUNDATIONS section 2
- * refuses status by colour or shape alone, and it is a real toggle so a screen reader announces
- * the state rather than the action.
+ * pulled.
+ *
+ * UX_REVIEW finding 10. Three things here are the finding, and one of them is not in this file:
+ *
+ *  - **It says which state it is in, in a word.** UI_FOUNDATIONS section 5 specifies "a labelled
+ *    speaker toggle" and "status is carried by shape, bar and words"; this control carried its
+ *    state in a colour and a one-character difference between two music notes, with the only word
+ *    hidden from everyone who can see. The word is `aria-hidden` because `aria-checked` already
+ *    tells a screen reader the state -- and because a switch whose accessible NAME moves with its
+ *    state is announced as a different control every time it is pressed.
+ *  - **It answers the keyboard.** `world/input.ts` preventDefaults Space and Enter whenever the
+ *    world owns the keyboard -- precisely when this control is on screen -- and raises
+ *    `interactPressed` before it does, so Space on the focused toggle opened an encounter and left
+ *    the switch alone. It is the only focusable control on Explore, so the one thing a keyboard
+ *    player could reach was the one thing they could not operate. The keys the button itself uses
+ *    therefore stop here instead of reaching the window listener. Esc and the arrows are let
+ *    through: walking away from a focused toggle must still walk.
+ *  - **Its off state is still Stone `#787771` at 4.26:1 on Black**, which breaks section 7 change 4
+ *    (Stone replaced by Ash below 24px), section 1 (Stone is foreground only and does not appear in
+ *    this UI) and WCAG at Level A -- and it is still set in Arial, because no `font-family` is
+ *    declared and the UA's `button` default beats inheritance. Both live in `panels.css`, which
+ *    this round belongs to someone else: see the notes with this change for the two lines.
  */
-export function MusicToggle({ on, onToggle }: { on: boolean; onToggle(): void }) {
+export function MusicToggle({
+  on,
+  onToggle,
+  labels,
+}: {
+  on: boolean;
+  onToggle(): void;
+  labels: MusicLabels;
+}) {
   return (
     <button
       type="button"
@@ -98,10 +162,20 @@ export function MusicToggle({ on, onToggle }: { on: boolean; onToggle(): void })
       role="switch"
       aria-checked={on}
       onClick={onToggle}
-      title={on ? 'Music on' : 'Music off'}
+      onKeyDown={(e) => {
+        if (e.key === ' ' || e.key === 'Enter') e.stopPropagation();
+      }}
+      title={`${labels.name}: ${on ? labels.on : labels.off}`}
     >
-      <span aria-hidden="true">{on ? '♪' : '♩'}</span>
-      <span class="otp-visually-hidden">Music</span>
+      {/*
+        One grid item, not two: `.otp-music` is `display: grid; place-items: center`, so a second
+        visible child would open a second row and push the control out through a header whose
+        height ui/stage.ts has already reserved to the pixel.
+      */}
+      <span class="otp-music__face" aria-hidden="true">
+        <SpeakerGlyph on={on} /> <span class="otp-music__state">{on ? labels.on : labels.off}</span>
+      </span>
+      <span class="otp-visually-hidden">{labels.name}</span>
     </button>
   );
 }
@@ -159,6 +233,7 @@ export function HudBasket({ basket, items, label }: HudBasketProps) {
   return (
     <div
       class={`otp-hud-basket${leaving.length > 0 ? ' otp-hud-basket--jolt' : ''}`}
+      role="group"
       aria-label={label}
     >
       <span class="otp-hud-basket__label" aria-hidden="true">
@@ -195,10 +270,14 @@ export interface HudGoalsProps {
  * Without this the errand goals are invisible: the player is being scored on a trade -- capability
  * against risk -- that the game never showed them. Each row states "done" or "not yet" in words as
  * well as by the mark, because no status in this game is carried by colour alone.
+ *
+ * `role="group"` carries the heading to a screen reader (UX_REVIEW finding 21): a div with an
+ * aria-label and no role is not exposed as anything, so three of Grandma's sentences sat in the
+ * middle of the world with nothing saying what they were. Same for the basket above.
  */
 export function HudGoals({ goals, heading }: HudGoalsProps) {
   return (
-    <div class="otp-hud-goals">
+    <div class="otp-hud-goals" role="group" aria-label={heading}>
       <span class="otp-hud-goals__label" aria-hidden="true">
         {heading}
       </span>
@@ -260,32 +339,35 @@ export function NotationChip({ label, count }: NotationChipProps) {
   );
 }
 
-export interface SoundToggleProps {
-  on: boolean;
-  onToggle(): void;
-}
-
-/** Labelled sound control; replaces the decorative dots (UI_FOUNDATIONS binding change 7). */
-export function SoundToggle({ on, onToggle }: SoundToggleProps) {
-  return (
-    <button
-      type="button"
-      class="otp-sound"
-      aria-pressed={on}
-      aria-label={on ? 'Sound on' : 'Sound off'}
-      onClick={onToggle}
-    >
-      <span aria-hidden="true">{on ? '🔊' : '🔇'}</span>
-    </button>
-  );
-}
+/*
+ * `SoundToggle` lived here: a second, unused sound control drawn with the 🔊/🔇 emoji, which is a
+ * colour font no brand owns and a typeface UI_FOUNDATIONS does not list. Nothing rendered it --
+ * `MusicToggle` above is the shipped control -- and leaving a second one in the file is how the
+ * next person fixes the wrong one. The labelled-control requirement it was written for
+ * (UI_FOUNDATIONS binding change 7) is met by `MusicToggle`.
+ */
 
 /**
  * Keeps focus inside a modal panel, so a verdict can never be skipped by tabbing past the card.
- * Esc is owned by the input layer (world/input.ts), which hears it wherever focus happens to be.
+ *
+ * `onClose` is Esc for panels the reducer cannot hear it on. BACK is dispatched globally by
+ * `world/input.ts`, but the reducer handles it in the `dialogue` and `inspect` phases only -- and a
+ * notice is a DOM panel that leaves the phase on `explore`, so the one `aria-modal` panel where Esc
+ * must close was the one panel where it did nothing (UX_REVIEW finding 14). A panel that passes
+ * `onClose` closes itself here and stops the key, so it can never be handled twice.
+ *
+ * Esc listens on the document and Tab on the panel, which is not a stylistic difference. Tab is
+ * only interesting while focus is inside the panel -- that is what it moves. Esc has to work
+ * wherever focus happens to be: focus can sit on the body for the frame between the panel painting
+ * and this effect running, and the canvas takes focus on any pointer press, so a close bound to the
+ * panel is a close that silently does nothing some of the time. The first version of this was, and
+ * the test for it failed one run in three.
  */
-export function useFocusTrap() {
+export function useFocusTrap(onClose?: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  // The handler below is bound once; this keeps it pointing at the current callback.
+  const close = useRef(onClose);
+  close.current = onClose;
 
   useEffect(() => {
     const node = ref.current;
@@ -298,6 +380,14 @@ export function useFocusTrap() {
         ),
       );
     (node.querySelector<HTMLElement>('[data-autofocus]') ?? focusable()[0])?.focus();
+
+    const onEscape = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || !close.current) return;
+      e.preventDefault();
+      // Stops before the window listener in world/input.ts, so one Esc closes one layer.
+      e.stopPropagation();
+      close.current();
+    };
 
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Tab') return;
@@ -315,8 +405,10 @@ export function useFocusTrap() {
     };
 
     node.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onEscape);
     return () => {
       node.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onEscape);
       previous?.focus?.();
     };
   }, []);

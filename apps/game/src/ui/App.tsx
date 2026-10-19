@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'preact/hooks';
 import {
   CAPABILITIES,
+  canEnterCottage,
   errandGoals,
   findCharacter,
   findNotice,
   findSkill,
   liveCapabilities,
 } from '@otp/core';
-import type { Content, GameState, Verdict } from '@otp/core';
+import type { Character, Content, GameState, Verdict } from '@otp/core';
 import type { Store } from '../store';
 import { Dialogue } from './Dialogue';
 import { SkillCard } from './SkillCard';
@@ -43,6 +44,17 @@ function useStoreState(store: Store): GameState {
   return state;
 }
 
+/**
+ * Past tense of each verdict, for the lines that report one. `main.ts` carries the same three
+ * pairs for the toast; they belong in `content` beside the strings they name, which is a change to
+ * the content schema and so not this one.
+ */
+const VERDICT_STRING: Record<Verdict, string> = {
+  allow: 'verdictAllowed',
+  restrict: 'verdictRestricted',
+  reject: 'verdictRejected',
+};
+
 export function App({
   store,
   content,
@@ -73,6 +85,9 @@ export function App({
    */
   const inWorld =
     state.phase === 'explore' || state.phase === 'dialogue' || state.phase === 'inspect';
+  /** The forest itself is what is on screen: no panel is over it. */
+  const inForest = state.phase === 'explore';
+  const allLive = live.length === CAPABILITIES.length;
 
   return (
     <>
@@ -90,6 +105,40 @@ export function App({
         </div>
       )}
       {renderScreen()}
+      {/*
+        Every announcement the world makes, in regions that are mounted for as long as the world
+        is -- through a panel opening and closing over it -- rather than with the thing they
+        announce (UX_REVIEW finding 14).
+
+        A live region inserted into the DOM already containing its text is not announced at all:
+        screen readers announce MUTATIONS to a region that was already there. The verdict
+        confirmation was the proof. Its node sits in the explore branch, which unmounts the moment
+        Inspect opens and mounts again on the verdict with "Allowed: Cottage Finder" already
+        inside, so the one line that confirms the most consequential click in the game reached
+        nobody -- while the cottage hint, which mutates a node already on screen, always worked.
+
+        The announcing is split from the showing instead of hoisting the visible nodes, because the
+        three visible lines cannot move: `.otp-say` must disappear when nothing is being said (it
+        has no empty state and would otherwise leave a dark pill on the forest), and
+        `.otp-world-warning` is positioned inside the world frame, which is where it has to stay.
+        So each visible line is `aria-hidden` -- it is a duplicate of these words, not a second
+        message -- and these regions do the speaking. One region per channel, because a verdict and
+        the trifecta warning can arrive in the same tick and a single region can only hold one of
+        them: that is exactly the beat the review found silent.
+      */}
+      {inWorld && (
+        <div class="otp-visually-hidden">
+          <p data-announce="world" role="status" aria-live="polite">
+            {inForest ? (hint ?? '') : ''}
+          </p>
+          <p data-announce="say" role="status" aria-live="polite">
+            {inForest && say ? `${say.name}: ${say.line}` : ''}
+          </p>
+          <p data-announce="trifecta" role="status" aria-live="polite">
+            {inForest && allLive ? (content.strings['trifectaWarning'] ?? '') : ''}
+          </p>
+        </div>
+      )}
     </>
   );
 
@@ -165,7 +214,14 @@ export function App({
             <WorldFrame
               number="01"
               title="Explore"
-              music={music}
+              music={{
+                ...music,
+                labels: {
+                  name: content.strings['musicLabel'] ?? 'Music',
+                  on: content.strings['musicOn'] ?? 'On',
+                  off: content.strings['musicOff'] ?? 'Off',
+                },
+              }}
               aside={
                 <>
                   <NotationChip
@@ -177,32 +233,69 @@ export function App({
               }
             >
               <p class="otp-world-hint">{content.strings['controlsHint'] ?? ''}</p>
-              {live.length === CAPABILITIES.length && (
-                <p class="otp-world-warning" role="status">
+              {allLive && (
+                <p class="otp-world-warning" aria-hidden="true">
                   {content.strings['trifectaWarning'] ?? ''}
                 </p>
               )}
+              {worldAsText()}
             </WorldFrame>
-            {/*
-            Permanently mounted, so the live region actually announces. A region inserted into the
-            DOM already containing its text is not announced at all: screen readers announce
-            mutations to a region that was already there, which is why the verdict confirmation
-            reached nobody. Empty is hidden by CSS rather than by unmounting.
-          */}
+            {/* The visible lines. The regions above the phase switch are what says them aloud. */}
             <div class="otp-layer">
               {say && (
-                <p class="otp-say">
+                <p class="otp-say" aria-hidden="true">
                   <span class="otp-say__who">{say.name}</span>
                   {say.line}
                 </p>
               )}
-              <p class="otp-toast" role="status" aria-live="polite">
+              <p class="otp-toast" aria-hidden="true">
                 {hint ?? ''}
               </p>
             </div>
           </>
         );
     }
+  }
+
+  /**
+   * The world, in words (UX_REVIEW finding 16).
+   *
+   * The forest is a canvas with nothing behind it: no text alternative for where Red is, what is
+   * near her or what she can interact with. This is the part of that which the UI can actually
+   * know. Who is out there and how far the player has got with each of them is in the store, so it
+   * can be stated; WHERE anyone is, and whether one of them is in range right now, is known only
+   * to the Phaser scene, which reports neither on the bus. Until it does, a player who cannot see
+   * the forest can still tell who is left to meet, what Grandma asked for and whether the cottage
+   * will open -- but has to sweep the forest pressing Space to find anybody. Said plainly in the
+   * notes with this change, because it is the difference between completable and usable.
+   */
+  function worldAsText() {
+    const travellerState = (c: Character): string => {
+      const verdict = state.verdicts[c.skillId];
+      if (verdict) {
+        const word = content.strings[VERDICT_STRING[verdict]] ?? verdict;
+        return `${word}: ${findSkill(content, c.skillId)?.name ?? c.skillId}`;
+      }
+      if (state.met.includes(c.id)) return content.strings['worldTravellerMet'] ?? '';
+      return content.strings['worldTravellerUnmet'] ?? '';
+    };
+
+    return (
+      <section class="otp-visually-hidden" aria-label={content.strings['worldSummaryLabel'] ?? ''}>
+        {/* The same line as the hint over the canvas, which is display: none on a touch device. */}
+        <p>{content.strings['controlsHint'] ?? ''}</p>
+        <ul>
+          {content.characters.map((c) => (
+            <li key={c.id}>{`${c.name}, ${travellerState(c)}`}</li>
+          ))}
+        </ul>
+        <p>
+          {canEnterCottage(state, content)
+            ? (content.strings['worldCottageOpen'] ?? '')
+            : (content.strings['worldCottageLocked'] ?? '')}
+        </p>
+      </section>
+    );
   }
 }
 
