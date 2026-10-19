@@ -66,20 +66,72 @@ test.describe('capture', () => {
     }
   });
 
-  test('the panels', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 860 });
-    await page.goto('/');
-    await startGame(page);
+  /*
+   * Every screen the game has, at three widths, for a design review.
+   *
+   * A review that only sees the forest judges a third of the product: most of what a player reads
+   * is DOM panels, and `docs/UI_FOUNDATIONS.md` governs those, not the tileset. The widths are the
+   * three CLAUDE.md names in its definition of done, and they matter because `--otp-ui` and
+   * `--otp-px` step at 640px and 380px, so a panel at 375 is not the 1280 panel scaled.
+   */
+  const WIDTHS: [label: string, width: number, height: number][] = [
+    ['1280', 1280, 860],
+    ['768', 768, 1024],
+    ['375', 375, 812],
+  ];
 
-    await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
-    await page.waitForTimeout(900);
-    await page.screenshot({ path: `${OUT}/panel-dialogue.png` });
+  for (const [label, width, height] of WIDTHS) {
+    test(`every screen at ${label}`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      const shot = async (name: string, settle = 350): Promise<void> => {
+        await page.waitForTimeout(settle);
+        await page.screenshot({ path: `${OUT}/ui-${label}-${name}.png` });
+        console.log(`shot ui-${label}-${name}`);
+      };
 
-    await page.evaluate(() =>
-      window.__otp!.store.dispatch({ type: 'INSPECT', s: 'cottage-finder' }),
-    );
-    await page.waitForTimeout(400);
-    await page.screenshot({ path: `${OUT}/panel-card.png` });
-    console.log('shot panel-dialogue, panel-card');
-  });
+      await page.goto('/');
+      await page.waitForSelector('#game[data-ready="true"]');
+      await shot('00-title');
+
+      await startGame(page);
+      await shot('01-explore');
+
+      // Question: the typewriter needs a beat, or the line is caught mid-type.
+      await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
+      await shot('02-question', 1200);
+
+      await page.evaluate(() =>
+        window.__otp!.store.dispatch({ type: 'INSPECT', s: 'cottage-finder' }),
+      );
+      await shot('03-inspect');
+
+      /*
+       * Then straight through to the end: allow everything, which is both the fastest route and
+       * the most interesting one, since it is the run that trips every capability and lands the
+       * all-three-at-once warning.
+       */
+      await page.evaluate(() => {
+        const { store } = window.__otp!;
+        store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'allow' });
+        for (const [c, s] of [
+          ['owl', 'word-weaver'],
+          ['lantern-keeper', 'night-light'],
+        ]) {
+          store.dispatch({ type: 'MEET', c });
+          store.dispatch({ type: 'INSPECT', s });
+          store.dispatch({ type: 'VERDICT', s, v: 'allow' });
+        }
+      });
+      await shot('04-all-three-live');
+
+      await page.evaluate(() => window.__otp!.store.dispatch({ type: 'ENTER_COTTAGE' }));
+      await shot('05-arrive', 1200);
+
+      await page.evaluate(() => window.__otp!.store.dispatch({ type: 'FINISH' }));
+      await shot('06-results', 600);
+
+      await page.evaluate(() => window.__otp!.store.dispatch({ type: 'LEADERBOARD' }));
+      await shot('07-leaderboard');
+    });
+  }
 });
