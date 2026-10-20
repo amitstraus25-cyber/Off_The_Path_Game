@@ -675,14 +675,25 @@ test('the title column leaves Red on the path it says she is standing on', async
   /*
    * "Red is already standing on the path" was the first thing the hero screen said and it was false
    * at every landscape width: a 430px copy column put its right edge 46px past her, and she renders
-   * behind 88%-black at about 1.1:1, which is invisible. The chip has gone with the claim; the
-   * column is 340px, which is the number docs/UX_REVIEW.md finding 11 asks for and leaves 44 of her
-   * 64px sprite box clear of it. The camera cannot help -- scrollX is already clamped at the map's
-   * left bound -- so the column is the only lever, and widening it hides her again.
+   * behind 88%-black at about 1.1:1, which is invisible. The chip has gone with the claim. The
+   * camera cannot help -- scrollX is already clamped at the map's left bound -- so the column is
+   * the only lever, and widening it hides her again.
+   *
+   * THIS TEST USED TO MEASURE THE WRONG EDGE. It compared her sprite box's RIGHT edge to the
+   * column's, which stays comfortably positive while her left side is buried, and so it passed at
+   * 340px with 10px of her hidden -- confirmed by reading the pixels off the built preview, where
+   * she lands at x 349..396 at every size from 1280x800 to 1920x1080. The question is whether the
+   * column's right edge is left of HER LEFT EDGE, so that is what it now asserts.
+   *
+   * The edge measured here is the SPRITE BOX's, which starts about 10px left of her first painted
+   * pixel because the 32px frame carries transparent padding. So this is the stricter of the two
+   * readings: 306px ends at 325 and leaves 14px to the box, 24px to her cape.
    */
   for (const [w, h] of [
+    [1280, 800],
     [1280, 860],
     [1440, 900],
+    [1920, 1080],
   ] as const) {
     await page.setViewportSize({ width: w, height: h });
     await page.goto('/');
@@ -697,14 +708,78 @@ test('the title column leaves Red on the path it says she is standing on', async
       const column = document.querySelector('.otp-title-panel')!.getBoundingClientRect();
       // red.png frames are 32x48 with the origin at her feet (world/forest-scene.ts).
       const zoom = canvas.width / scene.cameras.main.width;
-      const right = canvas.left + (scene.redPosition.x + 16 - scene.cameras.main.scrollX) * zoom;
+      const left = canvas.left + (scene.redPosition.x - 16 - scene.cameras.main.scrollX) * zoom;
       return {
-        clear: Math.round(right - column.right),
+        clear: Math.round(left - column.right),
         column: Math.round(column.width),
       };
     });
-    expect(seen.column, `the title column at ${w}x${h}`).toBeLessThanOrEqual(384);
-    expect(seen.clear, `Red's sprite clear of the column at ${w}x${h}`).toBeGreaterThanOrEqual(40);
+    expect(seen.column, `the title column at ${w}x${h}`).toBeLessThanOrEqual(310);
+    expect(
+      seen.clear,
+      `air between the title column and Red's left edge at ${w}x${h}`,
+    ).toBeGreaterThanOrEqual(12);
+  }
+});
+
+/* --------------------------------------- the landing screen is a storybook, not a crypt */
+
+test('the title card is a light ground, and carries the logo that belongs on one', async ({
+  page,
+}) => {
+  test.slow();
+  /*
+   * The landing screen read as creepy, and the cause was measurable: 36-44% of its pixels were
+   * near-black (luminance < 0.045) against 12.0-14.3% on the approved board in reference/. Three
+   * CSS declarations did it -- a black page ground, an 88%-black title column and its 94%-black
+   * portrait twin. The column is now Shell, like every other panel in the game, which brings the
+   * screen to 12.0 / 10.6 / 13.4% at the three review widths.
+   *
+   * The two halves are asserted together on purpose. reference/brand/logos/README.md allows the
+   * white wordmark only on a dark ground, so a future round that darkens this card again without
+   * switching the mark back would ship an invisible logo -- and a round that lightens some other
+   * dark panel and forgets the mark has the same bug. Tying them in one test is what makes that
+   * impossible to do by halves.
+   */
+  for (const [w, h] of [
+    [1280, 800],
+    [768, 1024],
+    [375, 812],
+  ] as const) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.goto('/');
+    await page.waitForSelector('#game[data-ready="true"]');
+
+    const seen = await page.evaluate(() => {
+      const srgb = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+      /*
+       * A color-mix() does NOT compute to rgb(): Chromium reports it as
+       * `color(srgb 0.964706 0.960784 0.945098 / 0.94)`, with channels in 0..1. Dividing those
+       * by 255 reads Shell as near-black, which is how the first draft of this test failed on
+       * the very build it was written to approve. The trailing alpha is ignored on purpose --
+       * the question is what colour the card declares, not what the forest behind it does to it.
+       */
+      const luma = (css: string) => {
+        const scale = css.startsWith('color(') ? 1 : 1 / 255;
+        const [r = 0, g = 0, b = 0] = (css.match(/[\d.]+/g) ?? []).map(Number);
+        return 0.2126 * srgb(r * scale) + 0.7152 * srgb(g * scale) + 0.0722 * srgb(b * scale);
+      };
+      const panel = document.querySelector('.otp-title-panel')!;
+      const mark = panel.querySelector('img[src*="cyera-logo"]');
+      return {
+        ground: luma(getComputedStyle(panel).backgroundColor),
+        heading: luma(getComputedStyle(panel.querySelector('.otp-title__mark')!).color),
+        markSrc: mark?.getAttribute('src') ?? null,
+      };
+    });
+
+    // Shell is 0.90; anything under half-way to mid-grey is a dark panel wearing light text.
+    expect(seen.ground, `the title card's ground at ${w}x${h}`).toBeGreaterThan(0.5);
+    // ...and the heading has to be the dark one, or the card is light-on-light.
+    expect(seen.heading, `the title heading at ${w}x${h}`).toBeLessThan(0.2);
+    if (seen.markSrc !== null) {
+      expect(seen.markSrc, `the wordmark on the light title card at ${w}x${h}`).toContain('black');
+    }
   }
 });
 

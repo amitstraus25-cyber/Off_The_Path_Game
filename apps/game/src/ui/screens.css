@@ -513,7 +513,14 @@ h2.otp-section-label {
    * under the column. Clearing the whole sprite wants 300px or less, which no longer holds the
    * heading on one line, so that is a call for the title's owner and not a silent widening here.
    */
-  width: min(calc(340px * var(--otp-ui)), 62%);
+  /* 306, not 340. Measured on the built preview, Red's painted pixels run x 349..396 at every
+     landscape size from 1280x800 to 1920x1080 -- the camera anchors her identically, because
+     scrollX is already clamped at the map's left bound -- and her 32px sprite box starts at 339,
+     the first 10px of it being transparent. A 340px column ended at 359, covering her left side.
+     306 ends at 325: 14px of air to the sprite box, 24 to the first pixel of her cape. The
+     reading column loses about three characters a line, which the copy can afford; being able to
+     see who you are playing, it cannot. e2e/css-contract.spec.ts guards the number. */
+  width: min(calc(306px * var(--otp-ui)), 62%);
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -523,20 +530,30 @@ h2.otp-section-label {
      and on a desktop that left a few hundred pixels of void between the intro and the button. */
   justify-content: center;
   padding: calc(22px * var(--otp-ui)) calc(24px * var(--otp-ui));
-  /* Opaque enough to hold 4.5:1 text on any frame of the forest, with the blur as a bonus for
-     browsers that have it rather than something the contrast depends on. */
-  background: color-mix(in srgb, var(--cyera-black) 88%, transparent);
+  /* A LIGHT CARD, as every other panel in the game already is: Shell body, Deep Purple frame
+     (see .otp-dialogue, .otp-card). This was 88% Black, and it was the single largest reason the
+     landing screen read as creepy rather than as a storybook -- measured, the title screen was
+     36-44% near-black pixels against the approved board's 12-14%.
+
+     94% rather than flat, so a little forest still moves behind it. Worst case is the darkest
+     frame of the world showing through, which lands the ground near #E8E8E4: Black text on that
+     is 13:1, so the blur stays a bonus and never something the contrast depends on. */
+  background: color-mix(in srgb, var(--cyera-shell) 94%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-bottom-left-radius: calc(var(--otp-r-panel) - var(--otp-panel-border));
 }
+/* The four text colours below are the light-ground half of the flip above. They are the brand's
+   own semantic roles (cyera-theme.css: heading Deep Purple, text Black, muted Ash) rather than a
+   per-element choice, and the two purple tints that used to be here -- Lilac and Haze -- are
+   light-on-dark accents that fall under 3:1 on Shell. */
 .otp-title-panel .otp-title__mark {
   font-size: clamp(34px, calc(48px * var(--otp-ui)), 56px);
-  color: var(--cyera-offwhite);
+  color: var(--cyera-deep-purple);
 }
 .otp-title-panel .otp-title__sub {
   font-size: calc(18px * var(--otp-ui));
-  color: var(--cyera-lilac);
+  color: var(--cyera-aubergine);
   margin: calc(6px * var(--otp-ui)) 0 calc(16px * var(--otp-ui));
 }
 /* On the dark column the beige card would be a second panel inside a panel; the note keeps its
@@ -549,18 +566,19 @@ h2.otp-section-label {
      the screen the loud one; the indent and the caption under it already say it is a quote. */
   padding: calc(2px * var(--otp-ui)) 0 calc(2px * var(--otp-ui)) calc(2px * var(--otp-ui));
   font-size: max(12px, calc(16px * var(--otp-ui)));
-  color: var(--cyera-offwhite);
+  color: var(--cyera-black);
 }
 .otp-title-panel .otp-note__from {
-  color: var(--cyera-haze);
+  color: var(--cyera-ash);
   font-size: max(12px, calc(13px * var(--otp-ui)));
 }
 .otp-title-panel .otp-body-text {
   font-size: max(12px, calc(16px * var(--otp-ui)));
-  color: var(--cyera-haze);
+  color: var(--cyera-ash);
 }
+/* Ash, not Stone: Stone is 3.6:1 on this ground and the hint is the smallest type on the card. */
 .otp-title-panel .otp-hint {
-  color: var(--cyera-haze);
+  color: var(--cyera-ash);
 }
 .otp-title__foot {
   padding-top: calc(16px * var(--otp-ui));
@@ -598,6 +616,8 @@ h2.otp-section-label {
     max-height: 64vh;
     border: var(--otp-panel-border) solid var(--cyera-deep-purple);
     border-radius: var(--otp-r-panel);
-    background: color-mix(in srgb, var(--cyera-black) 94%, transparent);
+    /* Portrait sat at 94% Black and is where the near-black measured worst (42% of the screen at
+       375), because here the card is the bottom half rather than a side column. Same Shell. */
+    background: color-mix(in srgb, var(--cyera-shell) 96%, transparent);
   }
 }

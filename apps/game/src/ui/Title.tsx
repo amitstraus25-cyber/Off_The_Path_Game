@@ -174,12 +174,11 @@ export function Title({ content, onPlay }: TitleProps) {
             a flex column, so it lands top-right with no new rule -- which matters this round,
             because the stylesheets have another owner.
 
-            THE GROUND IT SITS ON. White-on-dark is correct TODAY and only today: .otp-title-panel
-            is 88% Black, and docs/DESIGN_BOARD.md section 2 asks for that near-black half-screen to
-            go. The moment the panel takes a light ground this must become `on="light"`, per
+            THE GROUND IT SITS ON. The panel has now taken the light ground that DESIGN_BOARD.md
+            section 2 asked for (Shell, not 88% Black), so the mark is black-on-light, per
             reference/brand/logos/README.md -- a white wordmark on Shell is an invisible one.
           */}
-          {markHidden && <CyeraMark />}
+          {markHidden && <CyeraMark on="light" />}
           <h1 class="otp-title__mark">
             <Highlighted text={s('title')} word={s('titleHighlight')} />
           </h1>

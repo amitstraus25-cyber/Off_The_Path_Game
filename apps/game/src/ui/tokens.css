@@ -90,8 +90,23 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--cyera-black);
-  color: var(--cyera-offwhite);
+  /*
+   * The page ground, and the single biggest reason the landing screen read as a horror title card.
+   *
+   * Measured by the head of product on fresh captures: the title screen was 36% near-black at 1280,
+   * 44% at 768 and 48% at 375 -- against the approved board's four frames at 12.0, 13.7, 12.6 and
+   * 14.3%. Nothing on the board is a half-screen of black. A sunlit forest seen through a glowing
+   * rectangle in a dark room is a horror-film frame, and on a phone almost half the landing screen
+   * of a marketing asset was a dead black field.
+   *
+   * The board's own surround is LIGHT -- the four frames sit on a pale ground -- so this is not an
+   * invention, it is what the design does. Shell is the lightest ground in UI_FOUNDATIONS section
+   * 1's closed palette and is already the panel ground throughout, so the page now matches the
+   * panels instead of fighting them. `color` moves with it or every unstyled node inherits
+   * Offwhite on Shell at 1.1:1; Black on Shell is 17.5:1, which section 6 already tabulates.
+   */
+  background: var(--cyera-shell);
+  color: var(--cyera-black);
   font-family: var(--cyera-font-sans);
 }
 
