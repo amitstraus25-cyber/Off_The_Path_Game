@@ -1,3 +1,4 @@
+import './zod-config.ts';
 import { z } from 'zod';
 import { findCharacterForSkill } from './content.ts';
 import type { Content } from './content.ts';

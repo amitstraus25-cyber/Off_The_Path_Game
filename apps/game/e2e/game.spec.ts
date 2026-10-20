@@ -114,12 +114,25 @@ test('rejecting everything arrives safely, with the errand undone', async ({ pag
   await expect(page.locator('.otp-arrive__line--reveal').first()).toContainText('given up waiting');
   await page.getByRole('button', { name: /Step inside/ }).click();
   await expect(page.locator('.otp-hero__score')).toBeVisible();
-  // Rejecting Word Weaver is the best call, so only the compass and the lantern are misses:
-  // refusing everything is safe but costly, which is the point of keeping one genuinely safe skill.
-  await expect(page.locator('.otp-recap__row--skill.otp-recap__row--missed')).toHaveCount(2);
-  await expect(page.locator('.otp-recap__row--skill:not(.otp-recap__row--missed)')).toContainText(
-    'Word Weaver',
-  );
+  /*
+   * Refusing everything is safe but costly, and the recap now says those are different things.
+   * `--missed` is the mark for a hidden action that RAN (`recap().compromised`, i.e. the outcome
+   * set a flag), not for any verdict short of the best one -- so a run that takes nothing wears it
+   * nowhere, which is what "safe" means. Rejecting Word Weaver is the best call and scores full
+   * marks; rejecting the compass and the lantern scores 100 of 200 each and leaks nothing.
+   *
+   * Asserted per row on `data-glyph`, the attribute Results.tsx documents as the one specs read,
+   * because a count alone cannot tell "0 missed because nothing was taken" from "0 missed because
+   * the rows stopped rendering". The order is content order: Cottage Finder, Word Weaver, Night
+   * Light.
+   */
+  await expect(page.locator('.otp-recap__row--skill')).toHaveCount(3);
+  expect(
+    await page
+      .locator('.otp-recap__row--skill .otp-recap__badge')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-glyph'))),
+  ).toEqual(['traded', 'check', 'traded']);
+  await expect(page.locator('.otp-recap__row--skill.otp-recap__row--missed')).toHaveCount(0);
 });
 
 test("allowing everything ends in the wolf's house", async ({ page }) => {
@@ -127,10 +140,23 @@ test("allowing everything ends in the wolf's house", async ({ page }) => {
   await playRun(page, { rabbit: 'allow', owl: 'allow', 'lantern-keeper': 'allow' });
 
   await finishArrival(page);
-  // A capability taken by allowing in full does not carry out Grandma's errand -- the word it
-  // sent went to the wolf as well -- so allow-all earns no goal and keeps only the lantern's 100.
-  // Allowing the lantern is now a miss too: restricting it is the best verdict on that card.
-  await expect(page.locator('.otp-recap__row--skill.otp-recap__row--missed')).toHaveCount(3);
+  /*
+   * A capability taken by allowing in full does not carry out Grandma's errand -- the word it
+   * sent went to the wolf as well -- so allow-all earns no goal and keeps only the lantern's 100.
+   *
+   * TWO rows wear the failure mark here, not three, and the third row is the whole lesson of the
+   * card. Allowing the compass sets `keyStolen` and allowing the translator sets `messagesLeaked`,
+   * so both ran a hidden action. Allowing the lantern sets NO flag: it is the wrong call (restrict
+   * scores 200 against its 100) but nothing was taken, so it reads `traded`/"Nothing taken". That
+   * distinction is the point of the three-state recap -- the "!" disc means something ran, and a
+   * run where it appears twice is not the same screen as one where it appears three times.
+   */
+  await expect(page.locator('.otp-recap__row--skill')).toHaveCount(3);
+  expect(
+    await page
+      .locator('.otp-recap__row--skill .otp-recap__badge')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-glyph'))),
+  ).toEqual(['missed', 'missed', 'traded']);
   const flags = await page.evaluate(() => window.__otp!.store.getState().flags);
   expect(flags).toEqual(['keyStolen', 'messagesLeaked']);
 });

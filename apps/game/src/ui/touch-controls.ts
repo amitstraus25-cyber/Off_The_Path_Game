@@ -79,6 +79,23 @@ const DIRECTIONS: readonly { key: keyof TouchLabels; x: number; y: number }[] = 
   { key: 'right', x: 1, y: 0 },
 ];
 
+/**
+ * Whether this key is the one a focused button is about to be activated BY.
+ *
+ * Space and Enter, and deliberately nothing else. `test/touch-pad.test.ts` is built on what is
+ * NOT in here: the arrows and Escape have to keep travelling, because walking away from a focused
+ * walk button must still walk and Escape must still close a panel, and a guard that swallowed
+ * them would trade one dead control for four.
+ *
+ * `e.key`, not `e.code`, because what matters is the character the activation is keyed to and not
+ * where it sits on the board. `ui/components.tsx` makes the same test inline for the music toggle
+ * against the same window listener; it is spelled out here because this file needs it on five
+ * controls and because the keys that belong in it are the thing a reader will want to check.
+ */
+export function activationKey(key: string): boolean {
+  return key === ' ' || key === 'Enter';
+}
+
 export function createTouchControls(input: Input, labels: TouchLabels): TouchControls {
   const root = document.createElement('div');
   root.className = 'otp-touch';
@@ -121,12 +138,20 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
    * reach, and out of flow -- `.otp-visually-hidden` is absolutely positioned -- so the stick and
    * the A button keep the pad's layout exactly as the mock has it.
    *
-   * Visually hidden rather than drawn, because drawing them means four 44px boxes in the pad and
-   * the styling for them lives in `ui/tokens.css`, which this change does not own. On a fine
-   * pointer the whole pad is `display: none` and the arrow keys are the answer instead, so no
-   * desktop player can tab into something invisible. What is left is a tablet with a keyboard,
-   * where a sighted player tabbing through would find five controls with no focus ring: the
-   * remedy is to draw them, which is a dozen lines in tokens.css and not this file's to write.
+   * Visually hidden UNTIL A KEYBOARD REACHES THEM, not hidden outright. `ui/tokens.css` draws this
+   * group as a row of pills on `:focus-within` -- the skip-link pattern -- so a sighted player
+   * tabbing through finds five controls with focus rings rather than five invisible ones. The note
+   * that stood here called that remedy "a dozen lines in tokens.css and not this file's to write";
+   * those lines are written, and this paragraph is what is left of the finding.
+   *
+   * And on a fine pointer the pad is NOT `display: none`. That sentence was true of an older
+   * tokens.css and it is most of the reason these five went so long without a keyboard path: while
+   * it held, nothing in the document could be focused, so nothing was ever pressed by a key and
+   * the dead activation below could not be noticed. The rule there now hides only the two THUMB
+   * controls, `.otp-stick` and `.otp-a-button`, and leaves this group in the document on every
+   * pointer, because on a desktop it is the only thing a player without sight has to walk with --
+   * the arrow keys appear in no accessible tree. Which is exactly why the keydown guard below has
+   * to exist: being reachable and being operable turned out to be different questions.
    */
   const pad = document.createElement('div');
   pad.className = 'otp-visually-hidden';
@@ -159,17 +184,41 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
     walkTimer = setTimeout(stopWalking, STEP_MS);
   };
 
+  /**
+   * Space and Enter, kept inside the button that was pressed.
+   *
+   * These five controls exist so the forest can be walked without a pointer, and until this
+   * listener they could not be operated by the only input that can reach them. `world/input.ts`
+   * takes `keydown` on the WINDOW and calls `preventDefault` on Space and Enter whenever the world
+   * owns input -- which on Explore it always does. A button's activation is a DEFAULT ACTION, so
+   * cancelling it up there cancels it down here: measured at 1280x800, every one of the five, both
+   * keys, 0 `click` events and Red moved 0.0px, while a pointer click on the same button moved her
+   * 78px. Ten dead presses and one live one.
+   *
+   * The remedy is the one `MusicToggle` already carries against the same window listener: stop the
+   * keys the button is activated BY from propagating, so the window never sees them and the
+   * browser's own activation survives untouched. Nothing is cancelled here -- the button still
+   * does what a button does -- and nothing else is held back. Everything that is not an activation
+   * key keeps bubbling, so the arrows still walk away from a focused control and Escape still
+   * closes a panel.
+   */
+  const keepActivationLocal = (e: KeyboardEvent): void => {
+    if (activationKey(e.key)) e.stopPropagation();
+  };
+
   for (const { key, x, y } of DIRECTIONS) {
     const walk = document.createElement('button');
     walk.type = 'button';
     walk.textContent = labels[key];
     walk.addEventListener('click', () => stepWalk(x, y));
+    walk.addEventListener('keydown', keepActivationLocal);
     pad.append(walk);
   }
   const stop = document.createElement('button');
   stop.type = 'button';
   stop.textContent = labels.stop;
   stop.addEventListener('click', stopWalking);
+  stop.addEventListener('keydown', keepActivationLocal);
   pad.append(stop);
 
   /** Red stops the moment she reaches someone, rather than walking straight past them. */
@@ -223,6 +272,51 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   };
 
   /**
+   * The ghost of the same press, which must not arrive at all. This handler presses nothing: its
+   * whole job is to cancel a gesture's default action.
+   *
+   * Chromium synthesises a compatibility mouse `click` from a single-touch gesture, and by the
+   * time it is dispatched this pad is gone: `main.ts` hides the whole thing the moment the phase
+   * leaves explore, so the click has no A button under it any more and retargets onto whatever the
+   * panel that replaced the pad put in that place.
+   *
+   * MEASURED, because the shape of the consequence is not what it looks like. The click is real: a
+   * trusted click, `detail` 1, landing on `.otp-dialogue__foot` at 375x812, 360x800 and 390x844.
+   * It lands on no CONTROL -- 576 combinations of viewport width, viewport height, character and
+   * question state were swept and the A button's centre is over an actionable control in none of
+   * them -- so it presses no button and costs no points. What it does instead is bubble: the
+   * dialogue's modal layer answers a click anywhere inside it by fast-forwarding the line being
+   * typed, so this never needed to hit a control to do something. One tap of A, eighteen taps out
+   * of eighteen, found the greeting ALREADY COMPLETE 120ms after the panel opened; the same
+   * interact sent from the keyboard found it still typing, twelve times out of twelve. The
+   * typewriter the design spends a beat on did not play on the device most people hold.
+   *
+   * IT IS A TOUCH EVENT THAT CANCELS IT, AND NOT A POINTER ONE. Both of the obvious places were
+   * tried and both were measured, because the sequence is not what it reads like:
+   *
+   *   - `pointerdown` was already cancelled, a dozen lines up, through every measurement above.
+   *     Cancelling it suppresses the compatibility `mousedown`; the click comes anyway.
+   *   - `pointerup` was tried next and makes no difference either. It is not that the handler is
+   *     missed -- a touch pointer is implicitly captured, so `pointerup` lands on this button at
+   *     182ms even though the pad went `hidden` at about 50ms, and the handler runs. The click
+   *     still arrived 1-2ms later, on `.otp-dialogue__foot`, in every trial.
+   *
+   * Chromium generates this click from the TOUCH sequence, so `touchend` is the event that has a
+   * default action to cancel. With this one listener the click is not dispatched at all: the trace
+   * ends at `pointerup`, and the greeting types out on a phone exactly as it does from the
+   * keyboard (0 of 18 fast-forwarded, against 18 of 18 before).
+   *
+   * The `detail === 0` path below is untouched, and that is the point of cancelling the gesture
+   * rather than filtering the click: an activation with no pointer behind it is preceded by no
+   * `touchend`, so there is nothing in this handler for a screen reader, a switch or
+   * `element.click()` to trip over. Measured after the change, at 390x844: one tap is one press at
+   * holds of 8, 40 and 120ms; `element.click()` is one press; and a second finger tapping A while
+   * the first rests on the stick -- the two-handed grip this pad is laid out for, and the one
+   * gesture Chromium sends no click for at all -- is still one press.
+   */
+  const onButtonUp = (e: Event): void => void e.preventDefault();
+
+  /**
    * The same press, arriving a second time.
    *
    * `pointerdown` above answers a thumb; this answers an activation with no pointer behind it,
@@ -266,6 +360,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   stick.addEventListener('pointerup', onStickUp);
   stick.addEventListener('pointercancel', onStickUp);
   button.addEventListener('pointerdown', onButton);
+  button.addEventListener('touchend', onButtonUp);
   button.addEventListener('click', onButtonClick);
 
   return {

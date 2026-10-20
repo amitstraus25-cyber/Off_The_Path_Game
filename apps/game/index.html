@@ -4,35 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Off the Path: That's Not My Grandma</title>
-    <!-- The real symbol, served from our own origin. The placeholder that stood here was written
-         before cyera-symbol-black.svg was added to public/brand, and its reasoning was right at the
-         time: a mark has to come from Brand Kit and inventing one would break "never invent brand
-         assets". It is here now, unmodified and self-hosted, so the placeholder has no reason left.
-         NOTE for brand: this is the BLACK symbol, which is correct on light browser chrome and
-         low-contrast on dark. Brand Kit has no white symbol, only a white wordmark, and recolouring
-         the file is the one thing rule 5 forbids outright -- so a dark-mode variant is a request to
-         Brand, not a change to make here. -->
     <link rel="icon" type="image/svg+xml" href="/brand/cyera-symbol-black.svg" />
-    <!-- NO FONT PRELOAD HERE, AND THAT IS THE FIX, NOT AN OMISSION.
-         Two <link rel="preload" as="font" type="font/ttf"> tags stood here, one per face. A font
-         preload is always fetched at the highest priority there is, so 705,680 bytes of raw TTF
-         went out ahead of /assets/index-*.js -- the 390,978-byte module script that is the only
-         thing in the build able to paint a screen. Measured on the built game over Lighthouse
-         Slow-4G with a 4x CPU throttle at 390x844: the script did not finish downloading until
-         5,261ms, the two faces finished at 3,880ms and 5,590ms having been useful to nobody in the
-         meantime, and first contentful paint was 5,852ms. That is the blank hero the client
-         reported. Nothing sets any text until the script has run, so the priority was exactly
-         backwards.
-         With the preloads gone each face is requested when the first text node needs it, after
-         Preact's first render, and the script gets the pipe to itself: it now finishes at 2,236ms,
-         FCP is 2,820ms and the game is ready at 4,696ms, against 7,089ms. (Both figures are the
-         median of five runs taken back to back on the same machine load, because an unpaired
-         before-and-after here measures the machine.) tokens.css carries the other half of the fix:
-         font-display is `swap` now, so with the face arriving later than it used to the hero still
-         paints at once -- in the brand stack's own fallback, which was measured and moves no line.
-         The Haffer preload comes back the moment the woff2 subset is cleared to ship -- 39KB of
-         pipe is free and tokens.css has the four-step recipe. Season Mix does not come back: it
-         sets three words in the whole product, none of them on the first screen. -->
     <link rel="stylesheet" href="/src/ui/tokens.css" />
   </head>
   <body>

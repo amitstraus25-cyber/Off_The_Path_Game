@@ -30,11 +30,28 @@ function rows(
   return Object.fromEntries(goals.map((g) => [g.id, errandState(g, verdicts, content)]));
 }
 
-const PERFECT: Record<SkillId, Verdict> = {
-  'cottage-finder': 'restrict',
-  'word-weaver': 'reject',
-  'night-light': 'restrict',
-};
+/**
+ * The same verdict for every skill the game ships, whatever they are.
+ *
+ * The three runs below used to spell the three shipped ids out, so a fourth skill would have been
+ * silently left undecided in each of them -- "allow everything" would have meant "allow three of
+ * four", and the enumeration further down would have gone on passing while testing a smaller game
+ * than the one in the file. CLAUDE.md rule 3: adding a skill is a content change.
+ */
+const everySkill = (verdict: Verdict): Record<SkillId, Verdict> =>
+  Object.fromEntries(content.skills.map((s) => [s.id, verdict]));
+
+/**
+ * Every skill played the way the game itself says is right.
+ *
+ * Read off `bestVerdict` rather than typed out. The three ids were a literal here, which is the
+ * same drift this file exists to catch one level up: a rebalance that moves Night Light's best
+ * verdict from Restrict to Allow would leave this constant describing a run nobody calls perfect,
+ * and every assertion built on it would go on passing about the wrong run.
+ */
+const PERFECT: Record<SkillId, Verdict> = Object.fromEntries(
+  content.skills.map((s) => [s.id, s.bestVerdict]),
+);
 
 /** The run as the reducer would have produced it, so `score()` reads a real log. */
 function runLog(
@@ -65,6 +82,22 @@ function runLog(
 }
 
 describe('an errand given up to keep the boundary is not a miss', () => {
+  it('the perfect run really is a verdict on every skill, and the best one each time', () => {
+    /*
+     * The premise every assertion in this file rests on. `PERFECT` is derived now, and a derivation
+     * that quietly produces {} would leave `rows(PERFECT)` describing an undecided run while most
+     * of the expectations below still held -- a guard that stops matching, which this project has
+     * shipped before. Stated against the skills themselves so it cannot be satisfied by an empty
+     * object or by a verdict that is merely legal.
+     */
+    expect(Object.keys(PERFECT)).toEqual(content.skills.map((s) => s.id));
+    expect(Object.keys(PERFECT).length).toBeGreaterThan(0);
+    for (const skill of content.skills)
+      expect(skill.outcomes[PERFECT[skill.id]!].points, skill.id).toBe(
+        Math.max(...Object.values(skill.outcomes).map((o) => o.points)),
+      );
+  });
+
   it('the perfect run shows one done and two traded, and nothing missed', () => {
     expect(rows(PERFECT)).toEqual({ route: 'met', word: 'traded', sign: 'traded' });
   });
@@ -100,11 +133,7 @@ describe('an errand given up to keep the boundary is not a miss', () => {
   });
 
   it('allowing everything trades nothing', () => {
-    const allowed = rows({
-      'cottage-finder': 'allow',
-      'word-weaver': 'allow',
-      'night-light': 'allow',
-    });
+    const allowed = rows(everySkill('allow'));
     expect(Object.values(allowed)).not.toContain('traded');
   });
 
@@ -182,13 +211,10 @@ describe('a row never says a capability was missing when the run granted it', ()
     // Refusing outright is the one case the old single string was right about.
     expect(miss('route', { ...PERFECT, 'cottage-finder': 'reject' })).toBe('refused');
     // And the run the client read: every row a miss, and not one of them for want of a capability.
-    const allowed: Record<SkillId, Verdict> = {
-      'cottage-finder': 'allow',
-      'word-weaver': 'allow',
-      'night-light': 'allow',
-    };
-    expect(Object.values(rows(allowed))).toEqual(['missed', 'missed', 'missed']);
-    expect(['route', 'word', 'sign'].map((id) => miss(id, allowed))).not.toContain('refused');
+    const allowed = everySkill('allow');
+    const goalIds = content.scoring.errandGoals.map((g) => g.id);
+    expect(Object.values(rows(allowed))).toEqual(goalIds.map(() => 'missed'));
+    expect(goalIds.map((id) => miss(id, allowed))).not.toContain('refused');
   });
 });
 
@@ -219,15 +245,10 @@ describe('the breakdown sums to the score above it', () => {
       'taken on trust and the rest played right',
       runLog({ ...PERFECT, 'night-light': 'allow' }, { inspect: false }),
     ],
-    [
-      'allow everything',
-      runLog({ 'cottage-finder': 'allow', 'word-weaver': 'allow', 'night-light': 'allow' }),
-    ],
-    [
-      'reject everything',
-      runLog({ 'cottage-finder': 'reject', 'word-weaver': 'reject', 'night-light': 'reject' }),
-    ],
-    ['one verdict only', runLog({ 'cottage-finder': 'restrict' })],
+    ['allow everything', runLog(everySkill('allow'))],
+    ['reject everything', runLog(everySkill('reject'))],
+    // One decided skill and the rest left open, which is the shortest log `breakdown` ever sees.
+    ['one verdict only', runLog({ [content.skills[0]!.id]: content.skills[0]!.bestVerdict })],
   ];
 
   it.each(cases)('%s', (_name, state) => {

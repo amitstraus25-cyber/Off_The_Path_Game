@@ -1,3 +1,4 @@
+import './zod-config.ts';
 import { z } from 'zod';
 import { VERDICTS } from './content.ts';
 import type { CharacterId, Content, Flag, SkillId, Verdict } from './content.ts';

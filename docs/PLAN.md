@@ -35,18 +35,18 @@ Effort sizes: **S** under half a day, **M** about a day, **L** several days (for
 
 All ten decisions take the recommended default above. Owners should confirm; two need action outside engineering.
 
-| ID  | Decision                                                                                                                                                                                                                           | Status                                                                                                                                                                                                                     |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | **Amended 2026-10-16:** Night Light has no fine print, so it stays honest on inspection, but it is no longer safe by default. Best verdict is Restrict, which grants nothing; Allow leaves it reading what strangers wrote.        | Amended by `docs/MAKING_IT_BETTER.md` section 3; recap copy updated. **Research has not confirmed the direction** — `docs/RESEARCH_ALIGNMENT.md` open question 4 is still open, and its owners are game design + research. |
-| D2  | Design team or a pixel artist produces tileset, sprites, portraits. Graybox until then.                                                                                                                                            | Brief drafted in `docs/PHASE0_REQUESTS.md`, not yet sent                                                                                                                                                                   |
-| D3  | **Changed 2026-10-16:** Vercel Functions (Node 22 runtime) in the same Vercel project as the game, with a Vercel-marketplace Postgres or KV store, behind `LeaderboardClient`. Same origin means no CORS and `connect-src 'self'`. | Recorded; Security to confirm                                                                                                                                                                                              |
-| D4  | Handle only, no email field.                                                                                                                                                                                                       | Recorded; Legal to confirm                                                                                                                                                                                                 |
-| D5  | Canvas on top, panels docked at the bottom on portrait; never require rotation.                                                                                                                                                    | Recorded                                                                                                                                                                                                                   |
-| D6  | Request Haffer and Season Mix woff2 from Brand Kit.                                                                                                                                                                                | Request drafted, not yet sent                                                                                                                                                                                              |
-| D7  | Start with GAME_DESIGN section 7 scoring; tune in Phase 8.                                                                                                                                                                         | Recorded                                                                                                                                                                                                                   |
-| D8  | Player must meet all three characters before the cottage.                                                                                                                                                                          | Recorded                                                                                                                                                                                                                   |
-| D9  | Static host on a cyera.com subdomain, iframe embed, parent page owns analytics.                                                                                                                                                    | Recorded; Web team to confirm                                                                                                                                                                                              |
-| D10 | Handle + score only, 12-month retention, manual delete endpoint, Legal sign-off before launch.                                                                                                                                     | Recorded; Legal sign-off pending                                                                                                                                                                                           |
+| ID  | Decision                                                                                                                                                                                                                                                                                                                                         | Status                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | **Amended 2026-10-16:** Night Light has no fine print, so it stays honest on inspection, but it is no longer safe by default. Best verdict is Restrict, which grants nothing; Allow leaves it reading what strangers wrote.                                                                                                                      | Amended by `docs/MAKING_IT_BETTER.md` section 3; recap copy updated. **Research has not confirmed the direction** — `docs/RESEARCH_ALIGNMENT.md` open question 4 is still open, and its owners are game design + research. |
+| D2  | Design team or a pixel artist produces tileset, sprites, portraits. Graybox until then.                                                                                                                                                                                                                                                          | Brief drafted in `docs/PHASE0_REQUESTS.md`, not yet sent                                                                                                                                                                   |
+| D3  | **Changed 2026-10-16:** Vercel Functions (Node 22 runtime) in the same Vercel project as the game, behind `LeaderboardClient`. Same origin means no CORS and `connect-src 'self'`. **Store settled in Phase 6: Supabase over PostgREST through `fetch`** — no driver and no new dependency, rather than the "Postgres or KV" this row left open. | Recorded; **Security still to confirm, and `security-reviewer` has not been run on the shipped service**                                                                                                                   |
+| D4  | Handle only, no email field.                                                                                                                                                                                                                                                                                                                     | Recorded; Legal to confirm                                                                                                                                                                                                 |
+| D5  | Canvas on top, panels docked at the bottom on portrait; never require rotation.                                                                                                                                                                                                                                                                  | Recorded                                                                                                                                                                                                                   |
+| D6  | Request Haffer and Season Mix woff2 from Brand Kit.                                                                                                                                                                                                                                                                                              | Request drafted, not yet sent                                                                                                                                                                                              |
+| D7  | Start with GAME_DESIGN section 7 scoring; tune in Phase 8.                                                                                                                                                                                                                                                                                       | Recorded                                                                                                                                                                                                                   |
+| D8  | Player must meet all three characters before the cottage.                                                                                                                                                                                                                                                                                        | Recorded                                                                                                                                                                                                                   |
+| D9  | Static host on a cyera.com subdomain, iframe embed, parent page owns analytics.                                                                                                                                                                                                                                                                  | Recorded; Web team to confirm                                                                                                                                                                                              |
+| D10 | Handle + score only, 12-month retention, manual delete endpoint, Legal sign-off before launch.                                                                                                                                                                                                                                                   | Recorded; Legal sign-off pending                                                                                                                                                                                           |
 
 ---
 
@@ -167,7 +167,14 @@ preview deploy, which waits on GitHub and Vercel being connected.
 Goal: the full game.
 
 - [x] (M) Owl (Word Weaver) and Lantern Keeper (Night Light) encounters via data only; fix any code that needed special-casing (that is a bug in the design).
-- [x] (M) Cottage finale: wolf-as-Grandma scene (silhouette in window, paw prints, door sequence); ending chosen from flags (clean / close / wolf's house); the line "Grandma, why do you need my key?" when `keyStolen`. No shake, no gore: slow fade and held beat.
+- [x] (M) Cottage finale: wolf-as-Grandma scene (silhouette in window, paw prints, door sequence); ending chosen from flags (clean / close / wolf's house). No shake, no gore: slow fade and held beat.
+      This line used to require _"Grandma, why do you need my key?"_ when `keyStolen`. **That line was
+      deliberately removed and must not be reinstated from this plan.** `endings.close` matches on a
+      flag count, not a flag identity, so it also drew for two single-flag runs that still had the key
+      in the basket on the same screen. The close ending now opens "Grandma, where did you get that?",
+      which names nothing. `apps/game/test/content-copy.test.ts` guards the general rule — an arrival
+      may not name a thing the player can still see in the basket — and `docs/GAME_DESIGN.md`
+      section 8 records why.
 - [x] (M) Results screen: score, per-skill recap rows (success vs missed styling), "Post your score" handle field with validation and clear privacy line, **Read the Research** band with the screen's one Lime.
 - [x] (S) Replay: reset store, new run id, back to title.
 - [ ] (S) **Research review pass**: send all fine-print and recap copy to the research team; apply edits in `content/game.json` only.
@@ -208,22 +215,86 @@ fills the viewport and there is no header to sit in. If design wants the frame, 
 
 Goal: simple, safe, optional leaderboard.
 
-- [ ] (S) `LeaderboardClient` interface + **mock adapter** (in-memory) so UI ships first. Leaderboard screen per spec: top five, gap row, your row, "Wolf _Spotters_", white-logo footer.
-- [ ] (M) `apps/api` Vercel Functions (Node runtime): `POST /runs`, `POST /runs/:id/submit`, `GET /leaderboard`; HMAC token; D1 schema + migrations; week window logic (UTC).
-- [ ] (M) Server-side verification: legal log check, recompute score with `packages/core`, min-duration plausibility, duplicate-submit guard, handle validation + blocklist, escape on render.
-- [ ] (S) Rate limiting with hashed, salt-rotating IP keys; no raw IP storage; CORS to embed origins only.
-- [ ] (S) http adapter in the game with timeouts and graceful degradation ("Leaderboard unavailable right now"), never blocks results or the CTA.
-- [ ] (M) Tests: forged-log suite (inflated score, illegal order, wrong content version, replayed token) must all be rejected; e2e with the API down.
-- [ ] (S) Moderation: admin delete endpoint behind a secret or Vercel auth protection; runbook in `docs/RUNBOOK.md`.
-- [ ] Run `security-reviewer`; fix findings.
-      Acceptance (M3): a real run posts, appears with correct rank, and a tampered submission is rejected; game still fully playable offline from the leaderboard.
+**Phase 6 landed on 2026-10-20 (commit `3dc0357`), and it did not land in the shape this list
+specified.** The boxes below are reconciled against the tree. Where a task was deliberately dropped
+rather than done, it is struck through with the reason, so nobody completes it as an oversight.
+`apps/api/README.md` is the service's source of truth and `docs/ARCHITECTURE.md` section 8 records
+why the shape changed.
+
+- [x] (S) `LeaderboardClient` interface + adapter. **No in-memory mock was needed** — the interface
+      shipped in Phase 5 with a stub behind it, and Phase 6 replaced the stub with the real adapter
+      behind the same interface. The board is **not a separate screen**: it renders inside
+      `Results.tsx`, which is where the handle and the one Lime CTA already were.
+- [x] (M) `apps/api` Vercel Functions (Node 22). **Shipped as `POST /api/score` and `GET /api/top`
+      over Supabase/PostgREST.** ~~`POST /runs`, `POST /runs/:id/submit`, `GET /leaderboard`; HMAC
+      token; D1 schema + migrations; week window logic (UTC)~~ — none of this was built. The token
+      existed to bind a run to a start time; ranking is by score alone and there is no duration
+      column, so it protected nothing. D1 was the pre-D3 Cloudflare plan. One board, no week windows.
+- [x] (M) Server-side verification: legal log check and **recompute with `packages/core`** both ship,
+      plus a strict body schema that makes a claimed score a 400, a 32 KB metered body gate, a
+      `MAX_LOG_EVENTS` of 256, and a duplicate guard. ~~Min-duration plausibility~~ was dropped: the
+      clock is the player's and ranking ignores it, so a floor would reject honest fast runs and buy
+      nothing. ~~Handle blocklist~~ was dropped because **handles are minted, not typed**
+      (`[a-z]+-[a-z]+-[1-9][0-9]`), re-checked on the way out of `GET /api/top`; there is no
+      free-text field to moderate. Escape on render is Preact text nodes.
+- [x] (S) Rate limiting: `src/limit.ts`, thirty writes a minute, **per instance**. ~~Hashed,
+      salt-rotating IP keys~~ dropped — **no IP is read, hashed or stored at all**, which is
+      stronger than the task asked for. ~~CORS to embed origins~~ is moot: same origin by D3.
+      **The cross-instance control is Vercel firewall rate limiting on `/api/*` and it is NOT ON.**
+      See "What is NOT done" below.
+- [x] (S) http adapter with timeouts (6 s) and graceful degradation; never blocks results or the CTA.
+- [x] (M) Tests: 53 across 5 files, including the forged-log suite — claimed score, unreachable
+      score, a verdict whose card was never opened, a run that never arrived, an oversized body, a
+      duplicate. `apps/game/e2e/leaderboard.spec.ts` covers the board; the API-down path is the
+      `503` case, asserted in `routes.test.ts` ("when the board is not there").
+- [ ] (S) Moderation: admin delete endpoint, and `docs/RUNBOOK.md`. **Neither exists.** An
+      unauthenticated delete endpoint would be worse than none, and the only secret the service may
+      read is the Supabase key, so this needs Vercel deployment protection or a new server-only
+      variable first. Removing a row is SQL in the Supabase console until then. D10 is waiting on it.
+- [ ] Run `security-reviewer`; fix findings. **Not run on the shipped service.**
+      Acceptance (M3): **not met yet.** The service is built and tested in-process, but nothing here
+      has run against the live board — this checkout has no credentials — so "a real run posts and
+      appears with the correct rank" is unproven. The game is fully playable with the board down,
+      which is proven.
+
+### Phase 6: what is NOT done, and must be before the board is believed
+
+Recomputing every score bounds what a row can **say**. It does not bound how many rows a caller can
+write. These three are from `apps/api/README.md`; that file is the authority, this is the pointer.
+
+1. **Turn on Vercel firewall rate limiting for `/api/*` and prove it on a preview.** The only
+   control that spans instances, and the one thing here that cannot be done from the repository.
+2. **Make dedupe durable** (a `log_hash` column + unique index). It is a third column on a table
+   whose decision reads "handle and score only", so it **reopens D10** rather than being a quiet
+   migration. The code does not write it today, so the SQL is safe to run early.
+3. **Set retention.** `created_at` exists and nothing prunes it, against D10's twelve months.
+
+Also outstanding and cheap: **one preview deploy answers two questions at once** — whether Vercel's
+bundler follows `src/content.ts`'s import of `content/game.json` out of the service root, and
+whether the top-level `headers` block still reaches responses now that `vercel.json` declares two
+services (ARCHITECTURE section 10). Both fail silently and both are invisible to CI.
 
 ## Phase 7: Embed, hardening, release candidate (M4)
 
-- [ ] (M) iframe embed page and `postMessage` contract (ARCHITECTURE section 9) with origin checks; responsive container for the research page's game slot; test inside a copy of the landing page.
-- [ ] (S) Security headers and strict CSP on the static host; verify no violations in the console; SRI where applicable; confirm zero third-party requests (Playwright network assertion).
+- [ ] (M) iframe embed page and `postMessage` contract (ARCHITECTURE section 9); responsive container for the research page's game slot; test inside a copy of the landing page.
+      **Partly done already:** the **outbound** half shipped early as `apps/game/src/embed/postMessage.ts`
+      and is covered by `apps/game/e2e/embed-origin.spec.ts` — five events, one build-time target
+      origin, never `*`, no-op when not framed. What remains is the host side: the embed page itself,
+      the responsive container, and a test inside a copy of the landing page.
+      **There is no inbound channel and "origin checks" does not describe missing work.** Nothing
+      receives, so there is nothing to check. An inbound `otp:pause`/`otp:resume` would be new work
+      with a threat model attached — see ARCHITECTURE section 9 — not a gap to close here.
+- [ ] (S) Security headers and strict CSP on the static host. **Mostly done:** `vercel.json` ships
+      the policy, `apps/game/test/csp.test.ts` guards its text against the built page, and
+      `apps/game/e2e/shipped-headers.spec.ts` loads the real `dist` under the real headers in a
+      browser and drives every screen with `securitypolicyviolation` as the verdict and a canary so
+      an empty list means something. Zero third-party requests is asserted by `smoke.spec.ts`'s
+      request handler. SRI is **not applicable**: every asset is same-origin and self-hosted.
+      **What is left is the one thing only a deploy answers** — whether Vercel applies the top-level
+      `headers` block through a service rewrite now that there are two services. Both guards apply
+      the headers themselves and would stay green if it did not.
 - [ ] (M) Accessibility audit: keyboard-only, screen reader pass (NVDA/VoiceOver), zoom 200%, reduced motion, contrast; fix.
-- [ ] (M) Performance: bundle analysis against budget, asset compression, lazy-load leaderboard, test on a mid-range Android and an older iPhone.
+- [ ] (M) Performance: bundle analysis against budget, asset compression, test on a mid-range Android and an older iPhone. **"Lazy-load leaderboard" is struck**: there is not one dynamic `import()` in `apps/game/src`, the build emits a single chunk, and the board is part of `Results.tsx` rather than a separate screen to split off. Code-splitting it is an option, not a pending task, and ARCHITECTURE section 11 warns against budgeting as if it were done.
 - [ ] (S) Cross-browser: latest Chrome, Safari (iOS + macOS), Firefox, Edge. Touch: iOS Safari address-bar resize, Android Chrome.
 - [ ] (S) Error handling: asset load failure screen with retry; `window.onerror` surfaces a friendly message; no stack traces to players.
 - [ ] (S) Privacy copy and link next to the handle field; Legal review (D10).

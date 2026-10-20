@@ -10,18 +10,18 @@
 
 ## 2. Stack (defaults; confirm in Phase 0)
 
-| Concern                         | Choice                                                                                                                          | Why                                                                                                                                                                                                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language                        | TypeScript (strict)                                                                                                             | Shared types between game, core and API.                                                                                                                                                                              |
-| Build                           | Vite                                                                                                                            | Fast dev loop, simple static output.                                                                                                                                                                                  |
-| World renderer                  | Phaser 3 (pin exact stable version at scaffold time)                                                                            | Tilemaps, camera, input, mobile scaling out of the box. Phase 0 includes a one-day spike comparing bundle size against a hand-rolled canvas renderer; keep Phaser unless the bundle blows the budget.                 |
-| UI overlay                      | Preact + plain CSS (tokens from `reference/brand/cyera-theme.css`)                                                              | Tiny, declarative, accessible DOM for dialogue, cards, results, leaderboard.                                                                                                                                          |
-| Map editing                     | Tiled (export JSON)                                                                                                             | Standard; artists can iterate without code.                                                                                                                                                                           |
-| Validation                      | zod (or valibot)                                                                                                                | One schema validates content, API payloads and `postMessage`.                                                                                                                                                         |
-| Unit tests                      | Vitest                                                                                                                          | Core logic, scoring, state machine, content schema.                                                                                                                                                                   |
-| E2E                             | Playwright                                                                                                                      | Full playthroughs, a11y checks (axe), screenshot comparisons against the mocks.                                                                                                                                       |
-| Hosting + backend (leaderboard) | Vercel: static game plus Vercel Functions on the Node 22 runtime, with managed Postgres or KV [DECISION D3, changed 2026-10-16] | One project and deploy for game and API; same origin, so no CORS. Hidden behind a `LeaderboardClient` interface so it can be swapped for Cyera infrastructure. `vercel.json` sets build, output and security headers. |
-| Package manager                 | pnpm workspaces                                                                                                                 | Strict, fast, lockfile.                                                                                                                                                                                               |
+| Concern                         | Choice                                                                                                                                                                                                                          | Why                                                                                                                                                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language                        | TypeScript (strict)                                                                                                                                                                                                             | Shared types between game, core and API.                                                                                                                                                                              |
+| Build                           | Vite                                                                                                                                                                                                                            | Fast dev loop, simple static output.                                                                                                                                                                                  |
+| World renderer                  | Phaser 3 (pin exact stable version at scaffold time)                                                                                                                                                                            | Tilemaps, camera, input, mobile scaling out of the box. Phase 0 includes a one-day spike comparing bundle size against a hand-rolled canvas renderer; keep Phaser unless the bundle blows the budget.                 |
+| UI overlay                      | Preact + plain CSS (tokens from `reference/brand/cyera-theme.css`)                                                                                                                                                              | Tiny, declarative, accessible DOM for dialogue, cards, results, leaderboard.                                                                                                                                          |
+| Map editing                     | Tiled (export JSON)                                                                                                                                                                                                             | Standard; artists can iterate without code.                                                                                                                                                                           |
+| Validation                      | zod (or valibot)                                                                                                                                                                                                                | One schema validates content, API payloads and `postMessage`.                                                                                                                                                         |
+| Unit tests                      | Vitest                                                                                                                                                                                                                          | Core logic, scoring, state machine, content schema.                                                                                                                                                                   |
+| E2E                             | Playwright                                                                                                                                                                                                                      | Full playthroughs, a11y checks (axe), screenshot comparisons against the mocks.                                                                                                                                       |
+| Hosting + backend (leaderboard) | Vercel: static game plus Vercel Functions on the Node 22 runtime. **As built, the store is Supabase over PostgREST through `fetch`** — no driver, no new dependency [DECISION D3, changed 2026-10-16; store settled in Phase 6] | One project and deploy for game and API; same origin, so no CORS. Hidden behind a `LeaderboardClient` interface so it can be swapped for Cyera infrastructure. `vercel.json` sets build, output and security headers. |
+| Package manager                 | pnpm workspaces                                                                                                                                                                                                                 | Strict, fast, lockfile.                                                                                                                                                                                               |
 
 Always run `npm view <pkg> time` (or equivalent) and pick a version older than 14 days. Pin exact versions (no `^` or `~`).
 
@@ -45,7 +45,8 @@ Phaser 4.x (4.2.1) exists; this plan targets 3.x as written. Moving to 4 is a de
 
 ## 3. Repository layout
 
-What is actually on disk. Four workspaces; `apps/api` is **not** among them (section 8).
+What is actually on disk. **Five** workspaces; `apps/api` is one of them (section 8), and has been
+since Phase 6 landed.
 
 ```
 off-the-path/
@@ -70,13 +71,19 @@ off-the-path/
         world/                # Phaser: scenes, map, assets, input, and the pure logic barrel
         ui/                   # Preact components + CSS (tokens.css imports the brand theme)
         audio/                # music generated from bar numbers; no audio files in the repo
-        net/leaderboard.ts    # LeaderboardClient interface + the Phase 6 stub
-        embed/postMessage.ts  # embed contract (section 9)
+        net/leaderboard.ts    # LeaderboardClient interface + the real Phase 6 adapter
+        embed/postMessage.ts  # the OUTBOUND embed contract (section 9)
         assets/               # generated tileset, map, sprites, portraits, items + manifest.json
       public/fonts/           # self-hosted Haffer and Season Mix
       public/brand/           # official Cyera logo files, used as-is
       test/                   # Vitest: map, assets, strings, title, results, score, logic
       e2e/                    # Playwright
+    api/                      # the leaderboard service -- the second deployed service
+      api/score.ts            #   POST /api/score, GET /api/top: thin, read the environment once
+      api/top.ts              #   and call the handler
+      src/                    #   handlers, store (PostgREST over fetch), env, deps, content, http, limit
+      test/                   #   every decision is a pure function, so this runs on a fake fetch
+      README.md               #   SOURCE OF TRUTH for this service; read it before changing it
   tools/
     graybox/                  # procedural placeholder art + the map generator
     sim/                      # plays strategies through the real reducer
@@ -157,38 +164,86 @@ explore -> cottage -> results -> leaderboard -> (replay -> title)
 - Portrait phones: the world takes the top share named by `PORTRAIT_WORLD` in `packages/core/src/camera.ts`, with no outer margin, because 32px of a 390px screen costs a whole zoom step, and panels dock at the bottom [DECISION D5]. Never require rotation.
 - `prefers-reduced-motion`: no camera shake or bobbing; instant panel transitions.
 
-## 8. Leaderboard API (`apps/api`, Phase 6 — not built yet)
+## 8. Leaderboard API (`apps/api`, Phase 6 — **built**)
 
-> The package does not exist in the repository. It is deliberately absent rather than an empty
-> stub, because an undeclared service cannot fail a build. When Phase 6 starts, create `apps/api`
-> and add it to `vercel.json` as a second service with an `/api/(.*)` rewrite.
+**`apps/api/README.md` is the source of truth for this service.** It carries the table DDL, the two
+environment variables, the hostile-caller table and the three manual steps still outstanding. This
+section says only what the rest of the architecture needs to know, and does not copy it.
 
-Base `/v1`, JSON only, CORS locked to the embedding origins.
+**What this section used to describe was never built, and nobody should go looking for it.** It
+specified a base of `/v1`, a `POST /runs` handshake returning an **HMAC-signed token**, a
+`POST /runs/:id/submit`, a `GET /leaderboard` with week windows, a `DELETE /admin/scores/:id`, a
+free-text handle grammar with a profanity blocklist, and rate limiting per hashed IP. None of it
+exists. Two routes shipped instead:
 
-| Method + path                                                                                                                                                                                          | Purpose                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /runs`                                                                                                                                                                                           | Start a run. Returns `{ runId, token, startedAt }`. Token is an HMAC-signed blob (runId, startedAt, contentVersion), short TTL (e.g. 2 h).                                                                                                                                                                                        |
-| `POST /runs/:id/submit`                                                                                                                                                                                | Body `{ token, handle, log }`. Server verifies the signature, content version, and that the log is a legal sequence; **recomputes score with `packages/core`**; rejects implausible durations (e.g. faster than 45 s) and duplicates; stores `{ handle, score, durationMs, week, createdAt }`. Returns `{ score, rank, window }`. |
-| `GET /leaderboard?window=week                                                                                                                                                                          | all&limit=5&runId=`                                                                                                                                                                                                                                                                                                               | Top N plus the caller's own row if `runId` given, plus `totalPlayers`. |
-| `DELETE /admin/scores/:id`                                                                                                                                                                             | Moderation; behind a secret or Vercel auth protection, never exposed in the client.                                                                                                                                                                                                                                               |
-| Rules: handle 3 to 16 chars `[A-Za-z0-9_.-]`, no leading/trailing punctuation, profanity + reserved-word blocklist (`cyera`, `admin`, `official`, ...),                                                |
-| rendered as text only. Week = ISO week in UTC, resets Monday 00:00 UTC. Rate limit per hashed IP (daily-rotating salt; **never store raw IPs**).                                                       |
-| No cookies, no accounts, no email. Retention policy to be set with Legal [DECISION D10].                                                                                                               |
-| **Client behaviour:** the game never blocks on the network. If `POST /runs` fails, play continues; at the end show results and a quiet "Leaderboard unavailable right now" with the CTA still working. |
+| Method + path     | Purpose                                                                                                                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/score` | Body `{ handle, log }` — **and nothing else**; the schema is strict and rejects any other key, so a claimed `score` is a 400. Replays the log through `packages/core`, **recomputes the score**, stores the recomputed number. Answers `{ handle, score }`. |
+| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest first, earliest first on a tie. Drops any row whose handle the game could not have minted.                                                                                                        |
 
-## 9. Embedding contract (`apps/game/src/embed`)
+Why the shape changed, so it is not "restored" as a fix:
 
-The game runs inside an iframe on the research page (or standalone). It posts events to `window.parent` with a strict target origin (configured at build time) and only accepts messages from that origin:
+- **No token handshake, so no HMAC and no secret to rotate.** The token existed to bind a run to a
+  start time. Ranking is by score alone and the table has no duration column, so there is nothing a
+  forged clock could buy and nothing the token would have protected. One round trip instead of two.
+- **No week window.** One board, ranked by score. `created_at` exists only for the tie-break and
+  retention.
+- **The handle is minted, not typed.** `packages/core` mints `[a-z]+-[a-z]+-[1-9][0-9]`, which is
+  why there is no profanity blocklist: a free-text field on a Cyera-branded public page is a
+  moderation problem that this design does not have. `GET /api/top` re-checks the grammar on the way
+  out, so a word removed from the list retires its rows.
+- **Rate limiting is per instance (`src/limit.ts`), not per hashed IP.** No IP is read, hashed or
+  stored. The control that spans instances is Vercel's firewall and **is not on yet** — README step 1.
+- **No delete endpoint.** D10 asks for one; an unauthenticated one would be worse than none, so
+  removing a row is SQL in the Supabase console until it has protection in front of it.
+
+Storage is Supabase over PostgREST through `fetch` — no driver, no new dependency. The key travels
+in headers only, never `?apikey=`, and a missing or wrong variable yields `503` and a quietly absent
+board rather than a crash.
+
+**Client behaviour is unchanged and is the part that matters:** the game never blocks on the
+network. Every failure — timeout, 4xx, 5xx, an unrecognised body shape — comes back as a message to
+show, never as a throw and never as a hang; results and the **Read the Research** call to action are
+untouched, and the player sees "Leaderboard unavailable right now."
+
+No cookies, no accounts, no email, no run id and no IP address in the table. A handle and a score,
+which is D10's decision expressed as the schema.
+
+## 9. Embedding contract (`apps/game/src/embed/postMessage.ts`)
+
+**The channel is outbound only. There is no inbound message handling anywhere in the game**, and
+this section used to describe some, which sent readers hunting for code that was never written.
+`apps/game/src/embed/postMessage.ts` is the whole of it: one `emit()`, and no
+`addEventListener('message')` anywhere in `apps/game/src` or `packages/core`. (A line count stood
+here for about an hour and was stale before the day ended. Don't.)
+
+The game runs inside an iframe on the research page (or standalone) and posts to `window.parent`
+with a strict target origin resolved at build time from `VITE_EMBED_ORIGIN` (default
+`https://www.cyera.com`; the literal `none` turns posting off). The origin is never `*`, so naming
+the wrong host **drops** the event rather than leaking it. Standalone, every call is a no-op.
+`EmbedEvents` in that file is the contract; this is a summary of it, not a second copy to drift:
 
 ```
-otp:ready        {version}
-otp:started      {runId?}
-otp:verdict      {skillId, verdict}
-otp:completed    {score, ending, rank?}
+otp:ready        { version: string }
+otp:started      { runId: string | null }
+otp:verdict      { skillId: string, verdict: string }
+otp:completed    { score: number, ending: string }
 otp:cta          {}              // "Read the Research" clicked; parent decides navigation
 ```
 
-Inbound (optional): `otp:pause`, `otp:resume`. All payloads are validated with the shared schema. Analytics belongs to the parent page's existing tooling; the game ships no analytics of its own.
+Two corrections to the list this replaced: `otp:completed` carries **no `rank`** (the board answers
+with a score, and the rank on screen is a position in a fetched list, not something the game knows
+at completion), and `otp:started`'s `runId` is `string | null`, not optional.
+
+**The posture the old text described is still right, and is why there is no inbound channel.** An
+inbound `otp:pause` / `otp:resume` would be a second, parent-controlled way to change game state,
+and it would have to validate the origin, validate the payload against the shared schema, and
+survive a hostile parent — for the benefit of pausing a game that pauses itself whenever a panel
+opens. If it is ever wanted, it is new work with a threat model attached, not a reconnection of
+something that exists. Nothing is currently receiving, so nothing currently needs that check.
+
+Analytics belongs to the parent page's existing tooling; the game ships no analytics of its own,
+which is what makes this one-way channel the parent's only signal (D9).
 
 ## 10. Security headers and CSP (static host config)
 
@@ -217,9 +272,39 @@ Build must not need `unsafe-inline`; no inline styles generated at runtime (use 
 The built `index.html` carries one external module script and one stylesheet link and no inline `<script>`
 or `<style>`, which is why `script-src 'self'` needs no relaxation.
 
-**Unverified, and it should be before launch:** nothing in the repository tests this policy, `vite preview`
-does not serve it, and it is not confirmed that a top-level `headers` block survives the rewrite into the
-`game` service. If it does not, the policy never ships.
+**What is tested, and what is still not.** This paragraph used to call the policy wholly untested.
+**Two** guards now cover it, at different depths, and the correction matters because it changes what
+the remaining risk actually is.
+
+**1. `apps/game/test/csp.test.ts` — the text.** Two halves, no browser, no deploy. It
+reads `vercel.json` and asserts the policy is declared on `/(.*)`, names the directives that make
+the other assertions meaningful, relaxes nothing (`'unsafe-inline'`, `'unsafe-eval'`,
+`'unsafe-hashes'`) and opens nothing to a bare `*` or a whole scheme — with `data:` under `img-src`
+the one allowed exception, which Phaser's default textures need to boot. The second half reads the
+**built** `apps/game/dist/index.html` and asserts no inline `<script>`, no `<style>` or `style=`,
+and no `on*=` handler, so `script-src 'self'` keeps meaning what it means. Both halves self-check
+first, so an empty policy list or an empty page cannot pass by vacuity.
+
+`dist` is gitignored, so that second half runs only where a build has happened.
+**`.github/workflows/ci.yml` therefore runs `pnpm build` before `pnpm test`, and reordering those
+two silently disables it in CI.**
+
+**2. `apps/game/e2e/shipped-headers.spec.ts` — the browser.** This one serves the real `dist` from a
+local Node server that applies **every header read out of `vercel.json`**, never retyped, and drives
+the game through every screen it has — title, forest, question, skill card, verdicts, arrival,
+results, leaderboard — with the browser's own `securitypolicyviolation` event as the verdict. The
+leaderboard's two fetches are the only exercise `connect-src` ever gets, which is why the run goes
+that far. **Its canary is load-bearing:** "no violations" is also what a page with no policy reports,
+so the run first does something the policy forbids and asserts the browser objects. Only then does
+an empty list mean anything.
+
+**Still unverified, and it should be before launch:** both guards apply the policy _themselves_.
+Neither can prove that **Vercel** applies a top-level `headers` block to a response served through a
+service rewrite, now that `vercel.json` declares two services. If it does not, the policy never
+ships and nothing in this repository can notice, because both guards would stay green. The check is
+a preview deploy with the response headers read off a real request — the same preview
+`apps/api/README.md` says is the only thing that answers whether the bundler follows the content
+import out of `apps/api`. Do one deploy and answer both.
 
 ## 11. Performance budget
 
@@ -240,4 +325,11 @@ page works with browser zoom to 200% (UI is DOM, so it reflows).
 - **core**: 100% of rules covered; table-driven tests for every skill x verdict; property test that `score(log)` equals the incremental score; ending selection tests.
 - **content**: schema validation + lint rules (every skill has all three outcomes, a best verdict exists, at least one safe skill exists, strings non-empty, no banned vendor names).
 - **e2e (Playwright)**: scripted playthroughs (perfect run = 1000, reject-all run, allow-all run), keyboard-only run, mobile viewport run, leaderboard-down run; axe a11y scan on every screen; screenshot diffs of DOM panels against the mocks with a tolerance.
-- **api**: unit tests for validation/recompute/rate limit; a replay test submitting forged logs that must be rejected.
+- **api**: built and green — 53 tests across 5 files, all in-process against a fake `fetch`, because
+  every decision in the service is a pure function of its dependencies. They cover validation,
+  recompute, the per-instance limiter, the store's request shapes, and the forged-log suite: a body
+  claiming a score, a log that replays to a score no player could reach, a verdict whose card was
+  never opened, a run that never arrived, an oversized body, and a duplicate submission. This
+  checkout has no credentials and nothing in `test/` tries to reach Supabase, so **the PostgREST
+  request shapes are asserted against a fake, never against the real service** — the first deploy is
+  the first real test of those.

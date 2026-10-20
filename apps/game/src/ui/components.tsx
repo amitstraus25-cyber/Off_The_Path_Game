@@ -348,6 +348,99 @@ export function NotationChip({ label, count }: NotationChipProps) {
  */
 
 /**
+ * How long after a modal panel mounts a POINTER activation inside it is read as the tail of the
+ * click that opened the panel rather than as an answer to it.
+ *
+ * It covers `--otp-motion-slow` (180ms, the `otp-panel-in` slide) with enough margin either side
+ * for the frame the panel paints on and for a platform double-click that straddles it. It is
+ * deliberately under the ~500ms interval every platform calls a double-click: the point is to
+ * discard a stray second half, not to make a player who already knows the card wait.
+ */
+const MOUNT_SETTLE_MS = 300;
+
+/**
+ * How far the pointer must travel between opening a panel and clicking inside it before the click
+ * counts as aimed rather than left over.
+ *
+ * The panel moves 8px under the hand (`otp-panel-in`), so the hand has to have moved further than
+ * the panel did. It is also twice the 4px of slop every platform allows inside a double-click, so
+ * a hand that merely trembles between the two presses is still treated as still.
+ */
+const POINTER_SLOP_PX = 8;
+
+/**
+ * Whether an activation inside a freshly mounted modal panel is one the player meant.
+ *
+ * Pure, and exported so test/modal-guard.test.ts can hold the rule without a browser. THREE
+ * things make an activation deliberate, and only the last of them is about time.
+ *
+ * `detail` is the click's count: 0 for a keyboard Enter or Space, for `element.click()`, and for
+ * every assistive-technology activation, because none of them has a pointer. Those can never be
+ * the second half of a double-click -- there was no first half at a screen position -- so they are
+ * always honoured. Gating them too would be a far worse bug than the one this fixes: a switch
+ * player would press Allow and watch nothing happen.
+ *
+ * `pointerMovedPx` is the distance from where the pointer stood when this panel appeared. The
+ * defect is a panel moving under a hand that did not, so a hand that DID move has aimed at what it
+ * hit and is never second-guessed, however fresh the panel is. Measured: the double-click defect
+ * travels 0px, while a player going from "Show me the skill" to Restrict travels 133px at
+ * 1280x800 and gets there in as little as 46ms -- comfortably inside the window below, and an
+ * answer every time. Without this clause the guard refuses that player, and e2e/ui.spec.ts's
+ * "a verdict updates the basket and returns to the world" is the proof: it fails on age alone.
+ *
+ * `sinceMountMs` is the last word, for the stationary pointer: too fresh to be an answer.
+ */
+export function activationIsDeliberate(
+  detail: number,
+  sinceMountMs: number,
+  pointerMovedPx: number,
+): boolean {
+  if (detail === 0) return true;
+  if (pointerMovedPx > POINTER_SLOP_PX) return true;
+  return sinceMountMs >= MOUNT_SETTLE_MS;
+}
+
+/*
+ * Where the pointer is, which a panel cannot ask for at the moment it mounts.
+ *
+ * The one fact the guard above turns on -- did the hand move between opening this panel and
+ * clicking in it? -- is about an instant that has already passed by the time the panel exists: the
+ * click that opened it. Nothing in the DOM remembers it, so this does, in two numbers, for the
+ * life of the document. `NaN` until a pointer is first seen, which makes every distance computed
+ * from it `NaN` and every comparison with it false, so a session that has only ever used the
+ * keyboard falls back to the age rule and nothing here has to special-case it.
+ *
+ * Capturing and passive: it can neither be stopped by a handler below it nor delay a scroll, and
+ * it writes two numbers per move and allocates nothing, which is what keeps it off the game loop.
+ */
+let pointerX = Number.NaN;
+let pointerY = Number.NaN;
+const trackPointer = (e: PointerEvent): void => {
+  pointerX = e.clientX;
+  pointerY = e.clientY;
+};
+if (typeof document !== 'undefined') {
+  const how = { capture: true, passive: true } as const;
+  document.addEventListener('pointermove', trackPointer, how);
+  document.addEventListener('pointerdown', trackPointer, how);
+}
+
+/**
+ * The ref a modal panel puts on its layer, plus the one question a control inside it may ask.
+ *
+ * It is the ref object itself rather than a `{ ref, ... }` pair so that `ref={trap}` keeps working
+ * in the two panels that want nothing but the trap (Dialogue, Notice).
+ */
+export interface FocusTrapRef {
+  current: HTMLDivElement | null;
+  /**
+   * True when `event` is an answer and not the leftover second click of the double-click that
+   * mounted this panel. Only controls that COMMIT something irreversible need to ask.
+   */
+  deliberate(event: { detail: number; clientX: number; clientY: number }): boolean;
+}
+
+/**
  * Keeps focus inside a modal panel, so a verdict can never be skipped by tabbing past the card.
  *
  * `onClose` is Esc for panels the reducer cannot hear it on. BACK is dispatched globally by
@@ -363,8 +456,27 @@ export function NotationChip({ label, count }: NotationChipProps) {
  * panel is a close that silently does nothing some of the time. The first version of this was, and
  * the test for it failed one run in three.
  */
-export function useFocusTrap(onClose?: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
+export function useFocusTrap(onClose?: () => void): FocusTrapRef {
+  /*
+   * When this panel appeared, which is one frame after the click that opened it. `useRef` keeps
+   * the value from the first render, so this is the mount and not the latest re-render -- the
+   * argument is evaluated every render but only the first result is stored.
+   */
+  const mountedAt = useRef(performance.now());
+  // Where the hand was when this panel appeared, for the same reason and with the same rule: the
+  // first render's value is the one kept, and that render is the panel arriving.
+  const openedX = useRef(pointerX);
+  const openedY = useRef(pointerY);
+  const trap = useRef<FocusTrapRef>({
+    current: null,
+    deliberate: (event) =>
+      activationIsDeliberate(
+        event.detail,
+        performance.now() - mountedAt.current,
+        Math.hypot(event.clientX - openedX.current, event.clientY - openedY.current),
+      ),
+  });
+  const ref = trap.current;
   // The handler below is bound once; this keeps it pointing at the current callback.
   const close = useRef(onClose);
   close.current = onClose;
@@ -395,10 +507,27 @@ export function useFocusTrap(onClose?: () => void) {
       if (items.length === 0) return;
       const first = items[0]!;
       const last = items[items.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
+      /*
+       * Where focus sits in this panel's tab order, or -1 for the autofocus target.
+       *
+       * -1 is the case the trap used to leak through, and it is the case every modal panel OPENS
+       * in. The thing `[data-autofocus]` points at is a `tabindex="-1"` box on two of the three
+       * panels -- `.otp-card`, `.otp-dialogue__text` -- so that focus lands on the card being read
+       * rather than pre-selecting Allow. `focusable()` deliberately excludes `tabindex="-1"`,
+       * because it must not become a tab stop, which left `activeElement` equal to neither `first`
+       * nor `last`: the very first Shift+Tab matched no branch and the browser walked focus out of
+       * the dialog to the music toggle in the world frame behind it. The second one reached the
+       * body, with an `aria-modal` panel still on screen and nothing to tab back into.
+       *
+       * It is an ancestor of every item here, so in tab order it comes BEFORE the first of them:
+       * Shift+Tab wraps to the last, and a plain Tab needs no help, since the browser's own next
+       * stop from a container is the first tabbable inside it.
+       */
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      if (e.shiftKey && (at === 0 || at === -1)) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
+      } else if (!e.shiftKey && at === items.length - 1) {
         e.preventDefault();
         first.focus();
       }

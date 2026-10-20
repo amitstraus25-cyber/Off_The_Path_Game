@@ -101,6 +101,38 @@ export interface Camera extends StageFit {
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
 
 /**
+ * Rounds a camera dimension down to an even number of game pixels.
+ *
+ * Phaser pivots a camera about its own centre: `Camera.preRender` takes `width * originX` (0.5 by
+ * default) and, when `roundPixels` is on -- which it is, and must stay on, because it is what keeps
+ * a game pixel landing on a whole device pixel -- ROUNDS that origin before building the camera
+ * matrix. On an odd camera width the centre is a half pixel (621 * 0.5 = 310.5), the rounded origin
+ * is 311, and the whole world is drawn one pixel to the right of where it should be.
+ *
+ * Nothing shows while there is map on both sides: the neighbouring column simply slides in. It
+ * shows at a BOUND, where there is no next column and the camera backdrop prints through instead.
+ * Measured on the shipped build with the backdrop painted magenta (#FF00FF appears nowhere in the
+ * tileset, so a magenta pixel is a hole and nothing else), on the launch screen and in play alike:
+ *
+ *   1280x800  camera 621x359 (odd)   scrollX 0  -> 359 magenta px, every one in column 0
+ *   2560x1440 camera 1261x679 (odd)  scrollX 0  -> 679 px, column 0
+ *   375x812   camera 369x534 (odd)   scrollX 0  -> 534 px, column 0
+ *   1673x449  camera 1280x367 (even) scrollX 0  -> 0
+ *   844x390   camera 806x308 (even)  scrollX 0  -> 0
+ *
+ * and the same camera walked off the left bound (scrollX 134) -> 0, while turning `roundPixels` off
+ * at that same bound also -> 0. So the trigger is the odd dimension, the mechanism is the rounded
+ * origin, and the remedy is to not hand Phaser a half pixel to round. The alternative -- turning
+ * `roundPixels` off -- buys the same zero at the cost of resampling every tile, which is the defect
+ * this project spent a round removing.
+ *
+ * The cost here is at most one game pixel of field of view per axis, against a camera of several
+ * hundred. `MIN_VIEW` and `MAX_VIEW` are both even on both axes, so this cannot push the view
+ * outside its own limits; keep them even if they are ever retuned.
+ */
+const even = (v: number): number => v - (v % 2);
+
+/**
  * Picks a whole-CSS-pixel zoom and then derives the camera from whatever space is left, so the
  * canvas fills its frame at every size instead of being letterboxed.
  *
@@ -130,8 +162,10 @@ export function stageFit(
   return {
     zoom,
     view: {
-      width: clamp(Math.floor(available.width / zoom), limits.min.width, limits.max.width),
-      height: clamp(Math.floor(available.height / zoom), limits.min.height, limits.max.height),
+      width: even(clamp(Math.floor(available.width / zoom), limits.min.width, limits.max.width)),
+      height: even(
+        clamp(Math.floor(available.height / zoom), limits.min.height, limits.max.height),
+      ),
     },
   };
 }

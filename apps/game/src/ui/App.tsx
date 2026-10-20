@@ -85,6 +85,74 @@ function useWithinReach(): string | null {
   return id;
 }
 
+/**
+ * The canvas saying which way each traveller lies. The sibling of `WITHIN_REACH` above and a DOM
+ * event for the same reason: the scene is the only thing in the build that knows where Red is
+ * standing, the UI holds no bus, and `main.ts` is not on the path between them.
+ *
+ * NOTHING DISPATCHES THIS YET -- the producer is a handover, recorded in `worldAsText()` below.
+ * Until it lands every traveller's line reads exactly as it reads today, which is why the fallback
+ * is an empty list rather than a guess.
+ */
+const BEARINGS = 'otp:bearings';
+
+/**
+ * Which way one traveller lies, and roughly how far.
+ *
+ * INDICES, NEVER WORDS, which is the same discipline `WITHIN_REACH` carries and for the same
+ * reason: the words come from `content.strings` at the point of render, so an event dispatched by
+ * anything other than the scene cannot put a sentence of its own into a live region. `sector` is
+ * eight 45-degree sectors CLOCKWISE FROM NORTH (0 = north, 2 = east, 4 = south, 6 = west) and
+ * `band` is a coarse distance, nearest first -- the contract `test/strings.test.ts` writes down
+ * for `worldBearings` and `worldDistances`.
+ */
+interface Bearing {
+  readonly id: string;
+  readonly sector: number;
+  readonly band: number;
+}
+
+/** A non-negative whole number. The UPPER bound is the content list's own length, at lookup. */
+const isIndex = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+/**
+ * The payload, taken apart entry by entry, dropping the bad entries rather than the whole list.
+ *
+ * `window` is public, so anything on the page can dispatch this event: this is the one place
+ * untrusted input crosses into a live region, which is why it is a plain function with the whole
+ * check in one place rather than three casts spread through the render.
+ * `e2e/world-bearings.spec.ts` drives it through the real event with a malformed entry of each
+ * kind.
+ */
+function readBearings(detail: unknown): Bearing[] {
+  const list: unknown =
+    typeof detail === 'object' && detail !== null && 'bearings' in detail
+      ? (detail as { bearings: unknown }).bearings
+      : null;
+  if (!Array.isArray(list)) return [];
+  const found: Bearing[] = [];
+  for (const entry of list as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { id, sector, band } = entry as Record<string, unknown>;
+    if (typeof id !== 'string' || !isIndex(sector) || !isIndex(band)) continue;
+    found.push({ id, sector, band });
+  }
+  return found;
+}
+
+/** What the scene last said about where everyone is. Empty until something dispatches it. */
+function useBearings(): readonly Bearing[] {
+  const [bearings, setBearings] = useState<readonly Bearing[]>([]);
+  useEffect(() => {
+    const onBearings = (event: Event): void =>
+      void setBearings(readBearings((event as CustomEvent<unknown>).detail));
+    window.addEventListener(BEARINGS, onBearings);
+    return () => void window.removeEventListener(BEARINGS, onBearings);
+  }, []);
+  return bearings;
+}
+
 export function App({
   store,
   content,
@@ -101,6 +169,7 @@ export function App({
 }: AppProps) {
   const state = useStoreState(store);
   const withinReach = useWithinReach();
+  const bearings = useBearings();
   const live = liveCapabilities(state.verdicts, content);
   const notice = noticeId ? findNotice(content, noticeId) : undefined;
   const character = state.activeCharacter
@@ -138,6 +207,44 @@ export function App({
   const reachLine = reachName
     ? [reachName, content.strings['worldTravellerNear']].filter(Boolean).join(', ')
     : '';
+
+  /**
+   * Who still owes the player an answer: the predicate the locked door itself is built on.
+   *
+   * `canEnterCottage` is `every skill has a verdict`, so the ones without a verdict ARE the reason
+   * the door will not open. Read off `state.verdicts` -- the same source the hidden roster's
+   * `travellerState()` reads -- rather than off `met` or `inspected`, because meeting someone and
+   * walking away leaves the door just as shut.
+   */
+  const outstanding = content.characters.filter((c) => state.verdicts[c.skillId] === undefined);
+
+  /**
+   * The line over the world, with the names on it when it is the locked door talking.
+   *
+   * THE DEFECT: the door says "I should hear all three travellers first" and the chip beside it
+   * says "1 of 3 skills seen", and between them they never say WHICH. The only place Owl and
+   * Lantern Keeper are named is the visually-hidden roster in `worldAsText()`, so a sighted player
+   * turned away at the door has to re-sweep a forest they have already walked.
+   *
+   * Matched against `cottageHint` by value, because that is the one signal App has: `main.ts`
+   * shows the same content string on `enteredCottage` and shows skill names here otherwise, and a
+   * verdict confirmation must not collect a roster. Comparing against the content file rather than
+   * a literal means a rewrite of that line keeps working and a missing key matches nothing (the
+   * hint would be `''`, which is not `undefined`).
+   *
+   * NAMES ONLY, joined to the shipped sentence. The names are data, from the cast; the sentence is
+   * copy and stays exactly as content ships it. There is no string in the file for "still to
+   * hear", and inventing one here is the thing rule 3 forbids -- the same call `reachLine` above
+   * makes when its content key is missing: thin, but true.
+   *
+   * One string, used by both the visible pill and the live region below, so the `aria-hidden`
+   * duplicate stays an actual duplicate instead of drifting into a second, quieter message.
+   */
+  const heldAtDoor = hint !== null && hint === content.strings['cottageHint'];
+  const hintLine =
+    heldAtDoor && outstanding.length > 0
+      ? [hint, outstanding.map((c) => c.name).join(', ')].join(' ')
+      : hint;
 
   return (
     <>
@@ -216,7 +323,7 @@ export function App({
       {inWorld && (
         <div class="otp-visually-hidden" key="world-announce">
           <p data-announce="world" role="status" aria-live="polite">
-            {inForest ? (hint ?? '') : ''}
+            {inForest ? (hintLine ?? '') : ''}
           </p>
           <p data-announce="say" role="status" aria-live="polite">
             {inForest && say ? `${say.name}: ${say.line}` : ''}
@@ -325,8 +432,12 @@ export function App({
                 {say.line}
               </p>
             )}
+            {/*
+              One text child, still, so `.otp-toast:empty` keeps fading the pill out when there is
+              nothing to say. `hintLine` is `hint` itself everywhere but the locked door.
+            */}
             <p class="otp-toast" aria-hidden="true">
-              {hint ?? ''}
+              {hintLine ?? ''}
             </p>
           </div>
         );
@@ -387,19 +498,16 @@ export function App({
    * Whether one of them is in range right now is the scene's to say, and it now does -- see the
    * `near` region above.
    *
-   * What is still missing is WHERE anyone is. A player who cannot see the forest can tell who is
-   * left to meet, what Grandma asked for, whether the cottage will open, and -- the moment she
-   * arrives -- who is within reach; but finding someone is still a sweep, because nothing here
-   * says "the Owl is east of you". A bearing per traveller is the remaining piece, and it needs
-   * two things this file cannot reach, so that nobody has to work it out a third time:
+   * WHERE anyone is was the hole, and this is half of the fix. Each traveller's line now carries a
+   * bearing and a coarse distance when the scene has said one -- "Owl, not met yet, east of you, a
+   * short walk away" -- off `worldBearings` and `worldDistances`, two strings that shipped in the
+   * content file with nothing in the build able to reach them.
    *
-   *  - The direction words, in `content.strings`. Owned by the content task on this board.
-   *  - Red's position, and each traveller's. The UI has neither. `bus.ts` carries no event with a
-   *    position on it -- `interact`, `greetBystander` and `reachedNotice` carry ids -- and the
-   *    only place a position is published is `window.__otp.scene`, which `world/forest-scene.ts`
-   *    sets for the e2e specs alone and which App must not read. Giving the bus a `redMoved`
-   *    event, or a coarse `bearings` payload off the existing reach check, is the honest route;
-   *    it touches `bus.ts`, `world/forest-scene.ts` and `main.ts`, all owned elsewhere today.
+   * THE OTHER HALF IS A HANDOVER, and it is one file: `world/forest-scene.ts` is the only thing
+   * that knows where Red is standing. The UI holds no bus, and `main.ts` is not on the path, so
+   * the channel is a DOM event beside the one that scene already dispatches -- see `BEARINGS` at
+   * the top of this file for the payload, which is indices and ids with no words in it. Until that
+   * dispatch lands, `bearings` is empty and every line below reads as it read before.
    */
   function worldAsText() {
     const travellerState = (c: Character): string => {
@@ -410,6 +518,26 @@ export function App({
       }
       if (state.met.includes(c.id)) return content.strings['worldTravellerMet'] ?? '';
       return content.strings['worldTravellerUnmet'] ?? '';
+    };
+
+    /**
+     * One word out of a pipe-separated content string, by index.
+     *
+     * The list's own length is the upper bound on the index: an out-of-range sector reads as
+     * `undefined`, drops out at the `filter` below, and the line is simply short a bearing. That
+     * is deliberately not written as `sector < 8` -- a guard that repeats the constant it watches
+     * stops watching it the day the constant moves.
+     */
+    const word = (key: string, index: number): string =>
+      (content.strings[key] ?? '').split('|')[index]?.trim() ?? '';
+
+    /** The tail of a traveller's sentence: whichever of the two the scene has given us. */
+    const bearingOf = (c: Character): string[] => {
+      const found = bearings.find((b) => b.id === c.id);
+      if (!found) return [];
+      return [word('worldBearings', found.sector), word('worldDistances', found.band)].filter(
+        Boolean,
+      );
     };
 
     return (
@@ -430,9 +558,16 @@ export function App({
             ? (content.strings['controlsHint'] ?? '')
             : (content.strings['controlsHintTouch'] ?? '')}
         </p>
+        {/*
+          `filter(Boolean)` rather than a template, so a traveller with no bearing yet reads
+          "Owl, not met yet" and not "Owl, not met yet, , " -- and so a missing state string
+          leaves a name rather than a dangling comma.
+        */}
         <ul>
           {content.characters.map((c) => (
-            <li key={c.id}>{`${c.name}, ${travellerState(c)}`}</li>
+            <li key={c.id}>
+              {[c.name, travellerState(c), ...bearingOf(c)].filter(Boolean).join(', ')}
+            </li>
           ))}
         </ul>
         <p>

@@ -1,3 +1,4 @@
+import './zod-config.ts';
 import { z } from 'zod';
 
 export const VERDICTS = ['allow', 'restrict', 'reject'] as const;

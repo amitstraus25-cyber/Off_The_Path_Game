@@ -3,9 +3,12 @@ import raw from '../../../content/game.json';
 import {
   HANDLE_FIRST_WORDS,
   HANDLE_SECOND_WORDS,
+  checkLog,
   createState,
   isMintedHandle,
   loadContent,
+  score,
+  submitRequestSchema,
   tryReduce,
 } from '@otp/core';
 import type { Action, Content, GameState } from '@otp/core';
@@ -26,6 +29,9 @@ const content: Content = loadContent(raw);
 const client = createLeaderboardClient(content);
 
 const DOWN = content.strings['leaderboardDown']!;
+const REFUSED = content.strings['leaderboardRefused']!;
+const ALREADY = content.strings['leaderboardAlready']!;
+const ASSIGNED = content.strings['handleAssigned']!;
 
 /** A finished run, through the real reducer. The adapter posts this log and nothing else. */
 function finishedRun(): GameState {
@@ -150,6 +156,34 @@ describe('submit', () => {
     expect('score' in body).toBe(false);
   });
 
+  it('sends a body the server accepts, scoring it to the same number the screen showed', async () => {
+    /*
+     * The two halves, held against each other without a server. Everything else in this file
+     * checks what the adapter SENDS; apps/api's tests check what the service ACCEPTS; nothing
+     * checked that those are the same thing, and "both suites are green" is exactly how a wire
+     * contract drifts. So this takes the real body off the real request and runs it through the
+     * two functions `POST /api/score` runs: `submitRequestSchema` (strict -- an extra key here is
+     * a 400), then `checkLog` (the real reducer, replaying from a zero start), then `score()`.
+     *
+     * The run was built by the reducer, so a change that makes the game log something the server
+     * cannot replay fails here rather than on the first post after a deploy. Measured the same way
+     * in a real browser against the built game and the real handler: 13 events, 900 points on both
+     * sides, one row of {handle, score}.
+     */
+    const sent = intercept(() => okScore('brave-lantern-42'));
+    await client.submit(run, 'brave-lantern-42');
+
+    const parsed = submitRequestSchema.safeParse(bodyOf(sent[0]!));
+    expect(parsed.success, 'the server would refuse the body this adapter sends').toBe(true);
+
+    const replay = checkLog(parsed.data!.log, content, 0);
+    expect(replay.legal, 'legal' in replay ? '' : (replay as { reason: string }).reason).toBe(true);
+    expect(replay.legal && replay.complete, 'the server would call this run unfinished').toBe(true);
+    expect(replay.legal && score(replay.state.log, content).total).toBe(
+      score(run.log, content).total,
+    );
+  });
+
   it('names the handle that went up when the board took it', async () => {
     intercept(() => okScore('brave-lantern-42'));
     const message = await client.submit(run, 'brave-lantern-42');
@@ -185,8 +219,49 @@ describe('submit', () => {
   it('separates "the board refused this" from "the board is down"', async () => {
     intercept(() => new Response(JSON.stringify({ error: 'nope' }), { status: 400 }));
     const message = await client.submit(run, 'brave-lantern-42');
+    expect(message).toBe(REFUSED);
     expect(message).not.toBe(DOWN);
-    expect(message).toBeTruthy();
+  });
+
+  it('tells a player who pressed Post twice that the run is up, not that it failed', async () => {
+    /*
+     * The real case, not a hostile one. The button is enabled again the moment a post succeeds, so
+     * a second press sends the same run log and `apps/api` answers 409 -- measured against the
+     * real handler, not assumed. Reading that out as "could not be posted" tells a player their
+     * score failed while it is sitting on the board under the name they were just shown.
+     */
+    intercept(
+      () =>
+        new Response(JSON.stringify({ error: 'that run is already on the board' }), {
+          status: 409,
+        }),
+    );
+    const message = await client.submit(run, 'brave-lantern-42');
+    expect(message).toBe(ALREADY);
+    expect(message).not.toBe(REFUSED);
+    expect(message).not.toBe(DOWN);
+  });
+
+  it('says every one of its lines in the words of the content file', async () => {
+    /*
+     * CLAUDE.md rule 3. Three of these four used to be literals in the adapter, where no copy
+     * review could see them and `test/strings.test.ts` could not scan them. This asserts the
+     * reads resolve -- a key deleted from content/game.json falls through to a backstop and this
+     * fails -- and that the one template still has its slot filled.
+     */
+    for (const [key, value] of Object.entries({
+      leaderboardDown: DOWN,
+      leaderboardRefused: REFUSED,
+      leaderboardAlready: ALREADY,
+      handleAssigned: ASSIGNED,
+    })) {
+      expect(value, `content/game.json is missing ${key}`).toBeTruthy();
+    }
+    expect(ASSIGNED).toContain('{handle}');
+
+    intercept(() => okScore('quiet-thicket-11'));
+    const message = await client.submit(run, 'brave-lantern-42');
+    expect(message).toBe(ASSIGNED.replace('{handle}', 'quiet-thicket-11'));
   });
 
   it('calls an undeployed API a board that is down, not a run that was refused', async () => {

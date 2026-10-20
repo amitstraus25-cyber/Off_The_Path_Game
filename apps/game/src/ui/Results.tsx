@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { VERDICTS, exposedNotices, recap, score } from '@otp/core';
-import type { Content, GameState, GoalResult, SkillId, Verdict } from '@otp/core';
+import type { Content, GameState, GoalResult, RecapRow, SkillId, Verdict } from '@otp/core';
 import { RESEARCH_URL } from '../embed/postMessage';
 import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
@@ -167,6 +167,46 @@ export function errandMiss(
   return granted.some((c) => c.outcome.flagsSet.length === 0) ? 'unused' : 'flagged';
 }
 
+/**
+ * How a SKILL row should read. Three states, for the same reason the errand rows have three.
+ *
+ * `recap()` reports two booleans and this screen used only one of them: `success`, which is
+ * `points === maxPerSkill`. So every verdict that was not the best one drew the Black "!" disc and
+ * the Haze ground that UI_FOUNDATIONS section 5 reserves for "Missed it" -- the mark that means the
+ * hidden action ran. Measured on the shipped content, over all 27 verdict combinations x 4 notice
+ * readings: the game has SIX lines that reach the ceiling, and two of them (Cottage Finder
+ * restricted, Word Weaver rejected, Night Light ALLOWED, with the door note read) printed "Missed
+ * it" on Night Light under a headline reading the full score. A screen that tells a player who
+ * scored everything that they failed is the same defect as findings 1, 13 and 15, on the row the
+ * section heading promises is about what was hiding.
+ *
+ * The third state is the one `recap()` already measures and nothing read: `compromised`, which is
+ * "this verdict set a flag", which is "something was taken". That is what separates allowing the
+ * compass (the key goes) from rejecting it (you walk without a map): both score below the maximum,
+ * only one of them was taken from.
+ *
+ *  - `caught`   full marks. Check mark, Natural ground.
+ *  - `costly`   below full marks and nothing taken. The circled minus and Natural ground, exactly
+ *               as an errand given up on purpose -- it is the same claim, that the player paid for
+ *               something rather than failed to notice it. The chip says `nothingTaken`, which is
+ *               the mechanical truth in every case: there is no run on which a flagless verdict
+ *               took something, so unlike a judgement about the verdict's quality it cannot go
+ *               wrong on the tied-optimal line above.
+ *  - `missed`   a flag was set. The "!" disc and the Haze ground, unchanged.
+ *
+ * `compromised` is read FIRST so the failure mark always wins. Content lint does not forbid a
+ * maximum-scoring verdict that also sets a flag (it only forbids it on the declared best verdict),
+ * and a row that both lost the key and wore a check mark would be the worst of the three.
+ *
+ * This lives in the component, beside `errandState`, for the reason that one states: it is the
+ * component's question. `recap()` is unchanged, so no number the server recomputes moves
+ * (CLAUDE.md golden rule 6) and `tools/sim` keeps reading the field it reads today.
+ */
+export type SkillState = 'caught' | 'costly' | 'missed';
+
+export const skillState = (row: Pick<RecapRow, 'success' | 'compromised'>): SkillState =>
+  row.compromised ? 'missed' : row.success ? 'caught' : 'costly';
+
 /*
  * Each of the four lines reads "<prefix> <the capability's own label>.", which is the shape
  * `errandTradedDetail` already uses, so the capability is named in every state and only the claim
@@ -209,8 +249,15 @@ export function breakdown(result: ReturnType<typeof score>, content: Content): s
   if (result.boundaryBonus > 0)
     parts.push(`${result.boundaryBonus} for never running all three at once`);
   const met = result.goals.filter((g) => g.met).length;
+  /*
+   * "for 1 of 3 of what Grandma asked" put two `of`s in the one sentence that explains the score,
+   * and the second one governed nothing: the reader parses "3 of what Grandma asked" and finds no
+   * noun. The count needs a thing to count, so it has one.
+   */
   if (result.errandBonus > 0)
-    parts.push(`${result.errandBonus} for ${met} of ${result.goals.length} of what Grandma asked`);
+    parts.push(
+      `${result.errandBonus} for ${met} of the ${result.goals.length} things Grandma asked for`,
+    );
   if (result.trustBonus > 0)
     parts.push(`${result.trustBonus} ${content.strings['trustBreakdown'] ?? ''}`.trim());
   return parts.join(' · ');
@@ -333,42 +380,53 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
               <Highlighted text={s('recapHeading')} word={s('recapHeadingHighlight')} />
             </h2>
             <ul class="otp-recap">
-              {rows.map((row) => (
-                <li
-                  key={row.skillId}
-                  class={`otp-recap__row otp-recap__row--skill${row.success ? '' : ' otp-recap__row--missed'}`}
-                >
-                  <Badge glyph={row.success ? 'check' : 'missed'} />
-                  <div>
-                    <p class="otp-recap__heading">
-                      {row.skillName}{' '}
-                      <span>you {s(VERDICT_WORD[row.verdict]).toLowerCase()} it</span>{' '}
-                      {/* Status in words, never by glyph or colour alone. */}
-                      <span class="otp-recap__status">
-                        {row.success ? s('caughtIt') : s('missedIt')}
-                      </span>
-                    </p>
-                    {/*
-                      The payoff for a gamble that did not come off, and the only place the game
-                      says anything about it. The fine print below is shown either way, so a
-                      player who never opened the card reads here what was in it.
-                    */}
-                    {row.onTrust && <p class="otp-recap__trust">{s('cardNotOpened')}</p>}
-                    <p class="otp-recap__detail">{row.recap}</p>
-                    {/*
-                      The section is headed "What was hiding" and never showed it: outcomes.ts
-                      computes hiddenAction for every row and this screen discarded it. The fine
-                      print is the one piece of text the whole game teaches you to find.
-                    */}
-                    {row.hiddenAction && (
-                      <p class="otp-recap__hidden">
-                        <span class="otp-recap__hidden-title">{row.hiddenAction.title}</span>
-                        {row.hiddenAction.detail}
+              {rows.map((row) => {
+                const skill = skillState(row);
+                return (
+                  <li
+                    key={row.skillId}
+                    class={`otp-recap__row otp-recap__row--skill${skill === 'missed' ? ' otp-recap__row--missed' : ''}`}
+                  >
+                    <Badge
+                      glyph={
+                        skill === 'caught' ? 'check' : skill === 'costly' ? 'traded' : 'missed'
+                      }
+                    />
+                    <div>
+                      <p class="otp-recap__heading">
+                        {row.skillName}{' '}
+                        <span>you {s(VERDICT_WORD[row.verdict]).toLowerCase()} it</span>{' '}
+                        {/* Status in words, never by glyph or colour alone. */}
+                        <span class="otp-recap__status">
+                          {skill === 'caught'
+                            ? s('caughtIt')
+                            : skill === 'costly'
+                              ? s('nothingTaken')
+                              : s('missedIt')}
+                        </span>
                       </p>
-                    )}
-                  </div>
-                </li>
-              ))}
+                      {/*
+                        The payoff for a gamble that did not come off, and the only place the game
+                        says anything about it. The fine print below is shown either way, so a
+                        player who never opened the card reads here what was in it.
+                      */}
+                      {row.onTrust && <p class="otp-recap__trust">{s('cardNotOpened')}</p>}
+                      <p class="otp-recap__detail">{row.recap}</p>
+                      {/*
+                        The section is headed "What was hiding" and never showed it: outcomes.ts
+                        computes hiddenAction for every row and this screen discarded it. The fine
+                        print is the one piece of text the whole game teaches you to find.
+                      */}
+                      {row.hiddenAction && (
+                        <p class="otp-recap__hidden">
+                          <span class="otp-recap__hidden-title">{row.hiddenAction.title}</span>
+                          {row.hiddenAction.detail}
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
 
             {/*

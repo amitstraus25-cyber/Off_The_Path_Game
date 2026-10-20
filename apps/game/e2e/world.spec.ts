@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { REFERENCE_VIEWPORTS, TILE, cameraFor } from '@otp/core';
+import type { Size } from '@otp/core';
 import { hold, mapObject, probe, startGame, talkingDistance, walkTo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
@@ -159,7 +161,34 @@ test('touch controls move Red and stop her on release', async ({ browser }) => {
   await context.close();
 });
 
-test('the canvas keeps whole device pixels per game pixel', async ({ page }) => {
+/*
+ * A RECTANGLE HAS TWO AXES, AND THIS TEST WAS LOOKING AT ONE OF THEM.
+ *
+ * It read `cssWidth` and nothing else, at a single 1024x768 viewport, and asked only that the
+ * width was more than 70% of the window. So a canvas letterboxed to a third of its frame in the
+ * BLOCK axis passed it untouched -- which is the same defect, in the other direction, as the one
+ * the comment under it describes ("how a phone ended up rendering the world at a third of the
+ * screen"), and the axis the client's "sliver at the top" report is about. It also measured one
+ * viewport, while the arithmetic that produces the box changes with orientation: a portrait screen
+ * gives the world PORTRAIT_WORLD of its height and no margin, which the desktop case never
+ * exercises.
+ *
+ * Both axes now, at the four viewports the project reviews at plus the one this test already used,
+ * and against `cameraFor()` rather than a fraction of the window -- @otp/core is where the camera
+ * is derived, and the graybox tooling composes the art against the same function, so a canvas that
+ * disagrees with it means the art is being framed for a rectangle the player does not have. If a
+ * letterbox is ever wanted here, it belongs in `stageFit` so that both sides move together; one
+ * applied in ui/stage.ts alone is exactly what this is written to fail on.
+ */
+const FIT_VIEWPORTS: Size[] = [
+  // The viewport this test has always run at, kept so it still covers what it used to.
+  { width: 1024, height: 768 },
+  ...Object.values(REFERENCE_VIEWPORTS),
+];
+
+test('the canvas fills its frame in both axes, at whole CSS pixels per game pixel', async ({
+  page,
+}) => {
   for (const dpr of [1, 2, 3]) {
     const context = await page
       .context()
@@ -168,17 +197,72 @@ test('the canvas keeps whole device pixels per game pixel', async ({ page }) => 
     const p = await context.newPage();
     await p.goto('/');
     await startGame(p);
-    const fit = await p.evaluate(() => {
-      const canvas = document.querySelector('#game canvas') as HTMLCanvasElement;
-      const cssWidth = parseFloat(getComputedStyle(canvas).width);
-      // canvas.width is the camera size in game pixels, which now follows the window.
-      return { zoom: cssWidth / canvas.width, cssWidth };
-    });
-    // One game pixel is a whole number of CSS pixels at every DPR.
-    expect(Math.abs(fit.zoom - Math.round(fit.zoom)), `dpr ${dpr}`).toBeLessThan(0.001);
-    // And the world actually fills its frame: nobody was checking this, which is how a phone
-    // ended up rendering the world at a third of the screen.
-    expect(fit.cssWidth, `dpr ${dpr}`).toBeGreaterThan(1024 * 0.7);
+
+    for (const viewport of FIT_VIEWPORTS) {
+      await p.setViewportSize(viewport);
+      await p.waitForFunction((w) => Math.abs(window.innerWidth - w) < 1, viewport.width);
+      // Two frames: one for ui/stage.ts's resize handler, one for the layout it causes.
+      await p.evaluate(
+        () =>
+          new Promise<void>((done) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => done())),
+          ),
+      );
+
+      const seen = await p.evaluate(() => {
+        const canvas = document.querySelector('#game canvas') as HTMLCanvasElement;
+        const r = canvas.getBoundingClientRect();
+        return {
+          // What the player gets, in CSS pixels.
+          css: { width: r.width, height: r.height },
+          // The backing store: the camera in GAME pixels, which follows the window.
+          backing: { width: canvas.width, height: canvas.height },
+          // The window as the page sees it, which is what the camera is derived from. Read here
+          // rather than taken from `viewport`, so a scrollbar cannot make the two disagree.
+          window: { width: window.innerWidth, height: window.innerHeight },
+        };
+      });
+      const cam = cameraFor(seen.window);
+      const where = `${viewport.width}x${viewport.height} dpr${dpr}`;
+      console.log(`stage fit ${where}:`, JSON.stringify({ seen, cam }));
+
+      for (const axis of ['width', 'height'] as const) {
+        // The camera Phaser is drawing is the one @otp/core derives, in game pixels.
+        expect(
+          seen.backing[axis],
+          `${where}: the canvas backing store is ${seen.backing[axis]} game px ${axis}, against a derived camera of ${cam.view[axis]}`,
+        ).toBe(cam.view[axis]);
+
+        // One game pixel is a whole number of CSS pixels -- measured per axis, so a stretch in
+        // one of them cannot hide behind the other.
+        const zoom = seen.css[axis] / seen.backing[axis];
+        expect(
+          Math.abs(zoom - Math.round(zoom)),
+          `${where}: ${axis} zoom is ${zoom}, which is not a whole number of CSS pixels`,
+        ).toBeLessThan(0.001);
+        expect(zoom, `${where}: ${axis} zoom ${zoom} is not the derived ${cam.zoom}`).toBeCloseTo(
+          cam.zoom,
+          3,
+        );
+
+        /*
+         * And the world fills the box the frame leaves it. The slack is stated in TILES rather
+         * than as a share of the canvas -- a bound written against the thing it watches grows
+         * with it, and a canvas half the size it should be would satisfy "within 30% of itself".
+         * Less than one tile of unused frame: a camera that is a whole number of tiles high is
+         * still inside this, a camera letterboxed by more than a tile is not.
+         */
+        const unused = cam.available[axis] - seen.css[axis];
+        expect(
+          unused,
+          `${where}: ${unused}px of the frame's ${cam.available[axis]}px ${axis} is not world (${seen.css[axis]}px canvas)`,
+        ).toBeLessThan(TILE * cam.zoom);
+        expect(
+          unused,
+          `${where}: the canvas overflows its frame in ${axis}`,
+        ).toBeGreaterThanOrEqual(0);
+      }
+    }
     await context.close();
   }
 });

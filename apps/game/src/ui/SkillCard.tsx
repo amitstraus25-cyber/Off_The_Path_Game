@@ -177,12 +177,12 @@ export function SkillCard({
   onVerdict,
   onBack,
 }: SkillCardProps) {
-  const trapRef = useFocusTrap();
+  const trap = useFocusTrap();
 
   return (
     <div
       class="otp-layer otp-layer--modal"
-      ref={trapRef}
+      ref={trap}
       role="dialog"
       aria-modal="true"
       aria-label={`Inspect ${skill.name}`}
@@ -256,12 +256,26 @@ export function SkillCard({
             role="group"
             aria-label={`What should ${skill.name} be allowed to do?`}
           >
+            {/*
+              THE GUARD IS ON THE THREE PILLS, NOT ON THE PANEL.
+              A plain double-click on "Show me the skill" used to record Allow and end the
+              encounter. Click one mounts this card under a pointer that has not moved, and the
+              `otp-panel-in` slide then carries the Allow pill through that exact point, so click
+              two landed on a verdict. Measured: at 1280x800 a double-click at any gap up to ~100ms
+              logged `inspected` and `verdict` 3-6ms apart, with the run then unrecoverable -- a
+              verdict cannot be retaken -- and the toast reporting a weighed decision nobody made.
+              The pills are the only controls here that commit anything, so they are the only ones
+              that ask. Guarding the whole panel instead would swallow the first deliberate click
+              of someone who is reading it, and "Go back" stays unguarded because leaving is free.
+            */}
             {VERDICTS.map(({ id, label, Glyph }) => (
               <button
                 key={id}
                 type="button"
                 class={`otp-verdict otp-verdict--${id}`}
-                onClick={() => onVerdict(id)}
+                onClick={(e) => {
+                  if (trap.deliberate(e)) onVerdict(id);
+                }}
               >
                 <span class="otp-verdict__glyph" aria-hidden="true">
                   <Glyph />

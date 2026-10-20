@@ -514,9 +514,25 @@ export class ForestScene extends Phaser.Scene {
     this.position = { x: spawn.x + TILE / 2, y: spawn.y + RED_FEET_BELOW_SPAWN };
     this.facing = 'down';
     this.stopWalking();
+    /*
+     * EVERY SECOND RUN OPENED ON THE HEROINE'S BACK.
+     *
+     * `stopWalking` is the only thing that puts an idle frame on Red, and it returns early on
+     * `!this.walking` -- rightly, because `update` calls it on every non-exploring frame and
+     * re-setting the frame sixty times a second is seven hundred wasted Phaser calls a run. But
+     * `stageArrival` has ALREADY stopped her by the time a replay gets here, so the early return
+     * fires and the facing set a line above never reaches the sprite: she walks out of the cottage
+     * shot still wearing `red-idle-up-0` while `this.facing` says 'down', and the first frame of
+     * the second run is the back of her head. It healed on the player's first keypress, which is
+     * exactly late enough for the opening shot to be wrong and nothing else.
+     *
+     * So the frame is set here, the same pair `stageArrival` sets for the same reason -- the guard
+     * inside `stopWalking` stays where it is and keeps paying for itself on every idle frame.
+     */
+    this.red.stop();
+    this.red.setFrame(`red-idle-${this.facing}-0`);
     this.placeRed();
-    for (const npc of this.npcs) this.hidePrompt(npc);
-    this.announceWithinReach(null);
+    this.clearReach();
     // A replay starts outside every trigger, whatever Red was standing on when the run ended.
     this.triggered.clear();
     // The last run's trail is the last run's. A replay that kept it would promise an ending the
@@ -685,8 +701,29 @@ export class ForestScene extends Phaser.Scene {
       if (input.interactPressed) this.interact(target);
       this.checkNotices(state);
       this.checkCottage(state);
-    } else if (this.walking) {
+    } else {
+      /*
+       * THE BUBBLE OUTLIVED THE KEY THAT ANSWERS IT.
+       *
+       * Both of the lines above that say "you can talk to this person" -- the bobbing bubble over
+       * their head and the live region that says it out loud -- were inside the `exploring` branch
+       * and nowhere else. A notice post, a dialogue, a skill card: none of them changes the store
+       * phase, they take the input away through `hasInput()`. So `exploring` goes false with the
+       * phase still 'explore', this loop stops touching either of them, and the bubble and the
+       * sentence FREEZE on screen at the precise moment the interact key is dead. Stand by the
+       * Rabbit, step onto a notice, and the game is still pointing at the Rabbit and still telling
+       * a screen-reader player they can talk now, while A does nothing at all.
+       *
+       * Cleared unconditionally rather than only when something is up: there is nothing to
+       * remember, and both calls are edge-triggered, so a frame with nothing to clear costs two
+       * comparisons. They re-arm on the next exploring frame from the same proximity test that
+       * raised them, so nothing has to be put back.
+       *
+       * `stopWalking` keeps its own `!this.walking` guard -- this branch runs on every
+       * non-exploring frame, and without it Red's idle frame would be re-set sixty times a second.
+       */
       this.stopWalking();
+      this.clearReach();
     }
     this.syncCamera(deltaMs);
   }
@@ -716,9 +753,8 @@ export class ForestScene extends Phaser.Scene {
     this.red.stop();
     this.red.setFrame(`red-idle-${this.facing}-0`);
     this.placeRed();
-    for (const npc of this.npcs) this.hidePrompt(npc);
     // Nobody is within reach on the doorstep, whoever she was standing next to a frame ago.
-    this.announceWithinReach(null);
+    this.clearReach();
 
     /*
      * The trail is a claim about what happened, so it is content's to make and not this file's:
@@ -836,6 +872,20 @@ export class ForestScene extends Phaser.Scene {
     window.dispatchEvent(new CustomEvent(WITHIN_REACH, { detail: { id } }));
   }
 
+  /**
+   * Takes back both offers to talk: the bubble a player looks at and the sentence one listens to.
+   *
+   * One method because they are one claim. The three places that need to withdraw it -- the
+   * replay, the arrival, and any frame where a panel holds the input -- each used to write the
+   * pair out by hand, and the pair is only correct when BOTH halves are said: a scene that hid the
+   * bubble and left the live region holding "Rabbit, within reach: you can talk now" has told a
+   * sighted player one thing and a screen-reader player another.
+   */
+  private clearReach(): void {
+    for (const npc of this.npcs) this.hidePrompt(npc);
+    this.announceWithinReach(null);
+  }
+
   private interact(target: Npc | null): void {
     if (!target) return;
     if (target.kind === 'bystander') this.bus.emit('greetBystander', { bystanderId: target.id });
@@ -921,6 +971,21 @@ export class ForestScene extends Phaser.Scene {
    * against the edge of some future map would otherwise reduce the payoff to a sliver. If that
    * floor ever binds, the shot is off-centre again -- and the guard in e2e/scene-second-pass.spec.ts
    * fails, which is the right answer, because the fix then belongs to the map and not to here.
+   *
+   * AND IT IS ONE RECTANGLE, NOT TWO NUMBERS. The two axes were clamped independently, and on this
+   * map only the horizontal ever binds -- the door has 1,184px of forest it could be centred in
+   * vertically and at most 800 of canvas -- so the height came back as the whole canvas however
+   * narrow the width went. The shot's shape was therefore whatever the arithmetic left over:
+   * measured at the door, 608x359 at 1280 (aspect 1.69 against the canvas's 1.73, near enough),
+   * 608x499 at 1920 (1.22 against 1.89) and 608x679 at 2560 -- aspect 0.90, a PORTRAIT slot gouged
+   * out of a landscape frame, with half the screen black down either side and a column of forest
+   * above and below the cottage that the composition never asked for.
+   *
+   * So the width settles the shot and the height follows the canvas's own aspect: the payoff frame
+   * is the canvas, scaled down until it fits inside the world around the door, which means the
+   * surplus is an even border and the picture keeps the proportions every other frame of the game
+   * is composed in. `Math.min` over both ratios, rather than deriving from the width alone, so the
+   * vertical binds on a map where it has to -- the rule stays the rule rather than a special case.
    */
   private viewFor(
     centre: Vec,
@@ -929,9 +994,15 @@ export class ForestScene extends Phaser.Scene {
     const canvas = this.scale.gameSize;
     if (!this.arrived) return { width: canvas.width, height: canvas.height };
     const centred = (c: number, extent: number): number => Math.floor(2 * Math.min(c, extent - c));
+    const width = Math.min(canvas.width, Math.max(MIN_VIEW.width, centred(centre.x, world.width)));
+    const height = Math.min(
+      canvas.height,
+      Math.max(MIN_VIEW.height, centred(centre.y, world.height)),
+    );
+    const fit = Math.min(width / canvas.width, height / canvas.height);
     return {
-      width: Math.min(canvas.width, Math.max(MIN_VIEW.width, centred(centre.x, world.width))),
-      height: Math.min(canvas.height, Math.max(MIN_VIEW.height, centred(centre.y, world.height))),
+      width: Math.round(canvas.width * fit),
+      height: Math.round(canvas.height * fit),
     };
   }
 

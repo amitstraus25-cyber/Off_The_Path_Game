@@ -1,3 +1,4 @@
+import './zod-config.ts';
 import { z } from 'zod';
 import { runEventSchema } from './state.ts';
 

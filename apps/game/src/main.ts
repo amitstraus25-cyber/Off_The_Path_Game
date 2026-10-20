@@ -22,6 +22,7 @@ import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
 import { watchStage } from './ui/stage';
 import { App } from './ui/App';
+import type { NoticeClose } from './ui/Notice';
 import { createLeaderboardClient } from './net/leaderboard';
 import { emit } from './embed/postMessage';
 import './ui/panels.css';
@@ -97,6 +98,31 @@ async function start(): Promise<void> {
   let noticeId: string | null = null;
   const dismissed = new Set<string>();
 
+  /*
+   * Everything outside the store that has to agree with what is on screen: whether the pad is up,
+   * whether the bed is ducked, and what `#game` says it is showing.
+   *
+   * ONE function, because the two things that move it are not the same event. The store subscriber
+   * runs on a dispatch; a notice is a DOM panel that changes no phase, so opening and closing one
+   * dispatches nothing at all. `music.duck` used to live only in the subscriber, so the bed dropped
+   * on the READ_NOTICE dispatch and nothing was ever left to raise it again -- measured on the
+   * built page with the master gain instrumented: 0.34 on the walk, 0.1 from the moment the post
+   * was read, still 0.1 after Walk on and for the rest of the run. Opening the panel did not duck
+   * it, and closing it did not undo it; only the one dispatch in the middle ever moved it.
+   *
+   * `data-phase` is published here for the same reason. It is the store phase while the world is
+   * the thing on screen, and `notice` while the post is over it -- the store phase stays `explore`
+   * behind an `aria-modal` panel, so the attribute said the player was walking when they could not
+   * move. It is the only honest value the world has for this state, since the reducer has none.
+   */
+  const syncWorldChrome = (): void => {
+    const walkable = worldHasInput();
+    stage.dataset['phase'] = noticeId === null ? store.getState().phase : 'notice';
+    touch.setVisible(walkable);
+    // Reading the fine print should be the quiet moment, so the bed drops while a panel is up.
+    music.duck(!walkable);
+  };
+
   const beginRun = (): void => {
     store.dispatch({ type: 'START', runId: crypto.randomUUID() });
     store.dispatch({ type: 'BEGIN' });
@@ -142,10 +168,20 @@ async function start(): Promise<void> {
           if (reason) console.warn(`READ_NOTICE ${id} rejected: ${reason}`);
           draw();
         },
-        onLeaveNotice: () => {
-          if (noticeId) dismissed.add(noticeId);
+        /*
+         * Closing the post. `walked-on` is the player saying no to it, and only that is recorded:
+         * Esc is the reflex every other panel in this game teaches -- the card and the
+         * conversation both back out one level on it -- and a reflex must not spend a thing the
+         * run is scored on. It used to, because `useFocusTrap` was handed `onWalkOn` as its Esc.
+         *
+         * The default is `walked-on`, so an App that forwards this without the argument keeps the
+         * old, safe behaviour rather than silently making every close free. e2e/notice-lifecycle
+         * holds the difference down from the outside.
+         */
+        onLeaveNotice: (how: NoticeClose = 'walked-on') => {
+          if (noticeId !== null && how === 'walked-on') dismissed.add(noticeId);
           noticeId = null;
-          touch.setVisible(worldHasInput());
+          syncWorldChrome();
           draw();
         },
       }),
@@ -198,24 +234,47 @@ async function start(): Promise<void> {
     if (state.phase !== 'explore') return;
     if (noticeId) return;
     /*
-     * The second of the two latches docs/UX_REVIEW.md blocker 2 found. The reducer will now accept
-     * a second reading of a notice whose hidden instruction has not fired, but it never got the
-     * chance: this handler refused to re-open the panel once the post had been read or waved away,
-     * and `dismissed` is only cleared on replay.
-     *
-     * So the panel re-opens in exactly one case -- the post still has something to demonstrate AND
-     * all three legs are now live, which is to say reading it now would actually do something. That
-     * is the one beat the whole game is built to deliver, and it was unreachable by every route but
-     * one narrow ordering. Once it fires, `noticePending` goes false and it never asks again.
+     * A `notice-<id>` the content does not define is a map that has outrun `content/game.json`.
+     * Opening the panel for it bricked the run: `noticeId` went non-null, so `worldHasInput` went
+     * false and Red stopped walking, while App's `findNotice` returned undefined and rendered no
+     * panel -- no Walk on, no Esc, nothing to close. Measured on the built page: Red at
+     * (176, 672), 600ms of ArrowRight, still (176, 672), and no error anywhere to say why. The
+     * warning is for whoever renames the object or the notice.
      */
     const notice = findNotice(content, id);
-    const wouldFire =
-      notice !== undefined &&
-      noticePending(notice, state.flags) &&
-      trifectaLive(state.verdicts, content);
-    if (!wouldFire && (dismissed.has(id) || state.read.includes(id))) return;
+    if (notice === undefined) {
+      console.warn(`reachedNotice ${id}: the content has no notice with that id`);
+      return;
+    }
+
+    /*
+     * Whether this post is still worth opening. Two separate reasons, and it only takes one.
+     *
+     * `hiddenPending` is the beat the game is built to deliver: the instruction on the post has
+     * not taken effect yet and all three legs are live, so reading it now would actually do
+     * something. The reducer has allowed that re-reading since UX_REVIEW blocker 2; this handler
+     * is what offers it.
+     *
+     * `errandWaiting` is the one it missed. Grandma's errand names notices by `act`, and
+     * `errandGoals` only counts such a goal once the reading is in `state.read` -- so a post that
+     * has never been read is worth a goal no matter what the capabilities are doing. The only
+     * clear lane east out of the spawn runs straight past the forest post, so the natural first
+     * act of the game meets it before a single verdict exists; one Walk on, or one Esc, latched it
+     * shut for the whole run and took the goal with it. Measured end to end on the built page,
+     * restrict/restrict/restrict with both bonus questions: 950 reading the post, 850 having
+     * waved it away in the first ten seconds, and no way back to the 950 because the only re-open
+     * path needed all three legs live, which that line never reaches.
+     *
+     * It goes quiet the moment the reading happens, because `read` is what the goal is scored on:
+     * this re-offers an unread post, it does not nag about one already read.
+     */
+    const hiddenPending =
+      noticePending(notice, state.flags) && trifectaLive(state.verdicts, content);
+    const errandWaiting =
+      content.scoring.errandGoals.some((g) => g.act === id) && !state.read.includes(id);
+    if (!hiddenPending && !errandWaiting && (dismissed.has(id) || state.read.includes(id))) return;
     noticeId = id;
-    touch.setVisible(false);
+    syncWorldChrome();
     draw();
   });
 
@@ -320,10 +379,7 @@ async function start(): Promise<void> {
   let lastPhase = store.getState().phase;
   let lastVerdicts = 0;
   store.subscribe((state) => {
-    stage.dataset['phase'] = state.phase;
-    touch.setVisible(worldHasInput());
-    // Reading the fine print should be the quiet moment, so the bed drops while a panel is up.
-    music.duck(!worldHasInput());
+    syncWorldChrome();
 
     // A verdict earns a brief confirmation, by shape and words, never by colour alone.
     const verdictCount = Object.keys(state.verdicts).length;
@@ -359,8 +415,7 @@ async function start(): Promise<void> {
    * through the whole title screen -- invisible before only because the title used to be an opaque
    * full-screen panel painted over them.
    */
-  stage.dataset['phase'] = store.getState().phase;
-  touch.setVisible(worldHasInput());
+  syncWorldChrome();
   draw();
 
   if (import.meta.env.DEV || import.meta.env['VITE_E2E'] === '1')

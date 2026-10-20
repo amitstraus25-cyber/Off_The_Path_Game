@@ -64,24 +64,17 @@ const PENDING: Record<string, string> = {
  * wired: `Results.tsx breakdown()` reads it, and `test/results.test.ts` adds the clauses up
  * against `score().total` so the headline and the parts cannot drift apart again.
  *
- * The two below are the opposite case to those seven: copy written ahead of the code that will say
- * it, applied to the content file in this round because the component that needs it is in another
- * round's file. `App.tsx worldAsText()` says who is left to meet and nothing about WHERE they are,
- * which it admits in a comment -- "a bearing per traveller is the remaining piece and it needs
- * direction words in the content file". These are those words. For a player who cannot see the
- * canvas, finding a traveller is otherwise a sweep of the whole forest.
- *
- * Both are pipe-separated lists, the convention `arriveLines.<ending>` and `arrivePawEndings`
- * already use in this file, so the eight bearings are one reviewed string rather than eight keys.
- * The contract for whoever wires them: `worldBearings` is eight 45-degree sectors CLOCKWISE FROM
- * NORTH (index = round(angle / 45) mod 8, north = 0), and `worldDistances` is three bands NEAREST
- * FIRST. Both read as the tail of a traveller's sentence: "the Owl: not met yet, east of you, a
- * short walk away."
+ * `worldBearings` and `worldDistances` were the last two entries and were struck off on 2026-10-20,
+ * the round `App.tsx worldAsText()` started reading them (line 538, via `word()`), which is the
+ * condition this list says it shrinks on. They stay documented here rather than in a commit message
+ * because the CONTRACT between the content file and the component is not expressed anywhere the
+ * type system can see it: `worldBearings` is eight 45-degree sectors CLOCKWISE FROM NORTH (index =
+ * round(angle / 45) mod 8, north = 0) and `worldDistances` is three bands NEAREST FIRST, both
+ * pipe-separated the way `arriveLines.<ending>` and `arrivePawEndings` already are. A producer that
+ * numbers its sectors anticlockwise, or from east, would put every traveller in the wrong place with
+ * every test still green, because both ends would agree about a list and disagree about its order.
  */
-const UNREAD: Record<string, string> = {
-  worldBearings: 'App.tsx worldAsText() -- bearing per unmet traveller',
-  worldDistances: 'App.tsx worldAsText() -- coarse distance per unmet traveller',
-};
+const UNREAD: Record<string, string> = {};
 
 /** Every `.ts`/`.tsx` file under apps/game/src. */
 function sources(dir: string): string[] {

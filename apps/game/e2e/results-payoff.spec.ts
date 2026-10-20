@@ -23,6 +23,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { loadContent, score } from '@otp/core';
+import type { Content, RunEvent, Verdict } from '@otp/core';
 import { ready } from './helpers';
 
 /*
@@ -35,11 +37,12 @@ import { ready } from './helpers';
  * Read rather than imported: Playwright runs these as plain Node ESM, where a JSON import needs an
  * import attribute the rest of the workspace does not use.
  */
-const strings = (
+const content: Content = loadContent(
   JSON.parse(
     readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
-  ) as { strings: Record<string, string> }
-).strings;
+  ),
+);
+const strings = content.strings;
 const TRADED = strings['errandTraded'] || 'Traded for the boundary';
 
 /**
@@ -49,13 +52,10 @@ const TRADED = strings['errandTraded'] || 'Traded for the boundary';
  */
 const NEEDED = strings['errandNeeded'] || 'Needed a skill that';
 
-type Verdict = 'allow' | 'restrict' | 'reject';
-
-const SKILL_OF: Record<string, string> = {
-  rabbit: 'cottage-finder',
-  owl: 'word-weaver',
-  'lantern-keeper': 'night-light',
-};
+/** Which skill each traveller offers. Read off the cast, not typed out beside it. */
+const SKILL_OF: Record<string, string> = Object.fromEntries(
+  content.characters.map((c) => [c.id, c.skillId]),
+);
 
 /** Plays a whole run and lands on Results, without the arrival beats in between. */
 async function playToResults(page: Page, verdicts: Record<string, Verdict>): Promise<void> {
@@ -76,12 +76,36 @@ async function playToResults(page: Page, verdicts: Record<string, Verdict>): Pro
   await expect(page.locator('.otp-hero__score')).toBeVisible();
 }
 
-/** Restrict, Reject, Restrict: every skill played the way the game says is right. */
-const PERFECT: Record<string, Verdict> = {
-  rabbit: 'restrict',
-  owl: 'reject',
-  'lantern-keeper': 'restrict',
-};
+/**
+ * Every skill played the way the game itself says is right, per traveller.
+ *
+ * Derived from `bestVerdict` rather than spelled Restrict, Reject, Restrict. A rebalance that
+ * moves one of them would have left this constant describing a run that is no longer perfect,
+ * with the assertions below still passing about it.
+ */
+const PERFECT: Record<string, Verdict> = Object.fromEntries(
+  content.characters.map((c) => [
+    c.id,
+    content.skills.find((s) => s.id === c.skillId)!.bestVerdict,
+  ]),
+);
+
+/**
+ * The run as the game recorded it, for recomputing what the screen should say.
+ *
+ * The store's log is typed loosely for the e2e helpers (`{ t: string }[]`); it is the same array
+ * `Results.tsx` hands to `score()`, so it is read back through the real type here.
+ */
+const runLog = async (page: Page): Promise<RunEvent[]> =>
+  (await page.evaluate(() => window.__otp!.store.getState().log)) as unknown as RunEvent[];
+
+/** The number the headline actually prints, with the thousands separator taken back off. */
+async function headlineTotal(page: Page): Promise<number> {
+  const text = (await page.locator('.otp-hero__score').textContent()) ?? '';
+  const digits = /^\s*([\d,]+)/.exec(text)?.[1];
+  if (digits === undefined) throw new Error(`the headline opens with no number: "${text}"`);
+  return Number(digits.replace(/,/g, ''));
+}
 
 const scrollTop = (page: Page): Promise<number> =>
   page.evaluate(() => document.querySelector('.otp-screen')!.scrollTop);
@@ -177,15 +201,28 @@ async function errandRows(page: Page): Promise<{ badge: string; missed: boolean;
 test('a perfect run is never marked with the failure glyph', async ({ page }) => {
   await playToResults(page, PERFECT);
   /*
-   * THE ONE EXACT TOTAL IN THE E2E SUITE, deliberately. Five other specs used to spell a score out
-   * -- game.spec.ts three times, trifecta.spec.ts twice -- so a weight change in content/game.json
-   * reddened five browser tests, which is exactly what CLAUDE.md rule 3 says adding or rebalancing
-   * a skill must not do. The arithmetic belongs to packages/core/test/scoring.test.ts, which pins
-   * every run shape in one it.each table under a 100% gate. This one survives because it is also
-   * the premise of the assertions below: the glyphs and the Haze ground are only interesting on a
-   * run that genuinely scored full marks, so if the ceiling moves this should be read, not fixed.
+   * THE ONE EXACT TOTAL IN THE E2E SUITE -- AND IT WAS NOT READING THE TOTAL.
+   *
+   * It was `toContainText('1,000')`, against an h1 that reads "<total> out of 1,000". The right
+   * half of that sentence is `strings.scoreOutOf`, a constant: the assertion matched the CEILING,
+   * never the score, so it passed on this run (which scores 900, as the log printed two lines
+   * below says) and would have passed just as happily on a 0-point run. Three rounds have now
+   * shipped a defect a guard was supposed to hold; this is one of the guards.
+   *
+   * Fixed by reading the number the player sees and holding it against `score()` run over the log
+   * the game just recorded -- the same function Results.tsx renders from, which is also the one
+   * the server recomputes with (CLAUDE.md rule 6). Nothing here spells a score out, so a weight
+   * change in content/game.json still cannot redden a browser test (rule 3), and a screen that
+   * printed the wrong number now cannot pass.
    */
-  await expect(page.locator('.otp-hero__score')).toContainText('1,000');
+  const expected = score(await runLog(page), content).total;
+  // The premise: this really is a run worth something. Against zero the comparison below is
+  // satisfied by a screen that printed nothing at all.
+  expect(expected, 'the perfect run scores more than nothing').toBeGreaterThan(0);
+  expect(await headlineTotal(page), 'the headline prints the score the run earned').toBe(expected);
+  // And the right-hand half of the sentence is still the ceiling from content, not a stray digit.
+  expect(strings['scoreOutOf'], 'content configures what the run was out of').toBeTruthy();
+  await expect(page.locator('.otp-hero__score')).toContainText(strings['scoreOutOf']!);
 
   const rows = await errandRows(page);
   console.log('finding 15 (perfect):', JSON.stringify(rows));

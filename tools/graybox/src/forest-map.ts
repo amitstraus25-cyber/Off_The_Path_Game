@@ -5104,6 +5104,26 @@ export function generateForestMap(): GeneratedMap {
     // tuples, so the non-null assertions this line used to carry on `dx` and `dy` are gone with it.
     const touchesTrack = NEIGHBOURS.some(([dx, dy]) => isPath(x + dx, y + dy));
     if (!touchesTrack) throw new Error(`${name} at ${x},${y} does not touch the track`);
+    /*
+     * ...AND A BITE OUT OF THE CARRIAGEWAY IS NOT A VERGE.
+     *
+     * `besideTrack` answers "the row below the last path row", which is a verge wherever the track
+     * is a solid band. It is not a verge where the track-edge pass has BITTEN a tile out of the
+     * sand: the snail stood at (41,20) with path at (40,20) and (42,20) and path again directly
+     * above him, which is a grass tile in the middle of the road rather than the shoulder of it.
+     * It read as a verge to every check there was, and it is the one row a player who only ever
+     * holds Right walks, so the moment the cast was given collision he became a wall across the
+     * gate approach -- which audit 2a then failed the build on, correctly, pointing at the symptom.
+     *
+     * Path on BOTH sides is the test, because that is what "the road runs through here" means. It
+     * is asked of every bystander rather than of the one that was wrong: the three forest columns
+     * are data and the next owner may move them.
+     */
+    if (isPath(x - 1, y) && isPath(x + 1, y))
+      throw new Error(
+        `${name} at ${x},${y} stands in the carriageway, not on the verge: the track runs through ` +
+          'that cell (path either side of it), so giving him collision walls the road',
+      );
     clearArea(x, y, 1, 1);
     return { name, x: x * TILE, y: y * TILE, width: TILE, height: TILE };
   };
@@ -5156,7 +5176,19 @@ export function generateForestMap(): GeneratedMap {
     // East of the deck. It used to stand at x 22, which the river now runs through: the water
     // crosses the track at a slant and the far bank has moved with it.
     bystander('bystander-magpie', 30, besideTrack(30)),
-    bystander('bystander-snail', 41, besideTrack(41)),
+    /*
+     * COLUMN 39, NOT 41, AND THE TWO COLUMNS MATTER.
+     *
+     * At 41 the track is one row tall -- the edge pass has bitten (41,20) out of the sand -- so
+     * `besideTrack` offered row 20, which is the carriageway with a tile of grass showing through
+     * it, not the verge. He sat in the middle of the road: path at (40,20), path at (42,20) and
+     * path directly above him, and row 20 is the one row a player who only ever holds Right walks
+     * from the spawn to the door. Harmless while he had no collision and a wall across the gate
+     * approach the moment he got some. The assertion in `bystander` above now refuses that cell
+     * outright, so this is two columns west, where the track is its full two rows (20 and 21) and
+     * row 22 is a genuine shoulder. Still the gate-approach stretch, still clear of the notice.
+     */
+    bystander('bystander-snail', 38, besideTrack(38)),
     /*
      * Inside the garden, north of the path, between the gate and the door. She is the only
      * bystander past the notice post, so by the time she speaks every decision has been made and
@@ -5221,7 +5253,22 @@ export function generateForestMap(): GeneratedMap {
       x: 42 * TILE,
       y: 20 * TILE,
       width: TILE * 4,
-      height: TILE * 2,
+      /*
+       * THREE ROWS, AND THE THIRD IS THE ONE THAT MAKES IT A BARRIER.
+       *
+       * Two rows spanned the gate approach tile for tile and the zero-click beat was still
+       * optional, because `overlaps` is a point test on Red's POSITION and her position is the
+       * bottom edge of her foot box. Standing in the lowest row of the approach she presents a y
+       * of exactly 704 -- the rect's own bottom edge, which `overlaps` reads as the row below --
+       * and 704 is on the 2px-per-frame grid she walks on from the spawn. Hold Down, then hold
+       * Right, and she goes through the gate with the notice never opening.
+       *
+       * A tile-level flood cannot see this and said the gate was sealed for as long as the fault
+       * existed. Audit 4 now floods over POSITIONS. The third row is walkable the whole width of
+       * the approach, so nothing about where she may stand changes; what changes is that the rect
+       * reaches past the last y she can present in the rows that matter.
+       */
+      height: TILE * 3,
     },
     {
       /*
@@ -5234,12 +5281,39 @@ export function generateForestMap(): GeneratedMap {
        * This belongs HERE, in the generator, and not in the generated map-forest.json: a previous
        * pass added it by hand to the JSON and every later `pnpm graybox` silently wiped it, which
        * left the goal advertised in the HUD and impossible to complete.
+       *
+       * ===========================================================================
+       * ...AND "EVERY APPROACH CROSSES THE NOTE" WAS A CLAIM, NOT AN INVARIANT. ONE ROW SOUTH.
+       * ===========================================================================
+       *
+       * Matching the trigger row for row is what the comment above describes and it is not what
+       * it claims. Measured on the committed map: the trigger is 50-51 x 19-21 and has EIGHT
+       * walkable entry tiles -- (49,19) (49,20) (49,21) from the west, (52,19) (52,20) (52,21)
+       * from the east, and (50,22) (51,22) from the south. Only the three western ones are inside
+       * the note. Row 22 is walkable from x47 clear through to x56, so a player who drops one row
+       * below the lane walks under the note, comes up the east side of the door and ends the run
+       * without the `sign` errand ever firing: 900 against 1,000 on identical verdicts, and on a
+       * line where that hundred is the margin the ending itself flips.
+       *
+       * ...AND "ONE ROW SOUTH" WAS THE FIRST ANSWER AND IT WAS WRONG, which is worth more than
+       * the fix. A tile-level flood with the four-row rect as a wall says the trigger is sealed.
+       * Driven in the running game it is not: `overlaps` is a point test on Red's POSITION, her
+       * position is the BOTTOM EDGE of her foot box, so standing in the lowest row of the lane she
+       * presents a y of exactly the rect's bottom edge -- which the half-open test reads as the
+       * row below -- and the rows below that are open garden. Measured by walking her: from (47,22)
+       * holding Right she goes clean under the note AND under the trigger to x58, `read` empty.
+       *
+       * So the bound is the last y she can PRESENT anywhere in these two columns, not the last row
+       * she can stand in, and audit 4a floods over positions to prove it. Five rows: at the fifth
+       * the only cells left below her are at x48, and x48 alone is a dead end -- column 50 stops
+       * at y 736, so there is nothing to walk east onto. Every tile of the rect is still walkable,
+       * and a note pinned at (50,18) is still the thing she is reading from the top of it.
        */
       name: 'notice-cottage-door',
       x: cx * TILE,
       y: 19 * TILE,
       width: TILE * 2,
-      height: TILE * 3,
+      height: TILE * 5,
     },
     { name: 'prop-signpost', ...landmarks['signpost']!, width: TILE, height: TILE },
     { name: 'prop-well', ...landmarks['well']!, width: TILE, height: TILE },
@@ -5854,8 +5928,7 @@ export function generateForestMap(): GeneratedMap {
    * them off the same register, so a tree's trunk and crown can never disagree about which way it
    * faces.
    *
-   * What may be mirrored is decided by LIGHTING, not by convenience:
-   *   - Ground texture and water have no light direction in them, so they take both axes.
+   * What may be mirrored is decided by LIGHTING, and by what the renderer can draw without a seam:
    *   - Anything that stands up -- scrub, boulders, flowers, toadstools, trees -- takes the
    *     horizontal axis only. Flipping those top to bottom would stand them on their heads.
    *   - The fence takes the horizontal axis. Its pales are a vertical pattern with no left and no
@@ -5865,6 +5938,9 @@ export function generateForestMap(): GeneratedMap {
    *   - Sand, shores, bridge and every other built thing take nothing. They either encode a
    *     direction in the tile itself or are read back by name in the map tests, and a flipped gid
    *     is not the gid those tests look up.
+   *   - Ground texture and water have no light direction in them, so the ART would take all eight
+   *     symmetries. THE RENDERER WILL NOT, so they take the horizontal axis like everything else.
+   *     This is the client's "lagginess in the top right" and the whole of the note below.
    */
   for (const t of trees) {
     // The facing the crowns were laid from, or a tree's trunk and its crown face opposite ways.
@@ -5881,8 +5957,63 @@ export function generateForestMap(): GeneratedMap {
       set(below, t.x + dx, t.y, gid(mirroredTrunk(t.k, dx)) + FLIP_H);
   }
 
-  const BOTH_AXES = new Set(['grass-0', 'grass-1', 'grass-2', 'grass-3', 'water', 'water-2']);
+  /*
+   * ===========================================================================
+   * ONE AXIS. THE HORIZONTAL ONE. NOTHING HERE MAY EMIT `FLIP_V` OR `FLIP_D`.
+   * ===========================================================================
+   *
+   * This set used to be two. `BOTH_AXES` held the isotropic textures -- `grass-0..3`, `water`,
+   * `water-2` -- and gave them all three bits, on the sound argument that a texture with no up and
+   * no light in it has eight symmetries rather than two, which halves the share of the map any
+   * single image covers for nothing. The argument is still true about the DRAWINGS. It is false
+   * about the renderer, and the renderer is what the client sees.
+   *
+   * WHAT THE CLIENT SEES, which is "I still see the lagginess in the top right": a one-pixel dashed
+   * line of the camera backdrop drawn straight across the world near the top of the frame, on the
+   * launch screen and in play. Not frame pacing, not a canvas offset, not a tear -- a HOLE, and the
+   * black showing through it is `--cyera-black` behind the world.
+   *
+   * WHY. Tiled keeps mirror state in the top three gid bits, and Phaser's `tilemapTiledJSON` loader
+   * decodes six of the eight combinations as a ROTATION. Measured in the running game, over all
+   * 2520 ground tiles, bit pattern -> what Phaser makes of it:
+   *
+   *     H V D  ->  rotation   flipX        H V D  ->  rotation   flipX
+   *     - - -  ->  0          false        H - -  ->  0          true     <- the only two that are safe
+   *     - V -  ->  180        true         H V -  ->  180        false
+   *     - - D  ->  270        true         H - D  ->  90         false
+   *     - V D  ->  270        false        H V D  ->  90         true
+   *
+   * Phaser's tilemap renderer rotates the quad about the tile centre, and a rotated quad lands a
+   * hair short of its cell, so the tile drops a pixel row. It does not drop it everywhere -- it
+   * depends on where the tile and the camera land against the device pixel grid, which is why only
+   * three or four dashes show at a time and why this survived seven rounds and three "ruled out"
+   * measurements. A tile at rotation 0 cannot do it at all.
+   *
+   * PROVEN, not reasoned. With the camera backdrop painted magenta (it appears nowhere in the
+   * tileset, so a magenta pixel is a hole and nothing else), at 1673x449 -- the client's own window
+   * -- and at 1280x800, DPR 1 and 2: 80, 320, 192 and 768 magenta pixels respectively, every one of
+   * them on the single scanline at world y=480.00, the row 14/15 boundary. Clearing `rotation` on
+   * every ground tile at runtime and changing nothing else took all four to ZERO. `roundPixels` was
+   * already `true` and `antialias` already `false`, so there was no renderer setting left to turn:
+   * the gids are where this has to be fixed.
+   *
+   * THE NEAR MISS, recorded so it is not tried again. The first fix forced `FLIP_D` on whenever H
+   * and V both landed, on the theory that the half-turn was the culprit. It moved all 289 `H|V`
+   * tiles to `H|V|D` and the leak did not move one pixel -- because `H|V|D` is a 90 degree rotation,
+   * which drops a row just as happily as 180. The half-turn was never the thing; ANY rotation is.
+   * Dropping `FLIP_D` instead is worse again, for the same reason in the other direction.
+   *
+   * So the two sets are one set, and the only bit it may ever add is `FLIP_H`. The guard in
+   * `apps/game/test/map.test.ts` holds this: it fails if any layer emits a rotating combination.
+   */
   const SIDEWAYS = new Set([
+    // The isotropic textures. They would take all eight symmetries as art and take one as pixels.
+    'grass-0',
+    'grass-1',
+    'grass-2',
+    'grass-3',
+    'water',
+    'water-2',
     'bush',
     // Both new silhouettes have a lit top and a shadow under them, like `bush`, so they take the
     // horizontal axis and not the vertical one. `bush-tall` leans, so its mirror is a genuinely
@@ -5922,15 +6053,11 @@ export function generateForestMap(): GeneratedMap {
          */
         const name = TILE_NAMES[at(layer, x, y) - 1];
         if (name === undefined) continue;
-        const both = BOTH_AXES.has(name);
-        if (!both && !SIDEWAYS.has(name)) continue;
-        let flips = 0;
-        if (heads(x, y, 1)) flips += FLIP_H;
-        if (both && heads(x, y, 2)) flips += FLIP_V;
-        // All three bits on an isotropic texture give its eight symmetries rather than four, which
-        // halves the share of the map any single image covers for nothing.
-        if (both && heads(x, y, 3)) flips += FLIP_D;
-        if (flips) set(layer, x, y, at(layer, x, y) + flips);
+        if (!SIDEWAYS.has(name)) continue;
+        // `FLIP_H` alone, for every tile in the set. See the note above the set: it is the only bit
+        // of the three that Phaser does not decode as a rotation, and a rotated tile drops a pixel
+        // row. The vertical mirror and the transpose are not a style choice here, they are a hole.
+        if (heads(x, y, 1)) set(layer, x, y, at(layer, x, y) + FLIP_H);
       }
 
   // --- verges ------------------------------------------------------------------------------------
@@ -6648,6 +6775,142 @@ export function generateForestMap(): GeneratedMap {
     );
   }
 
+  /*
+   * ===========================================================================
+   * SECOND PASS: THE CAST STOPS HER, AND THREE HOLES CLOSE. The last writer, by design.
+   * ===========================================================================
+   *
+   * WHY IT IS DOWN HERE rather than beside the placements it corrects. Everything above this line
+   * either plants or fells, and three of those passes call `clearArea`, which clears collision:
+   * the verge sweep, the east-walk sweep and the connectivity flood. A cell made solid at the top
+   * of the file is a cell any of them may hand straight back, silently, which is precisely how the
+   * second hole below opened in the first place. Nothing below this block writes a tile, so what
+   * is laid here is what ships -- and every invariant the audit measures is measured AFTER it.
+   *
+   * `sealCell` is the pocket pass's own two-liner (see "WHAT IS LEFT OVER BECOMES THICKET"): plant
+   * where nothing is drawn, then make solid. Both halves or neither -- planting without collision
+   * is a bush you walk through, collision without planting is the invisible wall this file fails
+   * the build for.
+   */
+  const sealCell = (x: number, y: number): void => {
+    if (at(below, x, y) === 0) set(below, x, y, gid(scrub(x, y)) + (heads(x, y, 1) ? FLIP_H : 0));
+    solid(x, y);
+  };
+
+  /*
+   * 1. NOBODY IN THE CAST IS A GHOST.
+   *
+   * Measured in the running game: Red walks through all seven of them -- three travellers and four
+   * bystanders -- and is drawn INSIDE them at equal depth on the way past, because the cast is
+   * seated by `npc()`/`bystander()`, both of which call `clearArea` and so leave the cell open. A
+   * character you walk through is not a character standing there; it is a decal.
+   *
+   * The spawn cell becomes solid. Talking survives it: `INTERACT_RADIUS` is 48px against a 32px
+   * tile, so Red standing in the next cell is 32px from the spawn centre (40px approaching from
+   * the south, where her feet sit a row below her tile) and well inside reach. `map.test.ts`
+   * asserts that rather than leaving it to this comment.
+   *
+   * Nothing is planted under them: the scene draws the figure on that cell, so it is the one kind
+   * of solid-and-undrawn cell that is not an invisible wall. Audit 3 is told about them by name.
+   */
+  const castTiles = new Set<number>();
+  for (const o of objects) {
+    if (!o.name.startsWith('npc-') && !o.name.startsWith('bystander-')) continue;
+    const x = Math.floor(o.x / TILE);
+    const y = Math.floor(o.y / TILE);
+    castTiles.add(y * MAP_W + x);
+    solid(x, y);
+  }
+
+  /*
+   * 2. SHE CANNOT STAND ON GRANDMA'S ROOF.
+   *
+   * The facade is solid over the roof and wall courses and NOT over the row above them, where only
+   * the gable and the chimney stand -- which leaves the two columns between and beside them open:
+   * one-tile alcoves wedged into the building's own silhouette, reachable from the garden strip
+   * behind the house and from the alley between the house and the west fence. Driven to them in
+   * the running game at 1280x860, Red is drawn standing on the ridge with the gable at her elbow
+   * and the chimney smoking beside her head, in the frame every player ends the game on.
+   *
+   * The whole bounding box of the building is solid, gable row included, and that is the invariant
+   * rather than two coordinates: she cannot be inside the house. Nothing about the PICTURE changes
+   * -- the tileset has no tile for the sky beside a gable and inventing one is the cottage owner's
+   * call, not this file's -- so audit 3 is told about these cells too, by the same derivation.
+   */
+  const facadeCells = new Set<number>();
+  for (let y = roofTop - 1; y <= doorstep; y++)
+    for (let x = cx; x < cx + FACADE_W; x++) {
+      facadeCells.add(y * MAP_W + x);
+      solid(x, y);
+    }
+
+  /*
+   * 3. THE ENCLOSURE'S NORTH RAIL REACHES THE EDGE OF THE WORLD AGAIN.
+   *
+   * The fence pass seals both enclosure rows from `gardenEast` out to the map edge and plants
+   * scrub on the cells past the corner post, exactly so the garden cannot be entered round the
+   * end of the rail. On the shipped map (58,11) was open and bare: the connectivity flood had cut
+   * it. It is not a bug in the flood -- scrub is `fellable` by design, the flood found two
+   * walkable tiles at (58,12) and (58,13) sealed in behind the rail by the east fence posts and a
+   * trunk, and it opened the thinnest wall it could find, which was the rail's own scrub.
+   *
+   * So the rail is re-laid after the last pass that can cut it, and the dead end it closes is
+   * sealed with it. The second loop is deliberately not "seal (58,12) and (58,13)": it floods from
+   * the spawn and seals what the rail actually cut off, in the margin columns only. A column that
+   * is still reachable from the garden is left alone, and anything stranded anywhere else stays
+   * stranded for the audit below to fail on, which is where a surprise belongs.
+   *
+   * What this buys is not the two tiles. It is that the garden's east side stops depending on a
+   * TREE: with the gap open, felling the trunk at (58,14) -- which every planting pass in this
+   * file is free to do -- would have opened a way into the garden that skips the notice post, and
+   * the audit watches the gate tiles rather than the garden, so nothing would have said so.
+   */
+  for (let x = gardenEast + 1; x < MAP_W; x++) sealCell(x, gardenTop);
+  let behindTheRail = 0;
+  {
+    const reached = reachableFromSpawn();
+    for (let x = gardenEast + 1; x < MAP_W; x++)
+      for (let y = 0; y < MAP_H; y++) {
+        if (at(collision, x, y) !== 0 || reached.has(y * MAP_W + x)) continue;
+        sealCell(x, y);
+        behindTheRail++;
+      }
+  }
+
+  /*
+   * 4. AND NOTHING GROWS IN THE MIDDLE OF THE ROAD.
+   *
+   * The edge pass bites tiles out of the carriageway so the sand does not run with a ruled edge,
+   * and a bitten cell is still ROAD -- path to its east and path to its west -- it is just drawn
+   * as grass. The dressing pass reads the ground tile, sees lawn, and plants on it. While the
+   * snail was standing on (41,20) nothing showed; the moment he moved to a real verge a flower bed
+   * came up in the gap, on the one row a player who only ever holds Right walks down.
+   *
+   * It is the same predicate as the one `bystander` refuses a spawn on, applied to planting rather
+   * than to people, and it is deliberately bounded to the walk rows between the spawn and the door
+   * lane -- the stretch audit 2a already treats as load-bearing. There are two more bitten cells
+   * carrying a bush elsewhere on the map, at (18,19) and (4,21); they are off that stretch, they
+   * are nobody's regression, and widening a rule to sweep them up is how a map round turns into an
+   * art round. The next owner has the measurement and can decide.
+   *
+   * `below` only. A crown on `above` belongs to a tree standing beside the road, which is the wood
+   * doing its job, and clearing half of one is how this file gets a crown with no tree under it.
+   */
+  let weeded = 0;
+  for (const row of walkRows)
+    for (let x = spawnX; x <= cx + 3; x++) {
+      if (isPath(x, row) || !isPath(x - 1, row) || !isPath(x + 1, row)) continue;
+      if (at(below, x, row) === 0) continue;
+      set(below, x, row, 0);
+      weeded++;
+    }
+
+  console.log(
+    `  second pass: ${castTiles.size} of the cast made solid, the facade's gable row closed, ` +
+      `${behindTheRail} tile(s) sealed behind the enclosure's north rail, ` +
+      `${weeded} planted cell(s) lifted out of the carriageway`,
+  );
+
   // --- THE AUDIT. Nothing below writes a tile ----------------------------------------------------
   /*
    * ===========================================================================
@@ -6811,7 +7074,26 @@ export function generateForestMap(): GeneratedMap {
       if (MUST_STOP_HER.has(b) && walkableAt(x, y)) soft.push([x, y]);
       const g = nameAt(ground, x, y);
       const wetTile = g === 'water' || g === 'water-2' || g === 'waterfall';
-      if (!walkableAt(x, y) && b === '' && nameAt(above, x, y) === '' && !wetTile)
+      /*
+       * TWO CELLS THIS AUDIT MUST NOT FIRE ON, both from the second pass above, both solid with
+       * nothing laid on them and neither an invisible wall. The exemption is narrow on purpose:
+       * it is two derived SETS, not a coordinate list, so it cannot quietly grow to cover a third
+       * kind of hole.
+       *   - a cell the cast stands on. The scene draws a traveller or a bystander there, which is
+       *     the thing that stops her; a tile under his feet would be a bush he is standing in.
+       *   - the facade's own bounding box. The gable row steps -- the building is drawn as a
+       *     gable and a chimney on that row and the tileset has no tile for the sky between them
+       *     -- and what stops her at the step is the house she can see, one cell either side and
+       *     one below.
+       */
+      const partOfSomethingDrawn = castTiles.has(y * MAP_W + x) || facadeCells.has(y * MAP_W + x);
+      if (
+        !walkableAt(x, y) &&
+        b === '' &&
+        nameAt(above, x, y) === '' &&
+        !wetTile &&
+        !partOfSomethingDrawn
+      )
         undrawn.push([x, y]);
       /*
        * A crown is stamped from the register, so one with no trunk under it is half a tree. Asked
@@ -6852,45 +7134,156 @@ export function generateForestMap(): GeneratedMap {
   const gap = rectOf('gate-fence-gap');
   if (notice.x1 !== gap.x0 - 1 || notice.y0 > gap.y0 || notice.y1 < gap.y1)
     faults.push('the notice post does not span the gate approach');
-  {
-    const start = spawnY * MAP_W + spawnX;
-    const seen = new Set([start]);
-    const queue = [start];
+  /*
+   * ===========================================================================
+   * THE FLOOD THESE THREE AUDITS ARE BUILT ON, AND IT IS OVER POSITIONS, NOT TILES.
+   * ===========================================================================
+   *
+   * This was a tile flood, and a tile flood is the wrong instrument for the question. Everything
+   * these audits are about -- a notice opening, the run ending -- is `overlaps()` in
+   * world/logic.ts, which is a POINT test on Red's position, and her position is the BOTTOM EDGE
+   * of her foot box rather than the middle of a tile. The two models disagree exactly at a row
+   * boundary: standing in the lowest row of a rect she presents a y equal to the rect's bottom
+   * edge, the half-open test reads that as the row below, and the notice does not fire. 704 for
+   * the forest post, 736 for the door note -- and both are on the 2px-per-frame grid she walks on
+   * from the spawn, so this is not a theoretical seam. The tile flood reported both sealed, for
+   * as long as both faults existed, which is the whole reason the model is written out here.
+   *
+   * So: nodes are integer FEET POSITIONS, the wall test is `blocked()` -- her foot box against the
+   * collision layer, not her centre tile -- and a refused rect is refused by position. One pixel
+   * per step is exact rather than approximate: every edge of the unblocked region falls on an
+   * integer, because the box is 20 x 12 against a 32px grid, so there is no sub-pixel corridor for
+   * it to miss. Axis-separated steps, because `moveWithCollision` moves one axis at a time.
+   */
+  const FOOT = { w: (TILE * 5) / 8, h: (TILE * 3) / 8, oy: (-TILE * 3) / 16 };
+  const PW = MAP_W * TILE;
+  const PH = MAP_H * TILE;
+  const EPS = 0.0001;
+  const blockedAt = (x: number, y: number): boolean => {
+    const top = y + FOOT.oy - FOOT.h / 2;
+    const bottom = y + FOOT.oy + FOOT.h / 2;
+    for (let ty = Math.floor(top / TILE); ty <= Math.floor((bottom - EPS) / TILE); ty++)
+      for (
+        let tx = Math.floor((x - FOOT.w / 2) / TILE);
+        tx <= Math.floor((x + FOOT.w / 2 - EPS) / TILE);
+        tx++
+      )
+        if (!walkableAt(tx, ty)) return true;
+    return false;
+  };
+  const standingFlood = (refuse?: { x0: number; x1: number; y0: number; y1: number }) => {
+    const seen = new Uint8Array(PW * PH);
+    const sx = spawnX * TILE + TILE / 2;
+    const sy = spawnY * TILE + TILE;
+    const queue = [sy * PW + sx];
+    seen[sy * PW + sx] = 1;
     for (let head = 0; head < queue.length; head++) {
       const key = queue[head]!;
-      const x = key % MAP_W;
-      const y = (key - x) / MAP_W;
+      const x = key % PW;
+      const y = (key - x) / PW;
       for (const [dx, dy] of NEIGHBOURS) {
         const nx = x + dx;
         const ny = y + dy;
-        if (!walkableAt(nx, ny)) continue;
-        if (nx >= notice.x0 && nx <= notice.x1 && ny >= notice.y0 && ny <= notice.y1) continue;
-        const next = ny * MAP_W + nx;
-        if (seen.has(next)) continue;
-        seen.add(next);
+        if (nx < 0 || ny < 0 || nx >= PW || ny >= PH) continue;
+        const next = ny * PW + nx;
+        if (seen[next] === 1 || blockedAt(nx, ny)) continue;
+        if (
+          refuse &&
+          nx >= refuse.x0 * TILE &&
+          nx < (refuse.x1 + 1) * TILE &&
+          ny >= refuse.y0 * TILE &&
+          ny < (refuse.y1 + 1) * TILE
+        )
+          continue;
+        seen[next] = 1;
         queue.push(next);
       }
     }
-    for (let y = gap.y0; y <= gap.y1; y++)
-      for (let x = gap.x0; x <= gap.x1; x++)
-        if (seen.has(y * MAP_W + x))
-          faults.push(`the gate at (${x},${y}) can be reached without reading the notice`);
-  }
+    return seen;
+  };
+  /** Where inside a rect she can still stand, as tiles, for a message a reader can act on. */
+  const standingIn = (
+    seen: Uint8Array,
+    r: { x0: number; x1: number; y0: number; y1: number },
+  ): [number, number][] => {
+    const hit = new Set<number>();
+    for (let y = r.y0 * TILE; y < (r.y1 + 1) * TILE; y++)
+      for (let x = r.x0 * TILE; x < (r.x1 + 1) * TILE; x++)
+        if (seen[y * PW + x] === 1) hit.add(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE));
+    return [...hit].map((k) => [k % MAP_W, Math.floor(k / MAP_W)] as [number, number]);
+  };
+  fault(
+    'tile(s) of the gate reachable without reading the notice',
+    standingIn(standingFlood(notice), gap),
+  );
 
   /*
-   * 5. EVERY OBJECT STANDS WHERE IT SAYS IT DOES. Anything the player or a traveller occupies has
-   * to be walkable over its whole rectangle -- a bystander carved out of a tree is never met, and
-   * a notice whose tiles are solid can never be stood on -- and every `prop-` is solid over its
-   * whole rectangle, because each one is a thing in the way.
+   * 4a. THE NOTE ON THE DOOR IS ON THE WAY TO THE DOOR, which is the same kind of claim as 4 and
+   * was carrying the same kind of hole.
+   *
+   * `trigger-cottage` ENDS THE RUN. `notice-cottage-door` pays the hundred points for the `sign`
+   * errand and half of one of the two lines that reach the thousand-point ceiling. The comment on
+   * the note says every approach crosses it first; the map said otherwise, because the note and
+   * the trigger were the same three rows and the lane is walkable a row below both of them. Five
+   * of the trigger's eight entry tiles were outside the note -- the three on its east side and the
+   * two underneath it -- so the natural walk round the south of the lane and up the far side of
+   * the door scored 900 instead of 1,000 on identical verdicts.
+   *
+   * It is asserted as reachability rather than as geometry, which is why this fires on a map where
+   * the rects still look right. Two rectangles that line up row for row prove nothing on their
+   * own: what matters is whether the world lets her round them, and only a flood knows that.
+   */
+  fault(
+    'tile(s) of the cottage trigger reachable without standing on the door note',
+    standingIn(standingFlood(rectOf('notice-cottage-door')), rectOf('trigger-cottage')),
+  );
+
+  /*
+   * 4b. ...AND NOTHING INSIDE THE ENCLOSURE IS REACHABLE WITH THE FOREST NOTICE REFUSED.
+   *
+   * Audit 4 watches the GATE, which is one column of two tiles, so it says nothing at all about a
+   * way in that does not come through the gate. One such way was open on the shipped map: the
+   * connectivity flood had cut the enclosure's north rail at (58,11) to reach two tiles sealed in
+   * behind it, and a player who refused the notice could walk through the gap and stand inside the
+   * line the fence draws. It went nowhere -- a trunk at (58,14) stopped her -- and that is exactly
+   * why it is worth an audit: the barrier was being held by a tree that every planting pass in
+   * this file is free to fell, and the only check there was looked somewhere else.
+   *
+   * The region is the enclosure's own interior, derived from the fence that draws it: east of the
+   * gate column, between the two rails. Not a rectangle anyone typed.
+   */
+  fault(
+    'tile(s) inside the garden enclosure reachable without reading the notice',
+    standingIn(standingFlood(notice), {
+      x0: fenceX + 1,
+      x1: MAP_W - 1,
+      y0: gardenTop + 1,
+      y1: gardenBottom - 1,
+    }),
+  );
+
+  /*
+   * 5. EVERY OBJECT STANDS WHERE IT SAYS IT DOES. The spawn she starts on, the rect a notice is
+   * read from and the rect that ends the run have to be walkable over every tile -- a notice whose
+   * tiles are solid can never be stood on -- and everything that is a THING has to be solid over
+   * every tile: the props, because each one is in the way, and now the cast as well.
+   *
+   * THE CAST MOVED SIDES THIS ROUND, and the sense of the check is the point rather than the list.
+   * It read `wantsSolid = startsWith('prop-')`, so it was the thing asserting that a traveller is
+   * walkable -- it was holding the ghosts in place. A character is a thing in the way exactly as a
+   * well or a signpost is; what makes him different is that nothing is drawn on his tile, which is
+   * audit 3's business and not this one's. The water-and-trunk check below still runs for him,
+   * because a solid traveller standing in the river is as wrong as a soft one was.
    */
   for (const o of objects) {
     const r = rectOf(o.name);
     const bad: [number, number][] = [];
-    const wantsSolid = o.name.startsWith('prop-');
+    const isCast = o.name.startsWith('npc-') || o.name.startsWith('bystander-');
+    const wantsSolid = o.name.startsWith('prop-') || isCast;
     for (let y = r.y0; y <= r.y1; y++)
       for (let x = r.x0; x <= r.x1; x++) if (walkableAt(x, y) === wantsSolid) bad.push([x, y]);
     fault(`tile(s) of "${o.name}" that are ${wantsSolid ? 'not solid' : 'not walkable'}`, bad);
-    if (wantsSolid) continue;
+    if (wantsSolid && !isCast) continue;
     const onWater = [];
     for (let y = r.y0; y <= r.y1; y++)
       for (let x = r.x0; x <= r.x1; x++) {

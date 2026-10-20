@@ -33,8 +33,8 @@ This is a Cyera marketing/research asset. It must be on-brand, fast, accessible,
 ```
 pnpm install            # exact versions only, see Security rules
 pnpm dev                # game dev server (apps/game, Vite) on :5173
-pnpm test               # unit tests in every workspace that has them -- packages/core, apps/game and
-                        #   tools/graybox. packages/core is gated at 100% on ALL FOUR metrics
+pnpm test               # unit tests in every workspace that has them -- packages/core, apps/game,
+                        #   apps/api and tools/graybox. packages/core is gated at 100% on ALL FOUR metrics
                         #   (statements, branches, functions, lines); tools/graybox deliberately has
                         #   no coverage threshold and gates on art measurements instead. Must stay green
 pnpm typecheck          # tsc in every workspace
@@ -52,11 +52,16 @@ pnpm graybox            # regenerate placeholder art into apps/game/src/assets
 pnpm audit              # high-severity dependency audit (also runs in CI)
 ```
 
-Workspaces: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + Preact, the only deployed
-service), `tools/graybox` (placeholder art generator), `tools/sim` (strategy simulator).
-The leaderboard API arrives in Phase 6 as `apps/api`; it does not exist yet, so `vercel.json`
-declares a single service. The Phase 0 renderer spike has been removed now that its result is
-recorded in `docs/ARCHITECTURE.md` section 2a.
+Workspaces, five: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + Preact),
+`apps/api` (the leaderboard functions), `tools/graybox` (placeholder art generator),
+`tools/sim` (strategy simulator).
+**Phase 6 landed, so `apps/api` exists and `vercel.json` declares TWO services**, `game` and `api`,
+with an `/api/(.*)` rewrite that must stay above the catch-all. Two routes, `POST /api/score` and
+`GET /api/top`, over Supabase; `apps/api/README.md` is the source of truth for the service and lists
+what still has to be done by hand before the board is believed. This paragraph said the opposite
+until 2026-10-20 and sent four reviewers hunting for a package that was already there.
+The Phase 0 renderer spike has been removed now that its result is recorded in
+`docs/ARCHITECTURE.md` section 2a.
 Pinned: TypeScript 6.0.3, Vite 7.3.6, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29.8, zod 4.6.5, Playwright 1.63.0.
 
 ## Golden rules

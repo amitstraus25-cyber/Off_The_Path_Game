@@ -104,29 +104,54 @@ async function ask(path: string, init: RequestInit): Promise<Reply | null> {
 }
 
 /*
- * Two player-facing lines that are NOT read from content, and should be.
+ * Every player-facing line this adapter can produce now comes out of content/game.json, which is
+ * CLAUDE.md rule 3 and was an ask the last round could not close: the three keys below were written
+ * in code because the content file belonged to someone else. They are shipped now --
+ * `handleAssigned`, `leaderboardRefused`, `leaderboardAlready` -- and `test/strings.test.ts` holds
+ * the file and these reads against each other in both directions.
  *
- * CLAUDE.md rule 3 puts these in content/game.json, which is owned by a human this round --
- * `apps/game/test/strings.test.ts` fails the build on a key the shipped file does not carry, and
- * its PENDING handover list is deliberately empty. So they are written down here, next to the
- * `leaderboardDown` read that does come from content, and the move is recorded as an ask. The keys
- * they want are `leaderboardRefused` and `handleAssigned`.
+ * The literals that remain are BACKSTOPS, not copy. `submit()` promises a sentence or null, and a
+ * key deleted from the content file must not turn that promise into `undefined` rendered on the
+ * payoff screen; the build-time guard is the thing that keeps them unreachable.
  */
-const REFUSED = 'That run could not be posted.';
-const ASSIGNED = 'Posted to the board as {handle}.';
-
 export function createLeaderboardClient(content: Content): LeaderboardClient {
-  const unavailable = content.strings['leaderboardDown'] ?? 'Leaderboard unavailable right now.';
-  const assigned = (handle: string): string => ASSIGNED.replace('{handle}', handle);
+  /*
+   * Indexed with a LITERAL key on purpose, not through a helper taking the key as an argument:
+   * `test/strings.test.ts` scans these sources for `strings['...']` to decide which keys the UI
+   * actually reads, and a key assembled behind a function call is invisible to it. The guard is
+   * only worth having if the code it reads is written the way it scans for.
+   */
+  const say = (value: string | undefined, backstop: string): string => value?.trim() || backstop;
+  const unavailable = say(content.strings['leaderboardDown'], 'Leaderboard unavailable right now.');
+  const refused = say(content.strings['leaderboardRefused'], 'That run could not be posted.');
+  const already = say(content.strings['leaderboardAlready'], 'That run is already on the board.');
+  const assigned = (handle: string): string =>
+    say(content.strings['handleAssigned'], 'Posted to the board as {handle}.').replace(
+      '{handle}',
+      handle,
+    );
 
   return {
     async submit(state, handle) {
       /*
        * The handle is minted, so a handle this game did not mint is not sent: the server would
-       * refuse it, and a player-typed string reaching the table is the thing the decision rules
-       * out. Until the results screen offers a minted handle to show and reroll, this mints one
-       * and the message below says which name went up -- the alternative is a board nobody can
-       * reach from the shipped UI.
+       * refuse it (`handleSchema` is the same schema on both ends), and a player-typed string
+       * reaching the table is the thing decision D4 rules out.
+       *
+       * THE SCREEN AND THIS FUNCTION STILL DISAGREE, and it is visible to a player. Measured in a
+       * real browser against the built game: type `wolfspotter` into the Results field, press
+       * Post, and the body on the wire carries `deft-cloak-81` while the status line reads "Posted
+       * to the board as deft-cloak-81." The typed name is discarded in the line below. The copy
+       * now says so -- `handleLabel`, `handlePlaceholder` and `handleHint` in content/game.json
+       * describe a board that names runs itself -- but copy cannot remove an input element.
+       *
+       * The remaining half is one patch in `Results.tsx`, which this file already exports
+       * everything for: hold `newHandle()` in state, render it as text instead of
+       * `<input class="otp-field">`, offer a reroll button that calls `newHandle()` again, and
+       * pass that value to `onPost`. `validateHandle` can go with the input -- every one of the
+       * 3,072 mintable handles passes it, which `test/leaderboard.test.ts` checks, so nothing has
+       * to be coordinated across the two changes. Until then this keeps the board reachable from
+       * the shipped UI rather than refusing every post.
        */
       const minted = isMintedHandle(handle) ? handle : newHandle();
       const reply = await ask(SCORE_PATH, {
@@ -144,8 +169,18 @@ export function createLeaderboardClient(content: Content): LeaderboardClient {
        * is no board to post to right now, which is a different sentence and the one Phase 5
        * promised. A 404 reported as "that run could not be posted" would blame the player for an
        * undeployed service.
+       *
+       * 409 gets its own sentence, and it is the one a REAL PLAYER meets. The Post button is
+       * enabled again the moment a post succeeds, so posting twice is a click, not an attack: the
+       * second one is the same run log, the server answers 409 "that run is already on the board",
+       * and reading that out as "that run could not be posted" tells a player their score failed
+       * when it is sitting on the board under the name they were just shown. Measured against the
+       * real handler: `apps/api` answers 409 on the second post of an identical log.
        */
-      if (!reply.ok) return reply.status === 400 || reply.status === 409 ? REFUSED : unavailable;
+      if (!reply.ok) {
+        if (reply.status === 409) return already;
+        return reply.status === 400 ? refused : unavailable;
+      }
 
       const parsed = submitResponseSchema.safeParse(reply.body);
       if (!parsed.success) return unavailable;

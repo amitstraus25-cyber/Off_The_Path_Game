@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { ending } from '@otp/core';
 import type { Content, GameState } from '@otp/core';
 import { WorldFrame } from './components';
@@ -75,6 +75,68 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
   const visible = beats.slice(0, shown);
   const revealed = visible.some((b) => b.reveal);
 
+  /*
+   * The arrival takes focus, which every other panel in this game already did and this one did not.
+   *
+   * Measured on the built page at 1280x800, entering the phase by walking there with the keyboard:
+   * `document.activeElement` was BODY. The canvas is not focusable (no tabindex), so play leaves
+   * focus on the body, and nothing here moved it. A screen reader was therefore never told it had
+   * landed anywhere, and the single control that advances the payoff -- one `.otp-advance` button
+   * in the whole layer -- had to be found with a blind Tab.
+   *
+   * `Results` is the precedent rather than `Dialogue`, because this is the same shape as Results:
+   * a whole screen, not a modal. There is nothing behind this layer to tab into and nothing to seal
+   * off -- measured on an iPhone 13 at the arrival, the touch pad is not on screen (`Walk up` is not
+   * in the document and `Talk or interact` has no box), and the world frame above is chrome. So no
+   * `useFocusTrap`: it exists to stop a verdict being tabbed past, this panel has no verdict, and
+   * it would restore focus on unmount to what it found, which here is the body.
+   *
+   * A ref and an effect, then, as Results does, with `data-autofocus` carried as well. The
+   * attribute is this project's marker for "this is the thing that takes focus", it is what the
+   * a11y specs query, and `panels.css` keys the suppressed focus ring off
+   * `[tabindex='-1'][data-autofocus]` -- without it the arrival would paint the purple band round
+   * the text that was twice reported as a rendering fault. Measured after the fix: the ring
+   * computes to `none none`, one Tab reaches "Go on" with nothing in between, and three Enters
+   * carry a keyboard-only player through every beat to "Step inside".
+   */
+  const text = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    text.current?.focus();
+  }, []);
+
+  /*
+   * What the arrival says out loud, in a region that is born empty and then mutated.
+   *
+   * A live region inserted into the DOM already containing its text is announced by nobody: screen
+   * readers announce MUTATIONS to a region that was already there. That is the shape `Notice`,
+   * `App` and the a11y specs all document, and the arrival was the last place still getting it
+   * wrong. Measured on the built page: the `aria-live` wrapper arrived with the first approach line
+   * already inside it, so the sentence that opens the payoff reached nobody, while beats two
+   * onwards -- real mutations of a node that was by then on screen -- were announced normally.
+   *
+   * The speaking is split from the showing rather than emptying the visible block and filling it in
+   * an effect, because the visible block cannot start empty. `.otp-layer--arrive` docks the box at
+   * the bottom and the text is centred in it: measured at 1280x800, each line added moves the
+   * sentences up by 19.1px (first line top 686.8 -> 667.7 -> 648.5). Mounting with nothing and
+   * appending a line one frame later would put a 19px jump on the first frame of the climax, which
+   * is the defect class this round has already fixed four times.
+   *
+   * It also carries the ending title, which is the one sentence the whole run was for. The title is
+   * an `<h2>` sibling outside the old region, so it was never announced at all; it stays exactly
+   * where it is visually -- `e2e/game.spec.ts` asserts it is hidden before the beats are done and
+   * reads its text after -- and is spoken from here instead, joined to the beat it lands with so
+   * one event is one announcement.
+   *
+   * The latest beat is duplicated between this and the paragraph below it, as `Notice`'s recap is.
+   * That is a sentence read twice by a virtual cursor, against the whole approach going unread; the
+   * visible prose stays in the accessibility tree so the player can go back over it.
+   */
+  const [said, setSaid] = useState('');
+  useEffect(() => {
+    const line = beats[shown - 1]?.line ?? '';
+    setSaid(done ? [chosen.title, line].filter(Boolean).join('. ') : line);
+  }, [shown]);
+
   return (
     <>
       {/*
@@ -105,9 +167,20 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
             role="img"
             aria-label={revealed ? 'At the cottage door' : 'Red on the doorstep'}
           />
-          <div class="otp-dialogue__text otp-arrive__text">
+          <div class="otp-dialogue__text otp-arrive__text" ref={text} tabIndex={-1} data-autofocus>
+            {/*
+              Empty on the first render, filled by the effect above. Visually hidden and out of
+              flow, so it cannot move a single pixel of the box it sits in.
+            */}
+            <p class="otp-visually-hidden" data-announce="arrive" role="status" aria-live="polite">
+              {said}
+            </p>
             {done && <h2 class="otp-ending__title">{chosen.title}</h2>}
-            <div aria-live="polite">
+            {/*
+              Not a live region any more. It was one, and it announced every beat except the first;
+              leaving it live alongside the region above would announce beats two onwards twice.
+            */}
+            <div>
               {visible.map((beat, i) => (
                 <p
                   key={i}

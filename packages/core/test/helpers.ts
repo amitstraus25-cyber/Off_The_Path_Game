@@ -55,7 +55,16 @@ export function encounter(character: string, verdict: string, questions: string[
   ];
 }
 
-export const CHARACTERS = ['rabbit', 'owl', 'lantern-keeper'] as const;
+/**
+ * The cast, in the order the content file lists it.
+ *
+ * It was `['rabbit', 'owl', 'lantern-keeper'] as const`. Three ids typed into a test helper are
+ * three ids the game no longer has to agree with: a fourth traveller added as pure content
+ * (CLAUDE.md rule 3) would never be met in any run built here, and every suite downstream would go
+ * on passing about a three-character game. Derived, `fullRun` meets whoever is shipped -- and a
+ * verdict missing for one of them throws in `run` rather than quietly scoring zero for that skill.
+ */
+export const CHARACTERS: readonly string[] = content.characters.map((c) => c.id);
 
 /** Whole run from title to cottage with one verdict per character (same verdict for all or per-character). */
 export function fullRun(verdicts: Record<string, string>, questions: string[] = []): GameState {

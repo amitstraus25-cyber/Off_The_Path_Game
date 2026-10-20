@@ -1,5 +1,20 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
+import { loadContent, score } from '@otp/core';
+import type { Content, RunEvent } from '@otp/core';
 import { hold, mapObject, probe, startGame } from './helpers';
+
+/** The shipped content, through the schema the game validates at startup. */
+const content: Content = loadContent(
+  JSON.parse(
+    readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
+  ),
+);
+
+/** The notice this walk exists to reach, and the errand that cannot be done without reading it. */
+const DOOR_NOTICE = 'cottage-door';
+const doorErrand = content.scoring.errandGoals.find((g) => g.act === DOOR_NOTICE)!;
 
 /*
  * The one test that would have caught the bug this file was written for.
@@ -60,7 +75,7 @@ test('the errand line can read the note on the door and still reach the cottage'
   const door = await mapObject(page, 'trigger-cottage');
   const readBoth = async (): Promise<boolean> => {
     const seen = await page.evaluate(() => window.__otp!.store.getState().read);
-    return seen.includes('forest-post') && seen.includes('cottage-door');
+    return seen.includes('forest-post') && seen.includes(DOOR_NOTICE);
   };
 
   // East along the track, through the forest post and up to the door.
@@ -93,7 +108,40 @@ test('the errand line can read the note on the door and still reach the cottage'
   await page.getByRole('button', { name: /Step inside/ }).click();
   await expect(page.locator('.otp-hero__score')).toBeVisible();
 
-  const sign = page.locator('.otp-recap__row--errand', { hasText: /note she pinned/i });
+  /*
+   * AND IT SCORED, which is the claim the whole walk above exists to make.
+   *
+   * This used to be `not.toHaveClass(/otp-recap__row--missed/)` and nothing else. Results marks
+   * three states, not two: a goal given up on purpose -- a TRADE -- carries neither the Haze
+   * ground nor the missed class and is worth no points at all (see e2e/results-payoff.spec.ts).
+   * So the old assertion was satisfied by a run that never reached the note, which is precisely
+   * the bug this file was written to catch: the walk ending short of `trigger-cottage` would have
+   * left the row traded, unmissed, and green here.
+   *
+   * Asserted against `score()` over the log the game recorded, so it is the points that are on
+   * trial and not a class name, and then against the mark the player can actually see.
+   */
+  const log = (await page.evaluate(
+    () => window.__otp!.store.getState().log,
+  )) as unknown as RunEvent[];
+  const result = score(log, content);
+  console.log(
+    'errand:',
+    JSON.stringify({ goals: result.goals, errandBonus: result.errandBonus, total: result.total }),
+  );
+
+  // The premise: the errand on trial is worth something, so "met" is a claim about points.
+  expect(doorErrand.points, `"${doorErrand.label}" is worth something`).toBeGreaterThan(0);
+  expect(
+    result.goals.filter((g) => g.met).map((g) => g.id),
+    `"${doorErrand.label}" went unscored: the note was never read, or reading it earned nothing`,
+  ).toContain(doorErrand.id);
+  expect(result.errandBonus).toBeGreaterThanOrEqual(doorErrand.points);
+
+  // And what the player sees on the row: the mark that means done, not the one that means given
+  // up for the boundary and not the "!".
+  const sign = page.locator('.otp-recap__row--errand', { hasText: doorErrand.label });
   await expect(sign).toBeVisible();
+  await expect(sign.locator('.otp-recap__badge')).toHaveAttribute('data-glyph', 'check');
   await expect(sign).not.toHaveClass(/otp-recap__row--missed/);
 });
