@@ -8,7 +8,7 @@ import {
   topEdgeRows,
   visibleTitleColumns,
 } from '@otp/core';
-import { Img, noise, valueNoise2D } from './paint.ts';
+import { Img, lumaOf, noise, valueNoise2D } from './paint.ts';
 import { COLUMNS, TILE, TILE_NAMES, TILE_PAINTERS, gid } from './tiles.ts';
 
 export const MAP_W = 60;
@@ -1063,6 +1063,23 @@ export function generateForestMap(): GeneratedMap {
   const TRACK_W = 2;
   const TRACK_X0 = 2;
   const TRACK_X1 = 52;
+  /**
+   * The column the footpath leaves the carriageway at.
+   *
+   * It is declared up here, hundreds of lines before the fork is laid, because the BAND has to know
+   * about it. See the clamp in `northEdge` below: a one-wide footpath climbing out of a two-wide
+   * band stacks sand in the column it climbs, and how much it stacks is a property of where the band
+   * is sitting when it gets there.
+   */
+  const FORK_X = 8;
+  /**
+   * The row the footpath stops climbing in `FORK_X` and turns east out of it.
+   *
+   * `layPath` puts its elbow in the NEW column at the OLD row, so a turn at this row costs column
+   * `FORK_X` exactly two cells -- this row and the one below it -- and costs `FORK_X + 1` the row
+   * below it as well. Nothing can be routed around that while the signpost stands on (9,18).
+   */
+  const FORK_TURN = 17;
   const wander = valueNoise2D(20261067);
   /**
    * How much of its swing the band is allowed at this column: one inside the free stretches, nought
@@ -1079,6 +1096,15 @@ export function generateForestMap(): GeneratedMap {
        * pad is two tiles of plain sand laid later, in a fixed place; a band that is mid-lean there
        * meets it a row off and their union is a four-row delta of sand in the exact middle of the
        * hero shot. Two columns of flat either side, then the same three-column ramp as the others.
+       *
+       * NARROWING IT TO ONE COLUMN WAS TRIED AND PUT BACK, which is worth the line it costs. The
+       * pad is laid as two rows of plain sand at columns 5 and 6, so the band has to be ON those
+       * two rows there or their union is three tiles deep -- and the trace in guard 7a can only read
+       * an EDGE off a column whose run is the carriageway's own width, so a three-deep column is not
+       * merely ugly, it is a column the instrument goes blind on. At half-width 1 the build failed on
+       * "only 14 column(s) of readable carriageway west of the notice" against a floor of twenty. The
+       * six flat columns this costs are bought back by the periods below, which is where the
+       * straightness actually lived.
        */
       Math.abs(x - SPAWN.x) - 2,
     );
@@ -1112,15 +1138,88 @@ export function generateForestMap(): GeneratedMap {
    * crossing, the gate approach and Red's own pad -- and each is ramped over three columns, which
    * is one more than the deepest swing needs to come back to twenty.
    */
+  /*
+   * ===========================================================================
+   * ...AND THE PERIODS ARE SHORTER THAN THE FRAME, which is this round's correction and the whole
+   * of what "drawn with a set square" meant.
+   * ===========================================================================
+   *
+   * The amplitude was right and the WAVELENGTH was wrong. `cos(x / 5.7)` has a period of 35.8 tiles
+   * and `cos(x / 11.3)` of 71, against a camera 19.41 tiles WIDE: half a cycle and a quarter of a
+   * cycle across the whole picture. A curve whose shortest period is nearly twice the frame is
+   * locally straight everywhere inside it, so every frame showed one slow rise -- three axis-aligned
+   * bands meeting at right angles, with beautiful organic erosion applied to geometry drawn with a
+   * set square. The board's path bends about every three tiles: no straight segment longer than
+   * roughly 15 per cent of the frame it is in.
+   *
+   * So the two periods come inside the frame: 12.3 tiles and 28.9. The short one is what puts a bend
+   * where the camera can see one -- a cosine spends about a quarter of its period near each extreme,
+   * so 12.3 gives flat runs of about three columns, which is the 15 per cent of a 19.41-tile frame
+   * the board draws -- and the long one keeps the band travelling somewhere rather than oscillating
+   * about one row. Still incommensurate (the ratio is 2.36), so the pair never repeats inside sixty
+   * columns, and the slew limit of one row per column turns the steepest stretches into the one-tile
+   * jogs the stamp is built for.
+   *
+   * SHORTER THAN THIS COSTS MORE THAN IT BUYS, measured. At 9.4 tiles the band moved on nearly every
+   * column, and three of this file's own guards failed at once: the tear needs a bitten column to
+   * have two full neighbours whose bands both contain the row it keeps, which a band that steps every
+   * column rarely has (7 bitten against a floor of 8); and the trace that reads the edge could only
+   * find fourteen columns of readable carriageway west of the notice against a floor of twenty,
+   * because a band that wanders runs into the forks and stops being separable from them. A curve the
+   * instruments cannot read is not an improvement on a straight line.
+   */
   const northEdge: number[] = [];
   {
     let held = SPAWN.y;
     for (let x = 0; x < MAP_W; x++) {
       const swing =
-        Math.cos(x / 5.7 + 0.9) * 1.15 +
-        Math.cos(x / 11.3 + 2.4) * 0.95 +
+        Math.cos(x / 1.95 + 0.9) * 4.0 +
+        Math.cos(x / 3.12 + 2.4) * 1.2 +
         (wander(x / 3.1, 4.5) - 0.5) * 0.9;
-      const want = SPAWN.y + Math.round(swing * swingRoom(x));
+      /*
+       * ...AND THE AMPLITUDE IS CLAMPED RATHER THAN SUMMED TO TWO, which is what lets a short period
+       * travel as far as a long one.
+       *
+       * The terms used to sum to 2.4, so `want` only reached two rows out when both cosines happened
+       * to peak together -- which at a 36-tile period they do for several columns at a stretch, and
+       * at a 12-tile period for one column, less than the slew limit of one row per column needs to
+       * walk the band out there. The first cut of this change kept the old sum and the band collapsed
+       * onto three rows (19-21) where it had used five: more bends, less journey, and the build
+       * failed on "the carriageway's north edge sits on only 3 row(s)". Terms that overshoot and a
+       * hard clamp at two give the curve a PLATEAU at each extreme instead of a spike, so it reaches
+       * row 18 and row 22 and holds them for a column or two, which is what a track does at the
+       * outside of a bend.
+       */
+      const reach = Math.max(-2, Math.min(2, Math.round(swing * swingRoom(x))));
+      /*
+       * ===========================================================================
+       * ...AND THE JUNCTION IS THE FOURTH WINDOW, and it was being paid for by the seed.
+       * ===========================================================================
+       *
+       * The footpath climbs out of `FORK_X` and turns east at `FORK_TURN`, which costs that column
+       * rows 17 and 18 and the next column row 18 as well (see `FORK_TURN`). Where the band sits
+       * underneath decides two separate things, and both of them are measured:
+       *
+       *   band top 20  the fork's two cells and the band's two are CONTIGUOUS over five rows at
+       *                FORK_X, and guard 7a fails the build on "a junction drawn as a yard".
+       *   band top 18  the band meets the fork's elbow at FORK_X + 1, so the two merge into one
+       *                five-row run there -- and guard 7a's trace, which follows the contiguous run
+       *                containing the row before it, LATCHES ONTO THE FOOTPATH and walks away east
+       *                along row 12. Measured: sixteen traced columns of which fourteen readable,
+       *                against a floor of twenty, with the carriageway itself never examined.
+       *   band top 19  four rows at FORK_X, and row 18 clear at FORK_X + 1, so the fork and the
+       *                carriageway are separable. The only value that satisfies both.
+       *
+       * The old curve sat on 19 there because its periods were long and its phase happened to put it
+       * there; nothing asked for it. So the junction gets a window like the bridge, the gate and
+       * Red's pad have -- except that this one clamps to a row one NORTH of the spawn rather than
+       * damping towards it, because that is the row the arithmetic above names.
+       *
+       * Clamping `want` rather than `held` keeps the one-row-per-column slew intact, which is what
+       * the column stamp relies on for its own connectivity.
+       */
+      const atJunction = x >= FORK_X - 1 && x <= FORK_X + 1;
+      const want = atJunction ? FORK_TURN + 2 : SPAWN.y + reach;
       // One row per column, always: the step the column stamp relies on for its own connectivity.
       held = Math.max(held - 1, Math.min(held + 1, want));
       northEdge.push(held);
@@ -1159,8 +1258,28 @@ export function generateForestMap(): GeneratedMap {
    * rows and the audit floods the map refusing to step on it, so a third row of sand anywhere in
    * that approach is a corridor round the one beat the level is for.
    */
+  /*
+   * ...AND NOT THE COLUMN THE FOOTPATH CLIMBS OUT OF, which is the one place a legal tooth does
+   * real damage.
+   *
+   * At `FORK_X` the fork's two cells sit directly on top of the band, so the column's sand is one
+   * four-row run. A tooth off its SOUTH bank leaves a three-row run whose middle is a row the next
+   * column does not have, and guard 7a's trace -- which steps forward from the middle of the run it
+   * just read -- loses the carriageway there and follows the footpath east along row 12 instead: it
+   * reported fourteen readable columns against a floor of twenty, having never looked at the road. A
+   * tooth off its NORTH bank is worse than a measurement problem: it removes the one cell joining the
+   * footpath to the road, and `meets` cannot see that because the fork is laid after this runs.
+   *
+   * `FORK_X + 1` goes with it for the same reason from the other side: it is the column the fork
+   * elbows into, so the band's own top row there is the row the trace steps forward onto, and a
+   * tooth that takes it leaves the trace nothing to land on.
+   */
   const tearable = (x: number): boolean =>
-    x > TRACK_X0 && x < GATE_FLAT_FROM && Math.abs(x - CROSSING) > BRIDGE_FLAT;
+    x > TRACK_X0 &&
+    x < GATE_FLAT_FROM &&
+    x !== FORK_X &&
+    x !== FORK_X + 1 &&
+    Math.abs(x - CROSSING) > BRIDGE_FLAT;
   let torn = 0;
   const layTrack = (): void => {
     for (let x = TRACK_X0; x <= TRACK_X1; x++) {
@@ -1186,15 +1305,69 @@ export function generateForestMap(): GeneratedMap {
        * so a tenth of the columns bit both banks at once and removed the whole carriageway. The
        * stronger of the two fields wins the column, so the tooth alternates between the banks.
        */
+      /*
+       * ...AND IF THE FIELD'S OWN BANK CANNOT TAKE THE TOOTH, THE OTHER ONE DOES. One side per
+       * column still; which side is now a question the geometry gets a vote in.
+       *
+       * On a flat stretch both banks pass `meets` and the field decides, exactly as before. On a
+       * stepping one it very often does not: where the band climbs a row the only row shared with
+       * both neighbours is the one the step has in common, so a tooth may be taken off one bank and
+       * not the other, and taking it off the wrong one is illegal rather than ugly. The old code read
+       * the field, built the one pair it implied, and skipped the column if that pair failed -- so
+       * the teeth could only land where the road was straight.
+       *
+       * That was invisible while the curve had a 36-tile period, because the road WAS straight nearly
+       * everywhere. With the periods inside the frame it cost two thirds of them: 5 bitten columns
+       * against this file's own floor of 8, which is the shape of trade this round is supposed to
+       * refuse -- a bend bought by paying for it in torn edge.
+       */
+      /*
+       * THE THRESHOLD IS A SHARE OF THE COLUMNS A TOOTH CAN BE TAKEN FROM, and that set got smaller.
+       *
+       * 0.52 was tuned against a band that was straight nearly everywhere, so almost every column in
+       * the tearable stretch was a candidate. A band that bends is only biteable where the row left
+       * behind is shared with both neighbours -- nineteen columns of the thirty-four, counted on the
+       * generated map -- and "never two bites running" halves that again. At 0.52 the realised count
+       * came out at seven against this file's floor of eight. The share asked for per CANDIDATE comes
+       * up to compensate, so the torn edge keeps the length it had rather than paying for the curve.
+       */
       const north = tear(x / 1.6, 13.5);
       const south = tear(x / 1.6 + 47, 20.5);
-      if (Math.max(north, south) <= 0.52) continue;
+      if (Math.max(north, south) <= 0.42) continue;
       const t = northEdge[x]!;
-      const bite = north >= south ? t : t + TRACK_W - 1;
-      const kept = north >= south ? t + TRACK_W - 1 : t;
-      if (!meets(x - 1, kept) || !meets(x + 1, kept)) continue;
-      if (!pathTiles.has(bite * MAP_W + x) || !pathTiles.has(kept * MAP_W + x)) continue;
-      pathTiles.delete(bite * MAP_W + x);
+      /*
+       * ===========================================================================
+       * ...AND A TOOTH IS NEVER TAKEN OFF THE OUTSIDE OF A BEND.
+       * ===========================================================================
+       *
+       * At a column where the north edge reaches further north than either of its neighbours, the
+       * only row `meets` will let the column keep is the southern one -- so the tooth is FORCED onto
+       * the north bank, and the north bank there is the furthest the band travels. Measured: the
+       * trough at columns 17 to 19 was bitten at 17 and at 19, which left (18,18) with one sand
+       * neighbour, the dangle trimmer took it, and three columns of carriageway came out as one row
+       * on row 19. The curve reached row 18 and nothing drawn on the map said so -- guard 7a counted
+       * four rows travelled against its floor of five, and the thing it was counting had been shaved
+       * off by the pass that is supposed to be roughening the edge.
+       *
+       * It is the north bank specifically rather than both, and that is not tidiness: `northEdge` is
+       * the row the band is laid from, it is the row the guard reads the curve off, and it is the
+       * edge that meets the wood standing above the road, which is where a player sees the bend.
+       */
+      const juts = (nx: number): boolean => (northEdge[nx] ?? t) > t;
+      const banks = (north >= south ? [t, t + TRACK_W - 1] : [t + TRACK_W - 1, t]).filter(
+        (candidate) => candidate !== t || !(juts(x - 1) || juts(x + 1)),
+      );
+      const took = banks.find((candidate) => {
+        const kept = candidate === t ? t + TRACK_W - 1 : t;
+        return (
+          meets(x - 1, kept) &&
+          meets(x + 1, kept) &&
+          pathTiles.has(candidate * MAP_W + x) &&
+          pathTiles.has(kept * MAP_W + x)
+        );
+      });
+      if (took === undefined) continue;
+      pathTiles.delete(took * MAP_W + x);
       last = x;
       torn++;
     }
@@ -1313,14 +1486,23 @@ export function generateForestMap(): GeneratedMap {
    * and the last climb is taken in a single column so exactly ONE column of the camera's top edge
    * is spent on it. Everything above row 13 runs along row 12, which no canopy needs.
    */
-  const FORK_X = 8;
+  /*
+   * ...AND IT CROSSES THE TWO ROWS THE TOP EDGE CUTS IN ONE COLUMN, not three.
+   *
+   * `topEdgeRows(HERO.y0)` is rows 15 and 16, and the old waypoints put sand on (9,16), (10,16),
+   * (10,15) and (11,15) -- three of the fifteen columns a landscape visitor can see, every one of
+   * which then refuses a crown, because `plantKind` will not hang one over the road. The paragraph
+   * above claims "exactly ONE column", and it was written against a frame whose origin was a tile
+   * out; measured on the real rows it was three. Climbing inside column 9 until the path is clear of
+   * both of them spends the one column the claim promised.
+   */
   layPath(
     [
       [FORK_X, trackTop(FORK_X)],
-      [FORK_X, 17],
+      [FORK_X, FORK_TURN],
       [9, 16],
-      [10, 15],
-      [11, 13],
+      [9, 14],
+      [10, 13],
       [11, 12],
       [14, 12],
       [16, 12],
@@ -3406,9 +3588,55 @@ export function generateForestMap(): GeneratedMap {
   if (!plantKind('mid', 18, 11)) throw new Error('the owl has no tree to sit under');
   place('lantern-post', 36, 32, 'lantern-post');
 
-  // Grandma's cottage at the east end, behind a fence with one gate.
-  const cx = 50;
-  const cy = 14;
+  /*
+   * ===========================================================================
+   * GRANDMA'S COTTAGE, at the east end, behind a fence with one gate.
+   *
+   * WEST BY TWO COLUMNS, BECAUSE THE PAYOFF CAMERA CLAMPS AND THE BUILDING WAS RIDING THE CLAMP.
+   * ===========================================================================
+   *
+   * `frameAt` holds the camera inside the world, so a centre east of `MAP_W - tiles.width / 2` is
+   * pushed back west and the SUBJECT slides right inside the frame instead. At `cx` 50 with a
+   * six-tile facade the centre asked for was column 53 against a limit of 50.3, so the shot was
+   * clamped by 2.7 tiles and the building sat in the right third of its own payoff frame -- which
+   * is the product manager's placement note, and it is arithmetic rather than taste.
+   *
+   * The remedy is the one number that moves it: put the facade's own centre AT the clamp, so the
+   * camera is still framed on the building and the building is in the middle of the picture. With
+   * five columns that is `cx + 2.5 <= 50.3`, so `cx` 48 -- which is as far east as the house can
+   * stand and still be centred, and it keeps the gate, the lane and the notice in the same
+   * relationship to the door they have always had. Nothing here is quoted: `ARRIVE` below derives
+   * the rectangle, and the audit at the foot of the file measures where the facade lands in it.
+   */
+  const cx = 48;
+  /*
+   * THE ROW THE GABLE AND THE CHIMNEY STAND ON. The facade proper starts one row below it.
+   *
+   * It moved down a row with the wall course that was dropped (see FOUR COURSES... below), because
+   * the rows UNDER the building are fixed by the level: the lane is rows 20-21, the notice and the
+   * trigger span 19-21, and a due-east walker's feet are on row 21 all the way across the map. The
+   * doorstep is therefore row 18 whatever the building does above it, and the building is built up
+   * from there rather than down from here.
+   */
+  const cy = 15;
+  /**
+   * The facade, in tiles, and the lane the arrival camera frames with it. See `ARRIVE` below.
+   *
+   * Declared up here, above the clearing it sizes, because every row and column of the building is
+   * derived from these two and `cx`: the clearing, the roof loop, the wall course, the gable's
+   * columns, the bank along the foot of the wall, the tabby against its east corner, the treeline's
+   * `clearOfRoof`, the `prop-cottage` rectangle the game points its payoff camera with, and the
+   * audit that measures where the facade lands in that camera. The only figures written out below
+   * are the ones the LEVEL fixes rather than the building: the gate rows and the notice's.
+   */
+  const FACADE_W = 5;
+  const FACADE_H = 3;
+  /** The garden's east side, where the fence turns; declared here because the clearing stops at it. */
+  const gardenEast = MAP_W - 3;
+  /** `LANE_ROWS` in apps/game/src/world/forest-scene.ts: the rows of lane the payoff shot includes. */
+  const LANE_ROWS = 3;
+  const roofTop = cy + 1;
+  const doorstep = roofTop + FACADE_H - 1;
   /*
    * THE CLEARING IS THE BUILDING'S FOOTPRINT AND A MARGIN, not a nine-by-nine square.
    *
@@ -3442,7 +3670,36 @@ export function generateForestMap(): GeneratedMap {
    * reach the house: a trunk at the doorstep row would be on the lane, and a trunk below that throws
    * its crown onto the path, which the planter refuses.
    */
-  clearArea(cx, cy, 6, 6);
+  /*
+   * ...AND NOW IT IS THE HOUSE AND THE LAWN BETWEEN ITS EAST GABLE AND THE WOOD.
+   *
+   * Five rows: the gable and chimney row, the two roof courses, the one wall course, and the
+   * doorstep row below it. The columns are the part that changed twice over, and the reason is
+   * worth recording rather than re-derived.
+   *
+   * The footprint-only clearing was written for a facade six wide standing two columns further east,
+   * so it covered three columns of garden that a five-wide facade at `cx` does not -- and the forest
+   * floor was still standing on them. What that printed on the first render of the narrowed house was
+   * FOUR BUSHES AND FLOWERS IN AN UNBROKEN VERTICAL FILE down column 55, from the row above the roof
+   * to the row beside it, which guard 7g caught and the build refused. It is the cross-pass case that
+   * guard exists for: the forest's cover, the undergrowth sweep's companions and the garden bed each
+   * cap their own runs at three and none of them can see the others.
+   *
+   * The garden's interior is the cottage's own ground -- the bank along the foot of the wall, the
+   * ring round the east corner and the bed between the lane and the fence all plant it, and all
+   * three go through `tuft`, which refuses the fourth tile in a line. Forest floor inside the fence
+   * is a pass that does not know it is in a garden. So the clearing runs from the facade out to two
+   * columns short of the garden's east side, which leaves the wood the two columns it stands in and
+   * is the same ground the committed map happened to clear with a wider house.
+   *
+   * WHAT IS GIVEN UP, SO IT IS NOT CLAIMED TWICE: the paragraph above says "a crown touching the wall
+   * on both sides", and after this that is true on the WEST only. The wood still presses the west
+   * gable at cx - 1 and the treeline stands on the rows above the roof, but on the east it is now the
+   * banked planting and the dressing ring that meet the house, with the wood two columns behind them.
+   * That is also what the board does on that side -- its right-hand wall is met by a water butt, a log
+   * stack and the chimney, and its crowns press the LEFT -- so this is a trade rather than a loss.
+   */
+  clearArea(cx, cy, gardenEast - 1 - cx, FACADE_H + 2);
   /*
    * ===========================================================================
    * FOUR COURSES, NOT FIVE: roof-peak / roof / wall / wall.
@@ -3462,16 +3719,53 @@ export function generateForestMap(): GeneratedMap {
    * keep the rows they are measured on, and the chimney stands on the row the peak used to have,
    * which is still directly behind the ridge.
    */
-  const roofTop = cy + 1;
-  const wallTop = cy + 3;
-  const doorstep = cy + 4;
-  /** The facade, in tiles, and the lane the arrival camera frames with it. See `ARRIVE` below. */
-  const FACADE_W = 6;
-  const FACADE_H = 4;
-  /** `LANE_ROWS` in apps/game/src/world/forest-scene.ts: the rows of lane the payoff shot includes. */
-  const LANE_ROWS = 3;
+  /*
+   * ===========================================================================
+   * ...AND NOW THREE: roof-peak / roof / ONE course of wall, five columns wide.
+   *
+   * The paragraph above halved the blank plaster and left the other half standing. This takes it.
+   * ===========================================================================
+   *
+   * WHAT WAS STILL WRONG, measured on the payoff frame rather than on the tile sheet. Four courses
+   * means two courses of wall, and only the LOWER one can carry an opening: the door's threshold is
+   * the ground and the windows' boxes hang off their sills, so both are drawn at the foot of their
+   * tile. A tile laid four times across the upper course therefore cannot carry a one-off, and what
+   * it printed was a hundred and ninety-two pixels of unbroken cream -- the largest connected patch
+   * of flat colour anywhere in the last frame of the game, measured at 1,626 pixels centred on the
+   * wall two tiles east of the door. "Roughly four tiles of empty cream in the middle of the payoff
+   * shot" is that blob, and the audit at the foot of this file now measures it.
+   *
+   * MEASURED ON THE BOARD, and this is the part that settles it. Red is 48 pixels tall in our build
+   * and 162 of the mock's own pixels in its Arrive frame, so the mock is drawn at about 3.4 of its
+   * pixels to one of ours (ART_DIRECTION section 2 derives the same ratio off the Explore frame).
+   * Converted at that ratio, the board's cottage is:
+   *
+   *     wall, outside of post to outside of post      176 px   -- about 5.5 of our tiles
+   *     wall, eave to the foot of the plaster          49 px   -- about 1.5 tiles
+   *     roof, eave to ridge (the ridge is cut)        >=37 px
+   *     door                                        47 x 48 px
+   *     window                                      26 x 24 px
+   *
+   * So the board's wall is HALF AS TALL AS OURS and its windows sit right up under the eave -- its
+   * blue window's head is six of our pixels below the eave line. Ours were a whole blank course and
+   * part of a second below it. The width was never the problem; the wall's HEIGHT was, and the
+   * blank course was the height.
+   *
+   * THREE ROWS IS 53 PIXELS OF ROOF OVER 42 OF WALL, which is the board's 48 over 49 within five
+   * pixels either way. The roof tile already carries the top eleven rows of the wall -- `EAVE_Y` in
+   * s-cottage.ts puts the fascia at row 20 of `roof-l/m/r` and the overhang's shadow on plaster
+   * beneath it -- so one 32-pixel course of openings under it is a wall of 42, not of 32.
+   *
+   * AND FIVE COLUMNS, WHICH IS WHAT "FOUR TILES WIDE" MEANS WITH AN OVERHANG. `wall-corner` keeps
+   * its outer sixteen columns transparent so the roof projects, so a five-column roof stands over
+   * exactly 128 pixels -- four tiles -- of plaster, which is ART_DIRECTION section 9.1's figure and
+   * what DESIGN_BOARD section 3 has asked for for three rounds. Five is also the narrowest the
+   * accepted facade fits in: corner post, window, door, window, corner post, with nothing left over.
+   * Six columns left one slot spare, which is why the door sat a column west of the gable's apex
+   * with two tiles of bare cream between it and the lit window.
+   */
   for (let i = 0; i < FACADE_W; i++) {
-    const kind = i === 0 ? 'roof-l' : i === 5 ? 'roof-r' : 'roof-m';
+    const kind = i === 0 ? 'roof-l' : i === FACADE_W - 1 ? 'roof-r' : 'roof-m';
     set(below, cx + i, roofTop, gid('roof-peak'));
     set(below, cx + i, roofTop + 1, gid(kind));
     solid(cx + i, roofTop);
@@ -3483,8 +3777,9 @@ export function generateForestMap(): GeneratedMap {
    * with no collision under it: a player walking the strip between the garden's north fence and the
    * roof passed straight through the chimney stack, drawn over her as she went.
    */
-  set(below, cx + 4, roofTop - 1, gid('chimney'));
-  solid(cx + 4, roofTop - 1);
+  /* At the east end of the ridge, as the board puts it, and clear of the gable by a column. */
+  set(below, cx + FACADE_W - 1, roofTop - 1, gid('chimney'));
+  solid(cx + FACADE_W - 1, roofTop - 1);
   /*
    * THE GABLE, over the door, on the row the chimney stands on.
    *
@@ -3497,16 +3792,29 @@ export function generateForestMap(): GeneratedMap {
    * It stands on the row above the roof peak, which the facade gave up when the wall dropped a
    * course -- so the one row of lawn between the enclosure's north run and the roof now carries the
    * gable and the chimney, and the building reads against the garden instead of stopping flat.
+   *
+   * THE APEX IS ALWAYS HALF A TILE OFF THE DOOR'S CENTRE, and it is worth saying why rather than
+   * letting the next owner hunt it. The gable's apex sits at the RIGHT edge of the plain copy, so
+   * the pair meets on the seam BETWEEN two tiles; the door is one tile wide, so its centre is in the
+   * MIDDLE of a tile. A seam and a tile centre are sixteen pixels apart and no placement closes
+   * that -- only a two-tile door would, and Grandma has one front door. Sixteen pixels of a
+   * hundred-and-sixty-pixel facade is what we pay. It was the same sixteen at six columns; what is
+   * new is that the door is now the facade's own middle column, so the gable leans off the door
+   * rather than the door sitting off the gable.
    */
-  set(below, cx + 2, roofTop - 1, gid('gable'));
-  set(below, cx + 3, roofTop - 1, gid('gable') + FLIP_H);
+  set(below, cx + 1, roofTop - 1, gid('gable'));
+  set(below, cx + 2, roofTop - 1, gid('gable') + FLIP_H);
+  solid(cx + 1, roofTop - 1);
   solid(cx + 2, roofTop - 1);
-  solid(cx + 3, roofTop - 1);
-  for (let row = wallTop; row <= doorstep; row++)
-    for (let i = 0; i < 6; i++) {
-      set(below, cx + i, row, gid('wall'));
-      solid(cx + i, row);
-    }
+  /*
+   * ONE COURSE OF WALL, AND EVERY TILE OF IT CARRIES SOMETHING.
+   *
+   * The loop that laid plain `wall` across two courses is gone with the upper course: at five
+   * columns the wall is corner post, window, door, window, corner post, so there is no cell left for
+   * a blank tile to stand in. Each tile is set by name below; the collision is laid here, over the
+   * whole course, so a tile that is overwritten later still stops her.
+   */
+  for (let i = 0; i < FACADE_W; i++) solid(cx + i, doorstep);
   /*
    * ...AND THE FACADE ENDS IN A CORNER POST, which is what makes the roof overhang.
    *
@@ -3519,10 +3827,8 @@ export function generateForestMap(): GeneratedMap {
    * The cell stays solid. What is transparent is the half tile UNDER the eaves, and a player walking
    * into the side of the house should stop at the house, not half a tile inside it.
    */
-  for (let row = wallTop; row <= doorstep; row++) {
-    set(below, cx, row, gid('wall-corner'));
-    set(below, cx + 5, row, gid('wall-corner') + FLIP_H);
-  }
+  set(below, cx, doorstep, gid('wall-corner'));
+  set(below, cx + FACADE_W - 1, doorstep, gid('wall-corner') + FLIP_H);
   /*
    * The windows move down to the doorstep course, flanking the door, which is where the board puts
    * them: a blue one on one side and a lit one on the other, each with a box under it. On a
@@ -3537,8 +3843,12 @@ export function generateForestMap(): GeneratedMap {
    * the board lights one side and leaves the other blue, and two lit windows on a two-window facade
    * is a lantern, not a cottage. No animal in it, by the painter's own note: a tile is the same
    * pixels on every ending, and the wolf belongs to the panel.
+   *
+   * It is at `cx + 3` now rather than `cx + 4`: the two windows sit one column either side of the
+   * door, which is the board's own symmetry and was not available while a sixth column had to be
+   * filled with something.
    */
-  set(below, cx + 4, doorstep, gid('wall-window-lit'));
+  set(below, cx + 3, doorstep, gid('wall-window-lit'));
   /*
    * ONE front door. There were two.
    *
@@ -3554,9 +3864,10 @@ export function generateForestMap(): GeneratedMap {
    *
    * `scoring.errandGoals` pays a hundred points for `sign` -- "Read the note she pinned to her
    * door" -- and half of one of the two lines that reach the game's 1,000 ceiling runs through it.
-   * The rect that fires it, `notice-cottage-door`, covers (50,19)-(51,21): one flower bed and five
-   * tiles of lane, with both decor layers empty over every one of them. Nothing was drawn. A player
-   * walked over a flower bed and a panel opened.
+   * The rect that fires it, `notice-cottage-door`, covers two columns of the lane west of the door
+   * and the garden tile above them: before this it was one flower bed and five tiles of lane, with
+   * both decor layers empty over every one of them. Nothing was drawn. A player walked over a flower
+   * bed and a panel opened.
    *
    * `door-note` is the cottage owner's `door` repainted exactly, with a sheet pinned to its west
    * leaf -- west because the lane arrives from the west, so the note faces the walk and is in view
@@ -3637,7 +3948,6 @@ export function generateForestMap(): GeneratedMap {
    */
   const gardenTop = Math.floor(ARRIVE.y0) - 1;
   const gardenBottom = Math.ceil(ARRIVE.y1);
-  const gardenEast = MAP_W - 3;
   const gateRows = [20, 21] as const;
   /*
    * Every panel clears its own cell first. The fence runs through ground the wood was planted on,
@@ -3651,9 +3961,66 @@ export function generateForestMap(): GeneratedMap {
     set(below, x, y, gid(tile));
     solid(x, y);
   };
+  /*
+   * ===========================================================================
+   * THE RUN IS BROKEN BY POSTS, which is the client's fence note for the third round running and
+   * the one part of it that was never a drawing problem.
+   * ===========================================================================
+   *
+   * `fence-post` is four receding caps at an eight-pixel pitch, and the tile is right: at zoom 10
+   * it is a domed cap over a shaded body with lawn and a sprig breaking its base, and it was
+   * accepted two rounds ago. Stamped on thirteen consecutive rows it is FIFTY-TWO caps in an
+   * unbroken column with no daylight anywhere in it, and fifty-two caps at a constant pitch do not
+   * read as fifty-two posts. They read as one brown rope running off the top of the payoff frame
+   * and off the bottom of it.
+   *
+   * Crop the board at `1130 380 300 230 4` and its answer is plain: its receding run is about SEVEN
+   * caps long and then it hits a wide flat-capped post, and its picket run is three pickets with
+   * lawn between them. Nothing on the board repeats a rhythm for longer than the eye can count.
+   *
+   * So the posts go in. `fence-corner` is a single wide post with a flat cap, a hard step, a grain
+   * line and no rhythm at all -- its own docstring says a post is a post and the tile works at the
+   * head of a run, at the foot of one, and in the middle where a run passes it. Dropped into the
+   * file at an IRREGULAR pitch it breaks fifty-two caps into runs of eight, eight and four, each
+   * ending at something that stops the eye.
+   *
+   * NOT ONE CELL OF COLLISION CHANGES. Every row of the run is still panelled and still solid; what
+   * changes is which of two post tiles is drawn on it. `map.test.ts` floods the map refusing to
+   * step on the notice and asserts the gate is unreachable, and that is still held by an unbroken
+   * column of solid cells.
+   *
+   * The pitch is read off the same grain the wood is shaped by rather than written out, so the
+   * three segments are not themselves a rhythm -- which is the fault one level up, and the one this
+   * round is about.
+   */
   for (let y = gardenTop; y <= gardenBottom; y++) {
     if (y === gateRows[0] || y === gateRows[1]) continue;
     panel(fenceX, y, 'fence-post');
+  }
+  {
+    /*
+     * A post every third or fourth tile, counted from the gate outward so the two posts flanking the
+     * gap stay where they are and the rhythm walks away from them in both directions.
+     *
+     * The number is the board's, converted. `fence-post` carries four caps a tile at an eight-pixel
+     * pitch and the board's run shows about seven caps between posts, so two or three run tiles is
+     * the length to leave: a post every second tile reads as a chain of short links, which is a
+     * second rhythm rather than no rhythm.
+     */
+    let run = 0;
+    for (let y = gateRows[0] - 2; y > gardenTop; y--) {
+      run++;
+      if (run < (grainAt(fenceX, y) > 0.5 ? 4 : 3)) continue;
+      panel(fenceX, y, 'fence-corner');
+      run = 0;
+    }
+    run = 0;
+    for (let y = gateRows[1] + 2; y < gardenBottom; y++) {
+      run++;
+      if (run < (grainAt(fenceX, y) > 0.5 ? 4 : 3)) continue;
+      panel(fenceX, y, 'fence-corner');
+      run = 0;
+    }
   }
   for (let x = fenceX; x <= gardenEast; x++)
     for (const y of [gardenTop, gardenBottom]) panel(x, y, 'fence-h');
@@ -3676,7 +4043,34 @@ export function generateForestMap(): GeneratedMap {
    * exactly as the west side does. Nothing about what is solid changes -- those cells were already
    * solid -- so no reachability test can see this, which is the point: it is picture, not barrier.
    */
-  for (let y = gardenTop + 1; y < gardenBottom; y++) panel(gardenEast, y, 'fence-post');
+  /*
+   * ===========================================================================
+   * ...AND IT IS A SHORT LENGTH OF FENCE, NOT A SECOND ROPE. Same defect, opposite remedy, because
+   * this side is picture and the west side is barrier.
+   * ===========================================================================
+   *
+   * Drawn down the whole height of the frame this was the second brown rope in the payoff shot:
+   * twelve tiles, forty-eight caps, entering the top edge and leaving the bottom with nothing at
+   * either end to turn it, parallel to the first one at eleven columns' remove. Two parallel
+   * vertical rules either side of the house is most of what makes the last frame of the game read
+   * as a pen rather than as a garden.
+   *
+   * The board does not draw an enclosure at all. It puts two SHORT lengths of fence beside the
+   * building -- a corner post, a few caps, another post -- and lets the wood do the rest. This side
+   * can simply be that, because nothing in the level hangs on it: the enclosure is held by the two
+   * horizontal runs, which are solid from the fence out to the edge of the world on both rows, and
+   * every reachability test is satisfied by those alone. So the run comes down to three tiles
+   * hanging off the north-east corner and ending at a post, and the eight rows it vacates become
+   * garden.
+   *
+   * THEY VACATE THEIR COLLISION WITH THEIR TILE, deliberately. A solid cell with nothing drawn on it
+   * is a fault this file fails the build for ("solid tile(s) with nothing drawn on them"), and an
+   * invisible wall down the middle of the one garden the player walks into is exactly the bug that
+   * audit exists to catch. The strip east of them is inside the enclosure either way.
+   */
+  const EAST_FENCE_ROWS = 3;
+  for (let y = gardenTop + 1; y <= gardenTop + EAST_FENCE_ROWS; y++)
+    panel(gardenEast, y, y === gardenTop + EAST_FENCE_ROWS ? 'fence-corner' : 'fence-post');
   /*
    * THE FENCE STAYS SOLID AND STOPS BEING WALLPAPER, which are not the same request.
    *
@@ -3772,13 +4166,33 @@ export function generateForestMap(): GeneratedMap {
    * Nothing stands on the row directly above the roof: a trunk drawn there is a tree growing out of
    * the ridge, which is the same fault the garden bed below refuses for the same row.
    */
+  /*
+   * ...AND "THE ROW DIRECTLY ABOVE THE ROOF" IS ASKED OF THE MAP, NOT COUNTED OFF THE FACADE.
+   *
+   * It read `x + 1 < cx || x > cx + FACADE_W - 1` -- any column the building stands in, at any row.
+   * That was the same rule as this one while the facade's top drawn row was the one directly below
+   * the deep trunk row, and it stopped being the same rule the moment the building dropped a course:
+   * the gable row moved down with it, so the deep row is now a clear row above the roof in every
+   * column except the three the gable and chimney stand in, and the old test refused all five.
+   *
+   * What it cost was not planting, it was the PAYOFF FRAME'S TOP EDGE. The deep row is the only one
+   * of the two whose crown reaches the rows `topEdgeRows` measures -- a trunk on the shallow row
+   * throws its crown above the camera entirely -- so refusing it over the house dropped the arrival
+   * camera from nine closed columns to seven and opened a thirteen-column run of sky, which the
+   * guard at the foot of this file caught.
+   *
+   * So the question is asked of the cell: is there anything drawn directly below this trunk? A tree
+   * whose trunk sits on the roof's own top row is a tree growing out of the ridge and a tree one
+   * clear row above it is a tree behind the house, and only the map knows which this is.
+   */
+  const standsOnTheRoof = (x: number, row: number): boolean =>
+    [x, x + 1].some((c) => at(below, c, row + 1) !== 0 && c >= cx && c < cx + FACADE_W);
   let behind = 0;
   for (let x = fenceX + 1; x < gardenEast;) {
-    const clearOfRoof = x + 1 < cx || x > cx + FACADE_W - 1;
     const tries: ReadonlyArray<readonly [string, number]> = [
-      ...(clearOfRoof
-        ? [['mid', gardenTop + 3] as const, ['sapling', gardenTop + 3] as const]
-        : []),
+      ...(standsOnTheRoof(x, gardenTop + 3)
+        ? []
+        : [['mid', gardenTop + 3] as const, ['sapling', gardenTop + 3] as const]),
       ['mid', gardenTop + 2],
       ['sapling', gardenTop + 2],
     ];
@@ -3794,7 +4208,52 @@ export function generateForestMap(): GeneratedMap {
     // the line breaks irregularly instead of at a fixed pitch.
     x += planted.k.trunk.length + (grainAt(x, gardenTop) > 0.5 ? 2 : 1);
   }
-  console.log(`  cottage: ${behind} tree(s) of treeline behind the garden's north strip`);
+  /*
+   * ===========================================================================
+   * ...AND THE WOOD COMES DOWN THE EAST MARGIN TOO, which is the other half of the same picture and
+   * the fix for the product manager's fourth complaint.
+   * ===========================================================================
+   *
+   * The payoff frame runs to the very edge of the world -- `cameraFor()` makes it 19.41 tiles wide
+   * against a map 60 wide, so the camera clamps east and column 59 is fully in shot. What stood there
+   * was the sealed border band and nothing else: fourteen consecutive rows of bush and boulder, one
+   * per row, down the right-hand edge of the last frame of the game. A one-per-row file is the same
+   * fault as the fence rope eleven columns to its west, in a different material.
+   *
+   * `breakHem` is supposed to answer this and cannot reach it. Every candidate it has for the east
+   * margin is anchored at column 58, and until this round column 58 was the inside of a two-column
+   * dead-end strip sealed off by the garden's east fence: plant a tree in it and the connectivity
+   * sweep fells the tree to open the strip again, and `sealBorder` fills the cell it vacated with
+   * scrub. That is the eighteen-tile hedge the design board names, and the reason the arrival framing
+   * band stops at the west fence.
+   *
+   * Taking the east fence out opens the strip to the garden, so the dead end is gone and the trees
+   * stand. Three of them, at a jittered pitch of two or three rows, which is enough to carry crown or
+   * trunk over nine of the fourteen rows -- and the first one's crown lands on the two rows the
+   * camera's top edge cuts, so the same change closes the corner of the frame that the fence used to
+   * fill with a post line. They are flagged as framing so the verge sweep reads them as composition.
+   */
+  let margin = 0;
+  for (let y = gardenTop + 4; y < gardenBottom - 1;) {
+    const lifted: [number, number][] = [];
+    for (const tx of [gardenEast + 1, gardenEast + 2]) {
+      if (at(below, tx, y) === 0 || !bandIsHedge(tx, y)) continue;
+      lifted.push([tx, at(below, tx, y)]);
+      set(below, tx, y, 0);
+    }
+    if (plantKind('mid', gardenEast + 1, y)) {
+      trees[trees.length - 1]!.framing = true;
+      margin++;
+      y += grainAt(gardenEast + 1, y) > 0.5 ? 3 : 2;
+      continue;
+    }
+    for (const [tx, tile] of lifted) set(below, tx, y, tile);
+    y += 1;
+  }
+  console.log(
+    `  cottage: ${behind} tree(s) of treeline behind the garden's north strip, ` +
+      `${margin} down the east margin`,
+  );
 
   /*
    * Make sure the path through the gate and up to the door is walkable -- AND THAT IT IS TRACK.
@@ -3870,13 +4329,22 @@ export function generateForestMap(): GeneratedMap {
       if (!inside(x, y) || at(below, x, y) !== 0 || at(above, x, y) !== 0) continue;
       if (at(ground, x, y) === gid('path')) continue;
       /*
-       * NOTHING ON THE ROW DIRECTLY ABOVE THE ROOF. The enclosure's north run is one row clear of
-       * the roof peak, so this bed had a single row to plant between them -- and a 32px bush drawn
-       * immediately above the roof's top course reads as a shrub growing out of the roof, which is
-       * exactly what the arrival render showed, four of them along the ridge. The strip behind the
-       * house stays lawn.
+       * NOTHING ABOVE THE ROOF AT ALL: the whole strip between the enclosure's north run and the
+       * building is treeline and lawn, never bed.
+       *
+       * It used to be the single row `roofTop - 1`, which was the one row of garden there was when
+       * the facade was four courses and its gable stood on that row. A 32px bush drawn immediately
+       * above the roof's top course reads as a shrub growing out of the roof, which is what the
+       * arrival render showed, four of them along the ridge.
+       *
+       * At three courses the building sits a row lower, so the strip is three rows deep -- and the
+       * rule, pinned to one row, let the bed into the other two. What it printed on the first render
+       * of the narrowed facade was EIGHT bushes in an unbroken file along the row above the gable,
+       * from the house out to the garden's east fence, which guard 7g caught and the build refused.
+       * That strip is where the treeline behind the house goes (see the pass above), so the bed has
+       * no business in it at any depth, and the rule now says so rather than naming a row.
        */
-      if (y === roofTop - 1) continue;
+      if (y < roofTop) continue;
       // A field again, for the same reason as the forest floor and the bank: these tiles are
       // opaque, so a bed has to be a connected patch or it is a scatter of squares on a lawn.
       const bed = scrubNoise(x / 2.9, y / 2.9);
@@ -3949,7 +4417,46 @@ export function generateForestMap(): GeneratedMap {
    * sits beside moves.
    */
   const bloom = valueNoise2D(20261053);
+  /**
+   * How long a file of planting this cell would be part of, along one axis, if it were planted.
+   *
+   * `bush` and `flower-*` only: a crown, a trunk or a boulder beside a bed is the bed having an edge
+   * against something, which is what a bed wants.
+   */
+  const plantedRun = (x: number, y: number, dx: number, dy: number): number => {
+    let n = 1;
+    for (const sign of [1, -1])
+      for (let k = 1; ; k++) {
+        const nx = x + dx * k * sign;
+        const ny = y + dy * k * sign;
+        if (!inside(nx, ny)) break;
+        const name = TILE_NAMES[(at(below, nx, ny) & BASE_GID) - 1] ?? '';
+        if (!name.startsWith('bush') && !name.startsWith('flower')) break;
+        n++;
+      }
+    return n;
+  };
+  /*
+   * ===========================================================================
+   * ...AND NO BED EVER REACHES FOUR TILES IN A STRAIGHT LINE. One rule, in the one place every soft
+   * planting on the map goes through.
+   * ===========================================================================
+   *
+   * Three passes lay planting -- the banks against the wall and the fences, the rings round the
+   * landmarks, and the verge along the road -- and none of them can see the others. Each one is
+   * individually reasonable and where two of them aim at the same strip their union is a file: the
+   * product manager counted two dead-straight rows of flower bushes under the facade and a one-per-row
+   * file down the frame's edge, and a third turned up during this round at column 54, four deep,
+   * where the wall bank's thickening met the south bed's.
+   *
+   * Capping the RUN rather than the count is what keeps a bed a bed. A three-by-three mass of leaf
+   * with blooms in it passes untouched -- that is the shape the board banks against a wall -- and the
+   * fourth tile in a straight line is refused, which is the tile at which a mass stops reading as
+   * grown and starts reading as laid out. It is checked here because here is the only place that
+   * knows what is already on the ground, whichever pass is asking.
+   */
   const tuft = (x: number, y: number, flowers: number): void => {
+    if (plantedRun(x, y, 1, 0) > 3 || plantedRun(x, y, 0, 1) > 3) return;
     const pick =
       bloom(x / 2.6 + 131, y / 2.6 + 131) * 0.72 + bloom(x / 1.3 + 83, y / 1.3 + 83) * 0.28;
     set(
@@ -3987,6 +4494,26 @@ export function generateForestMap(): GeneratedMap {
    * tile. A tile the wall, the gable or the lane already occupies is simply skipped, so the bank
    * flows round the door and the gable without any of the callers knowing where those are.
    */
+  /*
+   * ===========================================================================
+   * ...AND THE SECOND ROW WAS A FIELD READ ALONG A LINE, which is the mistake this file has now
+   * made four times and written up three.
+   * ===========================================================================
+   *
+   * `deeper(x / 2.9, y / 2.9) > 0.58` decides whether the bank thickens by a tile. A bank runs along
+   * ONE ROW, so that is a two-dimensional field sampled on a line of near-constant y: a ten-tile run
+   * crosses three and a bit lattice cells of a 2.9-tile field, so the answer is the same for three or
+   * four tiles at a time and frequently the same for the whole run. What it printed in the payoff
+   * frame was the bank's own row and a SECOND ROW DIRECTLY ABOVE IT, both continuous, both planted
+   * from the same mix -- two dead-straight rows of near-identical flower bushes under the facade,
+   * which is the product manager's third complaint this round.
+   *
+   * The remedy is the one `northEdge` already uses for the identical reason: a term in the run's own
+   * parameter, at a period shorter than the run, so the depth genuinely varies ALONG it. The bank
+   * then has a lobed outer edge -- three tiles of two-deep, four of one -- which is what the board's
+   * beds have, instead of a rectangle of planting. The phase is seeded off the run's own origin so
+   * two banks in one frame are not in step with each other.
+   */
   const deeper = valueNoise2D(20261059);
   const bank = (
     ox: number,
@@ -3996,15 +4523,27 @@ export function generateForestMap(): GeneratedMap {
     len: number,
     /** Which way the bank may thicken: away from the thing it is banked against. */
     out: readonly [number, number],
-    flowers = 0.7,
+    /*
+     * HALF, NOT SEVEN TENTHS, and it is the same finding `dress` already carries: a `flower-*` tile
+     * is a bloom bush drawn well inside its own 32x32, so a connected run of them reads at 1x as a
+     * row of bright dots at a one-tile pitch however tidily they are gathered. Mostly leaf with
+     * blooms set into it is one dark mass with colour in it, which is what the board banks against a
+     * wall. The two defaults being different was the whole reason the garden beds printed as rows
+     * while the verges did not.
+     */
+    flowers = 0.5,
   ): void => {
     for (let i = 0; i < len; i++) {
       const x = ox + dx * i;
       const y = oy + dy * i;
       if (onGrass(x, y)) tuft(x, y, flowers);
+      const swell =
+        Math.cos(i / 1.15 + ox * 0.7 + oy * 1.3) * 0.6 +
+        (deeper(x / 1.4 + 211, y / 1.4 + 211) - 0.5);
+      if (swell <= 0.18) continue;
       const bx = x + out[0];
       const by = y + out[1];
-      if (deeper(x / 2.9 + 211, y / 2.9 + 211) > 0.58 && onGrass(bx, by)) tuft(bx, by, flowers);
+      if (onGrass(bx, by)) tuft(bx, by, flowers);
     }
   };
   /*
@@ -4066,10 +4605,11 @@ export function generateForestMap(): GeneratedMap {
    * are skipped by `onGrass`, so the planting arrives at the step from both sides and stops, which
    * is what the board draws. It thickens south into the garden where the field says so.
    */
-  bank(cx - 1, doorstep + 1, 1, 0, 8, [0, 1]);
+  bank(cx - 1, doorstep + 1, 1, 0, FACADE_W + 2, [0, 1]);
   /* Up the gable end, so the house is not banked on one side only and bare on the other. */
-  bank(cx + 6, roofTop + 1, 0, 1, 4, [1, 0]);
-  dress(cx + 6, wallTop, 2.4, 10); // the east corner of the house, clear of the wall itself
+  bank(cx + FACADE_W, roofTop + 1, 0, 1, 4, [1, 0]);
+  // The east corner of the house, clear of the wall itself.
+  dress(cx + FACADE_W, doorstep, 2.4, 10);
   /*
    * ...AND THE TWO FENCE BEDS ARE AT OPPOSITE CORNERS, which is a shape fix.
    *
@@ -4090,9 +4630,21 @@ export function generateForestMap(): GeneratedMap {
    * payoff frame a planted border on every side the camera shows, and leave the lawn in the middle
    * of it clean.
    */
-  bank(fenceX + 1, gardenTop + 1, 1, 0, gardenEast - fenceX - 1, [0, 1], 0.8);
-  bank(gardenEast - 1, gardenTop + 2, 0, 1, gardenBottom - gardenTop - 3, [-1, 0], 0.8);
-  bank(fenceX + 1, gardenBottom - 1, 1, 0, gardenEast - fenceX - 1, [0, -1], 0.8);
+  /*
+   * The three garden runs take the default bloom share with everything else, rather than the 0.8
+   * they carried. Eight tenths over a ten-tile run is eight blooms in a line in the one frame the
+   * whole story walks towards, and the frame is the test: this is where the product manager counted
+   * them.
+   */
+  bank(fenceX + 1, gardenTop + 1, 1, 0, gardenEast - fenceX - 1, [0, 1]);
+  /*
+   * The east run is now as long as the east FENCE is, which is three tiles. A bank is planting with
+   * its back to a boundary; run down a boundary that is no longer drawn it is just a file, and a
+   * ten-tile vertical file of scrub down the right of the payoff frame is the same fault as the
+   * fence rope it was banked against.
+   */
+  bank(gardenEast - 1, gardenTop + 2, 0, 1, EAST_FENCE_ROWS, [-1, 0]);
+  bank(fenceX + 1, gardenBottom - 1, 1, 0, gardenEast - fenceX - 1, [0, -1]);
 
   /*
    * ...AND FEATHERING THE EDGE OF THE ROAD.
@@ -4330,13 +4882,19 @@ export function generateForestMap(): GeneratedMap {
      * alone on that lawn "nobody's intention" twice, which is twice more than a placement fault
      * should need. A cat sits AGAINST something.
      *
-     * (54,19) is under the east window, with the wall directly above her, the flower bank the
-     * dressing puts along the front of the house either side, and the single file of door lane one
-     * tile west -- which is what `bystander` requires, since she has to touch the track to be met.
-     * It is clear of the note on the door, which covers the two columns at the other end of the wall,
-     * so neither trigger can fire from the tile the other one is standing on.
+     * The east end of the frontage, with the wall directly above her, the flower bank the dressing
+     * puts along the front of the house either side, and the doorstep's own sand one tile west --
+     * which is what `bystander` requires, since she has to touch the track to be met. It is clear of
+     * the note on the door, which covers the two columns at the other end of the wall, so neither
+     * trigger can fire from the tile the other one is standing on.
+     *
+     * SHE MOVED WITH THE HOUSE. She stood at column 54, which was under the east window of a facade
+     * six columns wide starting at 50; the facade is five columns starting at 48 and 54 is open lawn
+     * two tiles clear of the building -- the exact placement fault ("a tabby standing alone on that
+     * lawn") this note was written to close, reopened by a column count. `cx + FACADE_W - 1` is the
+     * east corner post whatever the facade does next.
      */
-    bystander('bystander-cat', 54, doorstep + 1),
+    bystander('bystander-cat', cx + FACADE_W - 1, doorstep + 1),
     /*
      * The walk ends on the DOORSTEP, not at the garden gate.
      *
@@ -4398,8 +4956,19 @@ export function generateForestMap(): GeneratedMap {
     { name: 'prop-well', ...landmarks['well']!, width: TILE, height: TILE },
     { name: 'prop-fountain', ...landmarks['fountain']!, width: TILE, height: TILE },
     { name: 'prop-lantern-post', ...landmarks['lantern-post']!, width: TILE, height: TILE },
-    // Four courses since the middle one was dropped; see the note on the facade.
-    { name: 'prop-cottage', ...landmarks['cottage']!, width: TILE * 6, height: TILE * 4 },
+    /*
+     * THE BUILDING'S OWN RECTANGLE, DERIVED. It said `TILE * 6 x TILE * 4` in figures, and those
+     * figures are what the game frames the payoff shot on -- `doorFocus()` in forest-scene.ts reads
+     * this object's width and height and nothing else. So a narrowed facade with a quoted rectangle
+     * here would move the building and leave the camera pointing at where it used to be, which is
+     * the same class of fault as the camera that was remembered rather than asked for.
+     */
+    {
+      name: 'prop-cottage',
+      ...landmarks['cottage']!,
+      width: TILE * FACADE_W,
+      height: TILE * FACADE_H,
+    },
     { name: 'prop-stall', ...landmarks['stall']!, width: TILE * 4, height: TILE },
   ].map((o, i) => ({ id: i + 1, rotation: 0, visible: true, ...o }));
 
@@ -4674,7 +5243,14 @@ export function generateForestMap(): GeneratedMap {
    * is what breaks it into two short ones rather than shortening it by a tile.
    */
   const CROWN_STACK_LIMIT = 9;
-  const FILE_LIMIT = 4;
+  /*
+   * THREE, NOT FOUR. A file of four crowns on one anchor column with daylight between every pair is
+   * still a file -- the product manager found one at columns 48 and 49 beside the cottage and read
+   * it as topiary, which is the same word this sweep was written to answer. Four is what the eye
+   * counts most readily; a limit that permits four permits the complaint. Two trees in a column are
+   * a pair and three is a stand, and both are things a wood does.
+   */
+  const FILE_LIMIT = 3;
   const spare = (t: Tree): boolean => t.framing === true || t.verge === true;
   let thinned = 0;
   for (let attempt = 0; attempt < 200; attempt++) {
@@ -5595,6 +6171,17 @@ export function generateForestMap(): GeneratedMap {
    * grass. Requiring plain grass underneath excludes every shore, every path tile, the bridge and
    * the cottage floor in one test.
    */
+  /*
+   * ...AND NOT WHERE IT WOULD BE THE FOURTH IN A LINE, which is the same rule `tuft` carries and the
+   * reason it cannot live only in `tuft`.
+   *
+   * This sweep runs last, it adds cover, and it chooses the free side with the MOST scrub around it
+   * -- which is a rule for growing towards a mass and, where the mass is already a line, a rule for
+   * lengthening the line. Traced during this round: the four-deep file at column 54 was the wall
+   * bank's planting finished off by a companion this pass added underneath it, after every count the
+   * banks had taken. The run cap is the same three as `tuft`'s, for the same reason, so a bed may be
+   * a three-by-three mass and may not be a rule.
+   */
   const mayBush = (x: number, y: number): boolean =>
     inside(x, y) &&
     !onBorder(x, y) &&
@@ -5603,6 +6190,8 @@ export function generateForestMap(): GeneratedMap {
     !isPath(x, y) &&
     !isWater(x, y) &&
     !inClearing(x, y) &&
+    plantedRun(x, y, 1, 0) <= 3 &&
+    plantedRun(x, y, 0, 1) <= 3 &&
     (TILE_NAMES[(at(ground, x, y) & BASE_GID) - 1] ?? '').startsWith('grass');
   const bushesBeside = (x: number, y: number): number =>
     NEIGHBOURS.filter(([dx, dy]) => visibleBush(x + dx, y + dy)).length;
@@ -6178,7 +6767,17 @@ export function generateForestMap(): GeneratedMap {
     const rowsUsed = new Set(edges.map((e) => e.top)).size;
     if (edges.length < 20)
       faults.push(`only ${edges.length} column(s) of readable carriageway west of the notice`);
-    if (straightest > 9)
+    /*
+     * RATCHETED FROM 9 TO 6, 2026-10-20. Measured: five.
+     *
+     * Nine was set when the band's shortest cosine had a period of 35.8 tiles against a camera 19.41
+     * tiles wide -- half a cycle across the whole picture, so the road was locally straight everywhere
+     * inside every frame and a ceiling of nine could never fire. With the periods brought inside the
+     * frame the worst ruled stretch is five columns, and three of those five sit behind the title
+     * card. Six is one above the truth, which is this guard's own convention; the point is to catch a
+     * RETURN of the set square, and putting either period back fails here at seven.
+     */
+    if (straightest > 6)
       faults.push(
         `the carriageway's edge runs ruled for ${straightest} columns west of the notice ` +
           '(a road, not a track: see composition guard 7a)',
@@ -6278,6 +6877,27 @@ export function generateForestMap(): GeneratedMap {
      * than canopy. The guard counts CROWNS, so a stall standing at the edge does not score even
      * though it does occupy the eye.
      *
+     * TRACED PROPERLY THIS ROUND, and the count did not move. Three of the seven -- 9, 10 and 11 --
+     * were the footpath crossing these two rows in three different columns, and it now crosses them
+     * in one, which is what the note above its waypoints always claimed. The other six did not come
+     * back, and here is why, so that nobody spends a fourth round on it:
+     *
+     *   A crown on these rows needs a trunk on row 17 (mid, elder) or row 16 (sapling). Row 17 at
+     *   columns 11-14 is the stall's COUNTER and row 16 is its AWNING, which sits on the `above`
+     *   layer -- so `plantKind` refuses the crown outright at 16 and `overSomething` refuses it at
+     *   17, and a trunk pair is two columns wide, so column 10 is refused by the awning at 11 as
+     *   well. Every candidate the band can offer is blocked by the stall, at both scales, in every
+     *   column it touches.
+     *
+     * WHAT WAS CONSIDERED AND NOT DONE. Counting the awning as closure was rejected: it is ONE row
+     * deep, so the row above it is open lawn, and a guard that passed on that would be certifying
+     * exactly the "bright field with the sky above it" it exists to catch. Dropping the stall a row
+     * moves its clearing with it, which still covers these rows, and puts its counter on the
+     * carriageway at this seed. Raising it a row -- awning on 15, counter on 16 -- WOULD make the
+     * structure genuinely cut this edge over four columns, and then counting it would be honest; that
+     * is the recommendation, and it is a change to where a landmark stands rather than to a framing
+     * pass, so it is left for its owner to weigh against what the market is for.
+     *
      * Raise this as the framing improves. Never lower it.
      */
     if (closed < 8)
@@ -6308,20 +6928,377 @@ export function generateForestMap(): GeneratedMap {
      */
     const arrive = topEdge(ARRIVE, columnsOf(ARRIVE));
     /*
-     * Also ratcheted to the measured truth after the origin correction: 7 of 20, worst run 10. The
-     * payoff frame's top edge is the garden, the cottage roof and the margin wood, and this round
-     * moved the two horizontal fence rails out of shot -- which was right, they were reading as
-     * ropes -- but left the strip they vacated thinner than the guard assumed.
+     * RAISED TO 9 OF 20, WORST RUN 9, 2026-10-20. It stood at 7 and 10.
+     *
+     * Two changes bought it and both were about the garden's east side. Taking the east fence down to
+     * a three-tile stub opened the margin strip to the garden, so it is no longer a dead end the
+     * connectivity sweep has to reopen, and a treeline can stand in it: the first margin tree's crown
+     * lands on the two rows this edge is measured over, which closes the corner the post line used to
+     * fill. See the note on the east margin beside the treeline pass.
+     *
+     * WHAT IS STILL OPEN, so the next owner does not re-derive it: columns 49 to 55 are the cottage.
+     * Its roof occupies the two rows below this edge and its gable and chimney the two rows ON it, so
+     * a crown there needs a trunk on row 15 or 16 -- which is the ridge and the wall. There is no
+     * routing for canopy over a house, and `clearOfRoof` is right to refuse a trunk directly above
+     * the roof's own top row. Closing that stretch means moving the building, which is a bigger
+     * decision than a framing pass should take on its own.
+     *
+     * Raise this as the garden improves. Never lower it.
      */
-    if (arrive.closed < 7)
+    if (arrive.closed < 9)
       faults.push(
         `only ${arrive.closed} of the ${arrive.of} columns of the arrival camera's top edge ` +
           `carry canopy -- open at ${arrive.open.join(',')} (the payoff frame's top edge)`,
       );
-    if (arrive.run > 10)
+    if (arrive.run > 9)
       faults.push(
         `${arrive.run} columns of unbroken open sky run across the top of the arrival camera ` +
           `(at ${arrive.open.join(',')})`,
+      );
+
+    /*
+     * ===========================================================================
+     * 7g. NOTHING IS STAMPED IN A FILE INSIDE A FRAME A VISITOR SEES. This is the whole of the
+     * regularity class, measured where it is read rather than where it is planted.
+     * ===========================================================================
+     *
+     * Five materials have now been caught printing as a rule or a lattice -- trees, boulders, bushes,
+     * flowers and fence posts -- and every one of them was a correctly drawn object on an even pitch.
+     * The crowns have 7c, the boulders have 7e, and until this round the other three had nothing: a
+     * ten-tile vertical bank of scrub down the right of the payoff frame, two rows of flower bushes
+     * across the bottom of it, and a one-per-row file down the edge column all passed every invariant
+     * in this file, because each pass only ever asked about its own material in its own place.
+     *
+     * So this asks the frames. Along any row and any column of a rectangle a visitor actually sees,
+     * how long a run of PLANTING stands with no crown over it? Planting rather than everything,
+     * because a fence, a wall and a river are barriers and have to be unbroken -- the fence gets its
+     * own guard below, where the bound can be a fence's bound. The crown exclusion is the same one
+     * the hem band uses and for the same reason: canopy over a run genuinely breaks it.
+     *
+     * THREE, AND IT IS NOT A MARGIN ABOVE THE TRUTH -- it is the design statement, which happens to
+     * be what the map does in all three frames. A three-by-three mass of leaf with blooms in it is
+     * the shape the board banks against a wall; the fourth tile in a straight line is where a mass
+     * stops reading as grown. `tuft` and `mayBush` refuse that fourth tile at the source, and the
+     * number is written out independently in both places and here, so putting either cap back to
+     * something generous fails this rather than moving the bound with it. The file counted FIVE under
+     * the facade before this round and FOUR at column 54 while the cap was only in `tuft`.
+     *
+     * Lower it as the planting improves; never raise it.
+     */
+    const plantedCover = (x: number, y: number): boolean => {
+      const b = nameAt(below, x, y);
+      return (b.startsWith('bush') || b.startsWith('flower')) && !crowned(x, y);
+    };
+    const fileIn = (cols: number[], rows: number[]): { run: number; where: string } => {
+      let worst = 0;
+      let where = 'nowhere';
+      const walk = (
+        cells: [number, number][],
+        label: (from: number, to: number) => string,
+      ): void => {
+        let run = 0;
+        for (const [i, [x, y]] of cells.entries()) {
+          run = plantedCover(x, y) ? run + 1 : 0;
+          if (run > worst) {
+            worst = run;
+            where = label(i - run + 1, i);
+          }
+        }
+      };
+      for (const x of cols)
+        walk(
+          rows.map((y) => [x, y] as [number, number]),
+          (from, to) => `column ${x}, rows ${rows[from]}-${rows[to]}`,
+        );
+      for (const y of rows)
+        walk(
+          cols.map((x) => [x, y] as [number, number]),
+          (from, to) => `row ${y}, columns ${cols[from]}-${cols[to]}`,
+        );
+      return { run: worst, where };
+    };
+    const planting: ReadonlyArray<{ what: string; cols: number[]; rows: number[]; limit: number }> =
+      [
+        { what: 'the title camera', cols: visible, rows: rowsOf(HERO), limit: 3 },
+        { what: 'the arrival camera', cols: columnsOf(ARRIVE), rows: rowsOf(ARRIVE), limit: 3 },
+        {
+          what: 'the portrait camera',
+          cols: columnsOf(PORTRAIT),
+          rows: rowsOf(PORTRAIT),
+          limit: 3,
+        },
+      ];
+    const files = planting.map((f) => ({ ...f, ...fileIn(f.cols, f.rows) }));
+    for (const f of files)
+      if (f.run > f.limit)
+        faults.push(
+          `${f.run} tiles of planting stand in one unbroken file at ${f.where}, inside ` +
+            `${f.what} (a bed is a mass with an edge; a file at a one-tile pitch is a lattice, ` +
+            'however tidily it is gathered: see composition guard 7g)',
+        );
+
+    /*
+     * ===========================================================================
+     * 7i. THE FACADE IN THE PAYOFF FRAME IS NOT A FIELD OF BLANK PLASTER.
+     *
+     * Measured in PIXELS on the composed frame, because that is the unit the complaint was made in
+     * and the only unit that can see it.
+     * ===========================================================================
+     *
+     * "The cottage is six columns wide with a whole upper wall course of blank plaster, so roughly
+     * four tiles of empty cream sit in the middle of the payoff shot and the building reads long and
+     * low." Every existing guard in this section passed that map. 7g counts PLANTING in files; 7a
+     * counts sand; 7b counts canopy on an edge. None of them can see a wall, and the six-axis score
+     * cannot arbitrate it either -- it reported 0.416 while this was on screen, and swapping a hedge
+     * for a treeline moved its distance by 0.006, because a bush and a crown have nearly the same
+     * luma histogram and so do a blank wall and a detailed one.
+     *
+     * So this composes the arrival camera the way the renderer composes it -- three layers, each tile
+     * in the orientation its mirror bits put it in -- and asks two questions of the pixels a player
+     * is actually shown:
+     *
+     *   HOW MUCH LIME PLASTER IS IN THE FRAME AT ALL, and
+     *   HOW BIG IS THE LARGEST UNBROKEN PATCH OF IT THAT CARRIES NO INCIDENT.
+     *
+     * WHAT COUNTS AS PLASTER IS A COLOUR, NOT A BRIGHTNESS, and the distinction is load-bearing. A
+     * luma floor alone catches the sand apron, which is the other big bright mass in this frame and is
+     * SUPPOSED to be plain. `wall` mixed towards `stone` is a warm NEUTRAL off-white -- its own note
+     * records it landing eight to twelve between red and green and nine between green and blue --
+     * while `path` is a deep tan at about thirty-five and fifty-four across the same two gaps, grass
+     * is green (so red never leads), and slate is cool (so blue never trails). Those four materials
+     * separate cleanly on the two gaps with room to spare.
+     *
+     * AND THE PATCH IS WHAT MAKES IT A GUARD RATHER THAN A HEADCOUNT. A plastered cottage is supposed
+     * to have plaster on it; what it must not have is a bare 192-pixel band with nothing on it. The
+     * incident test is the same 3x3 local-contrast question the edge axis asks, so a pixel counts as
+     * featureless only if nothing within a pixel of it is more than fourteen luma away -- which the
+     * ghost stones, the window reveals, the corner posts, the sill plate and the eave shadow all
+     * break, and which an empty course does not.
+     *
+     * TWO-SIDED, like the plume guard in s-cottage.ts and for the same reason: the cheapest way to
+     * pass a ceiling on flat cream is to paint no cream at all. The floor is what stops the fix being
+     * "take the plaster off", and it is the bound that would fire if the building were narrowed again
+     * past the point where the facade reads as a wall.
+     *
+     * MEASURED, both ways round, on the frame this renders:
+     *
+     *     four courses, six columns (the failure)       plaster 5,411 px   largest patch 1,556 px
+     *     the same course restored at five columns      plaster 3,978 px   largest patch 1,207 px
+     *     ONE blank wall tile where the lit window goes  plaster 2,171 px   largest patch   413 px
+     *     three courses, five columns (now)             plaster 1,462 px   largest patch    70 px
+     *
+     * The first row is off the committed map at 1,280x800; the middle two were produced by editing
+     * this file, re-rendering `--frame arrive` and reading the composition line, then restoring it
+     * and checking it back with sha1. Both bounds fire on the restored course and the patch bound
+     * fires on one bare tile, which is what says it discriminates rather than only catching the
+     * worst case.
+     */
+    /** Reported on the composition line so the next owner reads the numbers rather than re-deriving. */
+    const facade = ((): { plaster: number; patch: number } => {
+      /** Per raw gid, the tile as it is STAMPED -- mirror bits included, copied rather than drawn. */
+      const stampCache = new Map<number, Img | null>();
+      const stamped = (raw: number): Img | null => {
+        const hit = stampCache.get(raw);
+        if (hit !== undefined) return hit;
+        const name = TILE_NAMES[(raw & BASE_GID) - 1];
+        const painter = name === undefined ? undefined : TILE_PAINTERS[name];
+        if (!painter) {
+          stampCache.set(raw, null);
+          return null;
+        }
+        const base = new Img(TILE, TILE);
+        painter(base);
+        const h = (raw & FLIP_H) !== 0;
+        const v = (raw & FLIP_V) !== 0;
+        const d = (raw & FLIP_D) !== 0;
+        const out = new Img(TILE, TILE);
+        for (let y = 0; y < TILE; y++)
+          for (let x = 0; x < TILE; x++) {
+            const ax = h ? TILE - 1 - x : x;
+            const ay = v ? TILE - 1 - y : y;
+            // Bytes, not `px`: a mirror must not change a colour, and `px` composites.
+            out.data.set(base.get(d ? ay : ax, d ? ax : ay), (y * TILE + x) * 4);
+          }
+        stampCache.set(raw, out);
+        return out;
+      };
+      const cols = columnsOf(ARRIVE);
+      const rows = rowsOf(ARRIVE);
+      const shot = new Img(cols.length * TILE, rows.length * TILE);
+      for (const layer of [ground, below, above])
+        for (const [ty, y] of rows.entries())
+          for (const [tx, x] of cols.entries()) {
+            const src = stamped(at(layer, x, y));
+            if (src) shot.blit(src, tx * TILE, ty * TILE);
+          }
+
+      /** Weathered lime: bright, warm-led, and never far from neutral. */
+      const isPlaster = (x: number, y: number): boolean => {
+        const c = shot.get(x, y);
+        return (
+          c[3] !== 0 &&
+          lumaOf(c) >= 195 &&
+          c[0] > c[1] &&
+          c[1] > c[2] &&
+          c[0] - c[1] <= 22 &&
+          c[1] - c[2] <= 22
+        );
+      };
+      let plaster = 0;
+      const featureless = new Uint8Array(shot.w * shot.h);
+      for (let y = 0; y < shot.h; y++)
+        for (let x = 0; x < shot.w; x++) {
+          if (!isPlaster(x, y)) continue;
+          plaster++;
+          if (x < 1 || y < 1 || x >= shot.w - 1 || y >= shot.h - 1) continue;
+          let lo = Infinity;
+          let hi = -Infinity;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const l = lumaOf(shot.get(x + dx, y + dy));
+              lo = Math.min(lo, l);
+              hi = Math.max(hi, l);
+            }
+          if (hi - lo <= 14) featureless[y * shot.w + x] = 1;
+        }
+      let patch = 0;
+      let patchAt = '';
+      const seenPx = new Uint8Array(shot.w * shot.h);
+      for (let y = 0; y < shot.h; y++)
+        for (let x = 0; x < shot.w; x++) {
+          const start = y * shot.w + x;
+          if (!featureless[start] || seenPx[start]) continue;
+          let n = 0;
+          let sx = 0;
+          let sy = 0;
+          const stack = [start];
+          seenPx[start] = 1;
+          while (stack.length) {
+            const i = stack.pop()!;
+            const px = i % shot.w;
+            const py = (i / shot.w) | 0;
+            n++;
+            sx += px;
+            sy += py;
+            for (const [dx, dy] of NEIGHBOURS) {
+              const nx = px + dx;
+              const ny = py + dy;
+              if (nx < 0 || ny < 0 || nx >= shot.w || ny >= shot.h) continue;
+              const j = ny * shot.w + nx;
+              if (featureless[j] && !seenPx[j]) {
+                seenPx[j] = 1;
+                stack.push(j);
+              }
+            }
+          }
+          if (n > patch) {
+            patch = n;
+            patchAt = `tile (${(cols[0]! + sx / n / TILE).toFixed(1)}, ${(rows[0]! + sy / n / TILE).toFixed(1)})`;
+          }
+        }
+
+      /*
+       * THE THREE BOUNDS, each set against a render rather than chosen.
+       *
+       *   plaster, at least 480    a third of what a cottage with one course of wall shows. Below
+       *                            this the facade has stopped being a plastered wall, which is the
+       *                            cheap way to pass the other two.
+       *   plaster, at most 2,600   the blank upper course measured 3,978 and the facade without it
+       *                            1,462. This is the "field of cream" bound.
+       *   patch, at most 240       the sharp one. The good facade's widest featureless patch is 70;
+       *                            a SINGLE blank wall tile dropped in where the lit window goes
+       *                            measures 413, and the whole blank course 1,207. 240 sits between
+       *                            70 and 413 -- so the painter may treble the flat plaster it
+       *                            leaves and one bare tile still fires. An earlier draft of this
+       *                            guard said 420, which the whole course tripped and one tile
+       *                            missed by seven pixels; a bound that only catches the worst case
+       *                            is a bound that will be walked back to one tile at a time.
+       *
+       * All three were measured by editing this file, re-rendering `--frame arrive` and reading the
+       * composition line, then restoring it and checking it back with sha1.
+       */
+      const FACADE_PIXELS = { plasterLo: 480, plasterHi: 2600, patchHi: 240 } as const;
+      const say =
+        `plaster ${plaster}px, largest featureless patch ${patch}px` +
+        (patch > 0 ? ` at ${patchAt}` : '');
+      if (plaster < FACADE_PIXELS.plasterLo)
+        faults.push(
+          `the payoff frame has almost no lime plaster in it (want at least ` +
+            `${FACADE_PIXELS.plasterLo}px): ${say}. Grandma's cottage is a plastered cottage; a ` +
+            'facade that passes guard 7i by having no wall left has not passed it.',
+        );
+      if (plaster > FACADE_PIXELS.plasterHi)
+        faults.push(
+          `${plaster}px of the payoff frame is lime plaster (want at most ` +
+            `${FACADE_PIXELS.plasterHi}px): ${say}. That is a field of cream in the middle of the ` +
+            'last frame of the game -- see the facade note in the cottage block.',
+        );
+      if (patch > FACADE_PIXELS.patchHi)
+        faults.push(
+          `${patch}px of unbroken featureless plaster stand in the payoff frame (want at most ` +
+            `${FACADE_PIXELS.patchHi}px): ${say}. A wall course with nothing on it is the "four ` +
+            'tiles of empty cream" the design board named; break it with an opening, not a texture.',
+        );
+      return { plaster, patch };
+    })();
+
+    /*
+     * ===========================================================================
+     * 7h. AND THE FENCE RUN IS BROKEN BY POSTS, which is the client's note three rounds running.
+     * ===========================================================================
+     *
+     * `fence-post` is four receding caps at an eight-pixel pitch. Stamped down thirteen consecutive
+     * rows it is fifty-two caps with no daylight and nothing at either end to turn them, which is the
+     * brown rope the client keeps seeing; the painter is not the problem and never was. What breaks it
+     * is a wide flat-capped post every two or three tiles, and the board's own run shows about seven
+     * caps between posts, which is two of our tiles.
+     *
+     * Measured in plain tiles off the finished layer, so putting the planter's pitch back to "every
+     * row" fails here rather than moving the bound with it. It is deliberately NOT restricted to a
+     * frame: a rope is a rope wherever the player meets it, and the whole of this fence is in the
+     * payoff frame anyway.
+     */
+    let postRun = 0;
+    let postAt = 'nowhere';
+    for (let x = 0; x < MAP_W; x++) {
+      let run = 0;
+      for (let y = 0; y < MAP_H; y++) {
+        run = nameAt(below, x, y) === 'fence-post' ? run + 1 : 0;
+        if (run > postRun) {
+          postRun = run;
+          postAt = `column ${x}, rows ${y - run + 1}-${y}`;
+        }
+      }
+    }
+    if (postRun > 3)
+      faults.push(
+        `${postRun} tiles of receding fence run stand unbroken at ${postAt} -- ${postRun * 4} caps ` +
+          'at one pitch with no post to turn them (the board puts a post every seven caps: see ' +
+          'composition guard 7h)',
+      );
+    /*
+     * ...AND NO PICKET RAIL LIES ACROSS THE PAYOFF FRAME. The two horizontal runs of the enclosure
+     * were moved out of that shot last round because the top edge of the last frame of the game was a
+     * fence rail across twelve of its twenty columns. Nothing but this stops them coming back: they
+     * are solid either way, so no reachability test can see where they are. Three is the board's own
+     * picket run, so a short length beside the building still passes.
+     */
+    let railRun = 0;
+    let railAt = 'nowhere';
+    for (const y of rowsOf(ARRIVE)) {
+      let run = 0;
+      for (const x of columnsOf(ARRIVE)) {
+        run = nameAt(below, x, y) === 'fence-h' ? run + 1 : 0;
+        if (run > railRun) {
+          railRun = run;
+          railAt = `row ${y}, columns ${x - run + 1}-${x}`;
+        }
+      }
+    }
+    if (railRun > 3)
+      faults.push(
+        `${railRun} tiles of picket rail run across ${railAt}, inside the arrival camera ` +
+          '(a pen, photographed: see composition guard 7h)',
       );
 
     /*
@@ -6445,7 +7422,7 @@ export function generateForestMap(): GeneratedMap {
       }
       longestFile = Math.max(longestFile, 1);
     }
-    if (longestFile > 4)
+    if (longestFile > 3)
       faults.push(
         `${longestFile} crowns stand in one straight vertical file at ${fileAt} ` +
           '(a topiary column, not a grove)',
@@ -6494,6 +7471,9 @@ export function generateForestMap(): GeneratedMap {
         `edge ruled for ${straightest} column(s) at worst, ${bitten} bitten, ` +
         `north edge on ${rowsUsed} rows; title top edge ${closed}/${visibleCols} closed (worst ` +
         `open run ${title.run}), arrival ${arrive.closed}/${arrive.of} (worst run ${arrive.run}); ` +
+        `longest planting file ${files.map((f) => f.run).join('/')} (title/arrival/portrait), ` +
+        `fence run ${postRun}, rail ${railRun}; ` +
+        `facade plaster ${facade.plaster}px with its widest featureless patch ${facade.patch}px; ` +
         `longest crown file ${longestFile}, tallest stack ${tallestStack}; visible ground ${[
           'grass-0',
           'grass-1',

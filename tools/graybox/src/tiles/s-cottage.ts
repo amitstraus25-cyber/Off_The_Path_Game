@@ -33,8 +33,10 @@
  * WHAT THE STABLE AXES ASK FOR. The board facade is 29.9 per cent below luma 81 and 17.9 per cent
  * below luma 60: nearly a fifth of the building is a near-black line. Almost all of it is in the
  * roof's joints, the window frames and glass, and the door. The plaster contributes none of it, and
- * the plaster is fourteen of the eighteen facade tiles -- which is why the one thing that must not
- * happen here is a bright blank wall. It was 225 luma; it is now about 198.
+ * the plaster was fourteen of the eighteen facade tiles -- which is why the one thing that must not
+ * happen here is a bright blank wall. It was 225 luma; it is now about 198. (The facade is five
+ * columns and one wall course now, so the plaster is the surround of the openings rather than the
+ * field between them; the rule it set is the one that mattered and it still holds.)
  *
  * ONE LIGHT, FROM THE TOP-LEFT. Every slate takes its catch on its own top edge, every stone block
  * is lit on its top-left corner, every plank carries its light down its left edge. Nothing is lit
@@ -88,6 +90,8 @@
  *     elevation is blank for a layout reason, not a painting one. Narrowing it to four columns and
  *     two wall courses would put the windows, the door, the quoins and the planting into one dense
  *     facade, which is the board's.
+ *     [DONE -- see the block at the foot of this comment. It went to five columns and ONE course of
+ *     wall rather than four and two, and the reasoning for that is there.]
  *   - A SECOND WINDOW TILE, `wall-window-lit`, so the board's amber-and-wolf window can exist
  *     without appearing on every ending. The argument is at the head of the window section.
  *
@@ -96,6 +100,49 @@
  * its own stone surround was impossible. The map now lays ONE door tile at `cx + 2`. The symmetry
  * constraint is gone with it, and `cottageDoor` is rebuilt as the board's doorway: a stone surround,
  * a segmental timber arch, a planked leaf, a threshold step and the bushes either side.
+ *
+ * =============================================================================================
+ * AND THE SHAPE ASK IS NOW DONE, WHICH CHANGES THE PREMISE OF HALF THE NOTES BELOW. READ THIS
+ * BEFORE BELIEVING ANY SENTENCE IN THIS FILE THAT BEGINS "`wall` IS LAID N TIMES".
+ * =============================================================================================
+ *
+ * The facade was six columns wide with two courses of wall -- eighteen tiles, fourteen of them plain
+ * `wall`, and a whole upper course of them that nothing could be drawn on, because the door's
+ * threshold is the ground and the window boxes hang off their sills, so both are painted at the FOOT
+ * of their tile and only the lower course can carry an opening. That upper course measured, on the
+ * composed payoff frame, as 1,556 pixels of unbroken featureless cream -- "roughly four tiles of
+ * empty cream in the middle of the payoff shot", which is what the product manager finally called it.
+ *
+ * `forest-map.ts` now lays the facade FIVE COLUMNS WIDE WITH ONE COURSE OF WALL:
+ *
+ *     the gable and chimney row      gable, gable mirrored, and `chimney` at the east end
+ *     the ridge row                  `roof-peak` x5
+ *     the slope row                  `roof-l`, `roof-m` x3, `roof-r`
+ *     the wall                       `wall-corner`, `wall-window`, `door`, `wall-window-lit`,
+ *                                    `wall-corner` mirrored
+ *
+ * Three consequences, and every one of them matters to somebody editing this file:
+ *
+ *   1. PLAIN `wall` IS NO LONGER LAID ANYWHERE ON THE MAP. It is still painted -- `TILE_NAMES` order
+ *      is gid order and removing it would repaint every tile on the map -- and `plaster()` is still
+ *      the surface under the windows, the corner posts, the door's surround and the gable's
+ *      tympanum. So the plaster work is all still on screen; the tile that was fourteen eighteenths
+ *      of the facade is simply not one of its tiles any more.
+ *   2. THE "A TILE LAID N TIMES CANNOT CARRY A MOTIF" ARGUMENT NO LONGER BINDS THE WAY IT DID, and
+ *      it is the premise of the three rejected weathering schemes in `wrapNoise`, of the trowel
+ *      striation in `plasterT`, of the ghost masonry in `stoneAt`, of the mid-rail reading of
+ *      `sillPlate`, and of the "a shadow that happens once on the elevation" refusals in `eave` and
+ *      `cottageDoor`. Plaster now appears in five tiles: `wall-corner` twice (mirrored), the two
+ *      window tiles once each, and the door once. Each is laid in ONE known place. A one-off mark --
+ *      quoins at the outer corners, ivy on one of them, a cast shadow that happens once -- is
+ *      buildable for the first time. Nothing in this round spends that; it is recorded so the next
+ *      owner does not re-derive a constraint that has lifted.
+ *   3. THE WALL IS NOW THE BOARD'S HEIGHT. The roof tiles carry the top eleven rows of the wall
+ *      (`EAVE_Y` puts the fascia at row 20 of `roof-l/m/r` and the overhang's shadow on plaster
+ *      beneath it), so one 32-pixel course of openings under them is 42 pixels of wall, not 32.
+ *      Measured against Red -- 48 pixels tall here, 162 of the mock's own pixels in its Arrive frame
+ *      -- the board's cottage is 49 pixels of wall under about 48 of roof. Ours is 42 under 54.
+ *      Within seven pixels on a 96-pixel elevation, where it used to be 75 under 53.
  */
 import { ember, Img, keyline, lumaOf, rose, tone } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
@@ -523,6 +570,15 @@ function plaster(img: Img): void {
  * fascia above is the same three rows in the same ramp, so the elevation now reads as fascia, rail,
  * plate between two posts: one piece of joinery, which is what the board's does.
  *
+ * ...AND IT IS NOT DRAWN TWICE ANY MORE. The wall is ONE course now (the block at the head of this
+ * file), so there is no seam across the middle of the elevation for a mid-rail to cover and these
+ * three rows do one job: the sill plate at the foot of the building, where the board draws it. The
+ * compromise has simply gone away, and the drawing that was the compromise turns out to be the thing
+ * the board has, so nothing here changes. What DOES become available is the deep shade the paragraph
+ * above says is "not available" -- a cast shadow at the wall base happens once on the elevation now,
+ * and a future pass may spend it. Kept slim regardless: the board's band is three or four of our
+ * pixels and the plate is the thing the planting banks against, not the thing it hides.
+ *
  * The near-black row is the one that matters for the complaint. It is the building's own contact
  * line, it runs the full width of every tile, and at the door the threshold step takes over in stone
  * -- a step projects into the light, so a bright tread breaking the band is the board's own picture
@@ -634,8 +690,13 @@ function cornerPost(
       /*
        * Across the post: a catch on the outer arris, then the face falling away to the inner edge.
        * The two darker streaks are grain, and they run the whole height with no horizontal feature
-       * in them -- this tile is laid on both wall courses, so anything that varies down the post
-       * would draw a line across the elevation every thirty-two rows.
+       * in them -- this tile used to be laid on both wall courses, so anything that varied down the
+       * post drew a line across the elevation every thirty-two rows.
+       *
+       * The wall is one course now, so that reason has lapsed and the drawing stays anyway: `eave`
+       * runs this same post up through the roof tile above it, and it is still two tiles' worth of
+       * post stacked on a 32 pitch. A peg, a joint or a taper would draw that seam in the one place
+       * on the facade where the eye is already looking for a vertical.
        */
       const grain = dx === 2 || dx === 6 ? 0.08 : 0;
       /*

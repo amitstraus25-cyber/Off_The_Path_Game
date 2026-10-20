@@ -794,6 +794,122 @@ function close(img: Img, fallback: RGBA): void {
     }
 }
 
+/*
+ * ================================================================================================
+ * THE BLEED, 2026-10-20: a crown RUNS ITS MASS OFF ITS LEFT AND RIGHT EDGES, so that two crowns
+ * standing side by side fuse into one canopy instead of printing as two circles.
+ *
+ * THE FAULT, measured rather than described. Lay the world's canopy tiles against each other as
+ * `map-forest.json` lays them and walk the seam: of the 232 places where one tree's canopy stands
+ * directly beside another's, the two crowns were four-connected across the seam on **NONE**. Every
+ * tree in the world was a disc with a moat round it, and the moat is drawn at exactly the camera's
+ * tile pitch -- which is the orchard the design board names: "every crown is a separate circle with
+ * bright green all the way round it, and there are bright aisles running the full height of the
+ * crop." The tile data says the opposite (1,107 crown tiles in 27 four-connected blobs) and both are
+ * true, because the blobs are of TILES and the circles are of PIXELS. **No density metric can see
+ * this**, which is why three rounds of density work did not touch it, and nor can the six-axis
+ * score: a bush and a crown have nearly the same luma histogram, so swapping a 26-tile hedge for a
+ * treeline moved its distance by 0.006.
+ *
+ * THE PRECEDENT IS `w-undergrowth.ts` AND TWO THINGS IN IT ARE COPIED DELIBERATELY. Its seventh and
+ * eighth passes solved exactly this for bushes -- seams merging went 41 per cent to 92 -- by bleeding
+ * the body to the tile edges and resolving the edge column to a channel (`BUSH_BLEED`, `rim()`).
+ * The two properties that made it work rather than merely pass are:
+ *
+ *   - every bound in its guard comes from THE DRAWING -- the plant's own rendered height, its own
+ *     leaf luma -- rather than from the constant the guard watches; and
+ *   - the runs are pinned across a COMMON BAND so that cross-species pairs merge too, not just a
+ *     tile against itself.
+ *
+ * THE COMMON BAND IS IN TILE-LOCAL ROWS, AND THAT IS THE ONE IDEA HERE THAT IS NOT A COPY. A bush
+ * is one tile, so "a common band of rows" needs no qualification. A crown is two or three tile rows
+ * of one drawing, and the map lays crowns at every vertical alignment -- counted off the map, a mid
+ * tree's lower canopy row stands beside a sapling's upper one 23 times, beside an elder's middle row
+ * 10 times, and so on. What has to coincide is therefore the band's position WITHIN A TILE, not
+ * within a drawing: two tiles meet along 32 rows, and they merge only on a row both of them reach
+ * their edge on. So all six runs -- two edges on each of three crowns -- cover tile-local rows 26..31
+ * and 0..2, wherever in its own drawing each crown puts them. Guard (g) at the foot of this file
+ * holds that, and guard (f) proves the merge itself by flooding every ordered pair.
+ *
+ * WHERE THE BAND IS, AND WHY IT IS NOT WHERE THE CROWN IS WIDEST. Each crown is near its drawing's
+ * edge in exactly one place -- the mid tree's lower canopy row at tile-local 9..16 (one to three
+ * columns of clearance), the elder's bottom row at local 3 (five), the sapling's top row at local
+ * 19..28 (six) -- and those three are at different tile-local rows, because each crown is a
+ * different size inside a different footprint. There is no band where all three are nearly at their
+ * edges, so the band is the one where all three are WITHIN REACH of them: local 26..31 plus 0..2,
+ * where the mid is 5 to 7 columns off, the elder 7 to 9 and the sapling 6 to 9.
+ *
+ * WHAT THAT COSTS, STATED PLAINLY, BECAUSE IT IS THE TRADE THE BUSH OWNER NAMED. A bleed only reads
+ * where the body is already close to the edge; at five to nine columns the crescent is a visible
+ * lobe, so **every crown now carries a small lobe on each flank whether or not it has a neighbour**,
+ * and a tree standing alone in the open pays it for nothing. Three things keep it cheap. It is
+ * ONE lobe a side of radius 4.4 to 5.2, which is inside the range the crown's own contour bumps are
+ * thrown at (4.0 to 8.0 on the mid tree), so it reads as one more bump on a scalloped silhouette
+ * rather than as an ear. It carries a LEAF CLUSTER, so what reaches the tile edge is foliage with
+ * the crown's own two dark columns in front of it -- the first render of this round had bare matrix
+ * there and grew a near-black bracket out of both sides of all 318 crowns. And it sits at the
+ * crown's flank rather than its cap or hem, so the crown still bulges well above and below it:
+ * fourteen rows clear above the seam and thirty-three below on the mid tree.
+ *
+ * WHAT IT BUYS: 119 of the 232 crown-to-crown seams in the world merge, from none.
+ *
+ * WHAT IT CANNOT BUY, AND IT IS AN ASK RATHER THAN A DEFECT. The other 113 are seams where the two
+ * tiles are at alignments whose fold rows cannot coincide -- a crown's band falls in one of its tile
+ * rows, so an upper tile beside a lower one shares no local row with it -- or where the face at the
+ * seam is the elder's cap or the sapling's hem, which stand 20 to 30 columns inside the drawing and
+ * no lobe can honestly reach. Closing those wants interior-vs-edge crown variants, which is a gid
+ * round; the ask is written out in the handback.
+ * ================================================================================================
+ */
+
+/**
+ * THE FOLD: every pixel the crown puts on its drawing's own left or right column is resolved to the
+ * keyline, and this is the half of the bleed that makes it safe.
+ *
+ * It is a property of the EDGE rather than of the crown that happens to be bleeding, for the reason
+ * `w-undergrowth.ts`'s `rim()` gives: a canopy tile is scattered, never tiled, so the painter cannot
+ * know what will be laid beside it. Counted off `map-forest.json`, of the 464 left-and-right faces
+ * the world's canopy tiles present at a crown-to-crown seam, every one of them has lawn, sand, a
+ * trunk or a rock on some other copy of the same tile. One drawing has to be right on both, and the
+ * only mark that is right against foliage AND against lawn is the crown's own near-black: between
+ * two crowns it is the fold the board cuts between its leaf masses (`140 600 240 230 3`: one or two
+ * of our pixels of near-black where two masses meet), and against bare ground it is a keyline.
+ *
+ * `LEAF_LINE` is not a new value in this file -- it is the line every crown is already ringed in, so
+ * a bleeding crown gains no colour and no second treatment. Two crowns side by side share a two-
+ * pixel fold, which is what `weight()` already gives the underside of every lobe; a crown with lawn
+ * beside it keeps a one-pixel line, which is what it had.
+ *
+ * It runs LAST, after `close()`, so nothing can lighten it afterwards.
+ *
+ * **IT FILLS THE SPAN, and that is the 1-pixel hole answered rather than tuned around.** Painting
+ * only the pixels that happened to be opaque left a one-row gap in four of the six folds, and the
+ * cause is not the crescents: `weight()` pushes a second ring pixel down-and-LEFT off the bottom arc
+ * of any mass, wherever that arc has turned far enough out of the light, so the foot of a bleed lobe
+ * throws two or three ring pixels a row or two below itself with an unringed row between. A pinhole
+ * of lawn inside a two-pixel fold is the same defect `close()` exists to kill everywhere else in
+ * this drawing, and three rounds of nudging radii to close it would only have moved it.
+ *
+ * So the fold is the whole span from the column's first opaque row to its last. Before this round
+ * NOTHING in any crown put a pixel on either of these columns -- measured, all three: the mid's body
+ * came within one column of its left edge and the ring took that column, the elder's within four and
+ * the sapling's within five -- so the span is the bleed's own reach and nothing else's, and the seam
+ * guard's ceiling on its height is what catches a lobe that has drifted somewhere it should not be.
+ * Like `close()` this can only ever darken, and it writes a colour already in the drawing.
+ */
+function foldEdges(img: Img, c: RGBA): void {
+  for (const x of [0, img.w - 1]) {
+    let from = -1;
+    let to = -1;
+    for (let y = 0; y < img.h; y++)
+      if (img.get(x, y)[3] !== 0) {
+        if (from < 0) from = y;
+        to = y;
+      }
+    for (let y = from; y >= 0 && y <= to; y++) img.px(x, y, c);
+  }
+}
+
 /* --------------------------------------------------------------------------------- the crown */
 
 /**
@@ -869,6 +985,22 @@ type CrownSpec = {
   readonly seatFrom: number;
   /** The skirt blobs: x, y, radius, in the crown's own space. See the skirt note in `MASS`. */
   readonly skirt: readonly (readonly [number, number, number])[];
+  /**
+   * THE BLEED: the crescents that carry the crown's mass off its left and right edges, so that two
+   * crowns standing side by side fuse into one canopy. Same form as `skirt` -- x, y, radius, in the
+   * crown's own space -- and the same clamp through `clearCap`. See the long note above `BLEED`.
+   */
+  readonly bleed: readonly (readonly [number, number, number])[];
+  /**
+   * The bleed's own `noise()` seed, and it is separate from `seed` for one reason: every blob the
+   * main stream draws moves every blob after it, and `forest-map.ts` plants trees by reading a
+   * crown's alpha. Drawing the bleed's wobble phases from their own stream leaves `MASS`'s eleven
+   * dozen matrix blobs, the contour bumps, the pendant lobes, the skirt AND all of `DAPPLE` placed
+   * on exactly the draws they were placed on before -- so the only pixels this round moves are the
+   * crescents themselves. `SAPLING_CROWN.seed` records what happens when a silhouette shifts under
+   * the map; this is the cheap way not to find out again.
+   */
+  readonly bleedSeed: number;
 };
 
 /**
@@ -1118,6 +1250,19 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
     dull: RND() * 0.26,
   });
 
+  /** The same blob, out of the bleed's own stream. See `CrownSpec.bleedSeed`. */
+  const BLEED_RND = noise(s.bleedSeed);
+  const bleedBlob = (x: number, y: number, r: number): Blob => ({
+    x,
+    y,
+    r,
+    seed: BLEED_RND() * 6.283,
+    lift: 0,
+    hue: BLEED_RND() * 1.7 - 0.85,
+    fine: (BLEED_RND() - 0.5) * 0.15,
+    dull: BLEED_RND() * 0.26,
+  });
+
   /**
    * The silhouette: the egg filled solid, then bumped.
    *
@@ -1226,6 +1371,13 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
      * the same, so that "no blob is placed where it would paint above the ring's rows" is a
      * property of the whole list rather than of the three places somebody remembered. */
     for (const [x, y, r] of s.skirt) out.push(blob(x, clearCap(y, r), r));
+    /*
+     * The bleed, LAST and out of its own stream. See the note above `BLEED` for what it is for and
+     * `CrownSpec.bleedSeed` for why it does not draw from `RND`: everything above this line is
+     * placed on exactly the draw it was placed on before, so the only alpha this round moves is the
+     * crescents'.
+     */
+    for (const [x, y, r] of s.bleed) out.push(bleedBlob(x, clearCap(y, r), r));
     return out;
   })();
 
@@ -1287,6 +1439,25 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
        */
       if (!clash) out.push(blob(x, y, r, (RND() - 0.58) * (0.6 * span(y) + 0.1)));
     }
+    /*
+     * NO CLUSTER IS SCATTERED ON A BLEED CRESCENT, AND ONE WAS TRIED AND MEASURED OUT.
+     *
+     * The dart loop cannot reach a crescent -- it rejects any candidate further from the centre line
+     * than `eggHalfW - 1.2k`, and a crescent is by definition outside that -- so a crescent is pure
+     * matrix. The first render of this round grew a near-black bracket out of both flanks of all 318
+     * crowns and the obvious reading was "the lobe has no leaf on it": one cluster per crescent was
+     * added, placed inboard of it at 0.72 of its radius, out of the bleed's own stream.
+     *
+     * It bought nothing, and the reason is worth keeping so nobody adds it again. A crescent that
+     * stands four to six columns proud of the crown is THIN, so nearly every pixel of it touches the
+     * outside and `fringe()` -- which runs after the clusters -- caps the lot of it at `FRINGE_LIT`
+     * anyway. Measured on the finished drawings, the median luma of the five columns inboard of each
+     * fold moved from 64 to 65 on the mid tree, 64 to 64 on the elder and 33 to 47 on the sapling,
+     * and two renders of the same crop at 6x are indistinguishable. What actually fixed the bracket
+     * was the lobe's SIZE: radius 4.4 to 5.2 instead of 5.6 to 6.4, which is inside the range the
+     * crown's own contour bumps are thrown at, so the lobe is small enough that the fringe's mid tone
+     * reads as a bump rather than as a clamp.
+     */
     return out;
   })();
 
@@ -1378,6 +1549,19 @@ const FRINGE_TURNED = 2 / 6;
 
 function fringe(img: Img): void {
   const before = maskOf(img);
+  /*
+   * The drawing's own left and right columns are NOT body as far as the rim is concerned, and that
+   * one line is what carries the fringe rule onto the bleed. Where a crown runs its mass off its
+   * edge (see `BLEED`), `foldEdges` resolves that column to the keyline -- so the first LEAF of the
+   * crown there is column 1, and ART_DIRECTION section 4 wants it one pixel in from the line and
+   * never on it. Clearing the two columns here makes column 1 a rim pixel, which caps it exactly as
+   * the rest of the silhouette's rim is capped. Off the bleed's rows both columns are transparent
+   * already, so this is an identity on every crown drawn before this round.
+   */
+  for (let y = 0; y < img.h; y++) {
+    before[y * img.w] = 0;
+    before[y * img.w + img.w - 1] = 0;
+  }
   const body = (x: number, y: number): boolean =>
     x >= 0 && y >= 0 && x < img.w && y < img.h && before[y * img.w + x] === 1;
   const litCeiling = lumaOf(leaf(FRINGE_LIT));
@@ -1547,8 +1731,10 @@ function crownPainter(s: CrownSpec, shape: CrownShape, blobs: CrownBlobs) {
     img.outline(LEAF_LINE);
     weight(img, body, LEAF_LINE);
     seat(img, LEAF_LINE, s.seatFrom);
-    // Last, after every pass that can leave a gap in the line: see `close`.
+    // After every pass that can leave a gap in the line: see `close`.
     close(img, LEAF_LINE);
+    // And last of all, so nothing can lighten the seam afterwards: see `foldEdges`.
+    foldEdges(img, LEAF_LINE);
     return img;
   }
 
@@ -1868,6 +2054,17 @@ const MID_CROWN: CrownSpec = {
     [39, 58, 4.8],
     [32, 61, 4.4],
   ],
+  /*
+   * The mid tree's waist, rows 23..35 -- the only band on this drawing where the body is already
+   * within seven columns of both edges (tile-local rows 23..31 run 5 to 7, and 0..3 run 4 to 6).
+   * Two crescents a side at different heights, radius 4.6 reaching nine columns inboard, so each
+   * meets the body with room rather than touching it. See `BLEED`.
+   */
+  bleed: [
+    [3.4, 29.6, 4.4],
+    [60.6, 28.6, 4.4],
+  ],
+  bleedSeed: 26031,
 };
 
 const MID_TRUNK: TrunkSpec = {
@@ -1985,6 +2182,17 @@ const ELDER_CROWN: CrownSpec = {
     [56, 88, 7.2],
     [48, 93, 7.0],
   ],
+  /*
+   * The elder's waist, rows 55..67, which is tile-local rows 23..31 of its MIDDLE row and 0..3 of
+   * its bottom one -- the same local band the mid tree and the sapling bleed on, which is the whole
+   * point (see `BLEED`). Its body is 5 to 9 columns off its edges there, further than the mid's, so
+   * the crescents are radius 6.0 and reach ten columns in.
+   */
+  bleed: [
+    [3.8, 62.0, 5.2],
+    [92.2, 58.4, 5.2],
+  ],
+  bleedSeed: 26037,
 };
 
 const ELDER_TRUNK: TrunkSpec = {
@@ -2145,6 +2353,18 @@ const SAPLING_CROWN: CrownSpec = {
     [37, 37, 3.5],
     [32, 40, 3.8],
   ],
+  /*
+   * The sapling's waist, rows 23..34: tile-local rows 23..31 of its top row and 0..2 of its bottom
+   * one, the same local band as the other two. Its body is 6 to 9 columns off its edges there --
+   * this is the crown whose sides stand furthest from its own drawing (see the width note in the
+   * edge guards), so its crescents are the largest relative to its clusters: radius 5.6 against
+   * clusters of 2.6 to 6.8.
+   */
+  bleed: [
+    [3.4, 29.0, 4.6],
+    [60.6, 27.0, 4.6],
+  ],
+  bleedSeed: 26041,
 };
 
 /**
@@ -2609,9 +2829,17 @@ export function crownSignature(
  * records for `CAP_FIELD`.
  *
  *   crown     share   biggest   patches   concentration   median luma   under 81   under 60
- *   mid       0.127     133       7           0.38            83          43.8%      30.2%
- *   elder     0.119     205      14           0.35            83          42.5%      28.8%
- *   sapling   0.102      58       5           0.31            83          47.6%      35.4%
+ *   mid       0.123     134       7           0.38            83          44.4%      30.1%
+ *   elder     0.115     205      14           0.35            83          44.5%      29.4%
+ *   sapling   0.094      58       5           0.31            77          51.9%      40.6%
+ *
+ * Re-measured after the bleed of 2026-10-20. Every lit share fell by four to eight thousandths and
+ * every dark fraction rose by one to five points, and it is the same one cause in each: a bleed lobe
+ * is a thin protrusion, so almost every pixel of it is rim, `fringe()` caps rim, and the crown
+ * gained between 150 and 300 pixels of capped mid-tone and keyline without gaining one lit pixel.
+ * `biggest`, `patches` and `concentration` -- the three that are actually about the shoulder -- did
+ * not move, which is the property to check if a later pass widens the lobes: the lit cap is supposed
+ * to be untouched by anything at the flank.
  *
  * The sapling's row is the cap clamp of 2026-10-20 and the `capSeed` that answers it; the other two
  * are unchanged, and byte-for-byte so -- see `CAP_ROOM`. **Its `patches` now sits ON the bound.**
@@ -2687,24 +2915,43 @@ export function crownEdge(img: Img): {
   rimMedian: number;
   /** The brightest body pixel that is NOT on that ring: the lit arc the fringe stands in front of. */
   insideMax: number;
-  /** The painted silhouette's width, keyline included. */
+  /**
+   * The painted silhouette's width, keyline included, read over the rows the crown is NOT bleeding
+   * on -- its own width rather than its drawing's. On a seam row the mass runs to both edges by
+   * construction, so a bounding box that counted those rows would report the drawing's width on
+   * every crown and the three scales would stop being distinguishable, which is the one thing this
+   * number exists to say.
+   */
   width: number;
+  /** How many rows the crown does bleed on; the seam guard below owns them. */
+  seamRows: number;
 } {
   const body = (x: number, y: number): boolean => {
     if (x < 0 || y < 0 || x >= img.w || y >= img.h) return false;
     const c = img.get(x, y);
     return c[3] !== 0 && lumaOf(c) > LINE_MAX;
   };
+  /*
+   * The rows the crown runs off its own edge, read off the drawing rather than taken from a spec,
+   * so there is no constant here for a drifting lobe to hide behind. Everything below that is
+   * measured ON these rows belongs to the seam and is handed to the seam guard; everything off
+   * them is the crown's own silhouette and is measured exactly as it was before this round.
+   */
+  const folded = (y: number): boolean => img.get(0, y)[3] !== 0 || img.get(img.w - 1, y)[3] !== 0;
   let top = img.h;
   let left = img.w;
   let right = img.w;
   let x0 = img.w;
   let x1 = -1;
+  let seamRows = 0;
   const rim: number[] = [];
+  let rimMax = 0;
   let insideMax = 0;
-  for (let y = 0; y < img.h; y++)
+  for (let y = 0; y < img.h; y++) {
+    const seam = folded(y);
+    if (seam) seamRows++;
     for (let x = 0; x < img.w; x++) {
-      if (img.get(x, y)[3] !== 0) {
+      if (!seam && img.get(x, y)[3] !== 0) {
         if (x < x0) x0 = x;
         if (x > x1) x1 = x;
       }
@@ -2715,19 +2962,37 @@ export function crownEdge(img: Img): {
       let open = false;
       for (let dy = -1; dy <= 1; dy++)
         for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !body(x + dx, y + dy)) open = true;
+      if (!open) {
+        const l = lumaOf(img.get(x, y));
+        if (l > insideMax) insideMax = l;
+        continue;
+      }
       const l = lumaOf(img.get(x, y));
-      if (open) rim.push(l);
-      else if (l > insideMax) insideMax = l;
+      if (l > rimMax) rimMax = l;
+      /*
+       * THE MEDIAN IS THE CROWN'S OWN RIM AND THE MAX IS EVERY RIM PIXEL, and the asymmetry is the
+       * same split `w-undergrowth.ts` makes between its guards 4 and 5. The ceiling says "no lit
+       * leaf on the outermost ring" and has to hold at the fold too -- a leaf one pixel in from the
+       * seam is cut off square against whatever is laid next door, which is the fault `foldEdges`
+       * exists to prevent. The floor says "the rim has not simply been painted black", and the
+       * seam is deliberately the crown's near-black, so a median taken over it would be pulled down
+       * by the fix rather than by a defect. The two columns beside each fold are therefore left out
+       * of the sample and the seam guard owns them, with its own two-sided bound.
+       */
+      if (seam && (x <= 1 || x >= img.w - 2)) continue;
+      rim.push(l);
     }
+  }
   rim.sort((a, b) => a - b);
   return {
     top,
     left,
     right,
-    rimMax: rim[rim.length - 1] ?? 0,
+    rimMax,
     rimMedian: rim[rim.length >> 1] ?? 0,
     insideMax,
     width: x1 - x0 + 1,
+    seamRows,
   };
 }
 
@@ -2775,16 +3040,24 @@ export function crownEdge(img: Img): {
  * **3. THERE ARE STILL THREE SCALES.** ART_DIRECTION section 7.5's whole point is that the wood is
  * built of trees of three sizes, and nothing stopped a later pass from quietly tuning two of them
  * onto the same width -- at which point 318 stamps are one stamp again and the forest is wallpaper
- * for the second time. Painted silhouette widths, measured: sapling 53, mid 62, elder 88.
+ * for the second time. Painted silhouette widths, measured: sapling 52, mid 62, elder 89.
  *
  * The bands are wider than the drift anyone should want and the ORDER is the real assertion. Read
- * the spread before trusting it: 7.5 wants 44-48, 60-65 and 85-90, and ours are 53, 62 and 88, so
- * the sapling is five pixels over its band and sits nine under the mid tree where the board's two
+ * the spread before trusting it: 7.5 wants 44-48, 60-65 and 85-90, and ours are 52, 62 and 89, so
+ * the sapling is four pixels over its band and sits ten under the mid tree where the board's two
  * small scales are twelve apart. That is a known residual, it is the crown's WIDTH rather than its
  * height, and it is not reachable from here -- narrowing the egg to 7.5's 44-48 takes the lit share
  * under the shoulder guard's floor, which is the same wall the old note on `SAPLING_CROWN` hit from
  * the other side. Raised for the map owner with the 2x3 stamp rather than hidden inside a band that
- * calls 53 correct.
+ * calls 52 correct.
+ *
+ * **The sapling's figure reads two pixels lower than it did before the bleed, and the tree has not
+ * moved.** `crownEdge` takes the width over the rows a crown is NOT bleeding on (see its own note),
+ * and the sapling is the one crown whose seam band and whose widest rows are the same rows -- it is
+ * small enough that its waist IS its flank. Measured over every row it was 53 and is now 55, the two
+ * extra being the lobe; over the rows off the seam it is 52. The bound is left at 50 rather than
+ * loosened to buy margin back, for the reason the note on `SAPLING_CROWN.seed` gives about its
+ * `patches` floor: the honest answer to a bound that is getting tight is the 2x3 stamp, not the bound.
  */
 /* Smallest first, because the daylight check below reads the list in order. */
 const EDGE_GUARDS = [
@@ -2843,3 +3116,384 @@ for (let i = 1; i < widths.length; i++)
     throw new Error(
       `Two of the three crown scales have closed up on each other, so the wood is one stamp again (want 4px of daylight, ART_DIRECTION section 7.5): widths ${widths.join(', ')}px for ${EDGE_GUARDS.map((g) => g.name).join(', ')}.`,
     );
+
+/* ------------------------------------------- the bleed, the fold and the merge, guarded */
+
+/** One contiguous run of rows on an edge column. */
+type FoldRun = { from: number; to: number };
+
+/**
+ * WHAT A CROWN'S SEAM IS MADE OF: the runs it puts on its drawing's own left and right columns, how
+ * dark they are, and whether there is leaf behind them.
+ *
+ * Exported for the same reason `crownEdge` and `crownSignature` are -- the numbers in the guard
+ * below are measurements and a tool or a test has to be able to take them again.
+ */
+export function crownFold(img: Img): {
+  /** The runs on column 0 and on column w-1, in that order. One each if the bleed is sound. */
+  edges: readonly (readonly FoldRun[])[];
+  /** The crown's own first and last painted row, so the waist can be judged against the tree. */
+  top: number;
+  bottom: number;
+  /** The brightest pixel on either run: the fold has to be the crown's own near-black. */
+  foldMax: number;
+  /** Separate four-connected masses in the whole drawing. */
+  masses: number;
+} {
+  const on = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < img.w && y < img.h && img.get(x, y)[3] !== 0;
+  const runsOn = (x: number): FoldRun[] => {
+    const out: FoldRun[] = [];
+    let from = -1;
+    for (let y = 0; y <= img.h; y++) {
+      const lit = y < img.h && on(x, y);
+      if (lit && from < 0) from = y;
+      if (!lit && from >= 0) {
+        out.push({ from, to: y - 1 });
+        from = -1;
+      }
+    }
+    return out;
+  };
+  const edges = [runsOn(0), runsOn(img.w - 1)];
+  let top = img.h;
+  let bottom = -1;
+  for (let y = 0; y < img.h; y++)
+    for (let x = 0; x < img.w; x++)
+      if (on(x, y)) {
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+        break;
+      }
+  for (let y = img.h - 1; y >= 0; y--) {
+    let any = false;
+    for (let x = 0; x < img.w && !any; x++) if (on(x, y)) any = true;
+    if (any) {
+      bottom = y;
+      break;
+    }
+  }
+  let foldMax = 0;
+  for (const [i, runs] of edges.entries()) {
+    const x = i === 0 ? 0 : img.w - 1;
+    for (const r of runs)
+      for (let y = r.from; y <= r.to; y++) {
+        const l = lumaOf(img.get(x, y));
+        if (l > foldMax) foldMax = l;
+      }
+  }
+  // Four-connected masses, so a crescent that has drifted off the body is counted rather than
+  // assumed away.
+  const seen = new Uint8Array(img.w * img.h);
+  let masses = 0;
+  for (let p = 0; p < img.w * img.h; p++) {
+    if (seen[p] === 1 || !on(p % img.w, (p / img.w) | 0)) continue;
+    masses++;
+    const stack = [p];
+    seen[p] = 1;
+    while (stack.length > 0) {
+      const q = stack.pop()!;
+      const x = q % img.w;
+      const y = (q / img.w) | 0;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!on(nx, ny)) continue;
+        const r = ny * img.w + nx;
+        if (seen[r] === 0) {
+          seen[r] = 1;
+          stack.push(r);
+        }
+      }
+    }
+  }
+  return { edges, top, bottom, foldMax, masses };
+}
+
+/**
+ * Two 32-column tiles laid side by side and flooded as one 64x32 strip: is the mass that touches the
+ * left tile the same mass that touches the right one? Returns how many masses span the seam.
+ *
+ * This is the question a player's eye asks at a seam, and it is the one bound in the guard below
+ * that cannot be satisfied by accident.
+ */
+function spansSeam(left: Uint8Array, right: Uint8Array): number {
+  const w = TILE * 2;
+  const strip = new Uint8Array(w * TILE);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      strip[y * w + x] = left[y * TILE + x]!;
+      strip[y * w + TILE + x] = right[y * TILE + x]!;
+    }
+  const seen = new Uint8Array(w * TILE);
+  let spanning = 0;
+  for (let p = 0; p < w * TILE; p++) {
+    if (strip[p] === 0 || seen[p] === 1) continue;
+    const stack = [p];
+    seen[p] = 1;
+    let lo = w;
+    let hi = -1;
+    while (stack.length > 0) {
+      const q = stack.pop()!;
+      const x = q % w;
+      const y = (q / w) | 0;
+      if (x < lo) lo = x;
+      if (x > hi) hi = x;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= TILE) continue;
+        const r = ny * w + nx;
+        if (strip[r] === 1 && seen[r] === 0) {
+          seen[r] = 1;
+          stack.push(r);
+        }
+      }
+    }
+    if (lo < TILE && hi >= TILE) spanning++;
+  }
+  return spanning;
+}
+
+/*
+ * FOUR. THE BLEED IS A WAIST, THE FOLD IS DARK WITH LEAF BEHIND IT, AND ANY TWO CROWNS ARE ONE MASS.
+ *
+ * This guard exists because the fault it protects against is invisible to everything else we have.
+ * The three guards above cannot see it -- the fringe and the width measurements had to be EXEMPTED
+ * from the seam's own columns and rows for this change to be possible at all, and this is the guard
+ * that owns what they gave up. The six-axis score cannot see it either and says so: a bush and a
+ * crown have nearly the same luma histogram, so the 26-tile hedge that moved its distance by 0.006
+ * is the same blindness. And a render alone cannot be relied on, because the failure is quiet --
+ * pull the lobes out of any one crown and it still paints, still passes every other guard in this
+ * file, and the forest is an orchard again.
+ *
+ * SEVEN BOUNDS, AND NONE IS WRITTEN IN TERMS OF THE CONSTANT IT WATCHES. Every number is read off
+ * the RENDERED crown -- its own painted height, its own line/leaf split -- or is a literal from the
+ * board. None comes from `bleed`'s radii or centres, so putting any crown's lobes back where they
+ * were, or shrinking them, or painting the whole lobe black, each fails at least one of these.
+ *
+ *   (0) THE CROWN IS ONE MASS. Checked first, because every bound below is satisfiable by a lobe
+ *       that has drifted off the body entirely, and what that leaves is a chip of foliage ringed on
+ *       its own beside every tree in the world.
+ *   (a) ONE RUN PER EDGE. `foldEdges` fills the span, so two runs on one column can only mean the
+ *       column is empty somewhere the fill could not reach -- i.e. nothing bled at all. Measured:
+ *       one each, on all six.
+ *   (b) THE RUN IS A WAIST. At least 4 rows: under that the merge comes apart into a dotted join
+ *       once the neighbour's own wobble is counted, which is the floor `w-undergrowth.ts` measured.
+ *       At most 20 rows AND at most 0.34 of the crown's own painted height: the absolute ceiling is
+ *       the drawing's, and the ratio is what carries the same rule onto the sapling, which is 46
+ *       rows where the elder is 83. A fixed ceiling alone would let the sapling be bled to a bar; a
+ *       ratio alone would let the elder carry a 28-row seam. Measured 12 / 12, 11 / 15, 11 / 14 on
+ *       crowns 60, 83 and 46 rows tall -- shares of 0.20, 0.18 and 0.30.
+ *   (c) THE CROWN STANDS CLEAR of its own seam, above and below, six rows each. This is what makes a
+ *       wood read as crown-fold-crown rather than as a hedge with a scalloped top. Measured 14 / 33,
+ *       33 / 33 and 20 / 11.
+ *   (d) THE TWO EDGES OVERLAP by at least 4 rows. `forest-map.ts` mirrors about half its canopy, so
+ *       a seam is one of four pairings, and only the rows BOTH edges carry join in all of them. They
+ *       are deliberately not identical -- equal heights would make the crown its own mirror across
+ *       its flank and cost the flip the second tree it buys. Measured 11, 9, 10.
+ *   (e) THE FOLD IS DARK. Every pixel of every run at or under `LINE_MAX`, this file's own
+ *       line/leaf split -- so the bound moves if the ladder moves and cannot be satisfied by a leaf.
+ *       A lit leaf reaching a tile edge is cut off square against whatever is laid next door, which
+ *       is what `foldEdges` exists to prevent. Measured 14 on all six, which is `LEAF_LINE` exactly.
+ *   (f) THE COMMON BAND, in TILE-LOCAL rows, which is why (g) can hold across three crowns of
+ *       different heights in different footprints. Every one of the six runs has to reach its edge on
+ *       rows the others do too, counted within a tile rather than within a drawing -- see the long
+ *       note above `foldEdges`. Three rows is the floor; measured, the six share nine (local 26..31
+ *       and 0..2).
+ *   (g) THE MERGE ITSELF, over every ordered pair of the three crowns in each of the four pairings
+ *       the map's flip can produce: 9 pairs, 36 joins, each one mass spanning the seam. This is the
+ *       whole of the change, stated as the question a player's eye asks, and it is independent of
+ *       every number above.
+ *
+ * WHERE THE TWO-SIDEDNESS LIVES, because it is not one clause here and a draft of this guard
+ * pretended it was. Two candidate second sides were written and both were broken on purpose and
+ * MEASURED OUT rather than kept:
+ *
+ *   - "there is leaf behind the fold", held as the luma of the column one step inboard of it, never
+ *     discriminated anything: `fringe()` caps that column to a mid tone on every crown whether the
+ *     lobe carries a leaf cluster or not. Removing the cluster left the figure at 64 against 64.
+ *   - "the bleed does not stand proud of the crown by more than its own bumps do", held as half the
+ *     difference between the drawing's width and the crown's own, does not move when a lobe moves --
+ *     it is a property of the CROWN -- and it is implied by the width floors above anyway (the
+ *     sapling's wLo of 50 already caps it at 7 columns). Inert twice over.
+ *
+ * What actually closes the cheap ways out is the other guards, and each was proven by breaking this
+ * one: painting more than one column of the fold dark makes the body reach the drawing's edge and
+ * the EDGE guard's `left`/`right` clearance fires; bleeding enormously fires (b) and (c); not
+ * bleeding at all fires (a) and (g). A clause that only looked like a second side is worse than
+ * none, because the next reader trusts it.
+ *
+ * PROVEN BY BREAKING, 2026-10-20. Each edit below was made to this file, the message was read, the
+ * file was restored from a copy and the restore verified with `cmp` and `shasum -a 1`:
+ *
+ *   `SAPLING_CROWN.bleed: []`                            -> (a), "must bleed ... as exactly ONE run, not 0"
+ *   `foldEdges(img, leaf(FRINGE_LIT))`                   -> the EDGE guard, "no room left for its own keyline"
+ *   elder lobes at r 13.0                                -> (b), "seam on column 0 is 28 rows, outside 4..20"
+ *   sapling lobes moved to rows 11..13                   -> (c), "stands 4 row(s) clear above its own seam"
+ *   mid lobes moved to row 41                            -> (0), "crown is 2 separate masses, not 1"
+ *   sapling's left lobe moved to row 22                  -> (f), "share only 1 tile-local row(s) of seam"
+ *   `foldEdges` filling a quarter of its span            -> the EDGE guard again, for the same reason as the second
+ *
+ * (g) is a backstop rather than a first responder, and deliberately so: every drift that would break
+ * the flood breaks the common band first, and a message naming the band and the crown that moved is
+ * more use than a flood failure on whichever pair happens to be measured first. `w-undergrowth.ts`
+ * splits its own (f) and (g) for exactly that reason. (e) is likewise belt-and-braces with the edge
+ * guard, which fires first on a fold painted in a leaf tone because the body then reaches the
+ * drawing's edge; (e) is the specific statement of what went wrong.
+ */
+
+const SEAM_RUN_ROWS = [4, 20] as const;
+const SEAM_RUN_SHARE = 0.34;
+const SEAM_CLEAR_EACH = 6;
+const SEAM_SHARED_ROWS = 4;
+const SEAM_COMMON_ROWS = 3;
+
+{
+  /** The tile-local rows an edge run covers, as a 32-row mask. */
+  const localOf = (r: FoldRun): Uint8Array => {
+    const m = new Uint8Array(TILE);
+    for (let y = r.from; y <= r.to; y++) m[y % TILE] = 1;
+    return m;
+  };
+  const common = new Uint8Array(TILE).fill(1);
+  /** For each crown, the 32x32 masks of the tile that carries the band, left face and right face. */
+  const faces = new Map<string, { left: Uint8Array; right: Uint8Array }>();
+
+  for (const g of EDGE_GUARDS) {
+    const img = g.img();
+    const f = crownFold(img);
+    const say = `${g.name}: ${f.edges
+      .map(
+        (runs, i) =>
+          `col ${i === 0 ? 0 : img.w - 1} ${runs.map((r) => `${r.from}..${r.to}`).join(',') || 'none'}`,
+      )
+      .join('; ')}; crown rows ${f.top}..${f.bottom}; fold max ${f.foldMax.toFixed(0)}`;
+
+    if (f.masses !== 1)
+      throw new Error(
+        `${g.name}'s crown is ${f.masses} separate masses, not 1. A bleed lobe has drifted far ` +
+          `enough out that its crescent no longer meets the body, so outline() rings it on its own ` +
+          `and every copy of this tile carries a chip of foliage floating beside it: ${say}. Pull ` +
+          `the lobe inboard until it overlaps the crown. See the note above foldEdges.`,
+      );
+
+    for (const [i, runs] of f.edges.entries()) {
+      const x = i === 0 ? 0 : img.w - 1;
+      if (runs.length !== 1)
+        throw new Error(
+          `${g.name} must bleed to each of its side edges as exactly ONE run, not ${runs.length} ` +
+            `(${say}). None at all is the orchard coming back -- 232 crown-to-crown seams in the ` +
+            `world with lawn between them at the camera's own tile pitch, which is the lattice ` +
+            `DESIGN_BOARD section 3 names in the treeline. See CrownSpec.bleed, column ${x}.`,
+        );
+      const rows = runs[0]!.to - runs[0]!.from + 1;
+      const height = f.bottom - f.top + 1;
+      const ceiling = Math.min(SEAM_RUN_ROWS[1], Math.floor(height * SEAM_RUN_SHARE));
+      if (rows < SEAM_RUN_ROWS[0] || rows > ceiling)
+        throw new Error(
+          `${g.name}'s seam on column ${x} is ${rows} rows, outside ${SEAM_RUN_ROWS[0]}..${ceiling} ` +
+            `on a crown ${height} rows tall (${say}). Under the floor the merge comes apart into a ` +
+            `dotted join once the neighbour's own wobble is counted; over the ceiling the bleed is a ` +
+            `bar and a wood of them is one rectangle with a scalloped top.`,
+        );
+    }
+
+    const [l, r] = [f.edges[0]![0]!, f.edges[1]![0]!];
+    const seamTop = Math.min(l.from, r.from);
+    const seamBottom = Math.max(l.to, r.to);
+    const above = seamTop - f.top;
+    const below = f.bottom - seamBottom;
+    if (above < SEAM_CLEAR_EACH || below < SEAM_CLEAR_EACH)
+      throw new Error(
+        `${g.name} stands ${above} row(s) clear above its own seam and ${below} below (${say}); it ` +
+          `wants at least ${SEAM_CLEAR_EACH} each way. The bleed has to be a WAIST on the crown's ` +
+          `flank: the crown bulges above and below it, so a wood reads as crown-fold-crown. A seam ` +
+          `pinned against a cap or a hem prints a row of crowns hanging off a rail.`,
+      );
+
+    const overlap = Math.min(l.to, r.to) - Math.max(l.from, r.from) + 1;
+    if (overlap < SEAM_SHARED_ROWS)
+      throw new Error(
+        `${g.name}'s two side seams share only ${Math.max(0, overlap)} row(s), under ` +
+          `${SEAM_SHARED_ROWS} (${say}). forest-map.ts mirrors about half its canopy, so a seam is ` +
+          `one of four pairings and only the rows BOTH edges carry join in all of them.`,
+      );
+
+    if (f.foldMax > LINE_MAX)
+      throw new Error(
+        `${g.name} puts luma ${f.foldMax.toFixed(0)} on an edge column, over the ` +
+          `${LINE_MAX.toFixed(0)} line/leaf split (${say}). The edge column has to be the crown's ` +
+          `own near-black, because the SAME column is a fold between two canopies on 119 of the ` +
+          `world's seams and a keyline against bare lawn on the rest. A lit leaf there is cut off ` +
+          `square against the grass tile next door. foldEdges() is what holds this; check it still ` +
+          `runs after close().`,
+      );
+
+    for (const runs of f.edges) {
+      const m = localOf(runs[0]!);
+      for (let y = 0; y < TILE; y++) if (m[y] === 0) common[y] = 0;
+    }
+
+    // The tile that carries the band's upper rows, for the merge below: the crown's own tile row in
+    // which the left-edge run starts.
+    const row0 = Math.floor(f.edges[0]![0]!.from / TILE) * TILE;
+    const crop = (x0: number): Uint8Array => {
+      const m = new Uint8Array(TILE * TILE);
+      for (let y = 0; y < TILE; y++)
+        for (let x = 0; x < TILE; x++)
+          m[y * TILE + x] = row0 + y < img.h && img.get(x0 + x, row0 + y)[3] !== 0 ? 1 : 0;
+      return m;
+    };
+    faces.set(g.name, { left: crop(0), right: crop(img.w - TILE) });
+  }
+
+  const band = common.reduce((n, v) => n + v, 0);
+  if (band < SEAM_COMMON_ROWS)
+    throw new Error(
+      `the three crowns' six edge runs share only ${band} tile-local row(s) of seam, under ` +
+        `${SEAM_COMMON_ROWS}. Two tiles meet along 32 rows and merge only on a row both of them ` +
+        `reach their edge on, so every crown has to bleed on rows the others do too -- counted ` +
+        `WITHIN A TILE, because the map lays crowns at every vertical alignment. See the note above ` +
+        `foldEdges.`,
+    );
+
+  /** A 32x32 mask, mirrored horizontally: the other half of what `forest-map.ts`'s flip produces. */
+  const flip = (m: Uint8Array): Uint8Array => {
+    const o = new Uint8Array(m.length);
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) o[y * TILE + x] = m[y * TILE + (TILE - 1 - x)]!;
+    return o;
+  };
+  for (const [an, a] of faces)
+    for (const [bn, b] of faces) {
+      // A tile presents an edge column on its right face unmirrored, or on its left face mirrored.
+      const pairings: readonly (readonly [string, Uint8Array, Uint8Array])[] = [
+        ['plain|plain', a.right, b.left],
+        ['plain|flipped', a.right, flip(b.right)],
+        ['flipped|plain', flip(a.left), b.left],
+        ['flipped|flipped', flip(a.left), flip(b.right)],
+      ];
+      for (const [label, left, right] of pairings) {
+        const spanning = spansSeam(left, right);
+        if (spanning !== 1)
+          throw new Error(
+            `${an} laid beside ${bn} (${label}) has ${spanning} mass(es) spanning the seam, not 1. ` +
+              `This is the whole of the change: a wood has to print as one canopy with folds in it, ` +
+              `not as circles with lawn between them at the camera's own tile pitch. Both crowns ` +
+              `bleed, so the fault is that their runs no longer share tile-local rows -- check the ` +
+              `common band above. See the note above foldEdges.`,
+          );
+      }
+    }
+}
