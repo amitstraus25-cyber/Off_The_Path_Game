@@ -3,12 +3,30 @@ import { score } from '@otp/core';
 import { carefulRun, content } from './helpers.ts';
 
 /*
- * The two files Vercel actually invokes, and the wiring behind them.
+ * The route entry points, and the wiring behind them.
  *
  * `api/score.ts` and `api/top.ts` are four lines each, and until this file nothing executed either
  * of them: every other test calls the handlers directly with a fake Deps, so the Web handler
  * signature, the module-scope read of process.env and the one real `fetch` the store is built with
  * were all unexercised. That is the part of the service a deploy runs first.
+ *
+ * THESE ARE NOT THE FILES VERCEL INVOKES, AND THIS COMMENT SAID THEY WERE UNTIL 2026-10-21.
+ *
+ * There are two copies of the routes in this repository. The ones imported below are
+ * `apps/api/api/*.ts`, reaching the handlers by relative path. The ones actually served are
+ * `apps/game/api/*.ts`, reaching them by the `@otp/api/src/*.ts` deep path -- because vercel.json
+ * declares a single service, `game`, rooted at `apps/game`, and `apps/api` is not a service at all
+ * any more. A path outside a service root is not deployed, so this copy is dead on the platform.
+ *
+ * It is not dead here. This file and `apps/api/vitest.config.ts`'s coverage include (`api/**`) are
+ * what keep it alive, and the shipped copy is executed by NOTHING -- no test in any workspace
+ * imports `apps/game/api/*.ts`; `apps/game/tsconfig.api.json` typechecks it and that is the whole
+ * of its coverage. So what this file proves is that the wiring PATTERN works, not that the
+ * deployed file works. The two differ only in their import specifiers, which is exactly the thing
+ * a type error lives in, and exactly the thing this file cannot see.
+ *
+ * Whether the dead copy should be deleted is a human's call and is written up in apps/api/README.md
+ * rather than decided here. Deleting it stops this file importing anything, so read that first.
  *
  * There is still no database. `fetch` is replaced before the modules are imported, so the store
  * these routes build talks to an in-process function; the environment is stubbed with obvious

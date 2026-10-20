@@ -2,6 +2,11 @@
 
 Two routes behind the game, on the same origin, with no new dependencies.
 
+**The database as an operational thing is `docs/DATABASE.md`** — the schema and why, the RLS
+posture, the migrations in `supabase/migrations/`, how to rotate a key without downtime, what
+happens when the free tier pauses, how to tell whether the board is actually working and what to do
+when it is not. This file is the service; that one is the database.
+
 | Route             | What it does                                                                                                                                           |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `POST /api/score` | Takes `{ handle, log }`. Replays the log through `packages/core`, **recomputes the score**, stores the recomputed number. Answers `{ handle, score }`. |
@@ -62,44 +67,194 @@ A handle and a score. No account, no email, no cookie, no IP address, raw or has
 CLAUDE.md's privacy rule is the schema. `test/store.test.ts` asserts the inserted row has exactly
 the two keys, so a third one cannot arrive by accident.
 
+`supabase/migrations/0001_leaderboard_baseline.sql` is this same DDL written idempotently, so the
+repository and the database can be compared rather than assumed. Running it against the live
+project changes nothing; its verification query prints the table's actual columns, constraints,
+indexes, grants and RLS state, which is the first thing to run when the board misbehaves.
+
 ## Vercel settings
 
-`vercel.json` at the repository root declares this as a second service and routes `/api/*` to it:
+**As committed at `9aa7968`, `vercel.json` declares ONE service.** The routes are ordinary Vercel
+Functions of the _game_ service, in `apps/game/api/`, re-exporting the handlers from this package:
 
 ```json
 "services": {
-  "game": { "root": "apps/game", "framework": "vite", "outputDirectory": "dist" },
-  "api":  { "root": "apps/api", "framework": null }
+  "game": { "root": "apps/game", "framework": "vite", "outputDirectory": "dist" }
 },
 "rewrites": [
-  { "source": "/api/(.*)", "destination": { "service": "api" } },
-  { "source": "/(.*)",     "destination": { "service": "game" } }
+  { "source": "/(.*)", "destination": { "service": "game" } }
 ]
 ```
 
-Order matters: the `/api/(.*)` rewrite must stay above the catch-all, or every request reaches the
-game. The CSP is **unchanged** — `connect-src` stays `'self'` because the browser only ever calls
-our own origin. Widening it would be the wrong fix for anything.
+The CSP is **unchanged** — `connect-src` stays `'self'` because the browser only ever calls our own
+origin. Widening it would be the wrong fix for anything.
+
+**The two-service arrangement this section used to describe is gone, and why it failed is worth
+keeping.** It declared `"api": { "root": "apps/api" }` and routed `/api/(.*)` into it. That service
+set no `framework` (so no preset to trigger zero-config `api/` detection), no `entrypoint`, no
+`runtime` and no `functions` glob: it was told to produce nothing and it produced nothing, so
+`/api/*` was rewritten into an empty service and Vercel answered with its own NotFound page. An
+earlier form of it set `"framework": null`, which is invalid for a _service_ (it is only valid at
+the top level) and failed every deployment for six hours.
+
+`apps/api/api/score.ts` and `api/top.ts` remain, unchanged and tested, so this package is still
+deployable on its own if the routing question is ever reopened.
+
+### The two copies of the routes, and whether the dead one should go
+
+**State of it, measured 2026-10-21 against the working tree.** There are two copies:
+
+| Copy                 | Imports via                | Served?                                        | Executed by a test?                      | Typechecked by           |
+| -------------------- | -------------------------- | ---------------------------------------------- | ---------------------------------------- | ------------------------ |
+| `apps/api/api/*.ts`  | `../src/*.ts` (relative)   | **No** — outside the one service root          | **Yes** — `apps/api/test/routes.test.ts` | `apps/api/tsconfig.json` |
+| `apps/game/api/*.ts` | `@otp/api/src/*.ts` (deep) | **Yes** — the only copy the platform ever runs | **No** — nothing imports it              | `tsconfig.api.json`      |
+
+`vercel.json` declares one service, `game`, rooted at `apps/game`. A path outside a service root is
+not deployed, so `apps/api/api/` cannot be reached on the platform under the current config.
+
+**Recommendation: do not delete it yet, and do not leave it as it is either.** It is not a harmless
+duplicate and it is not disposable; it is both load-bearing and misleading at once.
+
+What breaks if it is deleted, exactly:
+
+1. **`apps/api/test/routes.test.ts` stops resolving.** It imports `../api/score.ts` and
+   `../api/top.ts` at lines 42–43. That file is the _only_ test anywhere that executes a route entry
+   point rather than calling a handler with a fake `Deps` — the Web handler signature, the
+   module-scope `process.env` read and the one real `fetch` the store is built with are exercised
+   nowhere else.
+2. **The 100% coverage gate loses a file it is configured to count.** `apps/api/vitest.config.ts`
+   sets `coverage.include: ['src/**/*.ts', 'api/**/*.ts']`, with a comment saying leaving `api/` out
+   is how a route entry point sits at 0% while the summary looks respectable. Delete the directory
+   and that half of the glob matches nothing; the gate goes quiet instead of going red.
+3. **Nothing else.** No import outside that one test file, no script, and no build step references
+   it. Deleting it does not touch the deployment, because the deployment never had it.
+
+The part worth saying plainly: **the copy that is tested is not the copy that ships, and the copy
+that ships is tested by nothing.** The two differ only in their import specifiers — relative versus
+the `@otp/api/src/*.ts` deep path — and the specifier is precisely where this service's known
+failure modes live (the missing `exports` map, the load-bearing `.ts` extension, the cross-root
+reach documented in `test/cross-root.test.ts`). So `routes.test.ts` proves the wiring _pattern_ and
+cannot prove the deployed file, which is the one thing its name suggests it does.
+
+That makes a straight deletion a net loss of coverage for a gain in tidiness. The sequenced fix, for
+whoever takes it: point `routes.test.ts` at `apps/game/api/*.ts`, extend the coverage include to
+reach them (or move the test into `apps/game`), watch it stay green, and only then delete
+`apps/api/api/`. Doing it in the other order deletes the test's subject and the gate's blind spot on
+the same commit. Both halves cross an ownership line, so it is one task for one owner, not two.
 
 **`services` is a real key and a gated one.** `vercel.json`'s own schema
 (<https://openapi.vercel.sh/vercel.json>, the `$schema` that file points at) does define a top-level
 `services` map — service names match `^[a-z]([a-z_-]*[a-z])?$`, `root` is the only required key, and
 `rewrites[].destination` may be `{ "service": "<name>" }` — so the block above is not invented. But
-the schema marks `services` **`"private": true`**, which on past form means a feature that is not on
-for every account. Nobody here can tell from a checkout whether this project has it. **If the deploy
-ignores `services`, the symptom is not an error: `/api/top` answers `200` with the game's
-`index.html`**, because the catch-all rewrite serves the SPA for any path. The adapter fails closed
-on that (it cannot parse HTML as a board, so it shows the unavailable line and the board stays
-empty), which is why the first check after a deploy is the content type of `GET /api/top`, not
-whether the page still loads.
+the schema marks `services` **`"private": true`** (re-verified against the live schema on
+2026-10-21, along with the allowed per-service keys: `root`, `framework`, `runtime`, `entrypoint`,
+`installCommand`, `buildCommand`, `devCommand`, `ignoreCommand`, `outputDirectory`, `bindings`,
+`functions`, `headers`, and `additionalProperties: false`). `"private"` on past form means a
+feature that is not on for every account. Nobody here can tell from a checkout whether this project
+has it.
+
+**The prediction that used to sit here was wrong, and production falsified it.** It said that a
+deploy ignoring `services` would answer `200` with the game's `index.html`, because "the catch-all
+rewrite serves the SPA for any path". It does not: `{ "service": "game" }` delegates the _path_ into
+the service, which then does its own filesystem lookup, and a static Vite `dist` has no
+`/api/top` to find. There is no SPA-fallback rewrite anywhere in `vercel.json`. So an unknown path
+404s whether `services` is honoured or not, and the content type of `GET /api/top` does **not**
+discriminate the two cases. Measured on production, 2026-10-21:
+
+| Request                           | Result                                      |
+| --------------------------------- | ------------------------------------------- |
+| `GET /`                           | `200` — the game, with this file's CSP live |
+| `GET /api/top`                    | `404`, Vercel's own NotFound page           |
+| `GET /api/score`                  | `404`, Vercel's own NotFound page           |
+| `GET /api/definitely-not-a-route` | `404`, Vercel's own NotFound page           |
+
+**The discriminator is `GET /api/score`, not `GET /api/top`.** `handleScore` answers any non-POST
+with `405 {"error":"method not allowed"}` and an `Allow: POST` header. A `GET` that comes back `404`
+therefore proves no function is mounted at that path at all — the request never reaches a line of
+ours. A 404 rules out the cold-start-throw theory too: a thrown `content.ts` is a `500`, not a `404`.
+
+Whatever replaces the two-service block, that `GET /api/score` check is the one to run first,
+because it separates "nothing is routed" from "something is routed and failing" in one request.
 
 - **Node version:** pinned to `22.x` by `engines.node` in this package's `package.json` (and by
   `.nvmrc` for CI). Project Settings → Node.js Version should read 22.x and not "latest".
 - **Environment variables:** the two above, on Production and Preview, marked sensitive. There is no
   `.env.example` entry for them: that file is owned elsewhere this round, which is why they are
   documented here.
-- **Functions:** `api/score.ts` and `api/top.ts` are Node functions using the Web handler signature
-  (`(request: Request) => Promise<Response>`), so they need no runtime types and no framework.
+- **Functions:** `api/score.ts` and `api/top.ts` — both here and, as shipped, in `apps/game/api/` —
+  are Node functions using the Web handler signature (`(request: Request) => Promise<Response>`),
+  so they need no runtime types and no framework.
+- **`apps/game/api/` is typechecked now, by `apps/game/tsconfig.api.json`** (added 2026-10-21), and
+  since 2026-10-21 it is run by **both** of `apps/game`'s scripts — `typecheck` and `build` — as a
+  second `tsc` after the game's own. **What it was before is worth keeping**: that `include` had no
+  `api` entry and the game's build was `tsc -p tsconfig.json && vite build`, so a type error in the
+  two shipped route files was invisible to `pnpm typecheck`, `pnpm build`, `pnpm lint`, `pnpm test`
+  and CI, and could fail only on a deploy — the exact shape of the six-hour outage above, one layer
+  down.
+
+  **`build` is the wiring that matters, and it was missing from the first version of this config.**
+  The game service in `vercel.json` sets no `buildCommand`, so the platform runs this package's own
+  `build` script and **never runs `typecheck`**. Wired into `typecheck` alone, the config gated CI
+  and left the deploy exactly as unguarded as before — a guard on the pipeline and not on the
+  deployment, which is trap 3 in `docs/PAUL_BRIEF.md` reintroduced by the fix for it.
+
+  **Measured, by breaking `apps/game/api/top.ts`'s `handlers.ts` import on purpose and running the
+  whole toolchain against it.** Before the `build` wiring: `tsc -p tsconfig.json` exit 0,
+  `eslint .` exit 0, `pnpm build` exit 0 (and `handlerz` appears nowhere in `dist` — the route files
+  are not in the bundle at all, which is _why_ the build could not see them). After it:
+  `pnpm --filter @otp/game build` exits **2** on
+  `api/top.ts: error TS2307: Cannot find module '@otp/api/src/handlerz.ts'`, and it fails
+  _before_ `vite build` runs, so no `dist` is produced and a broken route costs a failed deploy
+  rather than a deployed dead board. (The line:col this used to quote is deliberately gone: writing
+  the comment in that file moved the import from line 35 to line 58 on the same afternoon.) `eslint .` still exits 0 against the same break — see the next
+  bullet. Restored and confirmed byte-identical with `cmp`.
+
+  **Cost, since it is on every deploy now:** `tsc -p tsconfig.api.json` alone measures 0.64s, 0.59s,
+  0.59s over three runs. The whole `build` with it measures 3.97s, 3.97s, 4.09s against a baseline
+  of 3.65s, 4.40s, 5.11s without it — a real ~0.6s, inside the run-to-run noise of the build it
+  joins. Not a reason to leave the deploy path unguarded.
+
+  **What this config does _not_ catch, measured the same day:** dropping the load-bearing `.ts` off
+  those imports. `tsconfig.base.json` sets `"moduleResolution": "Bundler"`, and Bundler resolution
+  searches extensions where node's ESM resolver does not, so `'@otp/api/src/handlers'` typechecks
+  clean and `pnpm --filter @otp/game build` exits 0. The next bullet is the only thing holding that
+  line, and it is a comment, not a guard.
+
+- **`eslint .` and `prettier --check .` do read these two files — a claim in
+  `apps/game/api/top.ts` said otherwise until 2026-10-21 and was wrong.** That file called its
+  tsconfig "the only thing in the repository that reads these two route files at all". It is not:
+  `eslint .` resolves a config for `apps/game/api/` and lints it (proved by planting an unused
+  binding and watching `@typescript-eslint/no-unused-vars` report it by path), and
+  `prettier --check .` formats it (proved by unformatting it and watching `[warn]` name the file).
+  Both were restored and confirmed with `cmp`. What neither does is **resolve an import**: against
+  the `handlerz.ts` break above, `eslint .` exits 0 and prettier is happy. The gap was never
+  "nothing reads these files", it was "nothing _typechecks_ them".
+
+  **Adding `"api"` to the game's own `include` does not work, and that was re-run rather than
+  repeated from memory.** The game sets `"types": ["vite/client"]` and the DOM libs; the pulled-in
+  chain is Node. It fails with two `TS2591`s — `process` in `src/deps.ts` and, which the proposal
+  did not mention, `node:crypto` in `src/limit.ts`. One directory cannot be both halves of that
+  split, so the second config extends `tsconfig.base.json` with `types: ["node"]` instead. It also
+  sets `erasableSyntaxOnly`, matching this package, because Vercel compiles these files and Node's
+  type stripping refuses enums and parameter properties.
+
+- **The `.ts` extension on the route files' imports is load-bearing. Do not drop it.** It looks like
+  an artefact of `allowImportingTsExtensions` and the obvious tidy-up is to remove it. That tidy-up
+  was proposed and **refuted by measurement** on node 22.23.1, the version `engines.node` pins:
+  `import('@otp/api/src/deps.ts')` loads and exports `deps`; `import('@otp/api/src/deps')` is
+  `ERR_MODULE_NOT_FOUND`. Node's ESM resolver does no extension searching for a bare-specifier
+  subpath. A bundler such as esbuild does, so the extensionless form works under a bundler and only
+  under a bundler — and which of the two Vercel applies here is the same unanswered question as
+  everything else on this page. The form with the extension resolves under **both**, so it is the
+  safe branch of a question nobody here can close.
+
+- **`@otp/api` resolves from the game only because this package has no `exports` map**, and that is
+  now written into `apps/api/package.json` as a `"//"` key, since strict JSON cannot hold a comment.
+  Confirmed by adding the ordinary well-meaning map `{ ".": "./src/index.ts" }` and running both
+  resolvers: node gives `ERR_PACKAGE_PATH_NOT_EXPORTED`, tsc gives four `TS2307`s, one per import
+  across the two route files. Restored and confirmed with `cmp`. The good news is that this is no
+  longer a silent failure — the new typecheck is what caught it, which is the second thing that file
+  buys beyond the one it was asked for.
 - **Build:** none. There is no build step and no output directory for this service; Vercel compiles
   the two functions.
 - **The content file is imported from outside this service root.** `src/content.ts` imports
@@ -208,9 +363,11 @@ first three take a minute each.
    - `503 {"error":"the leaderboard is unavailable"}` — routing worked, the environment did not.
      The Vercel runtime log names the variable: `[leaderboard] not configured: SUPABASE_URL is not
 set`. Values are never logged.
-   - **HTML, or a `200` that is the game's page** — the `/api/*` rewrite did not take effect and
-     nothing of this service is running. See the `services` note above; this is the failure to
-     expect first.
+   - **`404`, Vercel's own NotFound page** — no function was created, and nothing of ours ran.
+     This is the failure to expect first, and it is what production answers today. It is **not**
+     the game's `index.html`: `{ "service": "game" }` delegates the path into the service, which
+     does its own filesystem lookup against a static Vite `dist`, and there is no SPA-fallback
+     rewrite anywhere in `vercel.json`.
    - `500` — the service is running and threw at cold start, which is almost certainly one of the
      two cross-root imports named above. The Vercel log has the stack.
 3. **Play a run on the preview and press Post once.** "Posted to the board as …" means a row was
@@ -236,30 +393,25 @@ write-what-you-like list that happens to contain honest scores. `src/limit.ts` c
    → rate limiting, scoped to the `/api/` path. This is the control that spans instances, and it is
    the one thing here that cannot be done from the repository. Until it is on, treat the per-instance
    budget as a speed bump and nothing more.
-2. **Make dedupe durable** by giving the table the column the code cannot add:
+2. **Make dedupe durable.** `supabase/migrations/0002_leaderboard_log_hash.sql` adds the column the
+   code cannot add, with the unique index over it, and is safe to run before the code that writes
+   it. It **reopens D10** rather than being a quiet migration — the column is a third one on a table
+   whose decision reads "handle and score only" — so the argument on both sides, and the paragraph
+   to put in front of Legal, are in `docs/DATABASE.md` under "Decision 1". The code change that goes
+   with it is there too, including the one trap: do not use
+   `Prefer: resolution=ignore-duplicates`, because with `return=minimal` an ignored duplicate is
+   indistinguishable from a real insert and the player is told a row exists that does not.
 
-   ```sql
-   alter table public.leaderboard add column log_hash text;
-   create unique index leaderboard_log_hash_idx on public.leaderboard (log_hash);
-   ```
+3. **Decide the delete path (D10 already did).** `supabase/migrations/0004_leaderboard_delete_path.sql`
+   ships the recommendation: no route at all, an `admin` schema PostgREST does not expose holding a
+   find-then-remove-by-id pair, and `UPDATE`/`DELETE`/`TRUNCATE` revoked from `service_role` so a
+   leaked key cannot erase the board. `docs/DATABASE.md`, "Decision 3", has the reasoning — the
+   short version is that **a handle is not an identity**, so a player cannot identify their own row
+   and neither can we, which makes this a moderation control rather than a privacy one.
 
-   Then the duplicate check moves from memory into the table, and a run posted from two instances
-   lands once. The column holds a SHA-256 of the run log — gameplay, not a person, and not an
-   identifier — but it is a third column on a table whose decision (D10) reads "handle and score
-   only", so it needs that decision reopened rather than a quiet migration. The code does **not**
-   write this column today, so running the SQL early breaks nothing.
-
-3. **Decide the delete path (D10 already did).** `docs/PLAN.md` records "manual delete endpoint,
-   Legal sign-off before launch" and there is no endpoint. Shipping an unauthenticated one would be
-   worse than none, and the only secret this service is allowed to read is the Supabase key, so the
-   route needs either Vercel deployment protection in front of it or a new server-only variable.
-   Until then, removing a row means SQL in the Supabase console.
-4. **Set retention.** `created_at` exists and nothing prunes it, against D10's twelve months:
-
-   ```sql
-   select cron.schedule('leaderboard-retention', '0 3 * * *',
-     $$delete from public.leaderboard where created_at < now() - interval '12 months'$$);
-   ```
+4. **Set retention.** `supabase/migrations/0003_leaderboard_retention.sql` schedules it against
+   D10's twelve months. Note what nobody has written down: twelve-month retention makes this a
+   rolling-twelve-month board rather than an all-time one.
 
 ### Known and accepted
 

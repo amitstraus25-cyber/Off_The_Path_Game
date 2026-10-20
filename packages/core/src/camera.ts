@@ -303,6 +303,131 @@ export function topEdgeRows(y0: number, count = 2): number[] {
 }
 
 /**
+ * Moves a camera's top edge onto a whole tile row, so the frame does not open on a slice.
+ *
+ * THE DEFECT. `topEdgeRows` above says a row the edge cuts most of the way into shows only the
+ * bottom sliver of whatever stands in it, and for a canopy tile that sliver is the crown's keyline
+ * and nothing else -- a hard dark rule across the top of the picture. It has been saying that since
+ * it was written, and only the ART ever read it: the composition passes planted crowns on the rows
+ * it names while the GAME went on pointing its camera wherever the arithmetic landed, which at the
+ * spawn is 78% of the way into row 14. The client has reported the resulting band since the first
+ * build. It was misdiagnosed twice as a backdrop hole -- it is not; a magenta-backdrop probe
+ * measures zero holes across 49 configurations, and both one-pixel holes that did exist are fixed.
+ * It is this: the camera's top edge is not on a row boundary, so the top of the frame is the bottom
+ * fifth of a row of crowns.
+ *
+ * Causation was proved before any code moved, by rendering the real map through the real camera and
+ * moving RED while leaving the world alone: at 1673x449 the first eight rows go from 25.1% deep
+ * shade to 8.0%, and at 390x844 from 48.1% to 19.2%, with not one pixel of the map repainted. So
+ * the band is where the camera sits, not what the painters put there.
+ *
+ * CEIL, NOT FLOOR, which is `topEdgeRows`'s decision and this function only carries it: ceil pushes
+ * the sliver OFF the top and opens on the first row that is wholly in frame. Floor would pull the
+ * camera up until the cut row is fully shown, which trades a sliver of crown for a whole row of it
+ * -- more dark pixels, not fewer, and it also contradicts the rows the framing passes plant into.
+ *
+ * WHAT WAS TRIED AND REJECTED, so that nobody spends a round re-running it:
+ *
+ *   1. SNAPPING EVERY FRAME. The obvious version: quantise the scroll in `syncCamera` on every
+ *      tick. It judders. The camera scrolls continuously while Red walks, so quantising the scroll
+ *      turns vertical movement into a 32px staircase -- the world jumps a whole tile instead of
+ *      sliding. That is a worse defect than the band and the client would report it as a new bug.
+ *   2. EASING TOWARD A SNAPPED TARGET. Keeps the motion continuous but makes the TARGET jump by a
+ *      whole tile as Red walks, so the camera rubber-bands: it accelerates and decelerates in 32px
+ *      chunks against an exponential ease that never actually arrives, so the resting edge is only
+ *      approximately on a row. Both halves of the idea fail.
+ *   3. SNAPPING WHEN THE CAMERA SETTLES. Defers the jump rather than removing it: stop walking and
+ *      the world lurches up to 31px. That is judder with a delay on it.
+ *   4. SNAPPING ONLY AT THE TOP BOUND. Free, and useless: at the top bound the edge is already 0,
+ *      which is already a whole row. The band is measured in open forest, nowhere near a bound.
+ *
+ * SO THE SNAP BELONGS AT A CUT. `forest-scene.ts` moves its camera in exactly two ways: it EASES
+ * after Red every frame (`syncCamera(deltaMs)` out of `update`), and it CUTS -- a hard placement
+ * with no motion at all -- in three places, the opening shot in `create`, the replay's opening shot
+ * in `resetToSpawn`, and the payoff shot in `stageArrival`, which its own docstring already calls
+ * "a CUT, not a pan". A cut has no frame before it to judder against, so a snapped cut costs
+ * nothing and fixes every frame a visitor looks at while standing still. While she walks the world
+ * scrolls and the top edge sweeps through every offset there is; that is what scrolling looks like
+ * and it is not the complaint.
+ *
+ * THE BOTTOM EDGE IS THE SAME DEFECT MOVED, so it is checked here rather than discovered later.
+ * Snapping DOWN pushes the bottom edge down too, and `maxTop` -- the furthest down the camera may
+ * sit, `world.height - view.height` -- is what says whether there is room. If there is not, the
+ * camera is against the bottom of the world and snapping down would open a strip of backdrop under
+ * the map, so it snaps UP to the row below instead: a whole row of crown at the top is what the
+ * framing passes plant for, and it is in-world, which a strip of backdrop is not. On this map no
+ * cut is anywhere near that bound -- the spawn object is row 20 of 42, Red's feet row 21, and the
+ * opening camera's top edge lands on rows 9.78 to 15.56 depending on the viewport with 353 to 538px
+ * of room left below it (narrowest at 2560x1440, widest at 844x390) -- so the fallback is
+ * correctness insurance for a future map and not a live path. THIS PARENTHESIS READ "the spawn sits
+ * at row 15 of 42" UNTIL 2026-10-21, WHICH IS NOT A ROW THE SPAWN HAS EVER BEEN ON: 15 is roughly
+ * where the CAMERA's top edge lands at 1280x800 (14.78), five rows above the spawn itself. The
+ * conclusion was right and the number was somebody's memory of a different rectangle, which is
+ * trap 1 in miniature, inside the file written to end trap 1.
+ *
+ * `top` is the already-clamped, already-rounded top edge in game pixels, so it is never negative
+ * and the result is never negative either. The caller applies the difference to the camera's CENTRE
+ * and lets `cameraTopLeft` clamp and round as it always did, which keeps that function the last
+ * word on the world's bounds -- this one only chooses which row to aim at.
+ */
+export function snapTopEdge(top: number, maxTop: number): number {
+  const down = topEdgeRows(top / TILE, 1)[0]! * TILE;
+  return down <= Math.max(0, maxTop) ? down : Math.floor(top / TILE) * TILE;
+}
+
+/** A camera centre and the lift it is currently carrying. See `snapCentreToRow`. */
+export interface LiftedCentre {
+  /** The camera's centre on the Y axis, in game pixels, with `lift` already in it. */
+  centreY: number;
+  /**
+   * How far below its unlifted aim the camera is sitting, in game pixels.
+   *
+   * Under a tile in magnitude. Non-negative on every live path, because `snapTopEdge` moves the
+   * edge DOWN onto the next whole row; negative only against the bottom of the world, where it
+   * snaps up instead rather than scroll past the last row of the map.
+   */
+  lift: number;
+}
+
+/**
+ * Re-aims a camera centre so its top edge lands on a whole tile row, replacing any lift it already
+ * carries.
+ *
+ * THIS EXISTS TO MAKE "SET, NOT ACCUMULATED" A THING A TEST CAN HOLD. The caller stores the lift
+ * between placements -- it has to, because the lift lives in what the camera is AIMING at and not
+ * in a one-off shift (forest-scene.ts's `syncCamera` carries that measurement) -- and a stored
+ * offset that is added to rather than replaced walks the camera off down the map. Measured through
+ * the real `cameraFor`/`cameraTopLeft` at 375x812 rotated to 812x375 and back, three times:
+ *
+ *     resize   1     2     3     4     5     6
+ *     set      31    6     31    6     31    6     centre 683 658 683 658 683 658
+ *     +=       31    37    67    77    83    109   centre 683 658 651 594 523 466
+ *
+ * -- six rotations and the accumulated version is carrying 109px of "lift", 3.41 tiles, with its
+ * centre 217px up the map from where the same six rotations leave the correct one. The correct
+ * version is periodic because the lift is a property of the viewport and nothing else; that is the
+ * property, and it only holds if each placement REPLACES the last.
+ *
+ * So the two numbers move together, from one function, and neither can be updated without the
+ * other: `centreY` comes back with the old lift taken out and the new one put in, and `lift` comes
+ * back as the new one, never as a sum. A caller that writes one and not the other is wrong in a way
+ * its own next frame will show it.
+ *
+ * `rawTop` is the UNLIFTED camera's top edge -- already clamped to the world and rounded by
+ * `cameraTopLeft`, which stays the last word on the world's bounds. `maxTop` is the furthest down
+ * the camera may sit, `world.height - view.height`, and is only consulted at the bottom of the map.
+ */
+export function snapCentreToRow(
+  centreY: number,
+  lift: number,
+  rawTop: number,
+  maxTop: number,
+): LiftedCentre {
+  const next = snapTopEdge(rawTop, maxTop) - rawTop;
+  return { centreY: centreY - lift + next, lift: next };
+}
+
+/**
  * The tile columns of the DESKTOP title camera a visitor can actually SEE.
  *
  * The copy column is opaque over the left end of the frame, so canopy counted across the whole row

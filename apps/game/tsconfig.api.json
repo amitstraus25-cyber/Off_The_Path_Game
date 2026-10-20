@@ -1,0 +1,43 @@
+/*
+ * The ONLY thing that typechecks apps/game/api/ -- the two route files that are the entire live
+ * leaderboard surface.
+ *
+ * Why this is a second config and not three more characters in tsconfig.json's `include`:
+ * that was tried and it does not work. The game's config sets `"types": ["vite/client"]` and the
+ * DOM libs, because it is a browser bundle. These route files re-export handlers from @otp/api,
+ * and that import chain is Node: `apps/api/src/deps.ts` reads `process.env` and
+ * `apps/api/src/limit.ts` imports `node:crypto`. Adding "api" to the game's own include was run
+ * before this file was written, and it fails with exactly that -- two TS2591s, "Cannot find name
+ * 'process'" and "Cannot find name 'node:crypto'". One directory cannot be both halves of that
+ * split, so it gets its own config, pointed at tsconfig.base.json with Node types instead.
+ *
+ * `erasableSyntaxOnly` matches apps/api/tsconfig.json deliberately. These files are compiled by
+ * Vercel, not by us, and Node's own type stripping refuses enums and parameter properties. A route
+ * file that typechecks here and dies on the platform is the exact failure this config exists to
+ * prevent, so the platform's constraint is written down rather than assumed.
+ *
+ * Wired into apps/game's `typecheck` AND `build` scripts. Both, not either, and `build` is the one
+ * that protects anything: vercel.json gives the game service no buildCommand, so the platform runs
+ * this package's `build` script on every deploy and never runs `typecheck` at all. Wired into
+ * `typecheck` alone -- which is how this config shipped first -- it gated CI and left the deploy
+ * path untouched, which is the one path a broken route file can actually reach production through.
+ * That is trap 3 in docs/PAUL_BRIEF.md: a guard that reads the pipeline and not the deployment.
+ *
+ * Measured 2026-10-21. `tsc -p tsconfig.api.json` alone: 0.64s, 0.59s, 0.59s over three runs. The
+ * whole `build` with it: 3.97s, 3.97s, 4.09s, against a baseline of 3.65s, 4.40s, 5.11s without it
+ * -- so the added step is a real 0.6s and is inside the run-to-run noise of the build it joins. It
+ * runs ahead of `vite build` deliberately: a route file that cannot typecheck should cost the
+ * deploy a second, not produce a dist that ships a dead leaderboard.
+ *
+ * WHAT IT CATCHES AND WHAT IT DOES NOT. It catches an import of a module that is not there
+ * (TS2307, proved by renaming handlers.ts to handlerz.ts and watching `build` exit 2). It does NOT
+ * catch dropping the load-bearing `.ts` extension off those imports, because tsconfig.base.json
+ * sets `"moduleResolution": "Bundler"` and Bundler resolution searches extensions where node's ESM
+ * resolver does not -- the extensionless form typechecks clean and then fails on the platform if
+ * the platform is not bundling. See apps/game/api/top.ts; that one is still held by a comment.
+ */
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": ["node"], "erasableSyntaxOnly": true },
+  "include": ["api"]
+}

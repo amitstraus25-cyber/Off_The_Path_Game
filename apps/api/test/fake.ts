@@ -37,8 +37,34 @@ export interface Instance {
   recent?: RecentRuns;
 }
 
+/**
+ * What PostgREST answers to the insert this service sends: `201 Created`, and -- because the
+ * request carries `Prefer: return=minimal` -- no body at all.
+ *
+ * The 201 is written here as a literal, taken from PostgREST's documentation for `POST /table`,
+ * and NOT imported from `src/store.ts`. A fake that reflects the adapter's own constant back at it
+ * would follow that constant wherever it went: change the adapter to believe 200 and every test
+ * here would move with it and stay green, which is the exact shape of guard this repo has been
+ * caught by before.
+ */
+export const created = (): Response => new Response(null, { status: 201 });
+
+/**
+ * A reply whose body errors instead of arriving -- a connection torn after the headers.
+ * `res.text()` rejects on it, which is the one case neither "empty" nor "a body" describes.
+ */
+export const unreadable = (status: number): Response =>
+  new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error('the connection went away mid-body'));
+      },
+    }),
+    { status },
+  );
+
 export function harness(
-  reply: (call: Call) => Response = () => new Response(null, { status: 201 }),
+  reply: (call: Call) => Response = created,
   instance: Instance = {},
 ): Harness {
   const calls: Call[] = [];

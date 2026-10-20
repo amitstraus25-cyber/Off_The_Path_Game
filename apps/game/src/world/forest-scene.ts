@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
-import { ending } from '@otp/core';
+/*
+ * `snapCentreToRow` comes straight from @otp/core rather than through `./logic`, which re-exports
+ * the rest of the camera geometry. That re-export list is a convenience for imports that predate
+ * the move to the core package, and world/logic.ts belongs to another owner this round; a new
+ * symbol does not need to be threaded through it to be used here.
+ */
+import { ending, snapCentreToRow } from '@otp/core';
 import type { Phase } from '@otp/core';
 import type { Store } from '../store';
 import type { Bus } from '../bus';
@@ -368,6 +374,21 @@ export class ForestScene extends Phaser.Scene {
   private reducedMotion = false;
   /** The camera's own centre, which lags Red rather than being pinned to her. */
   private camera: Vec = { x: 0, y: 0 };
+  /**
+   * How far below `CAMERA_FOCUS_Y` the camera aims, to put its top edge on a whole tile row.
+   *
+   * Under a tile in magnitude, and non-negative on every live path -- the edge is moved DOWN onto
+   * the next whole row. (`snapTopEdge` returns a negative lift only against the bottom of the
+   * world, where it snaps up rather than scroll past the last row; no cut on this map is within
+   * 350px of that bound. The docstring here read "Always in [0, TILE)" until 2026-10-21, which is
+   * the arithmetic of the live path mistaken for the range of the function.)
+   *
+   * CHOSEN at a placement and at a resize, and RELEASED on the first frame the camera's own centre
+   * moves, because a lift chosen for one camera position aligns nothing at any other. It is never
+   * re-chosen while Red walks. `syncCamera` is where both halves happen and where the whole
+   * argument, and the measurements behind it, live.
+   */
+  private snapLift = 0;
   /** A small pool of dust puffs, reused so walking never allocates. */
   private dust: Phaser.GameObjects.Sprite[] = [];
   private dustNext = 0;
@@ -442,7 +463,9 @@ export class ForestScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
     this.camera = this.focus();
-    this.syncCamera();
+    // A placement, not a movement: the opening shot, so its top edge is snapped to a whole tile
+    // row rather than opening on the bottom sliver of a canopy row. See `syncCamera`.
+    this.syncCamera(0, true);
     /*
      * DOT ACCESS, NOT `env['VITE_E2E']`, AND THAT IS THE WHOLE POINT.
      *
@@ -561,8 +584,10 @@ export class ForestScene extends Phaser.Scene {
     this.arrived = false;
     for (const paw of this.paws) paw.setVisible(false);
     // Snap, not ease: a replay should not pan across the forest from wherever the last run ended.
+    // A placement, so the top edge is snapped to a whole tile row, exactly as in `create`: the
+    // second run's opening shot is the same shot as the first's and must not keep the band.
     this.camera = this.redFocus();
-    this.syncCamera();
+    this.syncCamera(0, true);
   }
 
   /**
@@ -787,6 +812,11 @@ export class ForestScene extends Phaser.Scene {
       .includes(ending(this.store.getState(), this.store.content).id);
     for (const paw of this.paws) paw.setVisible(earned);
 
+    /*
+     * A placement, and deliberately NOT a snapped one: `syncCamera` refuses to snap the top edge
+     * while `arrived` is true, because this shot is composed on the building and not on the tile
+     * grid. The reasoning and the measured cost of snapping it are in `syncCamera`.
+     */
     this.camera = this.doorFocus();
     this.syncCamera();
   }
@@ -945,10 +975,20 @@ export class ForestScene extends Phaser.Scene {
     );
   }
 
-  private syncCamera(deltaMs = 0): void {
+  /**
+   * @param cut true when the camera is being PLACED rather than moved -- see the snap below.
+   */
+  private syncCamera(deltaMs = 0, cut = false): void {
     // The centre eases after Red and holds still while she is inside the deadzone; cameraTopLeft
     // still rounds, so the scroll stays on whole pixels and the tiles never shimmer.
+    const restedAt = this.camera.y;
     this.camera = cameraFollow(this.camera, this.focus(), deltaMs);
+    /*
+     * Whether the camera itself moved this frame, which is the question the lift's lifetime turns
+     * on. Measured on the CAMERA and not on Red: inside the deadzone she moves and it does not,
+     * and a camera that has not moved still has the whole tile row its placement bought it.
+     */
+    const moved = this.camera.y !== restedAt;
     const world = { width: this.map.widthInPixels, height: this.map.heightInPixels };
     const view = this.viewFor(this.camera, world);
     const main = this.cameras.main;
@@ -965,8 +1005,145 @@ export class ForestScene extends Phaser.Scene {
      */
     const vx = Math.round((this.scale.gameSize.width - view.width) / 2);
     const vy = Math.round((this.scale.gameSize.height - view.height) / 2);
-    if (main.x !== vx || main.y !== vy || main.width !== view.width || main.height !== view.height)
-      main.setViewport(vx, vy, view.width, view.height);
+    const reframed =
+      main.x !== vx || main.y !== vy || main.width !== view.width || main.height !== view.height;
+    if (reframed) main.setViewport(vx, vy, view.width, view.height);
+    /*
+     * THE DARK BAND ACROSS THE TOP OF THE WORLD, which is the client's oldest complaint.
+     *
+     * `snapTopEdge` in packages/core/src/camera.ts carries the whole argument -- what the band is,
+     * how causation was proved by moving Red and not the map, why it is CEIL, and the four ways of
+     * doing it that were tried and rejected. The one thing that belongs here rather than there is
+     * WHEN, because "when" is a fact about this file and about nothing else.
+     *
+     * This camera moves in exactly two ways and only one of them may be snapped:
+     *
+     *   IT EASES, every frame, out of `update` -> `syncCamera(deltaMs)`. Snapping an eased camera
+     *   quantises the scroll, so walking north or south moves the world a whole 32px tile at a
+     *   time instead of sliding: judder, which is a worse defect than the band and which the
+     *   client would report as a new bug. So `cut` is false there and nothing is snapped.
+     *
+     *   IT IS PLACED, with no motion before it to be continuous with. That is `cut` -- the opening
+     *   shot in `create` and the replay's in `resetToSpawn` -- and it is also `reframed`, a resize:
+     *   the viewport rectangle has just changed underneath the camera, so there is no continuity
+     *   left to protect and a snap in the same frame costs nothing. Without the `reframed` half,
+     *   rotating a phone on the title screen brings the band back and leaves it there until the
+     *   player walks, which is the whole defect again at the one moment the client is looking.
+     *
+     * NOT AT THE DOOR, and that is a refusal with a measurement behind it. The payoff frame is
+     * composed on the BUILDING -- `doorFocus` centres the chimney row, the facade and the three
+     * rows of lane -- and e2e/scene-second-pass.spec.ts asserts the building's centre lands within
+     * ONE game pixel of the canvas's at every payoff viewport. Snapping it was measured first:
+     * it moves the camera +31px at 1280x800, +27 at 375x812, +19 at 2560x1440, +7 at 1673x449.
+     * Every one of those is the building sliding off its centre line, which is the exact defect
+     * that spec was written for. Centred on the facade and aligned to the tile grid are two
+     * different rectangles and the map cannot give both, so the composed one wins and the arrival
+     * is left alone. `this.arrived` is the test, not the call site, so a future cut cannot opt
+     * into the snap at the door by accident.
+     *
+     * AND THE VIEW IS NOT CIRCULAR HERE, which is why the snap reads `view` from the line above
+     * rather than recomputing. `viewFor` returns the whole canvas whenever `!this.arrived`, so on
+     * every path that can reach this branch the view does not depend on the camera's centre and
+     * shifting the centre cannot change it. On the arrived path it does depend on the centre --
+     * and that is the path this branch refuses.
+     *
+     * IT GOES INTO `snapLift`, AND THE FIRST VERSION OF THIS FIX DID NOT, which is the failure
+     * worth recording here because it passed every test and a screenshot of the opening frame,
+     * and still did not work. That version shifted `this.camera.y` directly and left `redFocus`
+     * alone, so the very next frame `cameraFollow` saw the camera 31px from its target, measured
+     * that against `CAMERA_DEADZONE.y` -- which is 20 -- found it outside, and EASED THE SNAP
+     * BACK OUT. Measured by placing the camera and running sixty frames of the real follow:
+     *
+     *     1673x449   shift 11px   row 15.000 -> 15.000  holds
+     *     390x844    shift 10px   row 12.000 -> 12.000  holds
+     *     1280x800   shift  7px   row 15.000 -> 15.000  holds
+     *     375x812    shift 31px   row 13.000 -> 12.656  DRIFTS 11px
+     *     768x1024   shift 31px   row 16.000 -> 15.656  DRIFTS 11px
+     *
+     * -- so it held at five viewports and quietly came undone at the project's own phone and
+     * tablet, over about a third of a second, as a creep the player can see on the title screen.
+     * A snap smaller than the deadzone sticks by accident; one larger than it does not, and which
+     * you get depends on the viewport height. That is not a fix, it is a coin toss.
+     *
+     * So the lift is part of what the camera is AIMING at, not something done to it afterwards:
+     * `redFocus` adds `snapLift`, the deadzone is measured around the lifted target, and there is
+     * nothing for the follow to pull back. It is a CONSTANT translation, re-chosen only here at a
+     * placement, so it cannot quantise the scroll while she walks -- which is the whole reason the
+     * every-frame version was rejected. And it is SET from the unlifted camera rather than added
+     * to, which is `snapCentreToRow`'s job and is measured there: six rotations of a phone leave
+     * the correct version carrying 6px and the accumulating one 109px, 3.41 tiles, with its centre
+     * 217px UP the map. (This paragraph said "down the map" until 2026-10-21. The sign is the other
+     * way -- the accumulated lift is subtracted from the centre more often than it is added -- and
+     * the figure was nobody's measurement at all.)
+     *
+     * AND IT IS RELEASED ON THE FIRST FRAME THE CAMERA MOVES, which is the half this fix was sent
+     * back for not having. The lift went into `redFocus` for the WHOLE RUN, and `CAMERA_FOCUS_Y`
+     * is -20, so at the two viewports whose lift is 31 -- 375x812 and 768x1024, the project's own
+     * phone and tablet -- the camera spent an entire playthrough aiming eleven pixels BELOW Red's
+     * feet, out of a method whose own docstring says it frames her chest. The cost, measured as
+     * where her feet sit down the frame at the opening shot, unlifted -> lifted:
+     *
+     *     1673x449   view 1280x366   lift 11   55.46% -> 52.46%
+     *     390x844    view  384x556   lift 10   53.60% -> 51.80%
+     *     1280x800   view  620x358   lift  7   55.59% -> 53.63%
+     *     768x1024   view  380x342   lift 31   55.85% -> 46.78%
+     *     375x812    view  368x534   lift 31   53.75% -> 47.94%
+     *     844x390    view  806x308   lift 14   56.49% -> 51.95%
+     *     2560x1440  view 1260x678   lift  7   52.95% -> 51.92%
+     *     320x568    view  352x358   lift  7   55.59% -> 53.63%
+     *     390x600    view  384x382   lift 19   55.24% -> 50.26%
+     *
+     * -- a whole tile at the phone and the tablet, 5.81% and 9.06% of the frame, which moves her
+     * from below the centre line to above it. (The review that caught this called it "a 51px change
+     * in a 534px-tall frame". The change is the lift, 31px; 534 is the phone's view height and the
+     * tablet's is 342; 51 is the gap between CAMERA_FOCUS_Y's -20 and +31 and is not a distance the
+     * camera ever moves. The finding was right and the number was not, so the table above is
+     * derived rather than remembered.)
+     *
+     * THAT PRICE BUYS EXACTLY ONE FRAME, because once the camera has moved the lift aligns nothing:
+     * it is chosen for one camera position, and anywhere else it is an arbitrary offset. Walk her
+     * south through the real follow, let the camera settle, and read the top edge's offset into its
+     * row, at 375x812 and 768x1024 alike:
+     *
+     *     walked        37px  64px  100px  128px  181px  256px
+     *     lift held      18    12     16     12      2     12
+     *     lift released  19    13     17     13      3     13
+     *
+     * Off the row either way, at every distance. So the lift is dropped the first frame the camera
+     * moves, and that timing is what makes dropping it free:
+     *
+     *   STANDING STILL the camera never moves, so it is never dropped, and the frame a visitor
+     *   reads the title card over keeps its whole row. That is the frame the client photographed.
+     *
+     *   WALKING SOUTH the deadzone swallows it. She leaves the deadzone after 22px, the camera
+     *   takes its first step, and dropping a 31px lift puts the target 9px INSIDE the deadzone, so
+     *   the camera holds for another 29px of walking rather than reversing. Over 90 frames its
+     *   per-frame travel is identical with and without the release: 0.00 to 2.00px, which is the
+     *   walk's own rate.
+     *
+     *   WALKING NORTH the camera is already travelling the way the release pulls, and it travels
+     *   faster for about a third of a second: 4.51px in a frame against the walk's 2.00, then 4.18,
+     *   3.90, 3.65, 3.44, converged inside 1.5s exactly the lift (31px) further up the map, which
+     *   is where it was always meant to be aiming.
+     *
+     *   WALKING SIDEWAYS does not move the camera's Y at all, so the row survives and nothing is
+     *   handed back for nothing.
+     *
+     * AND NOT "SNAP ONLY THE POSITIONS THAT SHOW THE BAND", which is the cheaper answer this map
+     * does not have. The band needs canopy in the row the edge cuts, and on map-forest every row
+     * but the last carries canopy -- from 5% of columns on row 19 to 67% on row 2 -- while the top
+     * edge can cut rows 0-25 at 375x812 and 0-30 at 1280x800. "Only where a canopy row is cut" is
+     * "everywhere", which is rejected experiment 1 in camera.ts with arithmetic on top.
+     */
+    if ((cut || reframed) && !this.arrived) {
+      const unlifted = { x: this.camera.x, y: this.camera.y - this.snapLift };
+      const raw = cameraTopLeft(unlifted, view, world).y;
+      const placed = snapCentreToRow(this.camera.y, this.snapLift, raw, world.height - view.height);
+      this.camera = { x: this.camera.x, y: placed.centreY };
+      this.snapLift = placed.lift;
+    } else if (moved) {
+      this.snapLift = 0;
+    }
     const { x, y } = cameraTopLeft(this.camera, view, world);
     main.setScroll(x, y);
   }
@@ -1032,9 +1209,23 @@ export class ForestScene extends Phaser.Scene {
     return this.arrived ? this.doorFocus() : this.redFocus();
   }
 
-  /** The camera frames Red's chest, not her feet, so the shot shows where she is going. */
+  /**
+   * The camera frames Red's chest, not her feet, so the shot shows where she is going.
+   *
+   * Plus `snapLift`, which is under a tile and is what keeps the camera's top edge on a whole tile
+   * row instead of part-way into a row of canopy. It belongs in the TARGET rather than being
+   * applied to the camera afterwards, because the deadzone in `cameraFollow` is measured against
+   * this value: a lift bigger than `CAMERA_DEADZONE.y` applied anywhere else is eased straight
+   * back out. `syncCamera` carries the measurement and the rest of the argument.
+   *
+   * It is a term of this sum only while the camera is standing still. `syncCamera` releases it on
+   * the first frame the camera's centre moves, because a lift chosen for one camera position
+   * aligns no other -- and a lift left in for the whole run frames her eleven pixels below her own
+   * feet at 375x812 and 768x1024, which is the opposite of what this method's first line says it
+   * is for. The table of what that cost is in `syncCamera`.
+   */
   private redFocus(): Vec {
-    return { x: this.position.x, y: this.position.y + CAMERA_FOCUS_Y };
+    return { x: this.position.x, y: this.position.y + CAMERA_FOCUS_Y + this.snapLift };
   }
 
   /**

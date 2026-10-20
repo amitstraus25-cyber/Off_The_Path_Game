@@ -3,6 +3,21 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "//": [
+    "THERE IS NO \"exports\" MAP HERE AND THERE MUST NOT BE ONE. This is load-bearing, not an omission.",
+    "The two live leaderboard routes are apps/game/api/score.ts and apps/game/api/top.ts, and they reach",
+    "this package by deep path -- '@otp/api/src/deps.ts' and '@otp/api/src/handlers.ts'. A package with no",
+    "exports map is the only kind whose arbitrary subpaths resolve at all; the moment one is added, every",
+    "subpath not named in it stops existing. Measured 2026-10-21 by adding the ordinary well-meaning map",
+    "{ \".\": \"./src/index.ts\" } and running both resolvers: node answers ERR_PACKAGE_PATH_NOT_EXPORTED,",
+    "\"Package subpath './src/deps.ts' is not defined by exports\", and tsc answers four TS2307s, one per",
+    "import across the two files. That is the ENTIRE leaderboard surface failing at once, and before",
+    "apps/game/tsconfig.api.json existed it would have failed in silence -- those two files were typechecked",
+    "by nothing, so a dead board would have reached production and waited for someone to notice.",
+    "If you need an entry point, add a plain 'main' or let callers keep using the deep path. If you add an",
+    "exports map anyway, it must name './src/*' explicitly, and `pnpm typecheck` is what will tell you.",
+    "The '.ts' extension on those imports is load-bearing for the same reason -- see apps/game/api/top.ts."
+  ],
   "engines": {
     "node": "22.x"
   },

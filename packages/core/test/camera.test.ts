@@ -14,6 +14,8 @@ import {
   PORTRAIT_WORLD_BAND,
   RED_FEET_BELOW_SPAWN,
   REFERENCE_VIEWPORTS,
+  snapCentreToRow,
+  snapTopEdge,
   stageFit,
   TILE,
   TITLE_CARD_W,
@@ -214,6 +216,120 @@ describe('topEdgeRows', () => {
   it('returns as many rows as asked for', () => {
     expect(topEdgeRows(14.78, 3)).toEqual([15, 16, 17]);
     expect(topEdgeRows(14.78, 1)).toEqual([15]);
+  });
+});
+
+describe('snapTopEdge', () => {
+  /*
+   * THE PROPERTY, NOT THE FORMULA. A guard that recomputed `ceil(top / TILE) * TILE` and compared
+   * it with the function's own answer would move with the defect and pass in silence, which is the
+   * trap this repo has been bitten by. So what is asserted here is what a VISITOR can see: the
+   * edge lands on a tile row, the camera moved DOWN to get there, and it moved less than one row,
+   * which together are the whole of "the frame does not open on a slice of a canopy row".
+   */
+  const onARow = (v: number): boolean => v % TILE === 0;
+  const roomBelow = 42 * TILE; // a bound far below anything these cases ask for
+
+  it('puts a top edge that cuts into a row onto a whole row', () => {
+    for (const top of [473, 469, 385, 374, 1, TILE - 1, TILE * 7 + 13]) {
+      const snapped = snapTopEdge(top, roomBelow);
+      expect(onARow(snapped), `${top} -> ${snapped} is a whole tile row`).toBe(true);
+      expect(snapped, `${top} -> ${snapped} moved down`).toBeGreaterThan(top);
+      expect(snapped - top, `${top} -> ${snapped} moved less than one row`).toBeLessThan(TILE);
+    }
+  });
+
+  it('leaves an edge that is already on a row exactly where it is', () => {
+    for (const top of [0, TILE, TILE * 15, TILE * 41])
+      expect(snapTopEdge(top, roomBelow)).toBe(top);
+  });
+
+  /*
+   * The top bound is the case that looks like it needs a special rule and does not: a camera held
+   * against the top of the world sits at 0, and 0 is already a whole row.
+   */
+  it('does not move a camera that is already against the top of the world', () => {
+    expect(snapTopEdge(0, roomBelow)).toBe(0);
+  });
+
+  /*
+   * THE BOTTOM EDGE IS THE SAME DEFECT MOVED. Snapping down pushes the bottom down too, and
+   * against the bottom of the world there is nowhere for it to go: continuing would scroll past
+   * the map and open a strip of backdrop under it, which is the hole this whole complaint was
+   * twice misdiagnosed as. So it snaps UP instead -- still a whole row, still inside the world.
+   */
+  it('snaps up rather than past the bottom of the world', () => {
+    const maxTop = TILE * 15 + 20; // the furthest down the camera may sit, mid-row
+    const snapped = snapTopEdge(maxTop, maxTop);
+    expect(onARow(snapped)).toBe(true);
+    expect(snapped).toBe(TILE * 15);
+    expect(snapped).toBeLessThanOrEqual(maxTop);
+  });
+
+  it('never leaves the world when the camera is taller than the map', () => {
+    // `cameraTopLeft` clamps such a camera to 0 and hands that in; there is no row to snap to.
+    expect(snapTopEdge(0, -100)).toBe(0);
+  });
+});
+
+describe('snapCentreToRow', () => {
+  /*
+   * SET, NOT ACCUMULATED, which is the property this function exists to make testable.
+   *
+   * The scene stores the lift between placements -- it has to, because the lift lives in what the
+   * camera AIMS at rather than in a one-off shift -- and the stored number is the one that can be
+   * added to instead of replaced. Prose said "SET, not accumulated" for a round and nothing
+   * checked it, so `this.snapLift += lift` would have passed every test in the suite while walking
+   * the camera off up the map a third of a tile per resize. These are the two halves of that
+   * property, on the only function that is allowed to produce either number.
+   */
+  const roomBelow = 42 * TILE;
+
+  it('reads the new lift off the row, not off the lift it was handed', () => {
+    const fromNothing = snapCentreToRow(1000, 0, 473, roomBelow);
+    for (const carried of [7, 19, 31, -5, 1000]) {
+      const again = snapCentreToRow(1000 + carried, carried, 473, roomBelow);
+      expect(again.lift, `a camera carrying ${carried} gets the same lift`).toBe(fromNothing.lift);
+      expect(again.centreY, `and lands on the same centre`).toBe(fromNothing.centreY);
+    }
+  });
+
+  it('takes the old lift out of the centre before it puts the new one in', () => {
+    // 473 is the opening shot's top edge at 1280x800: 14.78 rows, so the row above needs 7px.
+    expect(snapCentreToRow(1000, 0, 473, roomBelow)).toEqual({ centreY: 1007, lift: 7 });
+    expect(snapCentreToRow(1031, 31, 473, roomBelow)).toEqual({ centreY: 1007, lift: 7 });
+  });
+
+  /*
+   * The resize nobody thinks about: the same size twice, or a rotation and back. Applying the
+   * function to its own output has to land where one application lands -- that is exactly what
+   * `+=` breaks, and it breaks it silently, a few pixels at a time.
+   */
+  it('lands in the same place however many times it is applied', () => {
+    const once = snapCentreToRow(1000, 0, 473, roomBelow);
+    const twice = snapCentreToRow(once.centreY, once.lift, 473, roomBelow);
+    const thrice = snapCentreToRow(twice.centreY, twice.lift, 473, roomBelow);
+    expect(twice).toEqual(once);
+    expect(thrice).toEqual(once);
+  });
+
+  it('keeps the lift inside one tile', () => {
+    for (const raw of [0, 1, 313, 374, 385, 461, 469, 473, 481, 498, 1311]) {
+      const { lift } = snapCentreToRow(1000, 29, raw, roomBelow);
+      expect(Math.abs(lift), `a raw top of ${raw} asked for a lift of ${lift}`).toBeLessThan(TILE);
+    }
+  });
+
+  /*
+   * Against the bottom of the world `snapTopEdge` snaps UP, so the lift it hands back is negative
+   * and the centre moves the other way. Asserted because `snapLift`'s docstring claimed [0, TILE)
+   * for a round, which is the live path's arithmetic mistaken for the function's range.
+   */
+  it('passes on a negative lift at the bottom of the world', () => {
+    const maxTop = TILE * 15 + 20;
+    const { centreY, lift } = snapCentreToRow(1000, 0, maxTop, maxTop);
+    expect(lift).toBe(-20);
+    expect(centreY).toBe(980);
   });
 });
 
