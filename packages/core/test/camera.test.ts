@@ -102,6 +102,54 @@ describe('stageFit', () => {
       max: [MAX_VIEW.width % 2, MAX_VIEW.height % 2],
     }).toEqual({ min: [0, 0], max: [0, 0] });
   });
+
+  /*
+   * THE FIVE WORKED VIEWPORTS, WHICH USED TO BE A TABLE IN A COMMENT AND WERE WRONG THERE.
+   *
+   * camera.ts's note on `even` tabulated these, and the row for 1673x449 -- the client's own
+   * window, and the only one of the five still being argued about -- read "camera 1280x367
+   * (even)". 367 is odd, and the real camera there is 1280x366, because `even` rounds it down. The
+   * row's conclusion was right and both of its numbers were wrong, inside the very fix written to
+   * stop numbers drifting. A comment cannot fail; this can, so the figures live here now.
+   *
+   * The `raw` column is the floor the sizing starts from, before MIN/MAX_VIEW clamping and before
+   * `even`, which is what makes this more than a snapshot: four of the five arrive odd on at least
+   * one axis, so the `camera` column is not simply recording that nothing happens. 844x390 is the
+   * control -- already even on both axes, and untouched. 1673x449 is the one to read carefully:
+   * its WIDTH goes 1635 -> 1280 by the MAX_VIEW clamp rather than by `even`, while its HEIGHT goes
+   * 367 -> 366 by `even`. That height is the number the old comment got wrong.
+   */
+  it('gives exactly these cameras at the five viewports the hole was measured at', () => {
+    const worked = (width: number, height: number): { raw: string; camera: string } => {
+      const { available } = availableFor({ width, height });
+      const { zoom, view } = stageFit(available);
+      return {
+        // The floor the sizing starts from, before clamping and before the evening rule.
+        raw: `${Math.floor(available.width / zoom)}x${Math.floor(available.height / zoom)}`,
+        camera: `${view.width}x${view.height}`,
+      };
+    };
+
+    expect({
+      '1280x800': worked(1280, 800),
+      '2560x1440': worked(2560, 1440),
+      '375x812': worked(375, 812),
+      '1673x449': worked(1673, 449),
+      '844x390': worked(844, 390),
+    }).toEqual({
+      // 359 magenta px down column 0 before the fix.
+      '1280x800': { raw: '621x359', camera: '620x358' },
+      // 679 px.
+      '2560x1440': { raw: '1261x679', camera: '1260x678' },
+      // 534 px.
+      '375x812': { raw: '369x534', camera: '368x534' },
+      // The client's window. Even in width, so it never showed the LEFT-bound hole the other three
+      // did -- which is why it was filed as "(even)" and left alone. Its height was odd all along.
+      '1673x449': { raw: '1635x367', camera: '1280x366' },
+      // The control: even on both axes before the rule, and unchanged by it.
+      '844x390': { raw: '806x308', camera: '806x308' },
+    });
+  });
 });
 
 describe('pixelSnap', () => {

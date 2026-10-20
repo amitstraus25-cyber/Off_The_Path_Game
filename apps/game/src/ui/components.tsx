@@ -265,6 +265,99 @@ export interface HudGoalsProps {
 }
 
 /**
+ * Where the errand goals are a drop-down rather than a standing panel.
+ *
+ * It is the pad's own condition, inverted. `ui/tokens.css` draws the on-screen pad for everyone
+ * except `(pointer: fine) and (hover: hover)`, and `panels.css` already argues from exactly that
+ * test twice: `.otp-world-hint` hides where there is no keyboard line to read, and the errand
+ * goals come back inside the world "wherever the pad is on screen at all". So the rule here is the
+ * same one sentence -- wherever the pad is on screen, the world is small enough that a standing
+ * panel is not affordable -- rather than a third, separately-tuned idea of what a phone is.
+ *
+ * Deliberately NOT `and (orientation: portrait)`. Measured on the built game, the box's share of
+ * the visible world is worse in landscape than in portrait (36.0% at 568x320 against 16.5% at
+ * 375x812), because a landscape phone's world is a 250px band. Both orientations get the drop.
+ *
+ * A touch TABLET matches this too, where the world is big and the panel was never in the way. That
+ * is accepted on purpose: one condition that is true wherever the pad is, rather than a height
+ * threshold that a new device lands the wrong side of. A disclosure costs a tablet one tap; a
+ * second media query costs the next round another argument about which phone is the short one.
+ *
+ * With no `matchMedia` -- a test renderer, or a server -- it answers "no drop", which keeps the
+ * panel exactly as it ships today. That is the conservative end: a renderer may then be judged for
+ * a panel that is too big, but it can never render a disclosure that nothing can open.
+ */
+export const GOALS_DROP_QUERY = '(hover: none)';
+
+/**
+ * The same question, asked continuously.
+ *
+ * `hover` describes the machine and a machine does not change mid-screen -- which is the argument
+ * `Title.padIsHidden` makes for matching per render -- but a DEVICE EMULATOR changes it, and so
+ * does a desktop browser's responsive mode, which is what every review of this screen is done in.
+ * `useFrameMarkHidden` already pays for a listener for the same reason. One more costs nothing and
+ * means the panel a reviewer sees is the panel a player gets.
+ */
+function useGoalsDrop(): boolean {
+  const [drop, setDrop] = useState(
+    () => typeof matchMedia === 'function' && matchMedia(GOALS_DROP_QUERY).matches,
+  );
+
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return;
+    const query = matchMedia(GOALS_DROP_QUERY);
+    const sync = (): void => setDrop(query.matches);
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  return drop;
+}
+
+/**
+ * Enter and Space on the bar, because in the world the browser's own button activation does not
+ * survive to the click.
+ *
+ * `world/input.ts` listens for keydown on the WINDOW and calls `preventDefault()` on Space, Enter
+ * and KeyE whenever the world owns the keyboard, which in Explore it always does -- that is how
+ * Space talks to a traveller without also scrolling the page. A button's activation is a DEFAULT
+ * ACTION, performed after the event has finished propagating, so a `preventDefault` four frames
+ * later at the window cancels it: measured on the built game, Tab reached this bar in one hop with
+ * the focus ring drawn correctly, and Enter and Space then did nothing at all. Tapping it worked,
+ * which is exactly the shape of bug a touch review never finds.
+ *
+ * So the bar takes the two keys out of the air before the window can see them. `stopPropagation`
+ * alone is the whole fix -- the window listener never runs, so nothing calls `preventDefault`, so
+ * the browser's own activation goes ahead and the `onClick` fires exactly once. It also means that
+ * pressing Enter on the goals cannot additionally interact with whoever Red is standing next to.
+ *
+ * THE MUSIC TOGGLE IN THIS FILE ALREADY DOES THIS, five hundred lines up and in the same three
+ * lines; it is not a new trick, it is the house answer for a control that sits over the world
+ * while the world owns the keyboard. Every such control needs it, so it is written once here and
+ * used by both. The gate itself (`main.ts worldHasInput`) is phase-based and knows nothing about
+ * where focus is -- the handover note proposes what a general repair would look like.
+ */
+function onToggleKey(): (e: KeyboardEvent) => void {
+  return (e) => {
+    if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
+  };
+}
+
+/** The rows, which are the same list whether they stand open or drop down. */
+function goalRows(goals: readonly GoalResult[]) {
+  return goals.map((g) => (
+    <li class={`otp-hud-goal${g.met ? ' otp-hud-goal--met' : ''}`} key={g.id}>
+      <span class="otp-hud-goal__mark" aria-hidden="true">
+        {g.met ? '✓' : '·'}
+      </span>
+      <span>{g.label}</span>
+      <span class="otp-visually-hidden">{g.met ? ' — done' : ' — not yet'}</span>
+    </li>
+  ));
+}
+
+/**
  * What Grandma actually asked for, in the HUD for the whole walk.
  *
  * Without this the errand goals are invisible: the player is being scored on a trade -- capability
@@ -274,23 +367,81 @@ export interface HudGoalsProps {
  * `role="group"` carries the heading to a screen reader (UX_REVIEW finding 21): a div with an
  * aria-label and no role is not exposed as anything, so three of Grandma's sentences sat in the
  * middle of the world with nothing saying what they were. Same for the basket above.
+ *
+ * ON A TOUCH SCREEN IT IS A DISCLOSURE, because the standing panel does not fit. Measured on the
+ * built game at 375x812 the box is 348.4x93.1 -- 94.7% of the world's WIDTH and 17.4% of its
+ * height, 16.5% of the visible world by area, and 22.2% at 320x568 -- sitting across the top of a
+ * world that is only 16.7 tiles tall to begin with.
+ *
+ * It cannot be answered by shrinking the type, and that is the whole reason this is a disclosure
+ * rather than "a bit smaller": `--otp-ui` is 0.7 on a phone, so the stylesheet's FLOOR RULE has
+ * every line in this box already AT its floor -- the label at max(11px, 11px x 0.7) = 11 and each
+ * goal at max(12px, 13px x 0.7) = 12. There is no smaller legal size. The only thing left to give
+ * back is the rows themselves, so they go behind a bar that keeps the heading and the three marks
+ * on screen the whole time and opens on a tap.
+ *
+ * Collapsed is the default, and it RESETS to collapsed at every encounter without being told to:
+ * `App.tsx` mounts this inside `.otp-world-anchor` only while the phase is in-world, so stepping
+ * into 02 Question unmounts it and walking back out mounts it closed. The goals are reference the
+ * player needs twice, not continuous reading, and the marks say how many are done without opening
+ * anything.
  */
 export function HudGoals({ goals, heading }: HudGoalsProps) {
+  const drop = useGoalsDrop();
+  const [open, setOpen] = useState(false);
+
+  if (!drop) {
+    return (
+      <div class="otp-hud-goals" role="group" aria-label={heading}>
+        <span class="otp-hud-goals__label" aria-hidden="true">
+          {heading}
+        </span>
+        <ul class="otp-hud-goals__list">{goalRows(goals)}</ul>
+      </div>
+    );
+  }
+
+  /*
+   * No `role="group"` and no `aria-label` on the wrapper here, unlike the standing panel above.
+   * The button IS the heading -- its accessible name is the same string -- so a group named with
+   * it as well would announce "Grandma asked for, group" and then "Grandma asked for, collapsed,
+   * button" on the way in. A disclosure names itself; the standing panel has nothing that can.
+   *
+   * No new content key is read for the button: the project's string guard fails the build on a key
+   * the UI reads and content/game.json lacks, and the state a toggle has to say out loud -- open or
+   * closed -- is what `aria-expanded` is for, in the screen reader's own words rather than ours.
+   */
   return (
-    <div class="otp-hud-goals" role="group" aria-label={heading}>
-      <span class="otp-hud-goals__label" aria-hidden="true">
-        {heading}
-      </span>
-      <ul class="otp-hud-goals__list">
-        {goals.map((g) => (
-          <li class={`otp-hud-goal${g.met ? ' otp-hud-goal--met' : ''}`} key={g.id}>
-            <span class="otp-hud-goal__mark" aria-hidden="true">
+    <div class="otp-hud-goals otp-hud-goals--drop">
+      <button
+        type="button"
+        class="otp-hud-goals__summary"
+        aria-expanded={open}
+        aria-controls="otp-hud-goals-list"
+        onClick={() => setOpen((was) => !was)}
+        onKeyDown={onToggleKey()}
+      >
+        <span class="otp-hud-goals__label">{heading}</span>
+        {/* The progress stays on screen while the rows are away: three marks, same glyphs as the
+            rows use, so "how many are done" never costs a tap. Hidden from a screen reader because
+            "✓ · ·" with no labels beside it is not a sentence -- `aria-expanded` and the rows
+            themselves carry that for AT. */}
+        <span class="otp-hud-goals__marks" aria-hidden="true">
+          {goals.map((g) => (
+            <span
+              class={`otp-hud-goals__mark${g.met ? ' otp-hud-goals__mark--met' : ''}`}
+              key={g.id}
+            >
               {g.met ? '✓' : '·'}
             </span>
-            <span>{g.label}</span>
-            <span class="otp-visually-hidden">{g.met ? ' — done' : ' — not yet'}</span>
-          </li>
-        ))}
+          ))}
+        </span>
+        <span class="otp-hud-goals__chevron" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      <ul id="otp-hud-goals-list" class="otp-hud-goals__list" hidden={!open}>
+        {goalRows(goals)}
       </ul>
     </div>
   );

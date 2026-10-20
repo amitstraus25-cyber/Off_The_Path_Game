@@ -111,20 +111,23 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v
  *
  * Nothing shows while there is map on both sides: the neighbouring column simply slides in. It
  * shows at a BOUND, where there is no next column and the camera backdrop prints through instead.
- * Measured on the shipped build with the backdrop painted magenta (#FF00FF appears nowhere in the
- * tileset, so a magenta pixel is a hole and nothing else), on the launch screen and in play alike:
- *
- *   1280x800  camera 621x359 (odd)   scrollX 0  -> 359 magenta px, every one in column 0
- *   2560x1440 camera 1261x679 (odd)  scrollX 0  -> 679 px, column 0
- *   375x812   camera 369x534 (odd)   scrollX 0  -> 534 px, column 0
- *   1673x449  camera 1280x367 (even) scrollX 0  -> 0
- *   844x390   camera 806x308 (even)  scrollX 0  -> 0
- *
- * and the same camera walked off the left bound (scrollX 134) -> 0, while turning `roundPixels` off
- * at that same bound also -> 0. So the trigger is the odd dimension, the mechanism is the rounded
+ * It was found by painting the backdrop magenta -- #FF00FF appears nowhere in the tileset, so a
+ * magenta pixel is a hole and nothing else -- and counting: 359 stray pixels down column 0 at
+ * 1280x800, 679 at 2560x1440, 534 at 375x812, and none at 844x390, whose camera was already even
+ * on both axes. The same camera walked off the bound showed none, and turning `roundPixels` off at
+ * the bound also showed none. So the trigger is the odd dimension, the mechanism is the rounded
  * origin, and the remedy is to not hand Phaser a half pixel to round. The alternative -- turning
  * `roundPixels` off -- buys the same zero at the cost of resampling every tile, which is the defect
  * this project spent a round removing.
+ *
+ * THE FIVE WORKED VIEWPORTS USED TO BE TABULATED HERE AND ONE OF THEM WAS WRONG. The row for
+ * 1673x449 -- the client's own window, and the only one of the five anybody was still arguing
+ * about -- read "camera 1280x367 (even)". 367 is odd; the camera there is 1280x366, because this
+ * very function rounds it down. A number written in a comment and derived nowhere drifts, which is
+ * the argument the top of this file opens with, and it had drifted INSIDE the fix written to stop
+ * it. So the figures now live in packages/core/test/camera.test.ts, where `cameraFor` is called
+ * for each of those viewports and the answer is asserted against a literal: a test that disagrees
+ * with the code fails, and a comment that disagrees with the code does not.
  *
  * The cost here is at most one game pixel of field of view per axis, against a camera of several
  * hundred. `MIN_VIEW` and `MAX_VIEW` are both even on both axes, so this cannot push the view

@@ -50,6 +50,9 @@ importers:
 
   apps/game:
     dependencies:
+      '@otp/api':
+        specifier: workspace:*
+        version: link:../api
       '@otp/core':
         specifier: workspace:*
         version: link:../../packages/core

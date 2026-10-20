@@ -216,7 +216,6 @@ test('the game runs clean under the headers vercel.json ships', async ({ page })
      * first, as a run that reached results and made no request at all.) The server answers 404,
      * which is the documented "board is down" path and leaves the game playable.
      */
-    await page.locator('form.otp-post input[type="text"]').fill('wolfspotter');
     await page.locator('form.otp-post button[type="submit"]').click();
     await expect.poll(() => asked.some((url) => url.includes('/api/score'))).toBe(true);
     /*

@@ -1,10 +1,37 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { REFERENCE_VIEWPORTS, TILE, cameraFor } from '@otp/core';
 import type { Size } from '@otp/core';
-import { hold, mapObject, probe, startGame, talkingDistance, walkTo } from './helpers';
+import { hold, mapObject, probe, ready, startGame, talkingDistance, walkTo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
+
+  /*
+   * WHICH BUILD IS BEHIND THIS PORT -- asked before anything is measured against it.
+   *
+   * Every spec in this file drives the game through `window.__otp`, which only a build made with
+   * VITE_E2E=1 defines. `vite preview` re-reads `dist` on every request, so a plain `pnpm build`
+   * run by anyone else in this checkout REPLACES the build under test while the suite is running,
+   * and the hooks vanish mid-run. That is not a hypothetical: it happened twice while this file
+   * was being written, the second time turning a green run into seven failures, every one of them
+   * reported as `page.waitForFunction: Test timeout of 30000ms exceeded` from inside startGame --
+   * a message that points at the game being slow, which it was not, instead of at the build having
+   * been swapped, which it had.
+   *
+   * One cheap evaluate turns thirty seconds of silence into a sentence. This covers this file
+   * only; the shared fix belongs in e2e-build.ts, which already carries a comment about a reused
+   * server measuring a stale dist and could assert the hooks are present in what it just built.
+   */
+  await ready(page);
+  expect(
+    await page.evaluate(() => typeof window.__otp),
+    'the page under test does not define window.__otp, so it was NOT built with VITE_E2E=1. ' +
+      'Something rebuilt apps/game/dist without the flag -- a plain `pnpm build` in this checkout ' +
+      'will do it, and `vite preview` picks it up per request. Rebuild with VITE_E2E=1 and re-run.',
+  ).toBe('object');
+
   await startGame(page);
 });
 
@@ -189,6 +216,10 @@ const FIT_VIEWPORTS: Size[] = [
 test('the canvas fills its frame in both axes, at whole CSS pixels per game pixel', async ({
   page,
 }) => {
+  // Three browser contexts and six viewports in each, so eighteen full layout settles. It flaked
+  // once on a loaded machine while this file was being extended; CI runs --fail-on-flaky-tests,
+  // where a retry that passes still fails the run, so the budget is declared rather than retried.
+  test.slow();
   for (const dpr of [1, 2, 3]) {
     const context = await page
       .context()
@@ -304,6 +335,8 @@ const ORIGIN_VIEWPORTS = [
 const offGrid = (v: number): number => Math.abs(v - Math.round(v));
 
 test('the canvas lands on whole device pixels, and says where it landed', async ({ page }) => {
+  // Same shape and the same budget as the fill test above, for the same reason.
+  test.slow();
   // One page per DPR, resized across the viewports: the scale factor is fixed per context.
   for (const dpr of [1, 2, 3]) {
     const context = await page
@@ -383,5 +416,368 @@ test('the canvas lands on whole device pixels, and says where it landed', async 
       }
     }
     await context.close();
+  }
+});
+
+/*
+ * ===========================================================================
+ * WHICH BUILD IS THIS? -- the guards that answer "still have the lags".
+ * ===========================================================================
+ *
+ * The round that produced these spent itself establishing that there was nothing to fix. The
+ * client reported a dark rule across the top of the world, which is the signature of the two
+ * backdrop holes closed the round before. Both were genuinely gone: 49 measured configurations,
+ * worst magenta count 0. What they were looking at was a DIFFERENT CHECKOUT -- a second working
+ * copy of a different git repository, four days stale, still serving the game on three ports
+ * (`vite dev` on 5173 and 5174, `vite preview` on 4190) -- which still has the left-bound hole.
+ *
+ * Nothing in the running game said which build it was, so a screenshot could not be told apart
+ * from any other screenshot, and three rounds argued about where a line was instead of which
+ * program drew it. Measured on the three servers that were live while this was written:
+ *
+ *   localhost:4173  this repo, production build   __otp undefined   /assets/index-xA2VY-K4.js
+ *   localhost:5173  stale checkout, dev server    __otp object      /@vite/client
+ *   localhost:4190  stale checkout, preview       __otp object      /assets/index-54DD2M2k.js
+ *
+ * The hashed bundle name is a build fingerprint that is already in the page and already visible in
+ * View Source. These two guards make it load-bearing instead of incidental:
+ *
+ *   1. `serves the build this run just made` -- the spec run and the server under test are the
+ *      same program. playwright.config.ts reuses an existing server on :4173 outside CI, and
+ *      e2e-build.ts already carries a comment about a reused server measuring a stale `dist`; it
+ *      rebuilds this repo's dist on every run, but nothing checked that the port it then measures
+ *      is serving THAT dist rather than some other checkout's. This is that check.
+ *   2. `no backdrop shows through the world` -- the standing instrument for the defect itself, so
+ *      the next report of a dark rule is answered by a test run rather than by a round of
+ *      forensics.
+ */
+
+/** `apps/game/dist/index.html`, the page globalSetup built, read from disk rather than the server. */
+const DIST_INDEX = fileURLToPath(new URL('../dist/index.html', import.meta.url));
+
+/** The hashed module bundle an index.html points at: the build's fingerprint. */
+const bundleOf = (html: string): string | null =>
+  /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1] ?? null;
+
+test('the server under test serves the build this run just made', async ({ page, baseURL }) => {
+  const onDisk = bundleOf(readFileSync(DIST_INDEX, 'utf8'));
+  expect(onDisk, `no module bundle found in ${DIST_INDEX}`).not.toBeNull();
+
+  const served = await page.evaluate(
+    () => document.querySelector('script[type="module"]')?.getAttribute('src') ?? null,
+  );
+
+  /*
+   * The failure this is written for is not subtle once you can see it, and is invisible until you
+   * can: every other spec in the suite goes on passing or failing against the wrong program, and
+   * the result is read as a statement about this checkout. So the message names both builds and
+   * the port, because the person reading it is about to go looking for the wrong thing.
+   */
+  expect(
+    served,
+    `${baseURL} is serving ${served}, but this run built ${onDisk}. The preview server on that ` +
+      `port belongs to a different checkout or a different build. playwright.config.ts reuses an ` +
+      `existing server outside CI, so stop whatever is on that port and let Playwright start its own.`,
+  ).toBe(onDisk);
+});
+
+/*
+ * A production build must not carry the e2e hooks.
+ *
+ * `window.__otp` hands out the store, the bus, the content and -- until the fix this guard was
+ * written beside -- a live handle on the Phaser scene. The gate is
+ * `import.meta.env.DEV || import.meta.env.VITE_E2E === '1'`, and it has to be DOT access: Vite
+ * folds the dot form to a literal at build time so the minifier drops the branch, and does not
+ * reliably fold `env['VITE_E2E']`, which leaves a runtime lookup and ships the payload. The scene
+ * half of that was measured shipping, in the bracket form, in this repo's own bundle.
+ *
+ * This runs a second, plain build rather than inspecting the one under test, because the build
+ * under test is deliberately made WITH the flag and legitimately has the hooks. It is the only
+ * assertion in the suite that compiles anything, hence test.slow(); the measured cost is ~2s.
+ * apps/game/test/csp.test.ts is the better long-term home -- it already reads built artefacts as
+ * text -- but it is outside this spec's ownership.
+ */
+test('a production build ships none of the e2e scene hooks', async () => {
+  test.slow();
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, readdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  const out = mkdtempSync(join(tmpdir(), 'otp-prod-'));
+  const cwd = fileURLToPath(new URL('..', import.meta.url));
+  // A plain build: no VITE_E2E in the environment, whatever this process was started with.
+  const env = { ...process.env };
+  delete env['VITE_E2E'];
+  /*
+   * The workspace's own vite, by path, rather than `npx vite`: npx falls back to FETCHING a package
+   * when it cannot resolve one locally, which on a CI runner is either a hang or a surprise
+   * download inside a test. An explicit path either runs the pinned binary or fails saying it is
+   * missing. `--outDir` is absolute and outside the project, so this cannot disturb `dist` -- the
+   * server under test reads that per request, and other specs in this run are reading it too.
+   */
+  const vite = join(cwd, 'node_modules', '.bin', 'vite');
+  execFileSync(vite, ['build', '--outDir', out, '--emptyOutDir'], { cwd, env });
+
+  const js = readdirSync(join(out, 'assets')).filter((f) => f.endsWith('.js'));
+  expect(js.length, 'the plain build produced no JavaScript to inspect').toBeGreaterThan(0);
+  const bundle = js.map((f) => readFileSync(join(out, 'assets', f), 'utf8')).join('\n');
+
+  /*
+   * Named for what they are rather than for the gate, so this does not pass by being rewritten
+   * alongside the thing it watches: these are the two hooks only the scene branch installs.
+   */
+  for (const hook of ['isSolidAt', 'mapObjects'])
+    expect(
+      bundle.includes(hook),
+      `"${hook}" is in a production bundle, so the e2e gate in forest-scene.ts is not being ` +
+        `eliminated. Check it is dot access -- import.meta.env.VITE_E2E -- and not env['VITE_E2E'].`,
+    ).toBe(false);
+});
+
+/*
+ * THE MAGENTA BACKDROP PROBE, as a standing guard rather than a thing someone rebuilds each round.
+ *
+ * Phaser paints a camera's backdrop wherever the world does not reach. Shipped, that backdrop is
+ * --cyera-black, the same colour as the frame's header strip directly above the canvas, so a row
+ * of it along the top edge is pixel-identical to the header being one pixel taller and a column of
+ * it at the side is invisible against the border. That is why two holes shipped, why a third was
+ * reported that did not exist, and why the only way anyone has ever settled it is to repaint the
+ * backdrop a colour the art cannot produce and count it. #FF00FF appears nowhere in the tileset,
+ * so a magenta pixel is backdrop showing through the world and nothing else.
+ *
+ * Both closed holes were parity bugs -- an odd camera dimension, which Phaser rounds about the
+ * camera's centre and so draws the world a pixel off -- and both printed only at a map BOUND,
+ * where there is no next column to slide in. packages/core/test/camera.test.ts asserts the parity
+ * directly, in arithmetic. This asserts the thing parity is a proxy FOR, in pixels, on the running
+ * game, which is the half that would have caught a cause neither of us thought of.
+ */
+
+/** The probe colour: chosen because the tileset cannot produce it, so a hit is unambiguous. */
+const PROBE = '#ff00ff';
+
+interface Backdrop {
+  count: number;
+  /** The first few canvas columns the backdrop showed in -- a hole at a bound is a column. */
+  columns: number[];
+  camera: { w: number; h: number; scrollX: number; scrollY: number };
+}
+
+/**
+ * Repaints the camera backdrop and counts what shows through, out of Phaser's own snapshot.
+ *
+ * `hideWorld` is the non-vacuity control: with the tilemap layers switched off the backdrop is
+ * unquestionably visible, so a probe that still returns 0 is broken rather than reassuring.
+ */
+const backdrop = async (p: import('@playwright/test').Page, hideWorld = false): Promise<Backdrop> =>
+  p.evaluate(
+    ([colour, hide]) =>
+      new Promise<Backdrop>((resolve) => {
+        const scene = window.__otp?.scene as unknown as {
+          cameras: {
+            main: {
+              width: number;
+              height: number;
+              scrollX: number;
+              scrollY: number;
+              backgroundColor: { color: number };
+              setBackgroundColor(c: string | number): void;
+            };
+          };
+          game: { renderer: { snapshot(cb: (image: HTMLImageElement) => void): void } };
+          children: { list: { type: string; visible: boolean }[] };
+        };
+        const cam = scene.cameras.main;
+        const restoreTo = cam.backgroundColor.color;
+        const layers = scene.children.list.filter((c) => c.type === 'TilemapLayer');
+        if (hide) for (const l of layers) l.visible = false;
+        cam.setBackgroundColor(colour as string);
+
+        scene.game.renderer.snapshot((image) => {
+          const c = document.createElement('canvas');
+          c.width = image.width;
+          c.height = image.height;
+          const g = c.getContext('2d')!;
+          g.drawImage(image, 0, 0);
+          const d = g.getImageData(0, 0, c.width, c.height).data;
+          let count = 0;
+          const columns: number[] = [];
+          for (let i = 0; i < d.length; i += 4) {
+            // Generous on the two lit channels and strict on the dark one: nothing in the forest
+            // is both that red and that blue while being that free of green.
+            if ((d[i] ?? 0) > 240 && (d[i + 1] ?? 0) < 16 && (d[i + 2] ?? 0) > 240) {
+              count++;
+              const x = (i / 4) % c.width;
+              if (columns.length < 8 && !columns.includes(x)) columns.push(x);
+            }
+          }
+          // Put the world back, so the probe leaves the page exactly as it found it and the next
+          // viewport in the sweep is not measuring a page this one damaged.
+          cam.setBackgroundColor(restoreTo);
+          if (hide) for (const l of layers) l.visible = true;
+          resolve({
+            count,
+            columns,
+            camera: { w: cam.width, h: cam.height, scrollX: cam.scrollX, scrollY: cam.scrollY },
+          });
+        });
+      }),
+    [PROBE, hideWorld] as const,
+  );
+
+test('the backdrop probe can actually see the backdrop', async ({ page }) => {
+  /*
+   * The control for every assertion below. A probe whose detector is broken -- a wrong colour
+   * channel, a snapshot taken before the repaint lands, a canvas read back empty under WebGL --
+   * returns 0 for a healthy world and 0 for a holed one, and reads as proof when it is silence.
+   * So: switch the world off, and require the probe to notice.
+   */
+  const blind = await backdrop(page, true);
+  expect(
+    blind.count,
+    'with every tilemap layer hidden the camera backdrop fills the view, and the probe saw none ' +
+      'of it: the probe is broken, and every zero it reports below is meaningless.',
+  ).toBeGreaterThan(0);
+
+  // And with the world back, it is the world that covers the backdrop rather than the probe
+  // having gone quiet: same page, same probe, immediately after.
+  expect((await backdrop(page)).count).toBe(0);
+});
+
+/*
+ * The client's own window is in here by number, because it is the one the screenshots came from
+ * and it is not a size anyone would have thought to list: 1673x449, a landscape strip whose camera
+ * lands at 1280x366. The rest are the project's reference viewports plus the two phones.
+ */
+const BACKDROP_VIEWPORTS: Size[] = [
+  { width: 1673, height: 449 },
+  ...Object.values(REFERENCE_VIEWPORTS),
+  { width: 390, height: 844 },
+  { width: 2560, height: 1440 },
+];
+
+test('no camera backdrop shows through the world, at any viewport or DPR', async ({ page }) => {
+  test.slow();
+  for (const dpr of [1, 2, 3]) {
+    const context = await page
+      .context()
+      .browser()!
+      .newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: dpr });
+    const p = await context.newPage();
+    await p.goto('/');
+
+    // The launch screen first: the hero shot, and the frame the client photographed.
+    await p.waitForSelector('#game[data-ready="true"]');
+    const launch = await backdrop(p);
+    expect(
+      launch.count,
+      `launch screen at dpr${dpr}: ${launch.count} px of backdrop in columns ${JSON.stringify(launch.columns)}, camera ${JSON.stringify(launch.camera)}`,
+    ).toBe(0);
+
+    await startGame(p);
+
+    for (const viewport of BACKDROP_VIEWPORTS) {
+      await p.setViewportSize(viewport);
+      await p.waitForFunction((w) => Math.abs(window.innerWidth - w) < 1, viewport.width);
+      // Two frames: one for ui/stage.ts's resize handler, one for the layout it causes.
+      await p.evaluate(
+        () =>
+          new Promise<void>((done) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => done())),
+          ),
+      );
+
+      const seen = await backdrop(p);
+      const where = `${viewport.width}x${viewport.height} dpr${dpr}`;
+      /*
+       * The camera is reported in the message, never asserted against a literal here: a camera
+       * size written down in a test is the same mistake as a camera size written down in a
+       * comment, and this project has paid for it three times. camera.test.ts owns the numbers.
+       */
+      expect(
+        seen.count,
+        `${where}: ${seen.count} px of camera backdrop showing through the world, first in ` +
+          `columns ${JSON.stringify(seen.columns)}. Camera ${JSON.stringify(seen.camera)}. ` +
+          `A column at x 0 or at the camera's width is a hole at a map bound.`,
+      ).toBe(0);
+    }
+    await context.close();
+  }
+});
+
+test('no backdrop shows at any of the four map bounds', async ({ page }) => {
+  test.slow();
+  /*
+   * Separated from the sweep because a bound cannot be reached by walking. Both closed holes
+   * printed ONLY at a bound -- with map on both sides the neighbouring column just slides in -- so
+   * a sweep that never reaches one is measuring the easy case. The first attempt here held
+   * ArrowUp for six seconds and got as far as scrollY 406 of a possible 0: the forest border stops
+   * Red a long way short, which is exactly what e2e/world.spec.ts's border test asserts. So Red is
+   * placed rather than walked, and the camera is allowed to ease after her.
+   *
+   * The top bound is the one the client described -- "a dark rule across the very top of the world
+   * under the header" -- and the one where a row of backdrop is indistinguishable by eye from the
+   * header being a pixel taller, since both are --cyera-black.
+   */
+  await page.setViewportSize({ width: 1673, height: 449 });
+  await page.waitForFunction((w) => Math.abs(window.innerWidth - w) < 1, 1673);
+
+  const corners = [
+    ['top-left', 0, 0],
+    ['top-right', 1, 0],
+    ['bottom-left', 0, 1],
+    ['bottom-right', 1, 1],
+  ] as const;
+
+  for (const [name, fx, fy] of corners) {
+    const settled = await page.evaluate(
+      ([x, y]) =>
+        new Promise<{ scrollX: number; scrollY: number }>((resolve) => {
+          const scene = window.__otp?.scene as unknown as {
+            position: { x: number; y: number };
+            map: { widthInPixels: number; heightInPixels: number };
+            cameras: { main: { scrollX: number; scrollY: number } };
+          };
+          // Past the corner on purpose: the camera clamps to its bounds, which is the state under
+          // test, and overshooting means the clamp rather than the arithmetic decides where it stops.
+          scene.position = {
+            x: x * scene.map.widthInPixels + (x ? 400 : -400),
+            y: y * scene.map.heightInPixels + (y ? 400 : -400),
+          };
+          // The camera eases after Red rather than snapping, so give it frames to arrive.
+          let frames = 0;
+          const tick = (): void => {
+            if (++frames > 120) {
+              const c = scene.cameras.main;
+              resolve({ scrollX: c.scrollX, scrollY: c.scrollY });
+            } else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+      [fx, fy] as const,
+    );
+
+    /*
+     * Non-vacuity, per corner rather than once at the end: the camera has to have actually
+     * arrived at the clamp, or the zero below is a statement about the middle of the map. A near
+     * bound clamps the scroll to 0; a far bound clamps it to a positive maximum.
+     */
+    for (const [axis, far] of [
+      ['scrollX', fx],
+      ['scrollY', fy],
+    ] as const) {
+      const got = settled[axis];
+      if (far)
+        expect(got, `${name}: ${axis} ${got} never reached the far bound`).toBeGreaterThan(0);
+      else expect(got, `${name}: ${axis} ${got} never reached the near bound`).toBe(0);
+    }
+
+    const seen = await backdrop(page);
+    expect(
+      seen.count,
+      `${name} bound (scroll ${settled.scrollX},${settled.scrollY}): ${seen.count} px of camera ` +
+        `backdrop showing through the world, first in columns ${JSON.stringify(seen.columns)}. ` +
+        `Camera ${JSON.stringify(seen.camera)}.`,
+    ).toBe(0);
   }
 });

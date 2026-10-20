@@ -125,6 +125,10 @@
   font: 600 calc(22px * var(--otp-ui)) / 1.1 var(--cyera-font-sans);
   min-height: var(--otp-touch-min);
   cursor: pointer;
+  /* The CTA renders as an <a> on Results, and a default underline through a Lime pill reads as
+     damage rather than emphasis. Lifted from an inline style in Results.tsx, which was the one
+     place the brand rules cannot reach. */
+  text-decoration: none;
 }
 
 .otp-cta__disc {
@@ -298,6 +302,14 @@
   background: var(--cyera-natural);
 }
 
+/* The text beside a badge. `min-width: 0` is load-bearing: a flex item defaults to `min-width:
+   auto`, so a long unbroken skill name would push the row wider than the panel instead of
+   wrapping. Lifted from an inline style in Results.tsx. */
+.otp-recap__body {
+  flex: 1;
+  min-width: 0;
+}
+
 .otp-recap__row--missed {
   background: var(--cyera-haze);
   border-left: 5px solid var(--cyera-deep-purple);
@@ -347,23 +359,39 @@
   flex-wrap: wrap;
 }
 
-.otp-field {
+/*
+ * The minted handle: the one name on this screen, which the player reads and cannot type.
+ *
+ * This was `.otp-field` until 2026-10-21, and it wore an input's costume on something that is not
+ * an input -- a 2px Ash boundary, input padding and a pill radius, wrapped around a name the
+ * player has no way to edit. A boundary is the universal "type here" signal, so the screen
+ * advertised an action it does not offer. That is the same mistake `test/handle-field.test.ts`
+ * guards in the markup, arriving through the stylesheet instead; the markup has been right since
+ * decision D4 and the CSS kept the costume on for four rounds after.
+ *
+ * A readout is a FILL, not a BOUNDARY. Natural ground, no border, and letter-spacing so the name
+ * reads as a minted token rather than a string somebody entered.
+ *
+ * Deliberately NOT Haze: on this screen Haze already means "missed" (.otp-recap__row--missed), and
+ * a second meaning for the same tint would blunt the first one.
+ *
+ * The padding carries the two pixels the border used to occupy, so the pill keeps its outer size.
+ *
+ * The flex pair here was an inline style in Results.tsx. It sat in the one place brand rules cannot
+ * reach and no reviewer reads; the owner who found it could not lift it, because this file had a
+ * different owner that round and two owners never share a file.
+ */
+.otp-handle {
+  display: flex;
+  align-items: center;
   flex: 1 1 200px;
-  /* Natural, the palette's own "icon wells" ground. Offwhite is text-on-dark only and is not in
-     the section 1 palette block at all (UI_FOUNDATIONS section 1). */
   background: var(--cyera-natural);
-  /* Clay on Shell is 1.39:1; the boundary of an input has to clear 3:1. */
-  border: 2px solid var(--cyera-ash);
   border-radius: var(--otp-r-pill);
-  padding: calc(11px * var(--otp-ui)) calc(14px * var(--otp-ui));
-  font: 400 calc(18px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
+  padding: calc(13px * var(--otp-ui)) calc(16px * var(--otp-ui));
+  font: 500 calc(18px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
+  letter-spacing: 0.04em;
   color: var(--cyera-black);
   min-height: var(--otp-touch-min);
-}
-
-.otp-field[aria-invalid='true'] {
-  border-color: var(--cyera-deep-purple);
-  border-width: 3px;
 }
 
 .otp-fine {
@@ -482,7 +510,7 @@ h2.otp-section-label {
 
 /* A Haze reveal inside an already-Haze missed row is invisible, so it takes the light ground
    there instead. The left bar and the words still carry the status.
-   Natural rather than Offwhite, for the reason on .otp-field above: Offwhite is text-on-dark. */
+   Natural rather than Offwhite, for the reason on .otp-handle above: Offwhite is text-on-dark. */
 .otp-recap__row--missed .otp-recap__hidden {
   background: var(--cyera-natural);
 }
@@ -791,4 +819,191 @@ h2.otp-section-label {
        375), because here the card is the bottom half rather than a side column. Same Shell. */
     background: color-mix(in srgb, var(--cyera-shell) 96%, transparent);
   }
+}
+
+/* ===========================================================================
+   THE CABINET SHELL -- a switchable prototype, OFF by default.
+
+   Turn it on with   document.documentElement.dataset.otpShell = 'cabinet'
+   (or add data-otp-shell="cabinet" to <html> in devtools). Nothing in the
+   build sets it; it exists to be looked at and judged, not shipped.
+
+   WHAT THIS IS AND IS NOT. The client sent a photo of a Mortal Kombat II
+   cabinet and asked for "a stand, a joystick and an A button, and the screen
+   over the top, Cyera colours". On a phone the game ALREADY has a round
+   joystick and a round A button below the world, so the parts exist; what is
+   missing is the thing that makes them read as ONE OBJECT. That is all this
+   does: it draws a bezel around the world and a deck under the thumb
+   controls, out of the brand's own palette, and joins them.
+
+   IT DOES NOT ADD A CABINET BODY, AND IT CANNOT, and the reason is the whole
+   cost answer -- measured, at five viewports, on the built preview:
+
+     1280x800   frame 1246x766   slack  34px across, 34px down
+     1440x900   frame 1406x866   slack  34px across, 34px down
+      844x390   frame  812x358   slack  32px across, 32px down
+      768x1024  frame  766x734   slack   2px across, 290px down
+      375x812   frame  374x584   slack   1px across, 228px down
+
+   In landscape the slack IS the 16px MARGIN in @otp/core's camera.ts, twice,
+   and nothing else: `stageFit` derives the camera to FILL whatever the frame
+   and the margins leave, so there is no spare room anywhere on a desktop --
+   seventeen pixels a side, which is a bezel and never a cabinet. Chrome wider
+   than that has to come out of the WORLD, and the world's size is not in this
+   stylesheet. It is `availableFor()`, which subtracts a fixed FRAME and
+   MARGIN from `innerWidth`/`innerHeight` and has never heard of a cabinet.
+
+   AND THE PRICE OF TAKING IT IS NOT LINEAR, which is the part worth knowing
+   before anyone commissions this. The zoom is a whole number by law (MAX_ZOOM
+   and the two e2e tests that assert a whole number of CSS pixels per game
+   pixel), so field of view does not shrink smoothly -- it falls off a cliff.
+   Zoom 2 needs available.width >= 704, i.e. a viewport of 742px; every pixel
+   of side chrome pushes that up by two:
+
+     bare game          zoom 2 from 742px wide
+     24px sides         zoom 2 from 790px
+     40px sides         zoom 2 from 822px
+     72px sides         zoom 2 from 886px
+
+   So a 40px-a-side cabinet drops the 768px tablet -- one of the three widths
+   the brand QA checklist names -- from zoom 2 to zoom 1, and a zoom step is
+   not a trim: it halves the tile from 64 CSS px to 32 and makes every sprite
+   smaller than it is today. That is the remaster's four times the detail
+   spent on making the art harder to see, to win a wooden surround.
+
+   WHAT IT COSTS HERE, BY CONTRAST: nothing. Every rule below paints in space
+   the layout already leaves empty, and the canvas rect is identical with the
+   attribute on and off. No rule touches the camera, the zoom or the canvas.
+
+   BRAND NOTES, because two of these were close calls:
+   - No new colour. Deep Purple, Black, Lilac, Haze, Natural, all from the
+     section 1 palette, all in the roles the table gives them. Deep Purple is
+     listed as "primary fills, dark section backgrounds", so a bezel is a use
+     the brand already sanctions.
+   - NO LIME. The Lime rule is one per screen and it is already spent on the
+     primary call to action. A cabinet that wanted an accent would have to
+     take it from the CTA, so this one does not want one.
+   - No drop shadow, no bevel, no gradient. UI_FOUNDATIONS section 4 forbids
+     elevation outright ("a panel separates from the world by fill contrast
+     and a 2px inset Haze ring, never by elevation"). A real cabinet is ALL
+     bevel, so this is the rule the idea collides with hardest, and the honest
+     consequence is below: flat, this reads as a handsome bezel rather than as
+     a wooden box. That is a limit of the brand, not of the CSS.
+   - The page ground stays Shell. It was moved off near-black deliberately
+     (the title screen measured 36-48% near-black against the approved board's
+     12-14%), so the cabinet is a LIGHT cabinet. The MKII photo is a dark one.
+
+   AND THE BEZEL IS NOT FREE IN THAT CURRENCY -- measured on the built
+   preview, share of viewport pixels under 0.2 relative luminance, which is
+   the test that condemned the old title screen. Deep Purple #441363 sits at
+   0.138, so a purple bezel counts as dark by exactly that measure:
+
+     title   1280x800   13.95% -> 19.21%   (+5.26)
+     explore 1280x800   18.86% -> 24.12%   (+5.26)
+     explore  375x812   18.96% -> 19.07%   (+0.11)
+
+   The phone is free because the bezel collapses to 0 there and only the
+   deck's 3px edge is added. The DESKTOP is not: the title screen sits at
+   13.95% today, which is inside the approved board's 12-14% band and is where
+   it was deliberately put, and the bezel takes it to 19.21% -- half again
+   past the top of that band. That is a third of the margin the brand team won
+   back, spent on a surround. It is nowhere near the 36-48% that caused the
+   original problem, and it is a real move in the direction that was reversed.
+   Brand's call, not this file's; the number is here so the call is informed.
+
+   ONE MORE LIMIT, SO NOBODY DISCOVERS IT LATE: this is only ever visible on
+   EXPLORE. `.otp-screen` at the top of this file is `position: fixed; inset:
+   0` on a Black ground, so Results and the leaderboard are full-viewport
+   takeovers that paint over the frame, the bezel and the deck alike. A
+   cabinet that is meant to hold the whole experience would have to be built
+   into those screens separately -- which is a second surround, not a reuse of
+   this one.
+   =========================================================================== */
+
+:root {
+  /*
+   * THE BEZEL, DERIVED FROM THE SLACK RATHER THAN QUOTED AT IT.
+   *
+   * The lesson this project has paid for three times: a number written as a
+   * literal drifts from the thing it describes. So the bezel is whatever is
+   * actually left over between the canvas and the window, less a 6px breath,
+   * capped at 16px -- which lands at 14px on every landscape size and
+   * collapses to 0 on a portrait phone, where the frame is already 1px from
+   * the viewport edge and an outline would simply be painted off-screen.
+   */
+  --otp-cab-bezel: clamp(0px, calc((100vw - var(--otp-canvas-w, 0px)) / 2 - 6px), 16px);
+}
+
+/* The screen in its surround. `outline` rather than a border or a shadow: it
+   draws OUTSIDE the border box without entering layout, so the frame does not
+   move and the world does not shrink -- and it follows the 20px radius. A
+   box-shadow spread would look identical and would be elevation by another
+   name, which section 4 forbids. */
+html[data-otp-shell='cabinet'] .otp-world-frame {
+  outline: var(--otp-cab-bezel) solid var(--cyera-deep-purple);
+}
+
+/* The marquee. The 44px header is already a Black bar carrying the quest chip
+   and the Cyera mark, which is exactly what a marquee is; it only needed a lit
+   edge to stop reading as a title bar. One Lilac hairline, the same Lilac that
+   is already the joystick ring and the panel numerals. */
+html[data-otp-shell='cabinet'] .otp-world-frame__header {
+  border-bottom: 2px solid var(--cyera-lilac);
+}
+
+/*
+ * THE DECK -- and the only part of this that is a real cabinet rather than a
+ * bezel, because it is the only part with room to be one.
+ *
+ * `.otp-touch` is a fixed strip across the bottom holding the joystick and the
+ * A button. In portrait the world takes PORTRAIT_WORLD (72%) of the screen and
+ * the strip below it is 228px on a 375x812 phone -- space the layout has
+ * already set aside and the pad already sits in. Giving that strip a ground, a
+ * bezel and a radius turns two floating circles into a control deck, which is
+ * the client's photograph, at the cost of nothing at all.
+ *
+ * Natural, not Black: it is the palette's own "slots, rows" ground, it keeps
+ * the light cabinet the page ground decided on, and Lilac-on-Deep-Purple
+ * controls sit on it with more contrast than they have on Shell today.
+ */
+html[data-otp-shell='cabinet'] .otp-touch {
+  background: var(--cyera-natural);
+  border-top: var(--otp-panel-border) solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel) var(--otp-r-panel) 0 0;
+  /* The brand's own separation device, and the only one section 4 allows. */
+  box-shadow: var(--otp-ring);
+  padding-top: calc(var(--otp-pad-gutter) + 6px);
+}
+
+/*
+ * NO DECK WHERE THERE IS NO PAD. This is tokens.css's own condition, repeated
+ * rather than inverted, because that is the file that decides the pad is not
+ * drawn for a fine pointer -- it collapses the strip's padding and hides both
+ * thumb controls, leaving a zero-height box that a border-top would still
+ * paint as a stray rule across the bottom of every desktop screen.
+ *
+ * It is also the honest shape of the answer: on a desktop there is no
+ * joystick, no A button and no deck, so "carry the cabinet to desktop" means
+ * drawing furniture around a keyboard, which is the expensive half of the idea
+ * and the half this prototype deliberately does not fake.
+ */
+@media (pointer: fine) and (hover: hover) {
+  html[data-otp-shell='cabinet'] .otp-touch {
+    background: none;
+    border-top: 0;
+    box-shadow: none;
+    padding-top: 0;
+  }
+}
+
+/* The walk row is a keyboard fallback that appears inside the deck on focus;
+   on the deck's Natural ground it keeps its own Deep Purple pills, so only its
+   corner radius needs to agree with the deck it now sits in. */
+html[data-otp-shell='cabinet'] .otp-touch > [role='group']:focus-within {
+  border-radius: var(--otp-r-panel) var(--otp-r-panel) 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Nothing here animates. Stated so the next person does not add something
+     that does: a cabinet is furniture, and furniture holds still. */
 }

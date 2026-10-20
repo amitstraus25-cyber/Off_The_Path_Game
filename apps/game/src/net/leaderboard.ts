@@ -138,20 +138,18 @@ export function createLeaderboardClient(content: Content): LeaderboardClient {
        * refuse it (`handleSchema` is the same schema on both ends), and a player-typed string
        * reaching the table is the thing decision D4 rules out.
        *
-       * THE SCREEN AND THIS FUNCTION STILL DISAGREE, and it is visible to a player. Measured in a
-       * real browser against the built game: type `wolfspotter` into the Results field, press
-       * Post, and the body on the wire carries `deft-cloak-81` while the status line reads "Posted
-       * to the board as deft-cloak-81." The typed name is discarded in the line below. The copy
-       * now says so -- `handleLabel`, `handlePlaceholder` and `handleHint` in content/game.json
-       * describe a board that names runs itself -- but copy cannot remove an input element.
+       * THE SCREEN AND THIS FUNCTION NOW AGREE. For four rounds they did not, and it was visible:
+       * a player typed `wolfspotter` into the Results field, pressed Post, and the body on the
+       * wire carried `deft-cloak-81` while the status line read "Posted to the board as
+       * deft-cloak-81." The typed name was discarded in the line below and nothing on the screen
+       * said so. `Results.tsx` holds `newHandle()` in state now, renders it as text, offers a
+       * reroll, and passes that value to `onPost`, so `handle` arrives here already minted.
        *
-       * The remaining half is one patch in `Results.tsx`, which this file already exports
-       * everything for: hold `newHandle()` in state, render it as text instead of
-       * `<input class="otp-field">`, offer a reroll button that calls `newHandle()` again, and
-       * pass that value to `onPost`. `validateHandle` can go with the input -- every one of the
-       * 3,072 mintable handles passes it, which `test/leaderboard.test.ts` checks, so nothing has
-       * to be coordinated across the two changes. Until then this keeps the board reachable from
-       * the shipped UI rather than refusing every post.
+       * The line below therefore has nothing left to substitute in the shipped UI, and it stays
+       * anyway. It is the boundary, not the screen's helper: this module is what reaches the
+       * network, and it is the last place that can promise "no string a player composed is ever
+       * posted" independently of whatever a future screen hands it. The cost of keeping it is one
+       * comparison; the cost of removing it is that the promise moves into a component.
        */
       const minted = isMintedHandle(handle) ? handle : newHandle();
       const reply = await ask(SCORE_PATH, {
@@ -193,6 +191,26 @@ export function createLeaderboardClient(content: Content): LeaderboardClient {
       return assigned(parsed.data.handle);
     },
 
+    /*
+     * NOTHING IN THE GAME CALLS THIS, and whoever wires the board screen should read the next
+     * paragraph before they do.
+     *
+     * An empty array means one of two quite different things and this signature cannot tell them
+     * apart: a board that answered and has no rows yet, and no board at all. The second is not
+     * hypothetical and it is not loud. Measured on 2026-10-20 against the shipped build on a plain
+     * `vite preview` -- and it is the same shape a deploy takes if the `/api/(.*)` rewrite never
+     * reaches apps/api, because the catch-all rewrite serves the SPA for every path:
+     *
+     *     GET /api/top?limit=10  ->  200, content-type: text/html, 654 bytes of index.html
+     *     POST /api/score        ->  404, no body
+     *
+     * The 200 is not a board. `ask()` survives it -- `res.json()` throws on the HTML and the catch
+     * turns it into "no reply" -- so this returns `[]` either way, and `submit()` says the board is
+     * unavailable, which is right. But a screen that renders `[]` as "no scores yet" would be
+     * telling a visitor the board is empty when the truth is that it is not there. The board screen
+     * needs a third state, which means this needs to return one; the shape is a change to
+     * `LeaderboardClient` and to `test/leaderboard.test.ts`, and both have other owners today.
+     */
     async top(limit) {
       const wanted = topLimit(limit);
       const reply = await ask(`${TOP_PATH}?limit=${wanted}`, { method: 'GET' });

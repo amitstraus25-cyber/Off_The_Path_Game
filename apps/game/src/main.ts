@@ -418,7 +418,17 @@ async function start(): Promise<void> {
   syncWorldChrome();
   draw();
 
-  if (import.meta.env.DEV || import.meta.env['VITE_E2E'] === '1')
+  /*
+   * DOT ACCESS, NOT `env['VITE_E2E']` -- the same reason as forest-scene.ts's gate. Vite folds
+   * `import.meta.env.VITE_E2E` to a literal at build time, so the minifier drops this branch
+   * entirely from a plain production build. The bracket form is a runtime lookup on an object
+   * literal, which survives minification: measured, a plain `pnpm build` shipped the whole
+   * `{ store, bus, content }` payload, and a VITE_E2E build was byte-identical to it. This is a
+   * public asset for a data security company; the store, the bus and the content should not be
+   * reachable from the page. apps/game/test/csp.test.ts asserts the built bundle carries no
+   * `__otp` so a revert to the bracket form reddens rather than quietly shipping.
+   */
+  if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1')
     Object.defineProperty(window, '__otp', { value: { store, bus, content }, configurable: true });
 }
 

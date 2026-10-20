@@ -54,7 +54,6 @@ async function reachResults(page: Page): Promise<void> {
 }
 
 const post = async (page: Page): Promise<void> => {
-  await page.locator('.otp-field input').fill('wolfspotter');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
 };
 
@@ -77,9 +76,12 @@ test('a post the board takes says which name went up', async ({ page }) => {
   await reachResults(page);
   await post(page);
 
-  // The handle is minted, never the typed string, and no score is sent (golden rule 6).
+  // The handle is minted, never typed, and no score is sent (golden rule 6). The sharper claim
+  // the minted field makes available: the name on the wire is the name on the screen.
   expect(sent.handle).toMatch(/^[a-z]+-[a-z]+-[1-9][0-9]$/);
-  expect(sent.handle).not.toBe('wolfspotter');
+  expect(sent.handle).toBe(
+    await page.locator('.otp-handle [data-handle]').getAttribute('data-handle'),
+  );
   expect(Object.keys(sent).sort()).toEqual(['handle', 'log']);
   await expect(page.getByRole('status')).toContainText(sent.handle!);
 });

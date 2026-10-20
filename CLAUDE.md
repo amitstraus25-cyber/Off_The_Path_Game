@@ -57,11 +57,16 @@ pnpm audit              # high-severity dependency audit (also runs in CI)
 Workspaces, five: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + Preact),
 `apps/api` (the leaderboard functions), `tools/graybox` (placeholder art generator),
 `tools/sim` (strategy simulator).
-**Phase 6 landed, so `apps/api` exists and `vercel.json` declares TWO services**, `game` and `api`,
-with an `/api/(.*)` rewrite that must stay above the catch-all. Two routes, `POST /api/score` and
-`GET /api/top`, over Supabase; `apps/api/README.md` is the source of truth for the service and lists
-what still has to be done by hand before the board is believed. This paragraph said the opposite
-until 2026-10-20 and sent four reviewers hunting for a package that was already there.
+**Phase 6 landed, so `apps/api` exists** — it holds the leaderboard logic, the schema and 53 tests —
+**but `vercel.json` declares ONE service, `game`.** A second service produced no functions and
+`GET /api/top` answered with Vercel's own 404 for days, so the two routes now live inside the game
+service as ordinary `apps/game/api/score.ts` and `top.ts`, thin re-exports of the handlers in
+`apps/api`. The logic has one home; only the hosting moved. `apps/api/README.md` is the source of
+truth for the service and lists what still has to be done by hand before the board is believed.
+**Do not reintroduce a second service without a deploy that proves it serves functions** — and never
+a `"framework": null`, which fails schema validation and with it every deployment, silently, for as
+long as nobody looks past CI. This paragraph has been wrong in both directions now; measure the
+deployment before you trust it.
 The Phase 0 renderer spike has been removed now that its result is recorded in
 `docs/ARCHITECTURE.md` section 2a.
 Pinned: TypeScript 6.0.3, Vite 7.3.6, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29.8, zod 4.6.5, Playwright 1.63.0.

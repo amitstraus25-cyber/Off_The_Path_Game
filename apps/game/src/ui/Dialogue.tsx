@@ -42,7 +42,7 @@ const OptionCaret = () => (
     height="1.15em"
     aria-hidden="true"
     focusable="false"
-    style={{ display: 'block' }}
+    class="otp-option__caret"
   >
     <path d="M1 1l12 7-12 7z" fill="currentColor" />
   </svg>

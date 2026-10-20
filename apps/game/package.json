@@ -12,6 +12,7 @@
     "e2e": "playwright test --fail-on-flaky-tests"
   },
   "dependencies": {
+    "@otp/api": "workspace:*",
     "@otp/core": "workspace:*",
     "phaser": "3.90.0",
     "preact": "10.29.8"

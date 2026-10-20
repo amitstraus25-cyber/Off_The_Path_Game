@@ -79,12 +79,27 @@ not exist.
 
 ## Deployment
 
-`vercel.json` declares **two services**: `game`, rooted at `apps/game`, and `api`, rooted at
-`apps/api`. Two rewrites route them, and **their order is load-bearing** — `/api/(.*)` must stay
-above the `/(.*)` catch-all or every API request is served the game. Security headers stay at the
-top level, where public routing lives in services mode, so the strict CSP applies to every response;
-`connect-src` stays `'self'` because the board is same-origin (D3) and widening it would be the
-wrong fix for anything.
+`vercel.json` declares **one service**: `game`, rooted at `apps/game`. It did declare two, with
+`api` rooted at `apps/api`, and that arrangement **never once served a function** — `GET /api/top`
+returned Vercel's own 404, not a 500 from our code, which is the difference between "the route
+failed" and "the route was never created". The two routes now live inside the game service as
+`apps/game/api/score.ts` and `top.ts`, thin re-exports of the handlers in `apps/api`, which is the
+oldest and most widely supported Vercel convention. One catch-all rewrite remains.
+
+Security headers stay at the top level so the strict CSP applies to every response; `connect-src`
+stays `'self'` because the board is same-origin (D3) and widening it would be the wrong fix for
+anything. **Confirmed live on `GET /`; not yet confirmed on a function response** — see
+`ARCHITECTURE.md` §10.
+
+Two non-obvious things that cost real time here:
+
+- **A `"framework": null` fails `vercel.json` schema validation,** and a failed validation fails the
+  whole deployment. It did, for six hours, while the client looked at a build from that morning and
+  we debugged a bug already fixed. A deploy that fails is louder than a test that fails — read the
+  deployment, not just CI.
+- **If a second service is ever reintroduced, the rewrite order is load-bearing** — `/api/(.*)` must
+  stay above the `/(.*)` catch-all or every API request is served the game — and it must not land
+  without a deploy that proves it serves functions.
 
 Two non-obvious things that are easy to undo by accident:
 

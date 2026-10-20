@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { VERDICTS, exposedNotices, recap, score } from '@otp/core';
+import { VERDICTS, exposedNotices, liveCapabilities, recap, score } from '@otp/core';
 import type { Content, GameState, GoalResult, RecapRow, SkillId, Verdict } from '@otp/core';
 import { RESEARCH_URL } from '../embed/postMessage';
+import { newHandle } from '../net/leaderboard';
 import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
+import { Trifecta } from './Trifecta';
 
 /*
  * THE RECAP BADGES WERE TYPED, AND TWO OF THE THREE WERE NOT IN THE FONT. Measured, not asserted:
@@ -57,7 +59,16 @@ function Badge({ glyph }: { glyph: 'check' | 'traded' | 'missed' }) {
   );
 }
 
-/** Matches the server rule in ARCHITECTURE section 8, so a handle never fails only on the server. */
+/*
+ * Matches the server rule in ARCHITECTURE section 8, so a handle never fails only on the server.
+ *
+ * NOTHING ON THIS SCREEN CALLS IT ANY MORE, and that is deliberate rather than an oversight. The
+ * form below shows a minted handle instead of taking a typed one, and every name `mintHandle` can
+ * produce is legal by construction -- `test/leaderboard.test.ts` runs all 3,072 of them through
+ * this function and expects null from every one, which is the check that lets the wordlists in
+ * packages/core change without the two ends being coordinated by hand. Delete this and that test
+ * loses its mirror; the day a typed name comes back, this is the rule it has to pass.
+ */
 const HANDLE = /^[A-Za-z0-9][A-Za-z0-9_.-]{1,14}[A-Za-z0-9]$/;
 const BLOCKED = ['cyera', 'admin', 'official', 'moderator', 'support'];
 
@@ -299,19 +310,27 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
     }
   };
 
-  const [handle, setHandle] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * Minted once per mount, not once per render: `useState(newHandle)` passes the FUNCTION, so
+   * Preact calls it for the initial state only. `useState(newHandle())` would mint a fresh name on
+   * every render -- and this component re-renders on every post -- so the name under the player's
+   * eyes would change between reading it and pressing the button.
+   */
+  const [handle, setHandle] = useState(newHandle);
   const [notice, setNotice] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
 
+  /** A different name, and the stale "Posted as ..." line cleared with it. */
+  const reroll = (): void => {
+    setHandle(newHandle());
+    setNotice(null);
+  };
+
   const submit = async (e: Event): Promise<void> => {
     e.preventDefault();
-    const problem = validateHandle(handle);
-    setError(problem);
     setNotice(null);
-    if (problem) return;
     setPosting(true);
-    setNotice(await onPost(handle.trim()));
+    setNotice(await onPost(handle));
     setPosting(false);
   };
 
@@ -350,7 +369,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
               class={`otp-recap__row otp-recap__row--boundary${result.boundaryHeld ? '' : ' otp-recap__row--missed'}`}
             >
               <Badge glyph={result.boundaryHeld ? 'check' : 'missed'} />
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div class="otp-recap__body">
                 {/*
                   Three states, not two. `boundaryHeld` is `!trifectaLive` and says nothing about
                   notices, so choosing between two strings on it alone asserted "a notice on a post
@@ -375,6 +394,13 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                 ))}
               </div>
             </div>
+
+            {/* The three things a skill can be given, in the words the HUD discs are marked with.
+                This is the ONLY place content.capabilities[*].detail renders: it came off the
+                inspect card, which the client asked for three verbs and nothing else, and the
+                non-compact Trifecta that draws these sentences was mounted nowhere. It belongs
+                here, beside the discs it explains. */}
+            <Trifecta content={content} live={liveCapabilities(state.verdicts, content)} />
 
             <h2 class="otp-section-label">
               <Highlighted text={s('recapHeading')} word={s('recapHeadingHighlight')} />
@@ -513,16 +539,14 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                 a handle on the opener, and the project ships no analytics that wants the referrer.
               */}
               {/*
-                The one property that has to be here rather than in the stylesheet: `.otp-cta` was
-                written for a <button>, so it sets no `text-decoration`, and the user-agent default
-                underlines an <a> whatever its specificity. An underlined Lime pill is a brand break
-                a screenshot review would catch, and `screens.css` has another owner this round, so
-                this is the smallest correct place for it today. It is one line to lift into
-                `.otp-cta` and delete from here.
+                `.otp-cta` was written for a <button>, so it set no `text-decoration`, and the
+                user-agent default underlines an <a> whatever its specificity -- an underlined Lime
+                pill is a brand break a screenshot review would catch. That lived here as an inline
+                style for one round, because `screens.css` had a different owner and two owners
+                never share a file. It is in `.otp-cta` now, where the brand rules can reach it.
               */}
               <a
                 class="otp-cta"
-                style={{ textDecoration: 'none' }}
                 href={RESEARCH_URL}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -536,20 +560,46 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
             </div>
 
             <p class="otp-section-label">{s('postHeading')}</p>
+            {/*
+              THE NAME IS SHOWN, NOT TYPED, and this is the half of decision D4 that was missing.
+
+              The board has minted its own handles since Phase 6: `submit()` in
+              src/net/leaderboard.ts sends `mintHandle()` and discards whatever string it was
+              handed, because a free-text name on a Cyera-branded public page is a moderation
+              problem and a player-supplied string is one more thing to sanitise on the way to a
+              table. The screen did not know that. A player typed `wolfspotter`, pressed Post, and
+              was told "Posted to the board as deft-cloak-81" -- the field had taken their input and
+              the product had quietly thrown it away. Two things were true at once and only one of
+              them was on the screen.
+
+              So the input is gone and the minted handle is the control: it is rendered as text,
+              it is what `onPost` receives, and the reroll button mints another. There is nothing
+              left to validate -- every one of the 3,072 handles `mintHandle` can produce is legal
+              by construction, which `test/leaderboard.test.ts` checks against `validateHandle`
+              directly -- so the error row goes with the input it belonged to. `validateHandle`
+              stays exported as the mirror of the server's rule; it is the thing that test holds
+              the wordlists against, and it is what a future typed name would have to pass.
+
+              `role="group"` rather than `<output>`: `<output>` carries an implicit `role="status"`,
+              and the post notice twenty lines down is the one status on this screen.
+            */}
             <form class="otp-post" onSubmit={submit} noValidate>
-              <label class="otp-field" aria-label={s('handleLabel')}>
-                <input
-                  type="text"
-                  class="otp-field"
-                  style={{ all: 'unset', width: '100%' }}
-                  value={handle}
-                  placeholder={s('handlePlaceholder')}
-                  maxLength={16}
-                  aria-invalid={error !== null}
-                  aria-describedby="otp-handle-hint"
-                  onInput={(e) => setHandle((e.target as HTMLInputElement).value)}
-                />
-              </label>
+              <span
+                class="otp-handle"
+                role="group"
+                aria-label={s('handleLabel')}
+                aria-describedby="otp-handle-hint"
+              >
+                <span data-handle={handle}>{handle}</span>
+              </span>
+              <button
+                type="button"
+                class="otp-button otp-button--quiet"
+                onClick={reroll}
+                disabled={posting}
+              >
+                {s('handleReroll')}
+              </button>
               <button type="submit" class="otp-button" disabled={posting}>
                 {s('post')}
               </button>
@@ -557,11 +607,6 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
             <p class="otp-fine" id="otp-handle-hint">
               {s('handleHint')} {s('privacyLine')}
             </p>
-            {error && (
-              <p class="otp-error" role="alert">
-                {error}
-              </p>
-            )}
             {notice && (
               <p class="otp-error" role="status">
                 {notice}

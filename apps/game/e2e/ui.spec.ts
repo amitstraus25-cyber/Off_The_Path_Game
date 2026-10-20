@@ -220,9 +220,7 @@ test('a card can be left without recording a verdict, on desktop and on a phone'
   }
 });
 
-test('the verb primer lands on the first card opened, whoever Red meets first', async ({
-  page,
-}) => {
+test('the verdict key lands on every card opened, whoever Red meets first', async ({ page }) => {
   /*
    * The primer is the only place the game says what Restrict means, and GAME_DESIGN section 4
    * requires the right answer to be discoverable. It used to render on `index === 1`, the skill's
@@ -244,7 +242,7 @@ test('the verb primer lands on the first card opened, whoever Red meets first', 
    * as the expected value, so it would have gone red on the correct build.
    */
   await expect(page.locator('.otp-panel .otp-chip')).toContainText('Skill 1 of 3');
-  await expect(page.locator('.otp-card__primer')).toContainText('Restrict:');
+  await expect(page.locator('.otp-card__primer')).toContainText('Restrict');
   // Not just that Restrict is named, but that the primer says what it MEANS. This came from a
   // second copy of this test in e2e/trifecta.spec.ts, which met the Rabbit -- Skill 1 of 3, the
   // ordering that passed even while the bug above was live -- and so could never catch it.
@@ -267,7 +265,7 @@ test('the verb primer lands on the first card opened, whoever Red meets first', 
   });
   await expect(page.locator('.otp-card__title')).toHaveText('Cottage Finder');
   await expect(page.locator('.otp-panel .otp-chip')).toContainText('Skill 2 of 3');
-  await expect(page.locator('.otp-card__primer')).toContainText('Restrict:');
+  await expect(page.locator('.otp-card__primer')).toContainText('Restrict');
   await expect(page.locator('.otp-card__primer')).toContainText(/not the extras/);
 });
 

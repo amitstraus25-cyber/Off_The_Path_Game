@@ -15,10 +15,10 @@
  *    notices, it holds for every ending at once, and it keeps holding when a fifth ending or a
  *    sixth item arrives.
  *
- * 2. THE CARD DEFINED THE VERBS ONCE AND THE CAPABILITIES NOWHERE. See `cardRulebook` in
- *    src/ui/SkillCard.tsx for the two bugs and why the fix has the signature it has. The e2e spec
- *    e2e/card-rulebook.spec.ts proves the paragraph reaches the second and third cards in a real
- *    browser; this proves the sentence inside it is complete, against the content file.
+ * 2. THE CARD DEFINED THE VERBS ONCE AND THE CAPABILITIES NOWHERE. The verbs are now three
+ *    definitions on every card, one per pill, from strings.verdict*Means; e2e/card-rulebook.spec.ts
+ *    proves they reach the second and third cards in a real browser, and this proves each one
+ *    exists and stays a single line. The capability lesson moved to Results.
  *
  * 3. THE THREE "Show me." REPLIES ARE UNREACHABLE. `tryReduce` refuses ASK with q = 'show' and
  *    Dialogue.tsx filters that option out of the list, so three replies in the shipped content
@@ -30,7 +30,6 @@
 import { describe, expect, it } from 'vitest';
 import raw from '../../../content/game.json';
 import {
-  CAPABILITIES,
   QUESTION_IDS,
   VERDICTS,
   createState,
@@ -40,7 +39,7 @@ import {
   tryReduce,
 } from '@otp/core';
 import type { Content, GameState, Verdict } from '@otp/core';
-import { cardAsksFor, cardRulebook } from '../src/ui/SkillCard';
+import { cardAsksFor } from '../src/ui/SkillCard';
 
 const content: Content = loadContent(raw);
 
@@ -130,31 +129,44 @@ describe('an arrival never names something the player is still carrying', () => 
   });
 });
 
-describe('every skill card carries the whole rulebook', () => {
-  it('cannot tell which card it is on, so it cannot be gated to one of them again', () => {
-    // The primer used to render behind `firstOpened`. A function of the content alone has nothing
-    // to gate on; a second parameter here is the regression itself.
-    expect(cardRulebook.length, 'cardRulebook(content) and nothing else').toBe(1);
-  });
+describe('every skill card carries the three verdicts, and only those', () => {
+  /*
+   * The card's whole small print is three definitions now, one per pill, read from these keys by
+   * the VERDICTS table in src/ui/SkillCard.tsx. The paragraph that used to live here also taught
+   * the three things a skill can be given, from content.capabilities[*].detail. That lesson is
+   * still required to be discoverable and has moved to Results, beside the discs it explains.
+   */
+  const MEANS: Record<Verdict, string> = {
+    allow: 'verdictAllowMeans',
+    restrict: 'verdictRestrictMeans',
+    reject: 'verdictRejectMeans',
+  };
 
-  it('defines all three verdicts', () => {
-    const rulebook = cardRulebook(content);
-    for (const verdict of VERDICTS)
-      expect(rulebook, `the rulebook never says what "${verdict}" does`).toMatch(
-        new RegExp(`\\b${verdict}\\b`, 'i'),
-      );
-  });
-
-  it('defines all three capabilities, in the words the discs are marked with', () => {
-    const rulebook = cardRulebook(content);
-    for (const id of CAPABILITIES) {
-      const leg = content.capabilities[id]!;
-      expect(rulebook, `"${id}" is not named on the card`).toContain(leg.label);
-      expect(rulebook, `"${id}" is on the card without its mark`).toContain(leg.mark);
-      // The sentence that says what the label actually MEANS. It rendered only in
-      // `.otp-leg__detail`, which no mount of Trifecta draws, so it reached nobody.
-      expect(rulebook, `"${id}" is named on the card but never explained`).toContain(leg.detail);
+  it('says what each of the three verbs does', () => {
+    for (const verdict of VERDICTS) {
+      const line = content.strings[MEANS[verdict]];
+      expect(line, `nothing on the card says what "${verdict}" does`).toBeTruthy();
+      expect(line!.trim().length, `"${verdict}" is defined by an empty line`).toBeGreaterThan(20);
     }
+  });
+
+  it('keeps each definition to one line, so the card is not a paragraph again', () => {
+    // What this replaced ran to nine lines at phone width. A definition that grows past a
+    // sentence is how that comes back, one key at a time.
+    for (const verdict of VERDICTS)
+      expect(
+        content.strings[MEANS[verdict]]!.length,
+        `the "${verdict}" definition has grown into a paragraph`,
+      ).toBeLessThan(110);
+  });
+
+  it('no longer teaches the capability lesson on the card', () => {
+    const card = VERDICTS.map((v) => content.strings[MEANS[v]]!).join(' ');
+    for (const leg of Object.values(content.capabilities))
+      expect(
+        card,
+        'the B/S/W lesson belongs beside the discs, not on the inspect card',
+      ).not.toContain(leg.label);
   });
 });
 

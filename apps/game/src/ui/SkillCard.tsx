@@ -1,5 +1,5 @@
 import type { JSX } from 'preact';
-import { BASKET_SLOTS, CAPABILITIES } from '@otp/core';
+import { BASKET_SLOTS } from '@otp/core';
 import type { Content, Skill, Verdict } from '@otp/core';
 import { NotationChip, Panel, useFocusTrap } from './components';
 import { assetUrl } from '../world/assets';
@@ -84,48 +84,6 @@ const BackGlyph = () => (
 );
 
 /**
- * The rulebook that rides on every card: the three verbs, then the three things a skill can be
- * given, in the words the HUD discs are marked with.
- *
- * TWO THINGS WERE DEFINED NOWHERE A DECIDING PLAYER COULD READ THEM.
- *
- *  - The verbs were defined on the first card opened and no other, so verdicts two and three were
- *    given with no definition of Allow, Restrict or Reject on screen at all. Night Light is third
- *    in content order and the only skill with no fine print whose best answer is still Restrict,
- *    so the rulebook was missing exactly where it decides the answer.
- *  - `content.capabilities[*].detail` -- the three sentences that say what "reaches into your
- *    basket" actually means -- rendered in one place, `.otp-leg__detail`, which only the expanded
- *    Trifecta draws. Every mount of that component passes `compact`, so those three sentences
- *    reached nobody at all.
- *
- * IT TAKES THE CONTENT AND NOTHING ELSE. No skill, no position in the run: the one thing this copy
- * must not do is differ between cards, and a signature that cannot see which card it is on cannot
- * be re-gated by accident. The legs are listed in `CAPABILITIES` order, which is the order the
- * discs sit in, and they are built from the same three records the discs read -- so adding a fourth
- * capability to the content file puts it on the card with no change here (CLAUDE.md rule 3).
- *
- * WHAT IT DELIBERATELY DOES NOT SAY is which of the three THIS skill would leave running, or what
- * each verdict would leave behind. That forecast was deleted on purpose and e2e/trifecta.spec.ts
- * guards its return: translating "it needs something written to shine on" into "it reads what
- * strangers wrote" is the whole cognitive task of this game. The player gets the vocabulary; the
- * translation stays theirs.
- *
- * One paragraph, not two. `.otp-card__primer` is the card's only quiet-small-print class and
- * panels.css has another owner this round, so a second block would either reuse a class that means
- * something else or carry layout inline. The ask to split and style it is in the handback.
- */
-export function cardRulebook(content: Content): string {
-  const legs = CAPABILITIES.flatMap((id) => {
-    const leg = content.capabilities[id];
-    return leg ? [`${leg.label} (${leg.mark}). ${leg.detail}`] : [];
-  });
-  return [content.strings['verdictPrimer'] ?? '', content.strings['cardLegs'] ?? '', ...legs]
-    .map((part) => part.trim())
-    .filter((part) => part !== '')
-    .join(' ');
-}
-
-/**
  * The "What it asks for" row, which is a sentence on every card -- including the honest one, whose
  * sentence is that there is nothing to find. Exported because test/content-copy.test.ts asks
  * whether the Keeper's only testable claim, written into an ask no code path can reach, actually
@@ -134,12 +92,51 @@ export function cardRulebook(content: Content): string {
 export const cardAsksFor = (content: Content, skill: Skill): string =>
   skill.finePrint?.detail ?? content.strings['noFinePrint'] ?? '';
 
-/* Three identical pills; the glyph is what distinguishes them, never a fill (UI_FOUNDATIONS §2). */
-const VERDICTS: { id: Verdict; label: string; Glyph: () => JSX.Element }[] = [
-  { id: 'allow', label: 'Allow', Glyph: AllowGlyph },
-  { id: 'restrict', label: 'Restrict', Glyph: RestrictGlyph },
-  { id: 'reject', label: 'Reject', Glyph: RejectGlyph },
+/**
+ * ONE TABLE DRIVES BOTH THE KEY AND THE PILLS.
+ *
+ * The three definitions above the pills and the three pills themselves are rendered from this
+ * array, in this order, with this glyph. That is not tidiness: UI_FOUNDATIONS section 2 says
+ * nothing may make one verdict look like the recommended one, and two independent lists is exactly
+ * how a fourth round discovers that the key reads Allow / Restrict / Reject while the buttons read
+ * Allow / Reject / Restrict, or that one of them picked up a different glyph. A definition cannot
+ * drift from the button it defines if there is only one of each.
+ *
+ * `means` is the CONTENT KEY, not the sentence: the words are data (CLAUDE.md rule 3) and live in
+ * content/game.json. It is a function rather than a bare key string so that each read is written
+ * out as `strings['verdictAllowMeans']` -- the literal form test/strings.test.ts scans for. That
+ * makes the content file and this card guard each other in both directions: delete a key and the
+ * read is unaccounted for, delete a render and the key is unreachable. Either way the build fails
+ * with the key named, instead of the card quietly rendering a verb with no meaning beside it.
+ */
+const VERDICTS: {
+  id: Verdict;
+  label: string;
+  Glyph: () => JSX.Element;
+  means: (content: Content) => string;
+}[] = [
+  {
+    id: 'allow',
+    label: 'Allow',
+    Glyph: AllowGlyph,
+    means: (content) => content.strings['verdictAllowMeans'] ?? '',
+  },
+  {
+    id: 'restrict',
+    label: 'Restrict',
+    Glyph: RestrictGlyph,
+    means: (content) => content.strings['verdictRestrictMeans'] ?? '',
+  },
+  {
+    id: 'reject',
+    label: 'Reject',
+    Glyph: RejectGlyph,
+    means: (content) => content.strings['verdictRejectMeans'] ?? '',
+  },
 ];
+
+/** Ties a pill to its definition for a screen reader, and `<dd>`s to the pills for everyone else. */
+const meansId = (id: Verdict): string => `otp-means-${id}`;
 
 export interface SkillCardProps {
   content: Content;
@@ -155,10 +152,12 @@ export interface SkillCardProps {
   /**
    * DEAD, and optional so that removing the prop from App.tsx needs no change here.
    *
-   * It used to gate the verb primer to the first card a run opened. The primer is now part of
-   * `cardRulebook`, which every card carries, so nothing on this card depends on which card it is
-   * -- see that function for why. App.tsx still computes and passes it; that file has another
-   * owner this round, and dropping the property from this interface would fail its typecheck.
+   * It used to gate the verb primer to the first card a run opened, so verdicts two and three were
+   * given with no definition of Allow, Restrict or Reject on screen at all -- and Night Light, the
+   * one card whose best answer is Restrict on an honest offer, is third. The key is now rendered
+   * unconditionally from `VERDICTS`, which cannot see which card it is on, so there is nothing
+   * here left to gate. App.tsx still computes and passes it; that file has another owner this
+   * round, and dropping the property from this interface would fail its typecheck.
    */
   firstOpened?: boolean;
 }
@@ -251,6 +250,39 @@ export function SkillCard({
             </div>
           </div>
 
+          {/*
+            THE KEY: three verbs, three one-line meanings, nothing else.
+
+            It sits directly ABOVE the pills, in the pills' own order and carrying the pills' own
+            glyphs, so the mapping from verb to meaning is made by POSITION -- column one defines
+            the button under column one -- and not by reading a paragraph and holding three
+            definitions in your head. It is also shorter than what it replaces, so the three pills
+            move UP the card rather than down.
+
+            What came out of here, and why it is not a deletion: this block used to append a second
+            lesson, the three things a skill can be given (basket B, strangers S, word ahead W) with
+            `content.capabilities[*].detail` spelling each one out. That is the only place in the
+            game those three sentences render -- `.otp-leg__detail` is drawn by the non-compact
+            Trifecta, which nothing mounts -- so cutting it from here cuts it from the product. The
+            handback carries the exact change that gives it a home on Results, beside the discs it
+            explains. It must not simply disappear.
+          */}
+          <dl class="otp-card__primer">
+            {VERDICTS.map(({ id, label, Glyph, means }) => (
+              <div class="otp-primer" key={id}>
+                <dt class="otp-primer__verb">
+                  <span class="otp-primer__glyph" aria-hidden="true">
+                    <Glyph />
+                  </span>
+                  {label}
+                </dt>
+                <dd class="otp-primer__means" id={meansId(id)}>
+                  {means(content)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
           <div
             class="otp-verdicts"
             role="group"
@@ -273,6 +305,9 @@ export function SkillCard({
                 key={id}
                 type="button"
                 class={`otp-verdict otp-verdict--${id}`}
+                /* The definition above is read out with the button, so a screen reader gets the
+                   same pairing the sighted player gets from the column it sits in. */
+                aria-describedby={meansId(id)}
                 onClick={(e) => {
                   if (trap.deliberate(e)) onVerdict(id);
                 }}
@@ -287,15 +322,6 @@ export function SkillCard({
 
           {/* States the asymmetry the back control depends on: leaving is free, deciding is not. */}
           <p class="otp-card__final">{content.strings['cardBackHint'] ?? ''}</p>
-
-          {/*
-            The rulebook, on EVERY card: the three verbs, and the three things a skill can be
-            given. Cutting the per-verdict "leaves B" microcopy removes the answer key, but nothing
-            else in the game ever says what Restrict does, and GAME_DESIGN section 4 requires the
-            right answer to be discoverable. It defines the vocabulary without naming what any
-            particular skill asks for -- see `cardRulebook`, which is why it cannot vary by card.
-          */}
-          <p class="otp-card__primer">{cardRulebook(content)}</p>
         </div>
       </Panel>
     </div>

@@ -182,24 +182,26 @@ test('a single leak draws the close card, in its own words', async ({ page }) =>
   await expect(page.locator('.otp-arrive__text')).toContainText(close.lines[0]!);
 });
 
-test('the handle field validates before anything is posted', async ({ page }) => {
+test('the board names the run itself', async ({ page }) => {
   await page.getByRole('button', { name: /Begin the walk/ }).click();
   await playRun(page, { rabbit: 'restrict', owl: 'reject', 'lantern-keeper': 'allow' });
   await finishArrival(page);
 
-  const field = page.locator('.otp-field input');
-  await field.fill('ab');
-  await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('between 3 and 16');
+  /*
+   * There is nothing left to validate: the handle is minted, not typed, so every name the form can
+   * show is legal by construction. What is worth holding is that the name is real, that the reroll
+   * changes it, and that posting still reaches the client.
+   */
+  const field = page.locator('.otp-handle [data-handle]');
+  const first = await field.getAttribute('data-handle');
+  expect(first).toMatch(/^[a-z]+-[a-z]+-[1-9][0-9]$/);
 
-  await field.fill('cyera-team');
-  await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('different handle');
+  await page.getByRole('button', { name: /Try another name/ }).click();
+  await expect(field).not.toHaveAttribute('data-handle', first!);
 
-  // A valid handle reaches the client, which reports the board is not up yet.
-  await field.fill('wolfspotter');
+  // The post reaches the client, which reports whether the board answered.
   await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText(/unavailable/i);
+  await expect(page.getByRole('status')).toContainText(/unavailable|Posted to the board/i);
 });
 
 test('the privacy line is next to the handle field', async ({ page }) => {

@@ -271,8 +271,9 @@ write. These three are from `apps/api/README.md`; that file is the authority, th
 
 Also outstanding and cheap: **one preview deploy answers two questions at once** — whether Vercel's
 bundler follows `src/content.ts`'s import of `content/game.json` out of the service root, and
-whether the top-level `headers` block still reaches responses now that `vercel.json` declares two
-services (ARCHITECTURE section 10). Both fail silently and both are invisible to CI.
+whether the top-level `headers` block reaches the `/api/*` function responses as well as the static
+build, now that those routes are Vercel Functions of the game service rather than a second service
+(ARCHITECTURE section 10). Both fail silently and both are invisible to CI.
 
 ## Phase 7: Embed, hardening, release candidate (M4)
 
@@ -291,8 +292,9 @@ services (ARCHITECTURE section 10). Both fail silently and both are invisible to
       an empty list means something. Zero third-party requests is asserted by `smoke.spec.ts`'s
       request handler. SRI is **not applicable**: every asset is same-origin and self-hosted.
       **What is left is the one thing only a deploy answers** — whether Vercel applies the top-level
-      `headers` block through a service rewrite now that there are two services. Both guards apply
-      the headers themselves and would stay green if it did not.
+      `headers` block to the function routes as well as the static build, now that `/api/*` is
+      served by the game service's own `api/` directory rather than by a second service. Both
+      guards apply the headers themselves and would stay green if it did not.
 - [ ] (M) Accessibility audit: keyboard-only, screen reader pass (NVDA/VoiceOver), zoom 200%, reduced motion, contrast; fix.
 - [ ] (M) Performance: bundle analysis against budget, asset compression, test on a mid-range Android and an older iPhone. **"Lazy-load leaderboard" is struck**: there is not one dynamic `import()` in `apps/game/src`, the build emits a single chunk, and the board is part of `Results.tsx` rather than a separate screen to split off. Code-splitting it is an option, not a pending task, and ARCHITECTURE section 11 warns against budgeting as if it were done.
 - [ ] (S) Cross-browser: latest Chrome, Safari (iOS + macOS), Firefox, Edge. Touch: iOS Safari address-bar resize, Android Chrome.

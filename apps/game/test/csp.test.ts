@@ -150,4 +150,37 @@ describe.runIf(existsSync(DIST_INDEX))('the page that policy applies to', () => 
   it('carries no event-handler attribute, which no CSP can make safe', () => {
     expect(builtPage()).not.toMatch(/\son[a-z]+\s*=/i);
   });
+
+  /*
+   * THE DEBUG HANDLE MUST NOT REACH PRODUCTION. `window.__otp` exposes the store, the bus, the
+   * content and (from forest-scene.ts) the live Phaser scene. Both gates read `import.meta.env`,
+   * and the form matters: Vite constant-folds `import.meta.env.VITE_E2E` so the minifier drops
+   * the branch, but `import.meta.env['VITE_E2E']` is a runtime lookup that survives it. That is
+   * not hypothetical -- a plain `pnpm build` shipped the whole payload, and the bundle was
+   * byte-identical to a VITE_E2E one, which is the signature of a gate that is not being
+   * eliminated rather than of a dist built with the flag.
+   *
+   * The names are asserted, not the gate, so this cannot pass by being rewritten alongside what
+   * it watches. It is skipped on an e2e build, where the hooks are supposed to be present.
+   */
+  it.runIf(process.env['VITE_E2E'] !== '1')(
+    'ships no debug handle and no scene hooks to a player',
+    () => {
+      const page = builtPage();
+      const script = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i.exec(page)?.[1];
+      expect(script, 'no module script in the built page -- is this a real build?').toBeTruthy();
+
+      const bundle = readFileSync(
+        fileURLToPath(new URL(`apps/game/dist${script!}`, ROOT)),
+        'utf8',
+      );
+      expect(bundle.length, 'the bundle is empty').toBeGreaterThan(1000);
+      for (const hook of ['__otp', 'isSolidAt', 'mapObjects'])
+        expect(
+          bundle.includes(hook),
+          `"${hook}" is in a plain production bundle, so an e2e gate is not being eliminated -- ` +
+            'check that both gates use dot access, not import.meta.env["VITE_E2E"]',
+        ).toBe(false);
+    },
+  );
 });

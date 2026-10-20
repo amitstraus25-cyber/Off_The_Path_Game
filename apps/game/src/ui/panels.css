@@ -786,6 +786,13 @@
   font-size: max(12px, calc(15px * var(--otp-ui)));
 }
 
+/* The caret SVG inside .otp-option__tri. `display: block` is load-bearing rather than cosmetic: an
+   inline SVG sits on the text baseline and reserves descender space under itself, which nudged the
+   selected row a pixel taller than its neighbours. Lifted from an inline style in Dialogue.tsx. */
+.otp-option__caret {
+  display: block;
+}
+
 .otp-option[aria-selected='true'] {
   background: var(--cyera-haze);
   color: var(--cyera-deep-purple);
@@ -880,6 +887,14 @@
 /* ---------------------------------------------------------------- skill card */
 
 .otp-card {
+  /*
+   * The one gutter the verdict key and the verdict pills both use. Declared once, here, because
+   * the key's three columns have to land on the pills' three columns exactly -- that alignment is
+   * the whole mechanism by which the card maps a verb to its meaning without a paragraph. Two
+   * copies of "10px" is two numbers that can drift; one custom property is one that cannot.
+   */
+  --otp-verdict-gap: 10px;
+
   /* Inside a panel body the card already has the panel's width. */
   width: 100%;
   color: var(--cyera-black);
@@ -1027,9 +1042,63 @@
   color: var(--cyera-black);
 }
 
+/*
+ * ---- the verdict key -------------------------------------------------------------------------
+ *
+ * Three definitions, one per pill, in one grid whose columns are the pills' columns. It replaced a
+ * single paragraph that ran the three verbs together and then taught a second lesson about what a
+ * skill can be given; at card width that was eight or nine lines of small print standing between
+ * the player and the only decision the game asks for.
+ *
+ * IDENTICAL BY CONSTRUCTION, which is binding (UI_FOUNDATIONS section 2: nothing may make one
+ * verdict look like the recommended one). One selector styles all three items, so there is no
+ * per-verdict rule here to get out of step -- the glyph is the only difference, and it is the same
+ * drawn glyph the pill carries, from the same table in SkillCard.tsx.
+ *
+ * Brand: no fill and no Lime on this screen. The key separates from the two Natural fact rows
+ * above it by a Clay hairline, which is Clay's documented role, and it rehearses the pills below
+ * in Deep Purple one step quieter, so the eye reads key and pill as the same three things twice.
+ * Ash on Shell for the meanings: 6.9:1, and the role colour for text under 24px (section 7.4).
+ */
+.otp-card__primer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--otp-verdict-gap);
+  margin: calc(14px * var(--otp-ui)) 0 0;
+  padding-top: calc(12px * var(--otp-ui));
+  border-top: 1px solid var(--cyera-clay);
+}
+
+/* 10 caps is the eyebrow role; this is a term, so it takes the row-heading size at Medium. */
+.otp-primer__verb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: max(12px, calc(14.5px * var(--otp-ui)));
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--cyera-deep-purple);
+}
+
+/* Sized in `em` by the component, so the glyph tracks the verb it sits beside. */
+.otp-primer__glyph {
+  display: grid;
+  place-items: center;
+  font-size: max(11px, calc(14px * var(--otp-ui)));
+  line-height: 1;
+}
+
+.otp-primer__means {
+  margin: 4px 0 0;
+  font-size: max(11px, calc(12.5px * var(--otp-ui)));
+  line-height: 1.4;
+  color: var(--cyera-ash);
+}
+
 .otp-verdicts {
   display: flex;
-  gap: 10px;
+  gap: var(--otp-verdict-gap);
   margin-top: calc(12px * var(--otp-ui));
 }
 
@@ -1037,10 +1106,19 @@
  * On a phone the three pills stack full width, as the portrait artboard has them. Side by side at
  * 390px each pill is about 105px, which crowds the glyph against the label and leaves a target
  * narrower than a thumb; stacked they are full width and comfortably over the 44px minimum.
+ *
+ * The key stacks at the SAME width and in the same order, so definition one still sits above pill
+ * one. Splitting the two breakpoints would leave a band of widths where three columns of key point
+ * at one column of pill, which is worse than either layout on its own.
  */
 @media (max-width: 420px) {
   .otp-verdicts {
     flex-direction: column;
+  }
+
+  .otp-card__primer {
+    grid-template-columns: minmax(0, 1fr);
+    gap: calc(8px * var(--otp-ui));
   }
 }
 
@@ -1420,14 +1498,8 @@
   color: var(--cyera-ash);
 }
 
-/* The one-time definition of the three verbs, on the first card only. Ash, not Stone: this is
-   below 24px (docs/UI_FOUNDATIONS.md section 7, change 4). */
-.otp-card__primer {
-  margin: calc(12px * var(--otp-ui)) 0 0;
-  font-size: max(12px, calc(13px * var(--otp-ui)));
-  line-height: 1.45;
-  color: var(--cyera-ash);
-}
+/* `.otp-card__primer` is the verdict key and is declared with the verdicts, above, so the one
+   custom property that aligns its columns with the pills sits beside both users of it. */
 
 /* All three verdict pills share one surface now, so the marks need no per-button inversion. */
 
@@ -1645,6 +1717,243 @@
    */
   .otp-ui {
     --otp-hud-basket-bottom: calc(14px * var(--otp-ui) + var(--otp-pad-button) + 14px);
+  }
+}
+
+/*
+ * ================================================================================================
+ * THE DROP-DOWN, WHICH IS THE TOUCH VERSION OF THE PANEL ABOVE.
+ *
+ * The two rules above win the argument they were having -- the goals belong inside the world
+ * wherever the pad is drawn -- and then the box they put there is too big for the world it is in.
+ * Measured on the built game, the standing panel against the visible world:
+ *
+ *   375x812   world 368x534   box 348.4x93.1   16.5% of the world by area, 17.4% of its height
+ *   390x844   world 384x556   box 362.2x95.4   16.2%                        17.2%
+ *   360x740   world 354x482   box 334.4x93.1   18.2%                        19.3%
+ *   375x667   world 368x430   box 348.4x93.1   20.5%                        21.7%
+ *   320x568   world 352x358   box 300.4x93.1   22.2%                        26.0%
+ *   568x320   world 530x238   box 263.8x90.3   18.9%                        37.9%
+ *   844x390   world 806x308   box 263.8x90.3    9.6%                        29.3%
+ *
+ * The area figure is the kind one. The box spans 94.7% of the world's WIDTH at 375x812 and sits
+ * across its top, so what it actually costs is a horizon: three of the world's 16.7 visible tile
+ * rows, and well over a third of a landscape world's height.
+ *
+ * TYPE CANNOT PAY FOR THIS, which is why the answer is a disclosure and not "a bit smaller". The
+ * FLOOR RULE at the top of this file puts a `max()` under every size that scales, and at a phone's
+ * --otp-ui of 0.7 every line in this box is ALREADY at its floor: the label is max(11, 11 x 0.7) =
+ * 11px and each goal is max(12, 13 x 0.7) = 12px. Shrinking either is not a design decision this
+ * round is allowed to take, it is deleting the rule the file opens with.
+ *
+ * So the rows -- which are the whole height -- go behind a bar, and the bar keeps the two things
+ * worth keeping on screen the whole time: the heading, so the player knows what the list is, and
+ * one mark per goal, so "how many are done" never costs a tap. Measured the same way afterwards,
+ * the bar is 233.2x44 at every one of those sizes:
+ *
+ *   375x812   5.2% of the world against 16.5%   width 63.4% against 94.7%   height 8.2%  vs 17.4%
+ *   390x844   4.9%               against 16.2%         62.1%       94.3%           7.9%     17.2%
+ *   360x740   6.0%               against 18.2%         65.9%       94.5%           9.1%     19.3%
+ *   375x667   6.5%               against 20.5%         63.4%       94.7%          10.2%     21.7%
+ *   320x568   8.1%               against 22.2%         66.3%       85.3%          12.3%     26.0%
+ *   568x320   8.1%               against 18.9%         44.0%       49.8%          18.5%     37.9%
+ *   844x390   4.1%               against  9.6%         28.9%       32.7%          14.3%     29.3%
+ *
+ * The width column is the one the client was describing. The rows come back on a tap, over the
+ * world rather than instead of it.
+ *
+ * THE SELECTORS CARRY TWO CLASSES ON PURPOSE. `.otp-hud-goals--drop` on its own is (0,1,0), the
+ * same weight as the `.otp-hud-goals` inside the two media blocks above, and a media query adds
+ * nothing -- so it would win only by being written later, which is a rule that holds until somebody
+ * moves a block. `.otp-hud-goals.otp-hud-goals--drop` is (0,2,0) and wins wherever it is written.
+ *
+ * The class is only ever in the DOM where `components.tsx GOALS_DROP_QUERY` matches, so these rules
+ * need no media query of their own; the component and the stylesheet agree by the class existing.
+ * ================================================================================================
+ */
+.otp-hud-goals.otp-hud-goals--drop {
+  /* The box is now a bar, so it stops being a painted panel: the bar and the opened list paint
+     themselves, and the wrapper is only the corner they hang from. */
+  padding: 0;
+  background: none;
+  /* Shrink to the bar rather than stretching across the world -- `right` is what both media blocks
+     above set, and `width: max-content` is what makes the two sides different lengths. */
+  right: auto;
+  width: max-content;
+  max-width: calc(100% - 28px * var(--otp-ui));
+}
+
+/*
+ * THE BAR. It is the one thing in the world a thumb is meant to land on besides the pad, so it
+ * carries --otp-touch-min outright rather than hoping padding reaches it; that token does not scale
+ * with --otp-ui, which is the point of it.
+ *
+ * `.otp-world-anchor` and the goals box are both `pointer-events: none` -- they sit over a canvas
+ * that takes the game's own input -- so the button has to hand itself back the pointer. Nothing
+ * else in this subtree does, so a tap anywhere but the bar still reaches the world.
+ *
+ * Fully opaque, where the standing panel is 82% black. Two reasons and both are measured: an 82%
+ * panel over the sand path composites to a warm brown-purple patch with the path's own silhouette
+ * in it, which reads as a smear rather than as a panel; and this bar is the control, so it should
+ * look like one. The standing panel's own 82% is left alone -- it is the desktop's, and it is
+ * signed off.
+ */
+.otp-hud-goals__summary {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--otp-ui));
+  width: 100%;
+  min-height: var(--otp-touch-min);
+  margin: 0;
+  padding: calc(6px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  border: 1px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-pill);
+  background: var(--cyera-black);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* On the dark bar the default ring's Deep Purple outline is the bar's own border colour; the two
+   swap, exactly as `.otp-panel__header :focus-visible` already swaps them for the same reason. */
+.otp-hud-goals__summary:focus-visible {
+  outline-color: var(--cyera-lilac);
+  box-shadow: 0 0 0 6px var(--cyera-deep-purple);
+}
+
+/* The heading is already the right size and colour from the standing panel; inside the bar it only
+   has to stop being a block, so the marks and the chevron can sit on the same line. */
+.otp-hud-goals--drop .otp-hud-goals__label {
+  display: inline;
+}
+
+.otp-hud-goals__marks {
+  display: flex;
+  gap: calc(8px * var(--otp-ui));
+  margin-left: auto;
+  /* So three marks cannot be read as an ellipsis: one more gap between them and the chevron than
+     between each other, which is what tells the eye they are a row of three and not a "...". */
+  margin-right: calc(4px * var(--otp-ui));
+}
+
+/* Same two glyphs and the same two colours as a row's mark, because they are reporting the same
+   thing: not-done is said by the glyph and by the row's own "not yet", never by colour. The 1em
+   box is the row mark's own width, so a goal that turns over does not shuffle the other two. */
+.otp-hud-goals__mark {
+  min-width: 1em;
+  font-size: max(12px, calc(13px * var(--otp-ui)));
+  line-height: 1;
+  text-align: center;
+  color: var(--cyera-lilac);
+}
+.otp-hud-goals__mark--met {
+  color: var(--cyera-offwhite);
+}
+
+.otp-hud-goals__chevron {
+  font-size: max(11px, calc(11px * var(--otp-ui)));
+  line-height: 1;
+  color: var(--cyera-lilac);
+  transition: transform 140ms ease;
+}
+.otp-hud-goals__summary[aria-expanded='true'] .otp-hud-goals__chevron {
+  transform: rotate(180deg);
+}
+
+/*
+ * THE OPENED LIST.
+ *
+ * `[hidden]` IS NOT ENOUGH ON ITS OWN HERE, and this is the one line in the block that is load
+ * bearing rather than decorative: `.otp-hud-goals__list` is `display: flex`, and an author
+ * `display` beats the user-agent sheet's `[hidden] { display: none }` on specificity. Without the
+ * rule below the attribute is set, `aria-expanded` says closed, every screen reader agrees -- and
+ * the three rows stay painted across the world, which is the entire defect this block exists to
+ * fix, now with a bar on top of it.
+ */
+.otp-hud-goals--drop .otp-hud-goals__list[hidden] {
+  display: none;
+}
+
+.otp-hud-goals--drop .otp-hud-goals__list {
+  margin-top: calc(6px * var(--otp-ui));
+  padding: calc(10px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  /* The same keyline and the same fill as the bar it drops from, so the two read as one control
+     and not as a panel that happened to appear under a button. */
+  border: 1px solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  background: var(--cyera-black);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-hud-goals__chevron {
+    transition: none;
+  }
+}
+
+/*
+ * LANDSCAPE OPENS SIDEWAYS, BECAUSE DOWNWARDS IS WHERE THE JOYSTICK IS.
+ *
+ * A landscape phone's world is a 238px band and the stick takes the bottom-left 96px of it. The
+ * standing panel cleared the stick's top edge by 1.7px at 568x320 -- 206.3 against 208 -- which is
+ * the one-pixel layout the note above this block already refuses to call a layout, and the moment
+ * the list opened under a 44px bar it went 30px into it: measured, the stick covered 73x2 of the
+ * second goal row and 73x19 of the third. "The touch pad covered an errand goal" is the exact
+ * defect the portrait rules were written to end, reintroduced at the far end of the same device.
+ *
+ * The bar on its own never reaches the stick -- it stops at y160 of a stick that starts at 208 --
+ * so what has to move is the list, and in landscape the room is beside the bar rather than under
+ * it. Opened sideways the box is 201 + 6 + 264 = 471px of a 530px world and it stays in the top
+ * band: measured afterwards, zero overlap with the stick, the A button and the basket at 568x320,
+ * 667x375, 740x360, 812x375 and 844x390.
+ *
+ * `(hover: none)` and not `(pointer: coarse)`, to match GOALS_DROP_QUERY: these rules only ever
+ * apply to a box whose class the component put there, and the component asks the first question.
+ */
+@media (hover: none) and (orientation: landscape) {
+  .otp-hud-goals.otp-hud-goals--drop {
+    display: flex;
+    align-items: stretch;
+    gap: calc(6px * var(--otp-ui));
+    /*
+     * AND IT STOPS ABOVE THE BASKET, in the basket's own tokens rather than in a height that
+     * happens to work. Sideways cleared the stick and then grazed the pill instead: measured at
+     * 568x320, 138x2 of it. The two boxes share one band at opposite ends of the world in
+     * landscape -- that is this file's own description of the geometry, four rules down -- and in
+     * landscape the pill is lifted clear of the A button as well, so the band above it is only
+     * about 64px tall on the shortest phone. The bound is therefore read off the same two tokens
+     * that put the pill where it is, so a future change to either moves this with it.
+     *
+     * The percentage resolves against `.otp-world-anchor`, which is the world's own box: this
+     * element is absolutely positioned inside it.
+     */
+    max-height: calc(
+      100% - var(--otp-world-header) - var(--otp-hud-basket-bottom) - var(--otp-hud-basket-h) -
+        20px * var(--otp-ui)
+    );
+  }
+  /* The bar stretches to the open list's width in portrait, where they are stacked. Side by side
+     it is its own width again, it keeps its own 44px height rather than stretching to the band,
+     and it must not be squeezed by a long goal label. */
+  .otp-hud-goals--drop .otp-hud-goals__summary {
+    flex: none;
+    width: auto;
+    align-self: flex-start;
+  }
+  /*
+   * On the shortest landscape phone three rows do not fit in that band, so the list scrolls rather
+   * than being clipped or being allowed back over the pill. `min-height: 0` is what lets a flex
+   * item be shorter than its content at all; `pointer-events` comes back because a box nothing can
+   * touch cannot be scrolled, and `overscroll-behavior` keeps that flick off the page behind it.
+   * Measured, it only ever scrolls at 568x320 -- at 667x375 and up the whole list fits.
+   */
+  .otp-hud-goals--drop .otp-hud-goals__list {
+    margin-top: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
   }
 }
 

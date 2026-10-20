@@ -443,7 +443,28 @@ export class ForestScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
     this.camera = this.focus();
     this.syncCamera();
-    if (import.meta.env.DEV || import.meta.env['VITE_E2E'] === '1') {
+    /*
+     * DOT ACCESS, NOT `env['VITE_E2E']`, AND THAT IS THE WHOLE POINT.
+     *
+     * Vite folds `import.meta.env.VITE_E2E` to a string literal at build time, so in a plain
+     * production build this condition is constant-false and the minifier drops the branch and
+     * everything it reaches. It does NOT fold the BRACKET form, which is what stood here. Measured
+     * on a plain build of this tree: with brackets, `isSolidAt` and `mapObjects` were both in the
+     * shipped JavaScript and the gate survived minification as a RUNTIME lookup against the baked
+     * env object; with dot access, neither string is in the bundle at all.
+     *
+     * Being precise about what that cost, because the round that found it overstated it and the
+     * overstatement is easy to repeat: the runtime lookup is false in a plain build, so a plain
+     * build does not actually define `window.__otp`. What shipped was the dead payload, not a live
+     * handle. The live case is `apps/game/dist` AFTER `pnpm e2e`, which builds with the flag and
+     * leaves the result sitting there -- deploy that directory and the store, the bus, the content
+     * and this scene are all reachable from the page. Folding the branch out is the difference
+     * between "we believe the flag was off" and "the code is not in the file", and on a data
+     * security company's public marketing asset that is a difference worth one character.
+     *
+     * e2e/world.spec.ts builds a plain bundle of its own and fails if the scene hooks appear in it.
+     */
+    if (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') {
       const w = window as unknown as { __otp?: Record<string, unknown> };
       if (w.__otp) {
         w.__otp['scene'] = this;

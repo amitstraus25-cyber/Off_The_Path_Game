@@ -298,13 +298,15 @@ that far. **Its canary is load-bearing:** "no violations" is also what a page wi
 so the run first does something the policy forbids and asserts the browser objects. Only then does
 an empty list mean anything.
 
-**Still unverified, and it should be before launch:** both guards apply the policy _themselves_.
-Neither can prove that **Vercel** applies a top-level `headers` block to a response served through a
-service rewrite, now that `vercel.json` declares two services. If it does not, the policy never
-ships and nothing in this repository can notice, because both guards would stay green. The check is
-a preview deploy with the response headers read off a real request — the same preview
-`apps/api/README.md` says is the only thing that answers whether the bundler follows the content
-import out of `apps/api`. Do one deploy and answer both.
+**Half of this is now answered.** Both guards apply the policy _themselves_, so neither can prove
+that **Vercel** applies a top-level `headers` block to a real response. A request to production
+settled the document route: `GET /` returns the CSP from `vercel.json`, so the file is read and the
+header ships. What that request did _not_ settle is whether the same block reaches a **function**
+response — `/api/score` and `/api/top`, now served from inside the game service as
+`apps/game/api/*.ts`. If it does not, the policy is missing on exactly the two routes that handle
+input, and nothing in this repository can notice, because both guards would stay green. The check is
+one preview deploy with the response headers read off a real `/api/top` request — the same preview
+that answers whether those functions exist at all. Do one deploy and answer both.
 
 ## 11. Performance budget
 
