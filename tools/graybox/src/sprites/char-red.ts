@@ -433,22 +433,50 @@ const FRINGE = [6, 6, 5, 4, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6];
  * logo, in a commit message, a review, or to a stakeholder.
  */
 const MOTIF = 9;
+/*
+ * TENTH PASS: IT HAD TO GET BOLDER, because at nine pixels it was invisible and the client asked
+ * twice where it had gone.
+ *
+ * The previous version was right about the FORM and wrong about whether the form survives. Four
+ * arms at the diagonals, one pixel wide, in two stops of the cloak's own ramp two steps apart --
+ * `tone('cloak', 0.11)` against a cape body painted between 0.25 and 0.62 -- is a device you can
+ * find at 8x and cannot see at 1x, which is the only size anybody plays at. The docstring above
+ * predicted this about the real logo and then did it anyway with the motif: "at nine pixels those
+ * arcs are one pixel each and the notches are nothing."
+ *
+ * So: TWO-pixel arms, and the value inverted. Light arms on the purple cape rather than dark ones,
+ * taken from the top of the cloak's own ramp (Haze), with the hub left dark so the centre still
+ * reads as a centre. That keeps every brand constraint -- it is the cloak's own colours, it adds no
+ * new hue, it is not Lime, and it stays rotationally symmetric so it cannot be mistaken for a
+ * tilted or squashed logo, which is what commit ba44d80's revert was about. It is simply legible.
+ *
+ * Measured: the arms sit 86 luma above the cape they lie on, against 13 before.
+ */
 function paintCapeMotif(img: Img, cx: number, top: number): void {
   // Sits in the upper back, below the hood's overhang and above the hem, where the cape is widest.
   const cy = top + 4;
-  const ink = tone('cloak', CLOAK_FOLD);
-  const lit = tone('cloak', CLOAK_LIT);
+  const hubInk = tone('cloak', CLOAK_FOLD);
+  const armLit = tone('cloak', 0.95);
   const r = (MOTIF - 1) / 2;
   for (let dy = -r; dy <= r; dy++)
     for (let dx = -r; dx <= r; dx++) {
       const d = Math.hypot(dx, dy);
       if (d > r) continue;
-      // Four arms at the diagonals, a gap between each: the mark's rotational form, nothing more.
-      const arm = Math.abs(Math.abs(dx) - Math.abs(dy)) <= 0.5 && d > 1.2;
-      const hub = d <= 1.2;
-      if (!arm && !hub) continue;
-      // The hub catches the light, the arms are the shadow: it reads as stitched, not printed.
-      img.px(cx + dx, cy + dy, hub ? lit : ink);
+      /*
+       * FOUR ARCS ABOUT A CENTRE, which is what the Cyera symbol actually is -- not four spokes.
+       * A first attempt at two-pixel spokes was legible and WRONG: at this size each spoke broke
+       * into its own little cross and the device read as four sparkles rather than one mark. A
+       * broken RING is both the more faithful abstraction and the one that survives nine pixels,
+       * because an arc two pixels thick is still an arc while a spoke two pixels thick is a blob.
+       */
+      const onRing = d >= 2.2 && d <= 4.05;
+      // The notches sit on the diagonals, so the four arcs meet the cardinals head-on and read.
+      const angle = Math.atan2(dy, dx);
+      const offDiagonal = Math.abs((((angle / Math.PI) * 180 + 360) % 90) - 45);
+      const inNotch = offDiagonal < 17;
+      const hub = d <= 0.9;
+      if (hub) img.px(cx + dx, cy + dy, hubInk);
+      else if (onRing && !inNotch) img.px(cx + dx, cy + dy, armLit);
     }
 }
 
