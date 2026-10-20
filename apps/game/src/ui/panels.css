@@ -1680,10 +1680,21 @@
 
 /* The trifecta warning, in the world rather than in the 44px frame header where it used to push
    the three capability discs out through the top of the frame. */
+/*
+ * A BUBBLE, NOT A BAND. This set `left` AND `right`, so it stretched the full width of the world
+ * and printed as a dark strip across the whole screen -- the client's note, and it is the loudest
+ * object in the frame at the exact moment the player is meant to be looking at the forest.
+ *
+ * The hint four hundred lines up has always been right about this: `left` plus a `max-width`, so
+ * the box is as wide as its words and no wider. The measure is capped in `ch` as well, because the
+ * warning is a sentence rather than a label and at 1280 a single unwrapped line of it reads as
+ * chrome; two short lines read as something said.
+ */
 .otp-world-warning {
   position: absolute;
   left: calc(14px * var(--otp-ui));
-  right: calc(14px * var(--otp-ui));
+  max-width: min(40ch, calc(100% - 28px * var(--otp-ui)));
+  width: max-content;
   top: calc(var(--otp-world-header) + 52px * var(--otp-ui));
   margin: 0;
   box-sizing: border-box;
