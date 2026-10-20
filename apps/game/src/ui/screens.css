@@ -600,7 +600,7 @@ h2.otp-section-label {
   color: var(--cyera-deep-purple);
 }
 .otp-title-panel .otp-title__sub {
-  font-size: calc(18px * var(--otp-ui));
+  font-size: calc(20px * var(--otp-ui));
   /* Ash, the muted-text role the comment above already names, not Aubergine. Aubergine is a
      foreground ACCENT (BRAND_AND_UI section 1 table), and spending it on the subtitle made the
      second line of the hero screen compete with the Deep Purple heading above it -- while the
@@ -617,21 +617,30 @@ h2.otp-section-label {
   border-radius: 0;
   /* No rule down the side. A bright Lilac stripe beside Grandma's note made the quiet thing on
      the screen the loud one; the indent and the caption under it already say it is a quote. */
-  padding: calc(2px * var(--otp-ui)) 0 calc(2px * var(--otp-ui)) calc(2px * var(--otp-ui));
-  font-size: max(12px, calc(16px * var(--otp-ui)));
+  padding: calc(2px * var(--otp-ui)) 0 calc(2px * var(--otp-ui)) calc(10px * var(--otp-ui));
+  /*
+   * MARGIN, BECAUSE IT IS A BLOCKQUOTE AND NOTHING HAD EVER SET ONE. The browser's default for
+   * <blockquote> is `1em 40px`, so Grandma's note was indented FORTY PIXELS ON EACH SIDE inside a
+   * 306px column -- eighty of its two hundred and ninety usable pixels, which is why five words
+   * wrapped to five lines and why the card read as cramped. The padding above is the quote's
+   * indent now, and it is ten pixels rather than forty.
+   */
+  margin: calc(4px * var(--otp-ui)) 0 calc(10px * var(--otp-ui));
+  font-size: max(13px, calc(17px * var(--otp-ui)));
   color: var(--cyera-black);
 }
 .otp-title-panel .otp-note__from {
   color: var(--cyera-ash);
-  font-size: max(12px, calc(13px * var(--otp-ui)));
+  font-size: max(12px, calc(14px * var(--otp-ui)));
 }
 .otp-title-panel .otp-body-text {
-  font-size: max(12px, calc(16px * var(--otp-ui)));
+  font-size: max(13px, calc(17px * var(--otp-ui)));
   color: var(--cyera-ash);
 }
 /* Ash, not Stone: Stone is 3.6:1 on this ground and the hint is the smallest type on the card. */
 .otp-title-panel .otp-hint {
   color: var(--cyera-ash);
+  font-size: max(12px, calc(14.5px * var(--otp-ui)));
 }
 /*
  * THE PROSE SCROLLS AND THE WAY IN DOES NOT. The copy's own scroll box, the wrapper the foot's

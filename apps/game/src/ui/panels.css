@@ -1230,6 +1230,25 @@
  * one rule above, so the off state now reads as the same control dimmed rather than as a different
  * one -- which is what an off state should be.
  */
+/*
+ * The glyph and the word, on one baseline. Both of these were UNSTYLED, so an inline SVG sat on
+ * the text's baseline next to a text node separated by a literal space -- which is why the speaker
+ * and the word "off" never lined up and why the gap between them was whatever the font's space
+ * happened to be. The client's note. A flex row with its own gap fixes both at once, and it stays
+ * one grid item so the parent's reserved header height is untouched.
+ */
+.otp-music__face {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--otp-ui));
+  line-height: 1;
+}
+.otp-music__state {
+  /* The word is a label on a glyph, not body copy; it reads at a step down and stays on the line. */
+  font-size: calc(13px * var(--otp-ui));
+  letter-spacing: 0.02em;
+}
+
 .otp-music[aria-checked='false'] {
   color: color-mix(in srgb, var(--cyera-haze) 72%, transparent);
 }
