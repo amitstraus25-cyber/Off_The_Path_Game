@@ -470,10 +470,16 @@ function paintCapeMotif(img: Img, cx: number, top: number): void {
        * because an arc two pixels thick is still an arc while a spoke two pixels thick is a blob.
        */
       const onRing = d >= 2.2 && d <= 4.05;
-      // The notches sit on the diagonals, so the four arcs meet the cardinals head-on and read.
+      /*
+       * TWO notches, not four. Four was the faithful count and it does not survive the size: at a
+       * nine-pixel diameter each of the four arcs is about three pixels long, and four three-pixel
+       * fragments read as a jumble rather than as a ring. Two notches 180 degrees apart leave two
+       * long arcs that each read as an arc, which is the most of the mark's construction that
+       * nine pixels can actually carry. Rendered at 20x, looked at, and reduced from four.
+       */
       const angle = Math.atan2(dy, dx);
-      const offDiagonal = Math.abs((((angle / Math.PI) * 180 + 360) % 90) - 45);
-      const inNotch = offDiagonal < 17;
+      const offNotch = Math.abs((((angle / Math.PI) * 180 + 360) % 180) - 45);
+      const inNotch = offNotch < 15;
       const hub = d <= 0.9;
       if (hub) img.px(cx + dx, cy + dy, hubInk);
       else if (onRing && !inNotch) img.px(cx + dx, cy + dy, armLit);
