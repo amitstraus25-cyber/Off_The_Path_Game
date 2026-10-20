@@ -170,12 +170,6 @@ describe('cameraFor', () => {
     expect(from / to).toBeGreaterThan(0.2);
   });
 
-  it('hides nothing horizontally in portrait, where the card docks below the world', () => {
-    const { from, to } = visibleTitleColumns(REFERENCE_VIEWPORTS.phone);
-    expect(from).toBe(0);
-    expect(to).toBeCloseTo(11.53, 2);
-  });
-
   it('reports tiles that agree with the view it reports, at every reference viewport', () => {
     for (const [name, viewport] of Object.entries(REFERENCE_VIEWPORTS)) {
       const cam = cameraFor(viewport);

@@ -17,7 +17,7 @@ import type { Page } from '@playwright/test';
 // The camera, asked rather than quoted. cameraFor() is the one place the game and the art tooling
 // both derive the view from, so a test that wants to know whether a viewport is portrait, or what
 // zoom it runs at, asks it instead of restating a rectangle that was wrong for three rounds.
-import { REFERENCE_VIEWPORTS, TILE, cameraFor } from '@otp/core';
+import { REFERENCE_VIEWPORTS, TILE, TITLE_CARD_W, cameraFor } from '@otp/core';
 import type { Size } from '@otp/core';
 import { startGame } from './helpers';
 
@@ -717,9 +717,19 @@ test('the title column leaves Red on the path it says she is standing on', async
       return {
         clear: Math.round(left - column.right),
         column: Math.round(column.width),
+        ui: parseFloat(
+          getComputedStyle(document.querySelector('.otp-ui')!).getPropertyValue('--otp-ui'),
+        ),
       };
     });
-    expect(seen.column, `the title column at ${w}x${h}`).toBeLessThanOrEqual(310);
+    /*
+     * The column is `min(306px * var(--otp-ui), 62%)`, and 306 is TITLE_CARD_W in packages/core --
+     * the number the art tooling subtracts from the hero frame to know which columns a visitor
+     * cannot see. So the assertion is equality against the constant, not a 310px literal of this
+     * spec's own: a literal with four pixels of slack agrees with nothing, and camera.ts claimed
+     * this test kept the two in step while never naming the constant at all.
+     */
+    expect(seen.column, `the title column at ${w}x${h}`).toBe(Math.round(TITLE_CARD_W * seen.ui));
     expect(
       seen.clear,
       `air between the title column and Red's left edge at ${w}x${h}`,

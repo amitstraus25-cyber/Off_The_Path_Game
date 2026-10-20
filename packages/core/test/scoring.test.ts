@@ -62,6 +62,47 @@ describe('score: whole runs (seed content)', () => {
     expect(score(fullRun(verdicts, [...questions]).log, content).total).toBe(total);
   });
 
+  /*
+   * The one run shape in this file that READS A NOTICE, and the only total in the repo that was
+   * asserted nowhere.
+   *
+   * It used to be pinned by e2e/trifecta.spec.ts as a literal `550`. That literal was relaxed to a
+   * visibility check on the grounds that "packages/core proves those totals in one it.each table",
+   * which was true of the four totals beside it and NOT of this one: every row in the table above
+   * walks straight to the cottage, so none of them earns a goal with an `act`. Grepping 550 across
+   * packages/core returned nothing. The arithmetic was written down in a comment where the
+   * assertion had been, which keeps it from being lost but does not make anything check it.
+   *
+   * So it is checked here, where a weight change in content/game.json belongs -- and not in a
+   * browser test, which is what CLAUDE.md rule 3 promises cannot be needed.
+   *
+   *   350  restrict the rabbit (200) + restrict the owl (50) + allow the keeper (100)
+   *   100  `route`, which needs only the basket
+   *   100  `word`, which needs the messenger's capability AND the walk to the forest post
+   *     0  no question bonus: nothing is asked
+   *     0  no boundary bonus: allowing night-light lights the third leg
+   *   ---
+   *   550
+   *
+   * `sign` is not earned: it needs `strangers`, which this run never has. Reading the post is both
+   * how `word` is done and how the letter leaves the basket -- the errand and the trap are one walk.
+   */
+  it('restrict / restrict / allow, reading the post on the way = 550', () => {
+    const steps: Step[] = [
+      ...begin,
+      ...encounter('rabbit', 'restrict'),
+      ...encounter('owl', 'restrict'),
+      { type: 'READ_NOTICE', n: 'forest-post' },
+      ...encounter('lantern-keeper', 'allow'),
+      { type: 'ENTER_COTTAGE' },
+    ];
+    const r = score(run(steps).log, content);
+    expect(r.total).toBe(550);
+    // Named individually, so a change to any one of them says which one moved.
+    expect(r).toMatchObject({ bonus: 0, boundaryBonus: 0, boundaryHeld: false, errandBonus: 200 });
+    expect(r.goals.filter((g) => g.met).map((g) => g.id)).toEqual(['route', 'word']);
+  });
+
   it('breaks the total into its parts', () => {
     const r = score(fullRun(perfect, ['needs']).log, content);
     expect(r).toMatchObject({

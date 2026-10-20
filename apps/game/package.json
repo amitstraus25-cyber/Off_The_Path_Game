@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test --fail-on-flaky-tests"
   },
   "dependencies": {
     "@otp/core": "workspace:*",

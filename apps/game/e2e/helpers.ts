@@ -45,6 +45,24 @@ declare global {
 
 export const ready = (page: Page) => page.waitForSelector('#game[data-ready="true"]');
 
+/**
+ * Tags a DOM node so a later render can be asked whether it is still the same object.
+ *
+ * This is the live-region trick the a11y specs are built on: a region inserted into the DOM
+ * already containing its text is announced by no screen reader -- they announce MUTATIONS to a
+ * region that was already there -- so a test that only checks "the text is present" passes on the
+ * broken case too. A remount loses the tag; a mutation keeps it.
+ */
+export const tag = (page: Page, selector: string, mark: string): Promise<void> =>
+  page
+    .locator(selector)
+    .evaluate((el, m) => void ((el as unknown as Record<string, string>)['__otpTag'] = m), mark);
+
+export const tagOf = (page: Page, selector: string): Promise<string | null> =>
+  page
+    .locator(selector)
+    .evaluate((el) => (el as unknown as Record<string, string>)['__otpTag'] ?? null);
+
 /** Clicks past the title screen into the forest. */
 export async function startGame(page: Page): Promise<void> {
   await ready(page);
@@ -111,13 +129,40 @@ export async function mapObject(page: Page, name: string): Promise<MapObject> {
   return found;
 }
 
+/**
+ * Where an NPC can actually be TALKED to, which is not where the map object is.
+ *
+ * `npc-rabbit` is a tile at (416, 608); the person standing on it answers at (432, 648), because
+ * the spawn is centred in its tile and the sprite's origin is its feet. The difference is 56px and
+ * INTERACT_RADIUS is 48, so walking to the object's own corner parks Red one tile short of being
+ * able to say anything -- which is exactly how e2e/world-reach.spec.ts was wrong first time round.
+ *
+ * Both offsets are derived from TILE rather than typed: half a tile across to the centre of the
+ * spawn tile, and a tile plus eight pixels down to where her feet stand. They used to be bare
+ * `+16, +40` literals repeated across five spec files, which were right at TILE = 32 and silently
+ * wrong at any other size -- the same drift that made the walking helpers above overshoot when the
+ * art moved from 16px tiles to 32px.
+ */
+export async function talkingDistance(page: Page, name: string): Promise<{ x: number; y: number }> {
+  const spot = await mapObject(page, name);
+  return { x: spot.x + TILE / 2, y: spot.y + TILE + 8 };
+}
+
 /** Closes a notice post if Red has walked up to one, so a walk across the map is not blocked. */
 export async function dismissNotice(page: Page): Promise<void> {
   const walkOn = page.getByRole('button', { name: /Walk on/ });
   if ((await walkOn.count()) > 0) await walkOn.first().click();
 }
 
-/** Walks towards a point, one axis at a time, until close enough or the budget runs out. */
+/**
+ * Walks towards a point, one axis at a time, and THROWS if the budget runs out short of it.
+ *
+ * It used to return the last probe either way. Ten call sites await it and not one of them looks
+ * at what comes back, so a map regeneration that drops a bush into the corridor did not fail here:
+ * it failed several seconds later, in five different spec files, as a locator timing out on a
+ * dialogue that never opened. The arrival is the precondition every one of those tests is built
+ * on, so it is asserted where it happens, with the gap in the message.
+ */
 export async function walkTo(
   page: Page,
   target: { x: number; y: number },
@@ -158,5 +203,13 @@ export async function walkTo(
     }
     last = await probe(page);
   }
+  const gap = Math.hypot(target.x - last.position.x, target.y - last.position.y);
+  if (gap > within)
+    throw new Error(
+      `walkTo gave up after ${budgetMs}ms: Red stopped at ` +
+        `(${Math.round(last.position.x)}, ${Math.round(last.position.y)}), ` +
+        `${Math.round(gap)}px from (${Math.round(target.x)}, ${Math.round(target.y)}), ` +
+        `needing ${Math.round(within)}px. Something is in the corridor.`,
+    );
   return last;
 }

@@ -1,4 +1,4 @@
-# Assets: manifest, gaps and placeholder strategy
+# Assets: the gap, and the rules an artist has to follow
 
 ## The gap, stated plainly
 
@@ -6,27 +6,48 @@ The approved pixel art exists only as **one flattened concept board** (`referenc
 It is a visual target, not a production asset: there are no separable tiles, no sprite sheets, no walk cycles. A production build needs layered, separable art.
 **Phase 0 must resolve who produces it** [DECISION D2]. Engineering is never blocked: the `tools/graybox` script generates placeholders with the same file names, sizes and atlas keys, so real art drops in without code changes.
 
-## Technical spec for art (confirm with the artist, then freeze)
+## Where the facts live, so this file cannot be wrong about them
 
-- Tile size **16 x 16**, scene logical resolution **480 x 270**. Nearest-neighbor, no anti-aliasing, no sub-pixel offsets. Source files in Aseprite (`.aseprite`) kept in `art-src/`; exports to PNG (+ JSON hash atlas) into `apps/game/src/assets/`.
-- Palette: keep the approved board's greens, browns, water blues, Red's cloak red. Add one limited "dusk shadow" ramp for the wolf reveal. Do not recolor to Cyera purple.
-- Layers per tileset: `ground`, `decor-below`, `decor-above` (tree canopies Red walks behind), `collision` (invisible), `objects` (Tiled object layer: `spawn-red`, `npc-*`, `trigger-cottage`, `prop-*`).
-- File naming: `kebab-case`, no spaces. Atlas frame names: `red-walk-down-0` etc.
+This file used to carry a technical spec and a manifest table with Status and Placeholder columns.
+Both were false in nearly every line — they described 16 × 16 tiles, a 480 × 270 scene, a 50 × 36 map,
+16 × 24 sprites and portraits at 3× — and `CLAUDE.md` lists this file read-first, so that is a page of
+wrong numbers handed to whoever starts next. They are gone. Three places hold the truth, and each of
+them is derived or generated rather than typed out:
 
-## Manifest
+| Question                                                 | Answer                                                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| What size is anything drawn at, and what is it shown at? | **`docs/PIXEL_STANDARD.md` section 1.** Binding, and the painters follow it.                                                          |
+| Which files ship, with what frame sizes and atlas keys?  | **`apps/game/src/assets/manifest.json`**, which the loader reads at boot and `apps/game/test/assets.test.ts` checks the PNGs against. |
+| How big is the camera, and what is in frame?             | `cameraFor()` in `packages/core/src/camera.ts`, or `pnpm world --frame title`.                                                        |
 
-| Asset                                                                                         | Needed for                                                                  | Spec                                                                                                                           | Status                                           | Placeholder                                           |
-| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ | ----------------------------------------------------- |
-| `tileset-forest.png` (+ Tiled `.tsx`)                                                         | Ground, paths, water, trees, flowers, fences, rocks, bridge, well, signpost | 16px grid, about 200 tiles incl. autotile edges for water/path                                                                 | Missing (target in board)                        | graybox: flat colored tiles with edge hints           |
-| `map-forest.json` (Tiled)                                                                     | The one v1 level                                                            | about 50 x 36 tiles; river with bridge, central path with fork, market stall, lantern post, signpost, well, cottage at the end | Missing                                          | graybox map with all landmarks as labelled rectangles |
-| `red.png` / atlas                                                                             | Player                                                                      | 4 directions x (idle + 3-frame walk), 16 x 24                                                                                  | Missing (cloak design in board)                  | colored capsule with a direction nub                  |
-| `npc-rabbit`, `npc-owl`, `npc-lantern-keeper`, `npc-wolf`                                     | NPCs                                                                        | idle 2 frames; wolf also "window silhouette" and "at door"                                                                     | Rabbit and owl in board; keeper and wolf partial | labelled rectangles                                   |
-| `portrait-red`, `portrait-rabbit`, `portrait-owl`, `portrait-keeper`, `portrait-wolf-grandma` | Dialogue boxes                                                              | about 32 x 32 art shown at 3x (100px) with 3px Deep Purple border added in CSS                                                 | Red and rabbit exist in board (crop reference)   | flat color + initial letter                           |
-| `item-compass`, `item-translator`, `item-lantern`, `item-key`, `item-letter`                  | Skill card icon well, basket                                                | 32 x 32, transparent background                                                                                                | Compass, key, letter in board                    | labelled squares                                      |
-| `fx-interact-prompt`                                                                          | Bobbing "A" above NPCs                                                      | 2 frames                                                                                                                       | Missing                                          | simple arrow                                          |
-| `fx-pawprints`                                                                                | Wolf trail at the cottage                                                   | 3 sprites                                                                                                                      | In board                                         | circles                                               |
-| Fonts (`Haffer`, `Season Mix` `.woff2`)                                                       | UI                                                                          | licensed                                                                                                                       | Not in repo; request from Brand Kit              | Inter / Georgia fallbacks                             |
-| Audio (stretch)                                                                               | SFX + loop                                                                  | CC0 or commissioned, under 300 KB total                                                                                        | Not started                                      | none                                                  |
+`manifest.json` currently declares one tileset, one map, Red's atlas, eleven spritesheets (four NPCs,
+four bystanders, three effects) and eleven images (six portraits and five items). It carries
+`"placeholder": true`; that flag flipping to `false` is what "real art has landed" means.
+
+## The rules, which are not in the manifest and do have to be written down
+
+These are binding on any artist, and on every painter in `tools/graybox/src`. Code across the repo
+cites this file by name for them.
+
+- **No partial alpha against transparency.** A semi-transparent colour drawn onto an _opaque_ pixel is
+  fine — the result is opaque. Drawn onto a _transparent_ pixel it leaves a partly-transparent pixel in
+  the PNG, and those are forbidden. Build soft shading by picking a darker ramp level, never by lowering
+  alpha over nothing. (`docs/PIXEL_STANDARD.md` section 4 states the same rule and names this file as
+  its home.)
+- **Palette: keep the approved board's greens, browns, water blues, Red's cloak red.** Exactly **one**
+  limited "dusk shadow" ramp is allowed, for the wolf reveal, and it extends an existing ramp downward
+  rather than introducing a hue. **Do not recolor the world to Cyera purple**; `docs/PIXEL_STANDARD.md`
+  section 2 says which three things carry brand colour and why.
+- **Layers per tileset:** `ground`, `decor-below`, `decor-above` (tree canopies Red walks behind),
+  `collision` (invisible), `objects` (Tiled object layer: `spawn-red`, `npc-*`, `bystander-*`,
+  `trigger-cottage`, `notice-*`, `gate-fence-gap`, `prop-*`).
+- **File naming:** `kebab-case`, no spaces. Atlas frame names: `red-idle-<facing>-0` and
+  `red-walk-<facing>-0..2` for four facings. The generator and the scene both depend on exactly these
+  names.
+- **Source files** in Aseprite (`.aseprite`) kept in `art-src/`; exports to PNG (+ JSON hash atlas) into
+  `apps/game/src/assets/`.
+- **Audio** (stretch, and ahead of plan — there is a generated music bed with no files in the repo):
+  CC0 or commissioned, **under 300 KB total**.
 
 ## Crops available from the board for reference only
 
@@ -35,7 +56,10 @@ They are soft because the board is upscaled; **do not ship them**. Redraw at nat
 
 ## Asset pipeline tasks (Phase 0 and 2)
 
-- [ ] `tools/graybox`: generate tileset, map, sprites, portraits, items with final names.
-- [ ] Loader that fails the build if any manifest asset is missing (so a stale placeholder is a visible choice).
-- [ ] `docs/ASSETS.md` status column kept current; a checklist in PLAN.md Phase 5 tracks swap-in of real art.
+- [x] `tools/graybox`: generate tileset, map, sprites, portraits, items with final names.
+- [x] Loader that fails loudly, with a named error rather than a black screen, if a manifest asset is
+      missing or a map has been rescaled under it (`world/assets.ts`, `world/map.ts`, `world/scenes.ts`).
+- [ ] A checklist in PLAN.md Phase 5 tracks swap-in of real art. **There is no status column here any
+      more**: a hand-maintained one went stale the week it was written, and `manifest.json`'s
+      `"placeholder"` flag is the machine-readable version of the same question.
 - [ ] Integer-scale and crispness test (Playwright screenshot at 1x, 2x, 3x device pixel ratios).

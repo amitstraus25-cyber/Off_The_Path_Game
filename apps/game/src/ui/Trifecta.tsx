@@ -80,27 +80,3 @@ export function Trifecta({
     </div>
   );
 }
-
-/** The marks a single verdict would leave running, for the skill card. */
-export function GrantMarks({
-  content,
-  grants,
-}: {
-  content: Content;
-  grants: readonly Capability[];
-}) {
-  if (grants.length === 0) return <span class="otp-grants otp-grants--none">nothing</span>;
-  return (
-    <span class="otp-grants">
-      {CAPABILITIES.filter((c) => grants.includes(c)).map((id) => {
-        const capability = content.capabilities[id];
-        return capability ? (
-          <span key={id} class="otp-grants__mark" title={capability.label}>
-            {capability.mark}
-            <span class="otp-visually-hidden">{capability.label}</span>
-          </span>
-        ) : null;
-      })}
-    </span>
-  );
-}

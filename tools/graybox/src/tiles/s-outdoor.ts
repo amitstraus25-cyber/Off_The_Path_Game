@@ -73,11 +73,8 @@
  * Both painters also have to survive how `forest-map.ts` actually lays them, which constrains them
  * more than the board does. See the notes on each.
  */
-import { Img, keyline, tone, type RGBA } from '../paint.ts';
-
-const TILE = 32;
-
-type Painter = (img: Img) => void;
+import { Img, keyline, TILE, tone, type RGBA } from '../paint.ts';
+import type { Painter } from '../paint.ts';
 
 /* ---------------------------------------------------------------- the wood */
 
@@ -830,7 +827,7 @@ function deck(img: Img): void {
     /*
      * Grain, two marks a plank, running WITH the board rather than across it -- an earlier version
      * drew them horizontally, which on a plank whose length runs top to bottom is a crack, not
-     * grain, and at a 26-tile camera read as a row of dashes. Each sits at its own height so
+     * grain, and at the playing camera read as a row of dashes. Each sits at its own height so
      * neither the two boards in a tile nor the three copies of `bridge-m` line their marks up into
      * a stripe across the span, and each is a sixth of a step down from the face it sits on, well
      * under the 24 luma the score counts as an edge and under what the eye reads as a line.

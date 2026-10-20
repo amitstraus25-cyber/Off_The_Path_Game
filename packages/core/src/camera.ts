@@ -175,20 +175,22 @@ export function cameraFor(viewport: Size): Camera {
 }
 
 /**
- * The viewports the project reviews at, named, so tooling and tests stop inventing their own.
- * These are the three widths docs/UX_REVIEW.md and the e2e capture spec use, plus the landscape
- * phone that keeps turning out to be the worst case for anything docked to the side.
- */
-/**
  * Width of the title screen's copy column, in CSS pixels, at --otp-ui 1.
  *
  * It is here rather than only in screens.css because the art tooling has to know how much of the
  * hero frame a visitor CANNOT see: in landscape this column is opaque over the left quarter of the
- * camera, so a tree planted behind it is a tree nobody looks at. e2e/css-contract.spec.ts asserts
- * the stylesheet stays at or under 310px, which is what keeps these two in step.
+ * camera, so a tree planted behind it is a tree nobody looks at. e2e/css-contract.spec.ts imports
+ * this constant and asserts the rendered column is exactly it (times --otp-ui), which is what keeps
+ * these two in step -- it used to assert a 310px literal of its own, which is not the same thing as
+ * agreeing with this file.
  */
 export const TITLE_CARD_W = 306;
 
+/**
+ * The viewports the project reviews at, named, so tooling and tests stop inventing their own.
+ * These are the three widths docs/UX_REVIEW.md and the e2e capture spec use, plus the landscape
+ * phone that keeps turning out to be the worst case for anything docked to the side.
+ */
 export const REFERENCE_VIEWPORTS = {
   desktop: { width: 1280, height: 800 },
   tablet: { width: 768, height: 1024 },
@@ -264,7 +266,7 @@ export function topEdgeRows(y0: number, count = 2): number[] {
 }
 
 /**
- * The tile columns of the title camera a landscape visitor can actually SEE.
+ * The tile columns of the DESKTOP title camera a visitor can actually SEE.
  *
  * The copy column is opaque over the left end of the frame, so canopy counted across the whole row
  * flatters itself: a framing pass was credited with nine closed columns of which five were off the
@@ -274,13 +276,19 @@ export function topEdgeRows(y0: number, count = 2): number[] {
  *
  * The card's left edge and the canvas's left edge coincide (both sit one border-plus-margin in), so
  * the hidden width is simply the card's own width over the CSS pixels a tile occupies.
+ *
+ * ONE VIEWPORT, DELIBERATELY. This took a `viewport` argument and answered for any of them, and the
+ * answer was wrong everywhere but here. screens.css declares the card at
+ * `min(306px * var(--otp-ui), 62%)`, and --otp-ui is a media-query step this package cannot see: on
+ * the landscape phone the module itself names as the worst case for anything docked to the side,
+ * --otp-ui is 0.7, so the card is 214px and covers 6.69 tiles while this returned 9.56 -- 2.87 tiles
+ * of hidden band that is not hidden. Nothing ever passed an argument (both call sites are in
+ * tools/graybox/src/forest-map.ts's title audit), and composition is aimed at the hero frame, so
+ * the parameter only offered a wrong answer to anyone who took it up. The honest smaller-viewport
+ * version has to carry the --otp-ui term, and that is a derivation to add when something needs it
+ * rather than a default to leave lying about.
  */
-export function visibleTitleColumns(viewport: Size = REFERENCE_VIEWPORTS.desktop): {
-  from: number;
-  to: number;
-} {
-  const cam = cameraFor(viewport);
-  // Portrait docks the card BELOW the world, so nothing is hidden horizontally.
-  if (cam.portrait) return { from: 0, to: cam.tiles.width };
+export function visibleTitleColumns(): { from: number; to: number } {
+  const cam = cameraFor(REFERENCE_VIEWPORTS.desktop);
   return { from: TITLE_CARD_W / (TILE * cam.zoom), to: cam.tiles.width };
 }

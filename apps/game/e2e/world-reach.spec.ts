@@ -22,7 +22,7 @@
  */
 import { expect, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
-import { mapObject, probe, startGame, walkTo } from './helpers';
+import { probe, startGame, tag, tagOf, talkingDistance, walkTo } from './helpers';
 // The real constant, as helpers.ts does it: a threshold copied by hand is a threshold that rots.
 import { INTERACT_RADIUS } from '../src/world/logic';
 
@@ -31,16 +31,14 @@ const WITHIN_REACH = 'otp:within-reach';
 
 const NEAR = '[data-announce="near"]';
 
-/** Tags a DOM node so a later render can be asked whether it is still the same object. */
-const tag = (page: Page, selector: string, mark: string): Promise<void> =>
-  page
-    .locator(selector)
-    .evaluate((el, m) => void ((el as unknown as Record<string, string>)['__otpTag'] = m), mark);
-
-const tagOf = (page: Page, selector: string): Promise<string | null> =>
-  page
-    .locator(selector)
-    .evaluate((el) => (el as unknown as Record<string, string>)['__otpTag'] ?? null);
+/*
+ * `tag`, `tagOf` and `talkingDistance` come from helpers.ts and used to be declared here as well.
+ * The tag pair was byte-identical to e2e/a11y.spec.ts's copy; `talkingDistance` returned the same
+ * point by a different route, `+16, +40` written out rather than derived from TILE. That is the
+ * drift the shared version exists to stop: the literals are correct at TILE = 32 and silently wrong
+ * at any other size, which is how the walking helpers overshot when the art moved from 16px tiles.
+ * The reasoning that was in the docstring here now sits above `talkingDistance` in helpers.ts.
+ */
 
 /** What a screen reader does to a control: one activation, no pointer, no hold. */
 const activate = (page: Page, name: string): Promise<void> =>
@@ -57,20 +55,6 @@ const touchPage = async (browser: Browser): Promise<Page> => {
   await page.goto('/');
   await startGame(page);
   return page;
-};
-
-/**
- * Where an NPC can actually be TALKED to, which is not where the map object is.
- *
- * `npc-rabbit` is a tile at (416, 608); the person standing on it answers at (432, 648), because
- * the spawn is centred in its tile and the sprite's origin is its feet. The difference is 56px and
- * INTERACT_RADIUS is 48, so walking to the object's own corner parks Red one tile short of being
- * able to say anything -- which is exactly how this file was wrong first time round. The rest of
- * e2e walks to `+16, +40` for the same reason.
- */
-const talkingDistance = async (page: Page, name: string): Promise<{ x: number; y: number }> => {
-  const spot = await mapObject(page, name);
-  return { x: spot.x + 16, y: spot.y + 40 };
 };
 
 /* -------------------------------------------- half one: is anybody there? */

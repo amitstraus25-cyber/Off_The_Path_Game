@@ -2,6 +2,15 @@
 
 **2026-10-19 · Head of Design · `main` @ c352f93 (typecheck and unit tests green)**
 
+> **Read this as a dated snapshot, not as the current state.** It is a measurement of one commit, and
+> work has landed against it since: spot-checking on 2026-10-20 found the three-state boundary string
+> and `trustBreakdown` wired in `Results.tsx`, `data-autofocus` on the Results body, the `--otp-ui`
+> type floors written into `panels.css`, `shore-n`/`shore-s` emitted by `forest-map.ts`, the
+> `07-leaderboard` capture dropped, and `titleStanding` gone from `Title.tsx`. **Check a finding
+> against the tree before acting on it or quoting it.** Findings are cited by symbol and selector
+> rather than by line number: this file held fifteen `file:line` citations and about half had already
+> drifted onto the wrong line.
+
 Six lenses — game-feel, ui-craft, accessibility, responsive, copy, art-direction — reviewed the running
 build at 1280, 768 and 375 against `UI_FOUNDATIONS`, `ART_DIRECTION`, `PIXEL_STANDARD`, `GAME_DESIGN`
 and `content/game.json`. Every finding was then checked by someone trying to refute it; 93 of 103
@@ -88,12 +97,12 @@ before dark needed reaches into your basket" — a run-on at every width, built 
 third-person verb phrase.
 → _Right:_ no ordering of walking, reading and deciding can produce `boundaryBroken` with an empty
 fired list; a heading that covers a card with nothing to hide; the "needed…" clause on its own line.
-`Results.tsx:101,112,176`.
+In `Results.tsx`: the `.otp-recap__row--boundary` row, the `recapHeading` block, and the errand row's `errandNeeded` template.
 
 **2. The one demonstration of the lesson can be spent before it fires, and is withheld from anyone who
 plays well.** `whenExposed` is evaluated once, at read time, against the verdicts held then
-(`reducer.ts:111`), behind two independent one-shot latches — `already-read` (`reducer.ts:107`) and
-`dismissed` (`main.ts:175`, cleared only on replay). Red spawns on tile row 21, the only clear lane runs
+(the `READ_NOTICE` case in `reducer.ts`), behind two independent one-shot latches — that case's
+`already-read` rejection, and the `dismissed` set in `main.ts`'s `reachedNotice` handler, cleared only on replay. Red spawns on tile row 21, the only clear lane runs
 due east along it, and the post spans x 1344–1472: a held-Right player arrives after 9.75s with `read=[]`
 and zero verdicts. Reading it there, or choosing "Walk on," kills the beat. The careful player loses it
 too — all four texts explaining the injection are gated on the trifecta, so a 1,000-point run reads none.
@@ -103,7 +112,7 @@ notice's own words.
 
 **3. The arrival frame tells the wrong story, including on the good ending.** `arriveLines` is one flat
 string for every outcome, so a flawless run reads "There are paw prints in the soft earth by the step" →
-"The door is already open." → "The door opens." `Cottage.tsx:66` swaps the portrait to
+"The door is already open." → "The door opens." `Cottage.tsx`'s `reveal` flag — set on every ending beat and on no approach beat — swaps the portrait to
 `portrait-wolf-grandma.png` on the first ending beat of _every_ ending, so "Clean arrival / Grandma waves
 from her chair" is captioned with a wolf in a bonnet. The silhouette is written into the `wall-window`
 tile layer at build time, so it is in **both** windows on **every** ending. `fx-pawprints.png` is drawn,
@@ -121,10 +130,10 @@ merge. Peak-to-peak 24–37 luma; autocorrelation 0.40–0.60 at the tile pitch.
 contributor — swapping `grass-0` removes roughly twice the lattice contrast that deleting every bush
 does.** Visible unaided on `ui-768-00-title.png`.
 → _Right:_ §6.2's cap honoured inside the tile, no tile-pitch periodicity visible at 1× on the title
-screen, shared border ring untouched. `w-ground.ts:359,609,620-626`.
+screen, shared border ring untouched. The `grass-0` band and the rim pin in `w-ground.ts`.
 
 **5. On a phone the trifecta HUD and the sound control fall off screen at the first decision.**
-`Trifecta.tsx:36` maps all three capabilities, lit or not, into a 44px nowrap header with 8px of slack.
+`Trifecta`'s capability map renders all three capabilities, lit or not, into a 44px nowrap header with 8px of slack.
 One verdict → 113px overflow at 375; three → 134px. `position: fixed`, so no scrollbar, no wheel, no
 reach. Two legs go off-screen, the survivor paints over the frame's rounded corner, and the music toggle
 sits 110–131px outside and untappable — with the setting persisted in `localStorage`, so a returning
@@ -160,7 +169,7 @@ inside a finding about breakpoint ordering. The `max-width: 640` block sets `--o
 `--otp-ui` drops below 0.94 with `slot-px` at 1. Measured: 390×844, 393×852, 412×915 and 430×932 give a
 66×53 slot holding a 64×64 icon — 13px out of the bottom, breaking the Results basket panel's lower edge;
 1366×768 and 1280×700 spill 10px.
-→ _Right:_ set `--otp-slot-px` wherever `--otp-ui` is set. One line in two blocks. `panels.css:22-28,45-50`.
+→ _Right:_ set `--otp-slot-px` wherever `--otp-ui` is set. One line in two blocks. The two `--otp-ui` media blocks in `panels.css` that set `--otp-ui` without `--otp-slot-px`.
 
 **9. The one Lime CTA is below the fold behind a dead form, and the keyboard cannot scroll to it.**
 `.otp-screen` is 1578px in an 860px viewport with the CTA at y=1310. It _is_ reachable — wheel works, and
@@ -177,7 +186,7 @@ colour §1 says "does not appear in this UI" — at 4.26:1 on Black, rendered in
 declared, so the UA `button` default beats inheritance), in a 38×18 box that is 26.6×12.6 at 375 against
 the project's own `--otp-touch-min: 44px`. Its state is carried by colour and a one-glyph shape
 difference, under a comment citing §2's refusal of exactly that. And it is **keyboard-inoperable**:
-`world/input.ts:59-61` preventDefaults Space and Enter whenever the world owns the keyboard — which is
+`createInput` in `world/input.ts` preventDefaults Space and Enter whenever the world owns the keyboard — which is
 precisely when the toggle is on screen — and sets `interactPressed = true` _before_ the preventDefault, so
 pressing Space on the focused toggle **opens an encounter instead**. It is the only focusable control on
 Explore.
@@ -193,7 +202,7 @@ it — `scrollX` is already clamped at the map's left bound. "Arrows to walk and
 copy shown unchanged on touch. "or just tap on a phone" over-promises: a tap moves Red 4px, only a
 sustained hold walks, and the pad is not drawn on the title screen at all. Separately the Cyera wordmark
 is `display: none` below 560px, so the hero screen of a marketing asset carries no brand on a phone.
-→ _Right:_ delete `titleStanding` (`Title.tsx:53` already guards it) or narrow the column from 430px to
+→ _Right:_ delete `titleStanding` (`Title.tsx` already guards it) or narrow the column from 430px to
 340px; a coarse-pointer variant of `titleMeta`; the mark in the title card itself, where the deck puts it.
 
 > **The 340px in that recommendation was wrong, and the test written to enforce it agreed with it.**
@@ -216,8 +225,8 @@ bonus-eligible, so a mis-tap costs the reply you wanted, not score — but it is
 → _Right:_ `min-height: var(--otp-touch-min)` with `display: flex; align-items: center`, plus a row gap,
 exactly as the verdict pills already have.
 
-**13. The copy review cannot reach the copy.** `game.json:3` declares the strings unreviewed placeholder
-and research sign-off is the launch gate; `COPY_REVIEW.md:6` claims "No copy lives in code" and "changed
+**13. The copy review cannot reach the copy.** `game.json`'s `status` key declares the strings unreviewed placeholder
+and research sign-off is the launch gate; `COPY_REVIEW.md`'s opening claims "No copy lives in code" and "changed
 there only." Both halves are false. The doc has one commit against game.json's five; 7 of its 9 quoted
 recap lines and both Cottage Finder fine-print lines have since changed; 31 of 61 `strings` keys are not
 named in it; it covers none of the bystanders, notices, errand goals or trust lines; and **~35
@@ -248,7 +257,7 @@ payoff screen.
 wording like "traded for the boundary" — with Haze kept for the per-skill reveal, where it is the payoff.
 
 **16. The world has no accessible equivalent, and on touch a screen-reader user cannot move Red.**
-Known-unfinished Phase 7 work (`PLAN.md:210`), so not a regression, but worth stating before publication.
+Known-unfinished Phase 7 work (the accessibility audit item in PLAN Phase 7), so not a regression, but worth stating before publication.
 Nothing announces that a traveller is in range, and the only spoken world content, `.otp-say`, sits
 outside every live region. The joystick derives its vector from pointer offset, so any point activation —
 including a real `touchscreen.tap` — yields (0,0) and moves her 0px; the A button is `pointerdown`-only,
@@ -277,7 +286,7 @@ squat barrel, is 45px and within 1px of Red. Thirteen of 36 pairs break §10.2's
 including rabbit and cat at an identical 22×44. §10.1's silhouette test still passes, so this is
 assignment, not legibility. → _Right:_ hold the specified heights; run §10.1 at 24px first.
 
-**20. The river ends in mid-air in 18 places.** `forest-map.ts:407` tests horizontal adjacency only and
+**20. The river ends in mid-air in 18 places.** the shore-tile choice in `forest-map.ts` tested horizontal adjacency only and
 only emits `shore-w`/`shore-e`, so `shore-n` and `shore-s` are painted, exported and placed **zero** times.
 All 18 bare water-to-grass edges are north or south, two of them under the bridge the player must cross.
 → _Right:_ test all four neighbours. The shore tiles already exist.
@@ -296,7 +305,7 @@ cottage facade and path centre-line miss their §9/§6.4 specs.
 ## Where the lenses over-reached — don't spend time here
 
 - **"There is no leaderboard screen"** (three lenses, three names). Unstarted Phase 6, tracked in four
-  places in the codebase. The only residue is that `capture.spec.ts:133` emits
+  places in the codebase. The only residue is that `capture.spec.ts` emitted
   `ui-<w>-07-leaderboard.png` files byte-identical to Results, so every future reviewer will "discover" a
   leaderboard that does not exist. Drop or rename the shot.
 - **"No sound effects."** `GAME_DESIGN` §10 lists "Music and sound effects (muted by default)" under _out
@@ -319,7 +328,7 @@ cottage facade and path centre-line miss their §9/§6.4 specs.
   eligibility indicator, not decoration — drawing a key label into it would re-break the bug its own
   docstring records.
 - **The project's horizontal-fit guard cannot fail**, and this is the highest-leverage test change in the
-  repo. `ui.spec.ts:329` asserts `documentElement.scrollWidth <= innerWidth`, and every panel here hangs
+  repo. the `noHScroll` assertion in `ui.spec.ts` asserts `documentElement.scrollWidth <= innerWidth`, and every panel here hangs
   off a `position: fixed` root, which never widens the document. It passes today on a build with 134px of
   header overflow. Assert per element (`el.scrollWidth <= el.clientWidth`, `rect.right <= innerWidth`) in
   the `explore` phase with a verdict recorded, and add 320 to the width list.
@@ -354,7 +363,7 @@ buys the most per hour.
 | #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                            | Owner                  |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | A   | **Do the flowers stay warm?** §6a moved everything off red; `w-undergrowth.ts` put the flowers and toadstool caps back to rose/ember/rust because painting the undergrowth in Red's hue made her the _least_ findable — her cloak body is L175 against a L167–179 lawn, so hue was all she had left. The painter flags it as unresolvable in one file: those three warm ramps join `PALETTE`, or the flowers go back to Lilac/Haze. | Brand + art direction  |
-| B   | **Does Red go back to the brighter Lilac-led cloak?** §6a recommends option A, Lilac-led, as "easiest to find at a 26-tile camera." `char-red.ts` inverted it — Aubergine holds the mass, Lilac is rim light only — on measured grounds that Lilac at L175 on this lawn is camouflage. Brand recommendation against measured findability; pick one and record it.                                                                   | Brand + art direction  |
+| B   | **Does Red go back to the brighter Lilac-led cloak?** §6a recommends option A, Lilac-led, as easiest to find at the game's camera. `char-red.ts` inverted it — Aubergine holds the mass, Lilac is rim light only — on measured grounds that Lilac at L175 on this lawn is camouflage. Brand recommendation against measured findability; pick one and record it.                                                                    | Brand + art direction  |
 | C   | **Is asking a budget or a record?** §9 open question 2, shipped unresolved: "Asking costs nothing" sits 174px above a depleting "2 questions left", and after the scoring-optimal play it reads "0 questions left." There is no budget in the reducer — the counter just counts the unticked rows two inches above it. Drop the counter, or say what the budget buys.                                                               | Design + game design   |
 | D   | **Night Light's direction.** `PLAN.md` D1 was amended 2026-10-16 (honest on inspection, best verdict Restrict), but `RESEARCH_ALIGNMENT` open question 4 is still unconfirmed by research — and this is the card that carries the thesis. It should not publish unconfirmed.                                                                                                                                                        | Game design + research |
 | E   | **Does the Post form ship before the API?** It is live, honest about failing, and sits between the recap and the one CTA. Hide it, or label it "Scores open at launch."                                                                                                                                                                                                                                                             | Marketing + eng        |

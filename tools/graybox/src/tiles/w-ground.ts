@@ -119,14 +119,9 @@
  * field wraps over exactly one tile. Marks are kept clear of every corner, where four tiles meet
  * and a mark would print as a repeated cross across the whole map.
  */
-import { Img, keyline, lumaOf, noise, tone } from '../paint.ts';
-import type { RGBA } from '../paint.ts';
+import { clamp01, Img, keyline, lumaOf, mix, noise, smooth, TILE, tone } from '../paint.ts';
+import type { Painter, RGBA, Side } from '../paint.ts';
 
-/** 32px per docs/PIXEL_STANDARD.md section 1. */
-const TILE = 32;
-
-type Painter = (img: Img) => void;
-type Side = 'n' | 's' | 'e' | 'w';
 /** Which pixels a mark is allowed to land on. Edge tiles use it to keep grass off the sand. */
 type Inside = (x: number, y: number) => boolean;
 /**
@@ -140,23 +135,6 @@ type Ground = (x: number, y: number) => number;
 const ALL: Inside = () => true;
 
 const wrap = (t: number, n: number): number => ((t % n) + n) % n;
-const smooth = (t: number): number => t * t * (3 - 2 * t);
-const clamp01 = (t: number): number => Math.max(0, Math.min(1, t));
-
-/**
- * An opaque blend of two opaque colours.
- *
- * This is the whole of the "no partial alpha" rule in one function. A soft edge here is a colour
- * computed between two others and written solid, never a translucent pixel laid over a transparent
- * one, so a tile never carries a half-alpha pixel that would fringe against whatever the map puts
- * beside it.
- */
-const mix = (a: RGBA, b: RGBA, k: number): RGBA => [
-  Math.round(a[0] + (b[0] - a[0]) * k),
-  Math.round(a[1] + (b[1] - a[1]) * k),
-  Math.round(a[2] + (b[2] - a[2]) * k),
-  255,
-];
 
 /**
  * Lean a colour toward a pole, then put most of its brightness back.
@@ -1141,11 +1119,25 @@ function clover(mark: Float64Array, cx: number, cy: number, ground: Ground): voi
  * real map, the same sixteen plants were stamped at every 32 pixels in a plainly visible grid, the
  * exact fault the director named at the top of the review.
  *
- * THE CONFLICT IS REAL AND IT IS NOT RESOLVABLE INSIDE THIS FILE. There are four ground tiles and
- * TILE_NAMES is frozen at 53 names, so whatever one tile carries is repeated across a whole patch.
- * A distinct object repeated at the tile pitch is found by the eye immediately; the measured axes
+ * THE CONFLICT IS REAL AND IT IS NOT RESOLVABLE INSIDE THIS FILE. There are four ground tiles --
+ * `grass-0` to `grass-3` -- so whatever one of them carries is repeated across a whole patch. A
+ * distinct object repeated at the tile pitch is found by the eye immediately; the measured axes
  * cannot see repetition at all, so they reward exactly the density that causes it. The score is
  * silent on the single most visible property of a tiled floor.
+ *
+ * THE REASON THIS PARAGRAPH USED TO GIVE WAS "TILE_NAMES is frozen at 53 names", AND THAT IS NO
+ * LONGER TRUE IN EITHER HALF: the list holds 79 names and it is append-only rather than frozen. So
+ * the constraint has genuinely weakened and the conclusion has to be re-argued rather than
+ * re-worded. A fifth and sixth lawn variant COULD now be appended, because appending renumbers no
+ * gid and leaves `map-forest.json` valid exactly as committed.
+ *
+ * What it would cost is the part that keeps the conclusion standing: the map chooses a lawn variant
+ * from a value-noise field in `forest-map.ts`, so new variants are not free decoration -- they are a
+ * change to that selection, a regenerated map, and a regenerated sheet, which moves tiles. Six
+ * variants would halve the repeat rate of any one mark; they would not remove the pitch, because the
+ * pitch is the tile and not the count. MOTTLE RATHER THAN OBJECTS, below, is what removes the pitch,
+ * and it works at four variants. More variants are an improvement available to a round that can
+ * afford to move the map, not the fix for this.
  *
  * So the marks are MOTTLE RATHER THAN OBJECTS: one or two blades, two or three pixels tall, close
  * together and shallow, with a contact pool on three in five and a light fleck beside two in five.
@@ -1373,9 +1365,9 @@ const grass =
  * The previous painter scattered thirteen grit pixels and three pressed stones into every path
  * tile. Measured, the board's open path carries neither: its pure-sand crop comes back at 0.00%
  * edge density and a luma spread of 18.3, where ours came back at 6.06% and 31.6. Thirteen isolated
- * pixels a tile is twenty-six hard steps a tile for a texture that averages out to nothing at a
- * 26-tile camera, and there is one `path` image, so whatever scatter it carries prints every 32
- * pixels. The sand's life now comes from the tone and warmth fields.
+ * pixels a tile is twenty-six hard steps a tile for a texture that averages out to nothing at the
+ * camera the game plays at, and there is one `path` image, so whatever scatter it carries prints
+ * every TILE. The sand's life now comes from the tone and warmth fields.
  */
 function sand(img: Img, seed: number, inside: Inside): void {
   const lit = field(seed, SAND_OCTAVES);

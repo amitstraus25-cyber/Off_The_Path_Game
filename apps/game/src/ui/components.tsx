@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { BASKET_SLOTS } from '@otp/core';
 import type { GoalResult } from '@otp/core';
 import { assetUrl } from '../world/assets';
 
@@ -180,7 +181,6 @@ export function MusicToggle({
   );
 }
 
-const HUD_SLOTS = 5;
 /** Long enough to watch something lift out of a slot, short enough not to delay the walk. */
 const LEAVE_MS = 340;
 const ARRIVE_MS = 300;
@@ -240,7 +240,7 @@ export function HudBasket({ basket, items, label }: HudBasketProps) {
         {label}
       </span>
       <ul class="otp-hud-basket__slots">
-        {Array.from({ length: HUD_SLOTS }, (_, i) => {
+        {Array.from({ length: BASKET_SLOTS }, (_, i) => {
           const item = shown[i];
           const icon = item ? items[item] : undefined;
           const state = item && leaving.includes(item) ? ' otp-hud-slot--leaving' : '';

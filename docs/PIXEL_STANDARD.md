@@ -11,17 +11,27 @@ and the alpha rule), `reference/mocks/gameplay-concepts.png` (the approved direc
 
 ## 1. Sizes
 
-| Thing                     | Source size | Shown at (1.5× camera upscale) |
-| ------------------------- | ----------- | ------------------------------ |
-| Terrain tile              | 32 × 32     | 48 × 48                        |
-| Red, NPCs, bystanders     | 32 × 48     | 48 × 72                        |
-| Portraits                 | 64 × 64     | DOM, unscaled                  |
-| Items                     | 64 × 64     | DOM, unscaled                  |
-| Interact prompt, pawprint | 32 × 32     | 48 × 48                        |
-| Dust                      | 16 × 16     | 24 × 24                        |
+| Thing                     | Source size | Shown at (zoom 2) |
+| ------------------------- | ----------- | ----------------- |
+| Terrain tile              | 32 × 32     | 64 × 64           |
+| Red, NPCs, bystanders     | 32 × 48     | 64 × 96           |
+| Portraits                 | 64 × 64     | DOM, unscaled     |
+| Items                     | 64 × 64     | DOM, unscaled     |
+| Interact prompt, pawprint | 32 × 32     | 64 × 64           |
+| Dust                      | 16 × 16     | 32 × 32           |
 
-The map stays 60 × 42 tiles and the field of view stays 26 × 15 tiles. Nothing about the level
-changes; only the number of pixels inside each square.
+**The column used to read "1.5× camera upscale".** There is no 1.5× anywhere in the game.
+`packages/core/src/camera.ts` rejects it by name, in writing, on `MAX_ZOOM`: a fractional scale over a
+nearest-sampled backing store draws every other source pixel two CSS pixels wide, which is the shimmer
+BRAND_AND_UI forbids and which two e2e specs fail on. The zoom is a whole number, it is capped at 2, and
+at 2 a 32px tile occupies 64 CSS px.
+
+The map stays 60 × 42 tiles. **The field of view is not 26 × 15 and never was on this build** — that was
+the field of view the abandoned 1.5× option would have kept, and quoting it has cost this project two
+rounds of composition aimed at a rectangle that does not exist. The camera is derived per viewport by
+`cameraFor()`; at the 1280 × 800 reference it is **19.41 × 11.22 tiles**, a third narrower and a third
+shorter than 26 × 15. Every sentence below that used to name that dead figure now says "at the game's
+camera" instead, and what that means at a given size is one command: `pnpm world --frame title`.
 
 **The detail budget is 4×, and it buys structure, not noise.** A 16px plank was one line; a 32px
 plank is a plank with a visible end grain and a gap to the next one. Four times the pixels spent on
@@ -48,7 +58,7 @@ Each ramp is still four steps — `0` dark, `1` base, `2` light, `3` highlight �
 between them, so `tone(r, 0)` is `shade(r, 0)` and `tone(r, 1)` is `shade(r, 3)`.
 
 - **Base is the subject.** Most of any object is level 1. The one documented exception is Red,
-  whose cloak is Lilac-led so she stays findable at a 26-tile camera; the reasoning is on `cloak`
+  whose cloak is Lilac-led so she stays findable at the game's camera; the reasoning is on `cloak`
   in `paint.ts` and it is confined to her.
 - **Level 0 is the shaded face, and `keyline()` is the outline.** This reverses what this section
   used to say. The board rings every object in a near-black of _its own hue_ and that is most of
@@ -96,7 +106,7 @@ paragraph as describing the code, which it does, rather than settling the questi
 
 **One light, from the top-left, everywhere.** Top and left faces catch level 2 or 3; bottom and
 right faces fall to level 0. A single object lit from the other side will read as a hole in the
-ground, and at a 26-tile camera you will see it before you see anything else.
+ground, and at the game's camera you will see it before you see anything else.
 
 Anything standing on the ground gets a **contact shadow**: a flattened ellipse in `shadow`, wider
 than it is tall, tucked under the base and offset one or two pixels down-right. Without it a tree
@@ -140,7 +150,7 @@ floats.
 
 32 × 48, four directions, four frames each (idle, then three walk).
 
-- **Silhouette first.** At a 26-tile camera you read the outline before anything inside it. If two
+- **Silhouette first.** At the game's camera you read the outline before anything inside it. If two
   characters have the same silhouette, one of them is wrong, whatever colour it is.
 - **Two pixels of eye, and no mouth** below this size. A drawn mouth at 32px reads as a smear.
 - **The walk cycle moves the whole body**, not just the legs: a one-pixel bob on frames 1 and 3
@@ -164,4 +174,16 @@ boundaries, and prints which cell holds which name. Magenta and the checkerboard
 palette, so neither can be mistaken for art.
 
 Judge at zoom 8 for pixel mistakes, then at zoom 2 for whether it reads at the size people will
-actually see. Most things that look good at zoom 8 and bad at zoom 2 are over-detailed.
+actually see — zoom 2 is the game's own zoom, so that sheet is life-size.
+
+A contact sheet shows tiles, not the forest, and "does the forest look like the board" only appears
+once tiles are composed. For that, and for anything about what is or is not in frame:
+
+```bash
+pnpm world --out /tmp/w.png --frame title     # exactly what the title screen shows
+pnpm world --out /tmp/w.png --frame arrive    # exactly what the payoff shot shows
+pnpm world --out /tmp/w.png --frame portrait  # the phone hero
+```
+
+`--frame` derives the rectangle from `cameraFor()` and the game's own focus rule, so it is the only
+way to be sure the thing you are looking at is the thing a visitor sees.

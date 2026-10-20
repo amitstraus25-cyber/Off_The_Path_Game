@@ -15,7 +15,13 @@
 import { expect, test } from '@playwright/test';
 import { startGame } from './helpers';
 
-const OUT = process.env['SHOT_DIR'] ?? '/tmp';
+/*
+ * No fallback. This used to default to '/tmp', so every CI run and every local `pnpm e2e` wrote
+ * four PNGs nobody reads into a system temp directory -- the screenshots are a reviewing aid for
+ * whoever is looking at the scales, not an output of the test, and nothing here reads them back.
+ * e2e/capture.spec.ts sets the convention: SHOT_DIR or no files.
+ */
+const OUT = process.env['SHOT_DIR'];
 
 const SCALE_SIZES = [
   { name: 'desktop-1280x800', width: 1280, height: 800 },
@@ -50,7 +56,7 @@ for (const size of SCALE_SIZES) {
     });
     await expect(page.locator('.otp-card')).toBeVisible();
     await page.waitForTimeout(250);
-    await page.screenshot({ path: `${OUT}/css-${size.name}.png` });
+    if (OUT) await page.screenshot({ path: `${OUT}/css-${size.name}.png` });
     await checkArt(page, `${size.name} inspect`);
 
     /*

@@ -45,21 +45,6 @@
   font-weight: 400;
 }
 
-.otp-heading {
-  font-size: calc(48px * var(--otp-ui));
-  font-weight: 600;
-  letter-spacing: -1.5px;
-  line-height: 1;
-  color: var(--cyera-deep-purple);
-  margin: 0;
-}
-
-.otp-subheading {
-  font-size: max(12px, calc(17px * var(--otp-ui)));
-  color: var(--cyera-ash);
-  margin: calc(10px * var(--otp-ui)) 0 calc(24px * var(--otp-ui));
-}
-
 .otp-section-label {
   font-size: max(11px, calc(15px * var(--otp-ui)));
   letter-spacing: 2px;
@@ -250,13 +235,14 @@
   align-items: center;
 }
 
+/* The margin lives on the `h1.otp-hero__score` rule further down, which is more specific and is
+   the one that applies: Results renders the score as an <h1> and nothing else wears this class. */
 .otp-hero__score {
   font-size: calc(80px * var(--otp-ui));
   font-weight: 600;
   letter-spacing: -3px;
   color: var(--cyera-deep-purple);
   line-height: 0.95;
-  margin: calc(4px * var(--otp-ui)) 0 calc(6px * var(--otp-ui));
 }
 
 .otp-hero__score small {
@@ -450,10 +436,11 @@
   color: var(--cyera-ash);
 }
 
-/* One Season Mix word inside a section heading: upright, sentence case, never italic. */
+/* One Season Mix word inside a section heading: upright, sentence case, never italic.
+   The family and the upright cut come from .otp-serif, which this element carries by definition of
+   the selector and which nothing between here and there overrides; only the label's own type needs
+   undoing. */
 .otp-section-label .otp-serif {
-  font-family: var(--cyera-font-serif);
-  font-style: normal;
   font-size: max(12px, calc(16px * var(--otp-ui)));
   letter-spacing: 0.04em;
   text-transform: none;
@@ -635,8 +622,15 @@ h2.otp-section-label {
  * No .otp-title__standing rule. The chip that claimed "Red is already standing on the path" was
  * removed with the claim (docs/UX_REVIEW.md finding 11): it was shown on exactly the landscape
  * widths where the column hid her and suppressed in the portrait one where she was visible. Its
- * styling and its portrait `display: none` outlived it by a round. e2e/title-claims.spec.ts still
- * asserts the element is absent, which is what keeps it from coming back by accident.
+ * styling and its portrait `display: none` outlived it by a round.
+ *
+ * NOTHING IN THIS FILE KEEPS IT FROM COMING BACK, and the note here used to claim otherwise.
+ * e2e/title-claims.spec.ts is the only thing that looks for the element, and an absence check
+ * bites only when it is written as a count assertion: `toBeHidden()` is satisfied by an element
+ * that is not in the DOM at all, so against a class nobody renders it passes without measuring
+ * anything. Whether that check is a real reintroduction guard is title-claims.spec.ts's to state,
+ * not this stylesheet's to assume -- the pattern to copy is apps/game/test/title.test.ts, which
+ * asserts its own predicate still matches something before trusting it.
  */
 
 /* Portrait docks the column under the world rather than beside it, so Red stays visible above it

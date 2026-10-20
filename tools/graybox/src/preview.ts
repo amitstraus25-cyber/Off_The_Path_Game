@@ -89,9 +89,11 @@ function index(names: readonly string[], cols: number): void {
  * rewritten lives in its own file and nothing imports it yet, so without this the only way to see
  * it would be to wire it in first and judge it afterwards -- which is the wrong way round.
  *
- *   node src/preview.ts --module ./tiles/ground.ts --export GROUND --size 32 --out /tmp/art
+ *   node src/preview.ts --module ./tiles/w-ground.ts --export GROUND_TILES --size 32 --out /tmp/art
  *
- * The module must export a Record<string, (img: Img) => void> under `--export`.
+ * The module must export a Record<string, (img: Img) => void> under `--export`. The example above
+ * cited `./tiles/ground.ts --export GROUND` until the retired tile modules were deleted; it is run
+ * rather than read, so it is kept pointing at a module and an export that exist.
  */
 const MODULE = arg('module', '');
 if (MODULE) {

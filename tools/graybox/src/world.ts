@@ -25,7 +25,7 @@ import { writeFileSync } from 'node:fs';
 import { cameraFor, REFERENCE_VIEWPORTS } from '@otp/core';
 import { Img } from './paint.ts';
 import { TILE, TILE_NAMES, TILE_PAINTERS } from './tiles.ts';
-import { generateForestMap, MAP_H, MAP_W } from './forest-map.ts';
+import { BASE_GID, FLIP_D, FLIP_H, FLIP_V, generateForestMap, MAP_H, MAP_W } from './forest-map.ts';
 
 const arg = (name: string, fallback: string): string => {
   const i = process.argv.indexOf(`--${name}`);
@@ -44,13 +44,14 @@ const WHOLE = flag('whole');
  * same map file -- which is precisely how a change gets reported as landed when it has not.
  *
  * Unmasked it is worse than a disagreement: the first mirrored tile the map writes indexes
- * `TILE_NAMES` past the end of a 53-entry array, `tileName` comes back undefined and the tile
+ * `TILE_NAMES` past the end of a 79-entry array, `tileName` comes back undefined and the tile
  * vanishes from the render with no warning.
+ *
+ * ALL FOUR NOW COME FROM `forest-map.ts`, which is the file that writes them into the map. They
+ * were declared again here, four literals in two files describing one wire format, under a comment
+ * about the two disagreeing. `BASE_GID` is what this file called `GID_MASK`; same number, and now
+ * one name for it.
  */
-const FLIP_H = 0x80000000;
-const FLIP_V = 0x40000000;
-const FLIP_D = 0x20000000;
-const GID_MASK = 0x1fffffff;
 
 /*
  * Tiled's own order of operations: the diagonal flip (an x/y transpose) first, then horizontal,
@@ -214,8 +215,8 @@ for (const name of DRAWN) {
     for (let tx = 0; tx < vw; tx++) {
       const raw = layer.data[(vy + ty) * MAP_W + (vx + tx)];
       if (!raw) continue;
-      const flips = (raw & ~GID_MASK) >>> 0;
-      const gid = raw & GID_MASK;
+      const flips = (raw & ~BASE_GID) >>> 0;
+      const gid = raw & BASE_GID;
       if (!gid) continue;
       const tileName = TILE_NAMES[gid - 1];
       if (!tileName) continue;

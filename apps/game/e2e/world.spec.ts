@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { hold, mapObject, probe, startGame, walkTo } from './helpers';
+import { hold, mapObject, probe, startGame, talkingDistance, walkTo } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
@@ -54,9 +54,16 @@ test('Red never stands inside a solid tile, whatever route she takes', async ({ 
   }
 });
 
-test('the interact prompt leads to a dialogue, and Esc backs out', async ({ page }) => {
-  const rabbit = await mapObject(page, 'npc-rabbit');
-  await walkTo(page, { x: rabbit.x + 16, y: rabbit.y + 40 });
+/*
+ * One walk, three beats. "Input is ignored while a panel is open" used to be a separate test that
+ * repeated this one line for line -- the same thirty-second walk to the same rabbit, the same
+ * Space, the same phase check -- and then added the two lines now in the middle here. Both tests
+ * depend on exactly the same state, so splitting them bought nothing and cost a second walk.
+ */
+test('the interact prompt leads to a dialogue, which swallows the walk keys, and Esc backs out', async ({
+  page,
+}) => {
+  await walkTo(page, await talkingDistance(page, 'npc-rabbit'));
 
   await page.keyboard.press('Space');
   await page.waitForTimeout(120);
@@ -65,21 +72,13 @@ test('the interact prompt leads to a dialogue, and Esc backs out', async ({ page
   expect(talking.activeCharacter).toBe('rabbit');
   expect(talking.log.map((e) => e.t)).toContain('met');
 
+  // The world stops listening while a panel owns the screen: Red must not walk out from under it.
+  await hold(page, 'ArrowRight', 600);
+  expect((await probe(page)).position.x).toBeCloseTo(talking.position.x, 0);
+
   await page.keyboard.press('Escape');
   await page.waitForTimeout(120);
   expect((await probe(page)).phase).toBe('explore');
-});
-
-test('input is ignored while a panel is open', async ({ page }) => {
-  const rabbit = await mapObject(page, 'npc-rabbit');
-  await walkTo(page, { x: rabbit.x + 16, y: rabbit.y + 40 });
-  await page.keyboard.press('Space');
-  await page.waitForTimeout(120);
-  const talking = await probe(page);
-  expect(talking.phase).toBe('dialogue');
-
-  await hold(page, 'ArrowRight', 600);
-  expect((await probe(page)).position.x).toBeCloseTo(talking.position.x, 0);
 });
 
 test('the cottage door stays shut until all three skills have a verdict', async ({ page }) => {

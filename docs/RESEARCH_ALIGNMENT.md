@@ -1,8 +1,32 @@
 # Research alignment and a proposal to raise the game
 
 Written 2026-10-16 after reading the published research on malicious agent skills, including Cyera's
-own. Nothing here has been built. It is for the game design, research and marketing owners to argue
-with. Sources are listed at the end.
+own. It is for the game design, research and marketing owners to argue with. Sources are listed at the end.
+
+> **"Nothing here has been built" was true when this was written and is not true now.** Most of
+> section 4's headline proposals have shipped, so read this as the argument for the current design
+> rather than as a wish list, and check `content/game.json` and `packages/core` before proposing any
+> of it again:
+>
+> - **4.1, the trifecta as the spine** — built. `capabilities` in `content/game.json`, `trifectaLive`
+>   and `liveCapabilities` in `packages/core`, the HUD chip in `Trifecta.tsx`.
+> - **4.2, a skill with no fine print that still costs you** — built, as Night Light plus the forest
+>   post's `whenExposed`. The notice fires only with all three legs live.
+> - **4.4 / the errand** — built, as `scoring.errandGoals` and the two notices.
+> - **4.5, score the boundary** — built, as `scoring.boundaryBonus` (200), and D7 is recorded resolved
+>   in `docs/PLAN.md` on the strength of it. Reject-all is no longer 600 of 1,000 against a careful
+>   run; it draws its own ending and the best full-errand line beats it.
+>
+> **Still genuinely open and still blocking:** open question 4 below. `docs/PLAN.md` D1, the amended
+> Night Light direction, is the card that carries the thesis, and research has not confirmed it.
+> `docs/GAME_DESIGN.md` section 4 and `docs/UX_REVIEW.md` decision D both say it should not publish
+> unconfirmed.
+>
+> **Checked and not built:** 4.3 (Restrict is still one of three buttons, not a permission manifest),
+> 4.6 (nothing edits Grandma's note), 4.7 (inspection is still a page), 4.9 (there is no run-to-run
+> variation — there is no randomness anywhere in `packages/core` or `apps/game/src`, by design).
+> 4.8 shipped only as far as the arrival beat; there is no refusal at the door. Of 4.10, the CTA
+> question is in place as `ctaPrompt`; the other two items are not.
 
 ---
 

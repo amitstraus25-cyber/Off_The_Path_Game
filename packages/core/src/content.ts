@@ -13,7 +13,6 @@ export const BASKET_SLOTS = 5;
 
 export type Verdict = (typeof VERDICTS)[number];
 export type Flag = (typeof FLAGS)[number];
-export type QuestionId = (typeof QUESTION_IDS)[number];
 export type Capability = (typeof CAPABILITIES)[number];
 export type SkillId = string;
 export type CharacterId = string;
@@ -173,8 +172,25 @@ export type Skill = Content['skills'][number];
 export type Character = Content['characters'][number];
 export type Outcome = Skill['outcomes'][Verdict];
 export type Ending = Content['endings'][number];
-export type Bystander = Content['bystanders'][number];
 export type Notice = Content['notices'][number];
+
+/**
+ * Does an ending's `when` cover a run that set `flags` flags and carried out `goals` of the errand?
+ *
+ * ONE RULE, TWO CALLERS, AND THEY HAVE TO AGREE. `ending()` in outcomes.ts picks the card a player
+ * is shown; `lintContent` below proves that every reachable (flags, goals) pair lands on exactly
+ * one ending. The two were written out separately and were character-identical -- and `ending()`
+ * leans on the lint for its non-null assertion, so a fifth `when` key added to one copy and not the
+ * other would quietly hand a player `undefined` through a `!`. The predicate lives here, next to
+ * the schema that defines the keys, so adding a key is one edit in one place.
+ *
+ * `maxFlags` and `maxGoals` are optional bounds: omitted means unbounded, not zero.
+ */
+export const endingMatches = (when: Ending['when'], flags: number, goals: number): boolean =>
+  flags >= when.minFlags &&
+  flags <= (when.maxFlags ?? Infinity) &&
+  goals >= (when.minGoals ?? 0) &&
+  goals <= (when.maxGoals ?? Infinity);
 
 export const findSkill = (content: Content, id: SkillId): Skill | undefined =>
   content.skills.find((s) => s.id === id);
@@ -353,13 +369,7 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
   // Every reachable (flag count, goals met) pair must land on exactly one ending.
   for (let n = 0; n <= possibleFlags.size; n++)
     for (let met = 0; met <= content.scoring.errandGoals.length; met++) {
-      const matches = content.endings.filter(
-        (e) =>
-          n >= e.when.minFlags &&
-          n <= (e.when.maxFlags ?? Infinity) &&
-          met >= (e.when.minGoals ?? 0) &&
-          met <= (e.when.maxGoals ?? Infinity),
-      );
+      const matches = content.endings.filter((e) => endingMatches(e.when, n, met));
       if (matches.length !== 1)
         add(
           `${n} flag(s) with ${met} goal(s) done must match exactly one ending (matched ${matches.length})`,

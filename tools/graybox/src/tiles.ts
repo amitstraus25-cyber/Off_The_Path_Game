@@ -1,10 +1,12 @@
 /*
  * The tileset: assembly only.
  *
- * Every tile is painted in one of the five modules under `tiles/`, at 32x32, from the shared ramps
- * in `paint.ts` (docs/PIXEL_STANDARD.md). This file owns three things and nothing else:
+ * Every tile is painted in one of the seven modules under `tiles/` -- `w-ground`, `w-water`,
+ * `w-trees`, `w-undergrowth`, `s-cottage`, `s-outdoor`, `s-props` -- at one TILE square, from the
+ * shared ramps in `paint.ts` (docs/PIXEL_STANDARD.md). This file owns three things and nothing else:
  *
- *   1. `TILE`, the size of a square, which `forest-map.ts` and the game both measure the world in.
+ *   1. A re-export of `TILE`, the size of a square, which `forest-map.ts`, `world.ts` and the game
+ *      all measure the world in. It is NOT declared here any more; see the note at the re-export.
  *   2. `TILE_NAMES`, whose ORDER is the gid order, which is baked into `map-forest.json` and into
  *      `tileset-forest.gids.json`. Reordering it silently repaints the whole map, so the list is
  *      written out by hand here rather than derived from the modules' own key order -- the modules
@@ -16,7 +18,8 @@
  * explicit that none of the 106 frames could be salvaged, and upscaled 16px art looks exactly like
  * upscaled 16px art.
  */
-import { Img } from './paint.ts';
+import { Img, TILE } from './paint.ts';
+import type { Painter } from './paint.ts';
 import { GROUND_TILES } from './tiles/w-ground.ts';
 import { WATER_TILES } from './tiles/w-water.ts';
 import { TREE_TILES } from './tiles/w-trees.ts';
@@ -25,13 +28,18 @@ import { COTTAGE_TILES } from './tiles/s-cottage.ts';
 import { OUTDOOR_TILES } from './tiles/s-outdoor.ts';
 import { PROP_TILES } from './tiles/s-props.ts';
 
-/** 32 since the remaster. One tile is one square of ground, everywhere. */
-export const TILE = 32;
+/*
+ * One tile is one square of ground, everywhere, and the one declaration is `@otp/core`'s.
+ *
+ * Re-exported rather than re-declared so that `forest-map.ts` and `world.ts`, which import `TILE`
+ * from here, keep working with no edit. It arrives from `paint.ts`, which is where the seven painter
+ * modules read it from too: this file imports all seven of them, so a painter importing `TILE` back
+ * out of here would have been the repo's first import cycle.
+ */
+export { TILE } from './paint.ts';
 
-/** How wide the sheet is. Unchanged at 32px: 12 columns of 32 is a 384px-wide image. */
+/** How wide the sheet is. 12 columns of one TILE is a 384px-wide image at the current 32. */
 export const COLUMNS = 12;
-
-type Painter = (img: Img) => void;
 
 /** Every painter, merged. Keys are the contract; see the note on `TILE_NAMES` about order. */
 export const TILE_PAINTERS: Record<string, Painter> = {
@@ -119,7 +127,7 @@ export const TILE_NAMES: readonly string[] = [
    *
    * Two more bush silhouettes: `bush-low` is a wide bank in the bottom half of its tile with lawn
    * above it, `bush-tall` a narrow leaning shrub with lawn either side. Both differ from `bush` in
-   * FOOTPRINT rather than in outline detail, which is what reads at a 26-tile camera.
+   * FOOTPRINT rather than in outline detail, which is what reads at the playing camera.
    */
   'bush-low',
   'bush-tall',

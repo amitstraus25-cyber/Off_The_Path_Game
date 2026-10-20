@@ -1,8 +1,8 @@
 /*
  * The six portraits, the five items and the three effects, redrawn for the 32px standard.
  *
- * The portraits are the one place in this game with room for a face. Everything else is read at a
- * 26-tile camera, where a character is an outline and two pixels of eye; these are shown in the DOM
+ * The portraits are the one place in this game with room for a face. Everything else is read at the
+ * playing camera, where a character is an outline and two pixels of eye; these are shown in the DOM
  * beside the dialogue, unscaled, so at 64 x 64 they can carry a brow, a lid, a muzzle that projects,
  * a jaw. The 16px versions were a stack of flat ellipses with two dots on the front, which is the
  * right answer at 32 x 32 and the wrong one here. The 4x budget goes on STRUCTURE, per
@@ -48,7 +48,7 @@
  * bite on.
  */
 import { Img, shade } from '../paint.ts';
-import type { RGBA } from '../paint.ts';
+import type { Painter, RGBA } from '../paint.ts';
 
 /** Portraits and items. The effects are smaller and say their own size at the top of each painter. */
 export const FACE_SIZE = 64;
@@ -194,8 +194,6 @@ function bonnet(img: Img, brow: RGBA): void {
 }
 
 // ----------------------------------------------------------------------------- portraits (64x64)
-
-type Painter = (img: Img) => void;
 
 /**
  * Red. The hood is the portrait: it is half the frame, it is the colour the whole rebrand turned on,

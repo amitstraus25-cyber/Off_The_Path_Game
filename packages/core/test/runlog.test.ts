@@ -104,17 +104,6 @@ describe('illegal logs', () => {
     ).toMatchObject({ legal: false, reason: expect.stringContaining('must-open-the-card') });
   });
 
-  it('rejects a verdict that skips the inspection', () => {
-    expect(
-      bad(
-        ev(
-          { t: 'met', c: 'rabbit', at: at(1) },
-          { t: 'verdict', s: 'cottage-finder', v: 'restrict', at: at(2) },
-        ),
-      ),
-    ).toMatchObject({ legal: false });
-  });
-
   it('rejects asking or inspecting someone never met', () => {
     expect(bad(ev({ t: 'asked', c: 'owl', q: 'needs', at: at(1) }))).toMatchObject({
       legal: false,

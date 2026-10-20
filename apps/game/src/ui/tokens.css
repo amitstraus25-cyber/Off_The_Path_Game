@@ -65,7 +65,10 @@
   --otp-slot-w: 84px;
   --otp-slot-h: 68px;
   --otp-touch-min: 44px;
-  --otp-motion-fast: 120ms;
+  /* One duration, read by .otp-layer--modal's panel slide in ui/panels.css. There was a
+     --otp-motion-fast beside it, declared here and again in the reduced-motion block below and
+     read by nothing; a token no rule consumes reads as a motion scale the UI honours, and this
+     UI has exactly one. */
   --otp-motion-slow: 180ms;
   /* Basket motion. Must stay in step with LEAVE_MS / ARRIVE_MS in ui/components.tsx, which hold
      the previous row on screen for exactly as long as the departure takes to play. */
@@ -75,7 +78,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --otp-motion-fast: 0ms;
     --otp-motion-slow: 0ms;
   }
 }
@@ -110,6 +112,10 @@ body {
   font-family: var(--cyera-font-sans);
 }
 
+/* `place-items` sets BOTH axes, so this is the whole of the stage's default alignment: a second
+   `.otp-stage { align-items: center }` block used to restate the block axis further down the file
+   and could only ever agree with this one. The portrait override beside the touch controls is the
+   only rule that changes it, and it wins on specificity rather than on source order. */
 .otp-stage {
   position: fixed;
   inset: 0;
@@ -138,9 +144,6 @@ body {
 }
 
 /* --- Stage and touch controls (geometry final, skinning in Phase 3) -------- */
-.otp-stage {
-  align-items: center;
-}
 
 .otp-stage[data-orientation='portrait'] {
   align-items: start;

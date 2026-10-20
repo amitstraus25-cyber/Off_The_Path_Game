@@ -10,24 +10,37 @@
  * `pnpm -r --if-present test` skipped this workspace entirely, and `.github/workflows/ci.yml`
  * does not run `pnpm graybox`. A module-load throw only throws when something loads the module.
  *
+ * Both halves of that are now closed: the workspace has a `test` script, `.github/workflows/ci.yml`
+ * runs `pnpm test`, and since this round `tsconfig.json` includes `test`, so the file that arms the
+ * guards is itself typechecked rather than only run.
+ *
  * So the art could regress to precisely the faults `docs/DESIGN_BOARD.md` names -- a keyline-
- * valued eye, a crown with a flat-cut cap, a fence run that comes apart into links, a 26-tile
- * hedge along the bottom of the world -- and typecheck, lint and test would all stay green.
+ * valued eye, a crown with a flat-cut cap, a fence run that comes apart into links, the
+ * twenty-six-tile run of hedge along the bottom of the world -- and typecheck, lint and test
+ * would all stay green.
+ *
+ * (That twenty-six is a MEASURED HEDGE RUN: `forest-map.ts`'s note on the last planting row
+ * printed rows 40 and 41 and counted it, and `HEM_LIMIT` in the audit holds it at six today. It
+ * is not the abandoned 26-tile camera this round is sweeping out of the tree, and it is spelled
+ * out in words here so the next sweep for "26-tile" does not collect it by mistake.)
  *
  * Importing a painter is what runs its guard, so the imports below ARE most of the test. The
  * assertions on top exist so a failure says which number moved rather than only which file threw.
  * Nothing here re-derives a bound: the guards own their own thresholds, and a test that restated
- * them would drift from the thing it claims to watch.
+ * them would drift from the thing it claims to watch. Five restatements of other modules' bounds
+ * were taken out this round -- two of them already off the number they claimed to mirror -- and
+ * each is named, in place, where it used to stand.
+ *
+ * THE NAMED IMPORTS ARE NOT THE POINT OF THE IMPORTS. Every line in the block below loads a
+ * module whose guards run at load. Narrowing one to the names a test happens to use is fine;
+ * deleting the line because its names went unused disarms that owner's guard, and is the one way
+ * this file can stop doing its job while staying green.
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-  assertBodyPlans,
-  assertFaceMetrics,
-  CAST_FRAMES,
-  measureFace,
-} from '../src/sprites/cast.ts';
-import { crownEdge, CROWNS, TREE_TILES } from '../src/tiles/w-trees.ts';
+import { CAST_FRAMES } from '../src/sprites/cast.ts';
+import { NPC_PAINTERS } from '../src/sprites.ts';
+import { CROWNS, TREE_TILES } from '../src/tiles/w-trees.ts';
 import { UNDERGROWTH_TILES } from '../src/tiles/w-undergrowth.ts';
 import { OUTDOOR_TILES } from '../src/tiles/s-outdoor.ts';
 import { COTTAGE_TILES } from '../src/tiles/s-cottage.ts';
@@ -48,57 +61,89 @@ describe('the painters load, which is what runs their import-time guards', () =>
 });
 
 describe('the cast and its faces', () => {
-  it('passes its own body and face guards', () => {
-    expect(() => assertBodyPlans()).not.toThrow();
-    expect(() => assertFaceMetrics()).not.toThrow();
-  });
-
   /*
-   * Design board section 2: the rabbit's eyes were `keyline('fur', 165)`, "the identical value the
-   * sprite is OUTLINED in", which is why the face read as perforated. The guard holds a floor of
-   * 12 luma; this says out loud which sprite it is about and prints the number on failure.
+   * THREE TESTS STOOD HERE AND EACH RESTATED A BOUND ITS OWN GUARD ALREADY OWNS, against the rule
+   * four paragraphs up. Naming them is the version that cannot drift:
+   *
+   *   - an eye no clearer than the keyline it is outlined in -- design board section 2, where the
+   *     rabbit's eyes were `keyline('fur', 165)`, "the identical value the sprite is OUTLINED in".
+   *     The floor is `MIN_LIFT` (12) at `sprites/cast.ts:1749`, thrown on in `assertFaceMetrics()`
+   *     at :1880. The copy here asked for `> 12` where the guard asks for `>= 12`, so it claimed
+   *     to mirror a bound it did not -- and the faces it covered measure 22.6 and 24.7, so the
+   *     one value it would have caught alone is a lift of exactly 12.
+   *   - an eye taller than it is wide, "the shape a narrowed eye makes". The ceiling is per face,
+   *     `FACE_PLAN`'s `maxTall` at `sprites/cast.ts:1711`, thrown on at :1874. The copy here was
+   *     an exact mirror of two of the three -- the rabbit and the keeper are capped at 1 -- and
+   *     left out the owl, whose cap is 1.4 because an owl's pupil is a disc. So it watched what
+   *     the guard already watches and not the face whose number is the interesting one.
+   *   - `assertBodyPlans()` and `assertFaceMetrics()` wrapped in `expect(...).not.toThrow()`.
+   *     `sprites/cast.ts:1899-1900` calls both at module scope, so importing `CAST_FRAMES` above
+   *     has already run them before this file's first test does. The wrapper only changed which
+   *     line a failure printed, while reading as the gate it was not.
    */
-  it('keeps every eye clear of the sprite it is outlined in', () => {
-    for (const name of ['npc-rabbit-0', 'npc-owl-0', 'npc-lantern-keeper-0'])
-      expect(measureFace(name).lift, `${name} eye-to-keyline luma`).toBeGreaterThan(12);
-  });
-
-  /* Section 2 again: "a 3 x 4 solid ellipse, taller than it is wide, which is the shape a narrowed
-   * eye makes". No face in the cast may go back to that. */
-  it('keeps no eye taller than it is wide', () => {
-    for (const name of ['npc-rabbit-0', 'npc-lantern-keeper-0'])
-      expect(measureFace(name).tall, `${name} eye height over its own width`).toBeLessThanOrEqual(
-        1,
-      );
-  });
 
   it('renders all ten cast frames', () => {
     expect(Object.keys(CAST_FRAMES)).toHaveLength(10);
   });
 });
 
+describe('the sheets generate.ts writes for the spawned characters', () => {
+  /*
+   * `twoFrame` (`sprites.ts:82-98`) throws at module load for any character missing its open or
+   * its blink frame -- seven throws that had run nowhere, because the only two importers of
+   * `sprites.ts` are `generate.ts` and `preview.ts` and CI runs neither. The import above is the
+   * guard. This says which key list it is holding.
+   *
+   * The list is a CONTRACT, not a threshold, which is why writing it out here is right where
+   * writing out a bound is wrong -- it has no owner to drift from, it has three readers:
+   * `generate.ts:60-62` writes one sheet per key and picks the bystanders out of them by prefix,
+   * `forest-map.ts` spawns them under the same names, and the scene looks each texture up by that
+   * name. Lose or rename one and nothing here fails: the first thing to notice is the asset
+   * loader, at boot, in a browser.
+   *
+   * The wolf is deliberately absent -- he is never spawned from the map, he appears at the
+   * cottage, and `generate.ts:60` names him by hand for that reason. This pins his absence too.
+   */
+  it('keys a two-frame painter for every character the map can spawn', () => {
+    expect(Object.keys(NPC_PAINTERS).sort()).toEqual([
+      'bystander-cat',
+      'bystander-magpie',
+      'bystander-snail',
+      'bystander-toadstool',
+      'npc-lantern-keeper',
+      'npc-owl',
+      'npc-rabbit',
+    ]);
+  });
+});
+
 describe('the crowns', () => {
   /*
-   * Section 3: "One crown at one scale stamped 270 times is why the forest is wallpaper."
-   * Three scales, strictly increasing, is the thing that must not quietly become two.
+   * THE OTHER TWO RESTATEMENTS STOOD HERE. Both re-measured a crown with `crownEdge` and then
+   * checked a bound `tiles/w-trees.ts` throws on at import from that same measurement:
+   *
+   *   - daylight between the three scales, so the wood is not one stamp (design board section 3,
+   *     "One crown at one scale stamped 270 times is why the forest is wallpaper"). The step is
+   *     `< 4` at `w-trees.ts:3114-3118`; the copy here wrote the same bound as `> 3`, which over
+   *     whole pixels is the identical test spelled so that the two could not be grepped together.
+   *   - room above and to the left of the body for `outline()`'s own keyline, so the silhouette
+   *     does not render as a flat cut. `w-trees.ts:3093-3097` wants `top >= max(RING_ROWS,
+   *     CAP_ROOM)`, which is 2, and each side `>= RING_ROWS`, which is 1; the copy here asked
+   *     only for `> 0`. That one was LOOSER than the guard it was watching, so it could never be
+   *     the thing that fired -- the sapling that shipped with 18px of crown on row 0 passes it.
+   *
+   * What is left below is the one thing w-trees does not check about the crowns: how many of
+   * them there are.
    */
-  it('keeps three distinct crown scales', () => {
-    const widths = Object.values(CROWNS)
-      .map((c) => crownEdge(c.img()).width)
-      .sort((a, b) => a - b);
-    expect(widths).toHaveLength(3);
-    expect(widths[1]! - widths[0]!).toBeGreaterThan(3);
-    expect(widths[2]! - widths[1]!).toBeGreaterThan(3);
-  });
-
-  /* Section 4.2: the ring is shared and must stay closed, so `outline()` always has a row to put
-   * the keyline on. The sapling shipped with 18 px of crown on row 0 of its own drawing. */
-  it('leaves every crown room for its own keyline', () => {
-    for (const [name, c] of Object.entries(CROWNS)) {
-      const e = crownEdge(c.img());
-      expect(e.top, `${name} rows clear above the body`).toBeGreaterThan(0);
-      expect(e.left, `${name} columns clear left of the body`).toBeGreaterThan(0);
-    }
+  it('keeps the wood at three crown scales', () => {
+    /*
+     * `EDGE_GUARDS` (`w-trees.ts:3063`) lists its three crowns by hand off `CROWNS`, so a fourth
+     * crown added to that record is measured by nothing: it misses the width ladder, the rim
+     * ceiling and floor and the daylight step, and the message thrown would still say "three
+     * crown scales". This count is the only thing watching for that, which is why it is pinned
+     * rather than checked for being non-empty.
+     */
+    expect(Object.keys(CROWNS)).toHaveLength(3);
   });
 });
 
@@ -106,10 +151,16 @@ describe('the map', () => {
   /*
    * Section 2's fourth complaint and section 3's first map bullet. The generator runs its own
    * audit and throws on its own invariants -- including the hedge limit added this round -- so
-   * generating the map at all is the assertion. The reachability check is here because the
-   * level's whole zero-click lesson depends on the gate being walkable.
+   * generating the map at all is the assertion; the three expectations below only make a failure
+   * say which number moved.
+   *
+   * REACHABILITY IS NOT CHECKED HERE, and the name this test used to carry said it was. It is
+   * proved twice and deliberately, in neither case from this file: by the generator's own flood
+   * fills before it writes anything (`forest-map.ts`'s audit sections 1 to 5a), and by
+   * `apps/game/test/map.test.ts` over the committed artefact, which is the one that treats
+   * `trigger-cottage` as a wall so the fill cannot stroll through the thing that ends the run.
    */
-  it('generates and audits a map whose walkable tiles are all reachable', () => {
+  it('generates a map that survives its own audit, at the committed dimensions', () => {
     const { json } = generateForestMap();
     const parsed = JSON.parse(json) as { width: number; height: number; layers: unknown[] };
     expect(parsed.width).toBe(MAP_W);

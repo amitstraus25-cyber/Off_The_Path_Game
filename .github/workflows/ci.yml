@@ -20,8 +20,38 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
+      # Build BEFORE test, and keep it there. apps/game/test/csp.test.ts asserts over the built
+      # index.html -- the artefact the Content-Security-Policy actually applies to -- and `dist` is
+      # gitignored, so with the old order half of that file would silently skip on every CI run.
       - run: pnpm build
+      # docs/PLAN.md's risk table names "budget checks in CI" as the mitigation for a heavy bundle
+      # and docs/ARCHITECTURE.md section 11 sets the figure at 450 KB gzipped. Until now the
+      # mitigation did not exist. The step prints the real number on every run rather than this
+      # comment carrying a figure that goes stale; it was about 84% of budget, in one chunk, when
+      # the step was written. Note it will read a little under Vite's own build log, which gzips
+      # at the default level where this gzips at -9.
+      - name: Initial JS budget (450 KB gzipped, ARCHITECTURE section 11)
+        run: |
+          shopt -s nullglob
+          files=(apps/game/dist/assets/*.js)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no JS emitted into apps/game/dist/assets -- the budget was not measured"
+            exit 1
+          fi
+          budget=$((450 * 1024))
+          total=0
+          for f in "${files[@]}"; do
+            n=$(gzip -9 -c "$f" | wc -c)
+            printf '%s: %s bytes gzipped\n' "$(basename "$f")" "$n"
+            total=$((total + n))
+          done
+          printf 'total: %s bytes gzipped against a budget of %s (%s%%)\n' \
+            "$total" "$budget" "$((total * 100 / budget))"
+          if [ "$total" -gt "$budget" ]; then
+            echo "::error::initial JS is $total bytes gzipped, over the $budget byte budget"
+            exit 1
+          fi
+      - run: pnpm test
       - run: pnpm audit --audit-level=high
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e

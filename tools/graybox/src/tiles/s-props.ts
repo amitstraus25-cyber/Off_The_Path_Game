@@ -80,14 +80,8 @@
  */
 import { GROUND_TILES } from './w-ground.ts';
 import { COTTAGE_TILES } from './s-cottage.ts';
-import { Img, keyline, lumaOf, shade, tone } from '../paint.ts';
-import type { Ramp, RGBA } from '../paint.ts';
-
-const TILE = 32;
-
-type Painter = (img: Img) => void;
-
-const clamp01 = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t);
+import { clamp01, Img, keyline, lumaOf, shade, TILE, tone } from '../paint.ts';
+import type { Painter, Ramp, RGBA } from '../paint.ts';
 
 /* ------------------------------------------------------------------ the keyline */
 
@@ -564,7 +558,7 @@ const stripeAt = (x: number): { accent: boolean; offset: number; width: number }
  * The two falls, pale panel and purple accent, each from its lit edge to its shaded one.
  *
  * The pale fall tops out at 0.58 of `wall` rather than at the ramp's head: `wall[3]` is #fffaf0 and
- * nothing in a forest at a 26-tile camera is pure white. It bottoms out at 0.22, which is cream's
+ * nothing in a forest at the playing camera is pure white. It bottoms out at 0.22, which is cream's
  * own shade -- NOT the `shadow` ramp, which is grass in shade and which earlier passes used here,
  * turning the most common colour in the awning into an olive where the board's cloth samples a warm
  * #fde7c9 top to bottom.
@@ -759,7 +753,7 @@ function paintAwningSheet(): Img {
  *
  * Drawn with hard steps on purpose. This is the one object in the stall that has to read as a
  * DELIBERATE MARK rather than as scenery, so its frame is a flat dark timber against a face a
- * hundred luma lighter, and the compass inside it is a gold ring on a cream dial. At a 26-tile
+ * hundred luma lighter, and the compass inside it is a gold ring on a cream dial. At the playing
  * camera the icon resolves to "there is a sign here with a thing on it", which is all it needs to.
  */
 function signBoard(s: Img, x: number, y: number, w: number, h: number): void {
@@ -903,7 +897,7 @@ const stallCounter: Painter = (img) => {
      * The board lays out a dense double row: crates and sacks of stock standing in the stall's
      * shade at the back, and in front of them, catching the light, the compasses themselves --
      * round dials with gold bezels, which is the skill Rabbit is offering. Ours was three gold
-     * domes a tile, which at a 26-tile camera is a row of identical blobs and tells the player
+     * domes a tile, which at the playing camera is a row of identical blobs and tells the player
      * nothing about what is for sale.
      *
      * Density here is also most of what the measurement wants. A crate is flat boards with hard

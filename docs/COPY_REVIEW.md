@@ -1,10 +1,28 @@
-# Copy review: every string a player reads
+# Copy review: part of what a player reads
 
 Research must sign off on every line here before launch (PLAN Phase 5, risk "Content drift between research and game").
 Product marketing reviews tone; Legal reviews the leaderboard and privacy lines.
 
-**All of these live in `content/game.json` and are changed there only.** No copy lives in code.
-After any change run `pnpm test` (the content lint runs with it) and `pnpm e2e`.
+> ## This document does not cover the copy yet, and sign-off on it is the launch gate
+>
+> It was titled "every string a player reads". **Measured 2026-10-20: it names 29 of the 86 keys in
+> `content/game.json`'s `strings` object.** The 57 it does not name include every bystander line, the
+> notices, the errand goals, the take-it-on-trust copy, the trifecta chip, the touch controls, the
+> music control, the arrival beats per ending, and the three-way boundary result — which is to say,
+> most of what was added after this file was written, and all of the copy that carries the lesson the
+> asset exists to teach.
+>
+> It also predates five commits against `game.json`, so some lines quoted below have since changed in
+> the shipped file. **Where this document and `content/game.json` disagree, the file is right.**
+>
+> The fix is mechanical and is not done: regenerate the tables from the shipped file so coverage
+> cannot drift again, rather than adding rows by hand. `apps/game/test/strings.test.ts` already scans
+> both directions between the file and the UI and would be the place to hang a coverage check.
+> `docs/UX_REVIEW.md` finding 13 is the long version of this.
+
+**All of these live in `content/game.json` and are changed there only.** Copy that lives in `.tsx`
+instead is a bug, and `docs/UX_REVIEW.md` finding 13 records roughly 35 of them.
+After any change run `pnpm test` (the content lint and the two-way string scan run with it) and `pnpm e2e`.
 
 Status key: **PLACEHOLDER** written by engineering and not yet reviewed; **DRAFT** written against the
 concept board and not yet reviewed; **APPROVED** signed off by research.
@@ -15,16 +33,16 @@ These are the lines the game is about. They are written the way real permission 
 Each must map to a real class of behaviour in the research: credential access beyond purpose, data
 exfiltration, instruction hijacking.
 
-| Path in `game.json`                       | String                                                                                        | Status                 |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------- |
-| `skills[cottage-finder].promise.title`    | Finds the route                                                                               | DRAFT (from the board) |
-| `skills[cottage-finder].promise.detail`   | Shows a path to Grandma's cottage on your map.                                                | DRAFT (from the board) |
-| `skills[cottage-finder].finePrint.title`  | Also copies your cottage key                                                                  | DRAFT (from the board) |
-| `skills[cottage-finder].finePrint.detail` | Requests access to your key so it can keep a backup.                                          | DRAFT (from the board) |
-| `skills[word-weaver].promise.*`           | Translates the forest / Understands what the creatures say.                                   | **PLACEHOLDER**        |
-| `skills[word-weaver].finePrint.*`         | Also forwards everything you say / Sends what Red says to a helper address so it can improve. | **PLACEHOLDER**        |
-| `skills[night-light].promise.*`           | Lights the path / Shines a lantern through the dark pines.                                    | **PLACEHOLDER**        |
-| `skills[night-light]` has no `finePrint`  | (the genuinely safe skill, decision D1)                                                       | **PLACEHOLDER**        |
+| Path in `game.json`                       | String                                                                                                                                                                                                                                                                                     | Status                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `skills[cottage-finder].promise.title`    | Finds the route                                                                                                                                                                                                                                                                            | DRAFT (from the board)                                   |
+| `skills[cottage-finder].promise.detail`   | Shows a path to Grandma's cottage on your map.                                                                                                                                                                                                                                             | DRAFT (from the board)                                   |
+| `skills[cottage-finder].finePrint.title`  | Also copies your cottage key                                                                                                                                                                                                                                                               | DRAFT (from the board)                                   |
+| `skills[cottage-finder].finePrint.detail` | Requests access to your key so it can keep a backup.                                                                                                                                                                                                                                       | DRAFT (from the board)                                   |
+| `skills[word-weaver].promise.*`           | Translates the forest / Understands what the creatures say.                                                                                                                                                                                                                                | **PLACEHOLDER**                                          |
+| `skills[word-weaver].finePrint.*`         | Also forwards everything you say / Sends what Red says to a helper address so it can improve.                                                                                                                                                                                              | **PLACEHOLDER**                                          |
+| `skills[night-light].promise.*`           | Lights the path / Shines a lantern through the dark pines.                                                                                                                                                                                                                                 | **PLACEHOLDER**                                          |
+| `skills[night-light]` has no `finePrint`  | Honest on inspection — nothing is hidden. **Not "the genuinely safe skill"**: D1 was amended 2026-10-16, its stated purpose _is_ the risk, and its best verdict is Restrict. `docs/RESEARCH_ALIGNMENT.md` open question 4 asks research to confirm this direction and is still unanswered. | **PLACEHOLDER**, and the direction itself is unconfirmed |
 
 **Question for research:** is the Cottage Finder fine print too easy to spot, or about right? The M2
 playtest should watch whether a first-time player finds it at all.
@@ -77,7 +95,13 @@ Leaderboard: `leaderboardTitle`, `leaderboardDown`.
 All **PLACEHOLDER** except `cta`, `ctaPrompt`, `quest` and `leaderboardTitle`, which come from the mocks.
 
 **Legal must review** `privacyLine` ("We store your handle and score only. No account, no email, no
-cookies.") and `handleHint` against decision D10 before launch.
+cookies.") and `handleHint` against decision D10 before launch. **That review has not happened**, and
+two things should go into it rather than being settled here:
+
+- The sentence describes an API that does not exist yet (Phase 6), so nothing can currently verify it.
+- The game does write one `localStorage` boolean, for the music preference. It is not a cookie, but it
+  is a similar technology to most readers and to ePrivacy, and "no cookies" on a data security
+  company's own research page is the one sentence an unfriendly reader will test.
 
 ## 6. Things deliberately not said
 

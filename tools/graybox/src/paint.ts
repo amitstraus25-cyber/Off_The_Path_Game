@@ -3,6 +3,76 @@ import { deflateSync } from 'node:zlib';
 
 export type RGBA = [number, number, number, number];
 
+/* --------------------------------------- the vocabulary every painter shares, promoted here */
+
+/*
+ * ONE TILE, and it is `@otp/core`'s.
+ *
+ * `TILE = 32` was written out by hand in eight places: `camera.ts` in core, `tiles.ts` here, and
+ * privately at the top of six painter modules, plus `w-water.ts`'s `const S = 32`. Six of those are
+ * invisible to the one that matters -- the game measures the world in core's `TILE`, the generator
+ * wrote the map against `tiles.ts`'s, and a painter that drew on its own 32 would have agreed with
+ * both by luck. `apps/game/src/world/map.ts` is the only place a drift between the generator and the
+ * game would ever have been caught, and it would have been caught at boot, in the browser.
+ *
+ * THE SEAM IS THIS FILE AND NOT `tiles.ts`, which is the one thing worth writing down. Every painter
+ * module already imports from `paint.ts` and `paint.ts` imports nothing but `node:zlib`, so a
+ * re-export here reaches all seven of them and adds no edge to the import graph. `tiles.ts` imports
+ * all seven painter modules, so routing them through it instead would have made this repo's first
+ * import cycle. `tiles.ts` re-exports `TILE` from here in turn, so `world.ts` and `forest-map.ts`
+ * keep importing it from where they always have.
+ *
+ * A re-export rather than a copy: there is now exactly one declaration, in `packages/core/src/
+ * camera.ts`, and its own note asks that the next rescale be that one constant.
+ */
+export { TILE } from '@otp/core';
+
+/**
+ * A tile or sprite painter: handed its own canvas, draws on it, returns nothing.
+ *
+ * Seven byte-identical copies of this line lived in `tiles.ts`, five tile modules and `faces.ts`.
+ * They never disagreed, but seven declarations of one function type is seven things to keep in step
+ * if the signature ever gains an argument.
+ */
+export type Painter = (img: Img) => void;
+
+/** Which edge of a tile a variant faces. Was declared twice, in `w-ground.ts` and `w-water.ts`. */
+export type Side = 'n' | 's' | 'e' | 'w';
+
+/** Clamp to 0..1. */
+export const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/**
+ * Smoothstep's curve, on an input already known to be in 0..1.
+ *
+ * Deliberately NOT the clamping, two-edged `smoothstep(a, b, x)`: `w-trees.ts` and
+ * `w-undergrowth.ts` each wrap this in their own clamp and their own edges, and those wrappers are
+ * different functions that happen to share this curve. Only the curve is shared.
+ */
+export const smooth = (t: number): number => t * t * (3 - 2 * t);
+
+/**
+ * An opaque blend of two opaque colours, UNCLAMPED.
+ *
+ * This is the whole of the "no partial alpha" rule in one function. A soft edge here is a colour
+ * computed between two others and written solid, never a translucent pixel laid over a transparent
+ * one, so a tile never carries a half-alpha pixel that would fringe against whatever the map puts
+ * beside it.
+ *
+ * SIX COPIES OF THIS BODY EXISTED and five of them were character-identical; `sprites/bystanders.ts`
+ * held the sixth, which clamped `k` into 0..1 before interpolating. The unclamped one is the one
+ * promoted, because a caller that passes `k` outside 0..1 is EXTRAPOLATING past a ramp stop on
+ * purpose and there are such callers; promoting the clamping body would have silently moved those
+ * pixels. `bystanders.ts` now clamps at its own call sites instead, which is exactly what its
+ * private copy did and is why its art is byte-identical across the merge.
+ */
+export const mix = (a: RGBA, b: RGBA, k: number): RGBA => [
+  Math.round(a[0] + (b[0] - a[0]) * k),
+  Math.round(a[1] + (b[1] - a[1]) * k),
+  Math.round(a[2] + (b[2] - a[2]) * k),
+  255,
+];
+
 export const rgb = (hex: string, a = 255): RGBA => [
   parseInt(hex.slice(1, 3), 16),
   parseInt(hex.slice(3, 5), 16),
@@ -70,15 +140,15 @@ export const PALETTE = {
    * The highlight lands in the Clay #D4D2C8 family one step below Clay itself. Level 3 is the lit
    * cap on every shingle, close to half the painted roof surface; put it on Clay at luma 210 and
    * the roof's mean lands within about fifteen levels of the cream wall beneath it (`wall` base is
-   * 222) and the cottage reads as one pale mass at a 26-tile camera. Level 0 is pushed deeper than
-   * the old red to compensate for losing hue contrast: the grooves and course lines are drawn in
-   * it, and that texture is now what tells a roof from a lawn.
+   * 222) and the cottage reads as one pale mass at the camera the game plays at. Level 0 is pushed
+   * deeper than the old red to compensate for losing hue contrast: the grooves and course lines are
+   * drawn in it, and that texture is now what tells a roof from a lawn.
    */
   roof: ['#4a453e', '#787266', '#979082', '#bdb6a7'],
   wall: ['#c4ab8c', '#f3d9c1', '#faeada', '#fffaf0'],
   wood: ['#6b4522', '#9a6a36', '#c08f55', '#dcb882'],
   /*
-   * Red herself, option A from section 6a: Lilac-led, so she is findable at a 26-tile camera.
+   * Red herself, option A from section 6a: Lilac-led, so she is findable at the playing camera.
    * ART_PRODUCTION section 6a names three stops for the cloak -- Deep Purple, Lilac, Haze -- and
    * Aubergine is the midtone this table added between the first two. That addition is what went
    * wrong at 16px and again in the first 32px pass, so the roles are written down here as the
@@ -107,7 +177,12 @@ export const PALETTE = {
    * from L*33 to L*49, and the share of her that is at least as light as the grass she stands on
    * (L*57) moves from 17 per cent to about 50. She is no longer in the cast-shadow band with the
    * tree shade and the wolf; she is a pale figure inside a Deep Purple rim at L*18, which is what
-   * finds her at a 20-tile camera -- by value, not by hue alone.
+   * finds her at the camera the game plays at -- by value, not by hue alone.
+   *
+   * This docstring used to say "a 26-tile camera" three lines up and "a 20-tile camera" here, which
+   * is two different wrong answers in one paragraph. The camera shows 19.41 x 11.22 tiles at
+   * 1280x800; 26 x 15 was the field of view of a 1.5x zoom option `packages/core/src/camera.ts`
+   * rejects by name. Ask `cameraFor` in `@otp/core` rather than writing either number down again.
    *
    * Two hexes in this table are shared, and both are specified rather than accidental. Level 0 is
    * also `wolf` level 1 and `night` level 2; level 1 is also `night` level 3. Section 6a gives Deep
@@ -231,12 +306,12 @@ export function valueNoise2D(seed: number): (x: number, y: number) => number {
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   };
-  const ease = (t: number): number => t * t * (3 - 2 * t);
   return (x, y) => {
     const x0 = Math.floor(x);
     const y0 = Math.floor(y);
-    const fx = ease(x - x0);
-    const fy = ease(y - y0);
+    // `x - x0` is a fraction in 0..1 by construction, which is `smooth`'s precondition.
+    const fx = smooth(x - x0);
+    const fy = smooth(y - y0);
     const top = hash(x0, y0) * (1 - fx) + hash(x0 + 1, y0) * fx;
     const bottom = hash(x0, y0 + 1) * (1 - fx) + hash(x0 + 1, y0 + 1) * fx;
     return top * (1 - fy) + bottom * fy;
@@ -329,10 +404,20 @@ export const rust = (t: number): RGBA => pull(tone('wood', t), 0.55, 0.42);
  * three-row fans as well, so a height here is an offset from the centre blade's. At `h` 4 this
  * table is the lawn's table exactly.
  *
- * `w-ground.ts` STILL CARRIES ITS OWN COPY and is another owner's file this round, so this is one
- * home and not yet the only one. Its copy also predates `away()` below: at `Math.round`, a left
- * flanker's half-pixel step rounds to -0 where the right one's rounds to 1, so the lawn's fan is a
- * column wider on one side than the other. Raised as an ask rather than reached for.
+ * `w-ground.ts` STILL CARRIES ITS OWN COPY, DELIBERATELY, and this is one home rather than the only
+ * one. Its copy predates `away()` below: at `Math.round`, a left flanker's half-pixel step rounds to
+ * -0 where the right one's rounds to 1, so the lawn's fan is a column wider on one side than the
+ * other and prints a detached speck where the right flanker is a clean diagonal.
+ *
+ * THAT IS A REAL DEFECT AND IT IS STILL NOT BEING MERGED, which is the part worth writing down,
+ * because the obvious reading of a round named "one colour vocabulary" is that this copy goes. It
+ * does not. Merging it MOVES PIXELS on 92 per cent of the world's floor, so `tileset-forest.png`'s
+ * hash changes and this project's one proof standard -- regenerate and diff -- stops applying to the
+ * change that needs it most. None of the ten art guards measures tuft geometry, so nothing in CI
+ * would catch a bad edit either. It needs an art owner and a pixel diff, in a round that can afford
+ * to look at a render. A HALF-MERGE IS WORSE THAN EITHER COPY: do not take the shape from here and
+ * leave the stepping there, or the two fans stop being comparable and the defect gets harder to see
+ * rather than easier. Both copies stay, whole, until someone fixes them together.
  */
 
 /** The ramp position of a blade's brightest row, and the step down it per row towards the root. */

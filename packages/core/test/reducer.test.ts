@@ -27,7 +27,6 @@ describe('happy path', () => {
     s = run(encounter('lantern-keeper', 'allow'), s);
     s = run([{ type: 'ENTER_COTTAGE' }, { type: 'FINISH' }, { type: 'LEADERBOARD' }], s);
     expect(s.phase).toBe('leaderboard');
-    expect(s.finishedAt).toBeGreaterThan(s.startedAt!);
     expect(s.log.at(-1)?.t).toBe('arrived');
   });
 

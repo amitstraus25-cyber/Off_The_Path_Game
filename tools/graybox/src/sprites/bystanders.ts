@@ -4,7 +4,7 @@
  * None of them offers a skill, none is ever scored, and nobody will stop to inspect one. They exist
  * so the forest reads as inhabited rather than as a test level with four quiz stations in it. That
  * makes them cheap to get wrong and cheap to get right: the whole job is four silhouettes that are
- * instantly nameable at a 26-tile camera and charming for the two seconds anyone looks.
+ * instantly nameable at the playing camera and charming for the two seconds anyone looks.
  *
  * THE SIZE IS THE DRAWING (2026-10-19, UX review finding 19). These four used to stand as tall as
  * Red: the snail, whom `docs/ART_DIRECTION.md` section 10.2 puts LOWEST in the cast at 14 px, was
@@ -79,7 +79,7 @@
  * 13-px-wide shadow ellipse under a 14-px-tall snail is most of his silhouette, and it was the
  * reason three of these four measured 31 px wide whatever was actually drawn.
  */
-import { Img, keyline, shade } from '../paint.ts';
+import { clamp01, Img, keyline, mix, pull, rust as rustTone, shade } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
 
 // ----------------------------------------------------------------------------- shared brushes
@@ -200,14 +200,21 @@ export const BYSTANDER_PLAN = {
  * inside the #6b2b12..#dc6e3a span the tile's dome actually covers, so the two read as one
  * mushroom at two sizes.
  *
- * Kept deliberately duplicated rather than exported from a tile module: a sprite reaching into
- * `tiles/` would invert the layering. If a third caller ever wants it, it belongs in `paint.ts`.
+ * THAT ASK HAS BEEN ANSWERED. This paragraph used to end "Kept deliberately duplicated rather than
+ * exported from a tile module: a sprite reaching into `tiles/` would invert the layering. If a third
+ * caller ever wants it, it belongs in `paint.ts`." Both `rust` and `pull` now live in `paint.ts`,
+ * which every painter already imports and which imports nothing but `node:zlib`, so the sprite
+ * reaches sideways rather than into `tiles/` and the layering is intact.
+ *
+ * The private copy is gone and the pixels did not move. `paint.ts`'s `rust(t)` sweeps the continuous
+ * ramp where this sprite wants the four discrete stops, and `tone('wood', i / 3)` is exactly
+ * `shade('wood', i)` -- i / 3 * 3 round-trips to each of 0, 1, 2 and 3 exactly in IEEE doubles, so
+ * `Math.floor` lands on the stop itself and the interpolation term is zero. Checked rather than
+ * assumed: all four levels come back [107,38,14], [154,58,23], [192,79,36], [220,101,55], which are
+ * the RGBAs the two lines deleted here produced.
  */
-const rustPull = (c: RGBA): RGBA => [c[0], Math.round(c[1] * 0.55), Math.round(c[2] * 0.42), 255];
-const rust = (level: 0 | 1 | 2 | 3): RGBA => rustPull(shade('wood', level));
-const CAP_LINE = ((c: RGBA): RGBA => [c[0], Math.round(c[1] * 0.62), Math.round(c[2] * 0.52), 255])(
-  keyline('wood'),
-);
+const rust = (level: 0 | 1 | 2 | 3): RGBA => rustTone(level / 3);
+const CAP_LINE = pull(keyline('wood'), 0.62, 0.52);
 
 /**
  * Convinced he is a signpost. A T: 22 px of cap over a 6 px stem, 18 px tall in all, which is the
@@ -369,16 +376,20 @@ function paintToadstool(img: Img, blink: boolean): void {
 
 // ----------------------------------------------------------------------------- the magpie
 
-/** Mix two palette colours. Both ends come from `PALETTE`, so no raw hex enters the file. */
-const mix = (a: RGBA, c: RGBA, t: number): RGBA => {
-  const k = Math.max(0, Math.min(1, t));
-  return [
-    Math.round(a[0] + (c[0] - a[0]) * k),
-    Math.round(a[1] + (c[1] - a[1]) * k),
-    Math.round(a[2] + (c[2] - a[2]) * k),
-    255,
-  ];
-};
+/*
+ * `mix` IS NOW `paint.ts`'s, AND IT DOES NOT CLAMP. This file's private copy did.
+ *
+ * The unclamped body is the one that was promoted, because five of the six copies were unclamped and
+ * some of their callers extrapolate past a ramp stop on purpose; promoting the clamping body would
+ * have moved pixels in files that had nothing to do with this merge. So the clamp had to come back
+ * somewhere, and the honest place is the one caller whose argument is not a literal.
+ *
+ * It was already dead code, which is worth recording so nobody deletes it as such later: `mix` has
+ * exactly three call sites here, two of them constants at 0.45 and 0.66, and the third is `PLUMAGE`
+ * below, whose seventeen call sites all pass literals between 0 and 0.74. Nothing in this file has
+ * ever reached the clamp. It is kept on `PLUMAGE` because `PLUMAGE` takes a `t` from its caller and
+ * the next caller may not be so well behaved, which is exactly the contract the private copy had.
+ */
 
 /**
  * HER BLACK IS NEUTRAL NOW, and that is the design board's finding of 2026-10-20: "it is currently
@@ -399,7 +410,7 @@ const mix = (a: RGBA, c: RGBA, t: number): RGBA => {
 const MAGPIE_DARK: RGBA = keyline('stone', 74);
 
 /** The plumage, cool near-black, nowhere near Red's purple. */
-const PLUMAGE = (t: number): RGBA => mix(keyline('stone', 64), keyline('stone', 30), t);
+const PLUMAGE = (t: number): RGBA => mix(keyline('stone', 64), keyline('stone', 30), clamp01(t));
 
 /**
  * The wing gloss: `water` 0 taken most of the way down to the plumage, which lands at luma 58 -- a
@@ -437,7 +448,7 @@ const HORN_DARK: RGBA = keyline('stone', 18);
  *    The neck is now a stroke NARROWER THAN EITHER MASS, five pixels between a nine-pixel skull and
  *    an eleven-pixel body, which pinches the outline twice: a notch under the jaw at the front and
  *    a step at the nape behind. Both are transparent pixels, so `outline` keylines each side of
- *    them, and both survive to the 26-tile camera because they are shape rather than shading.
+ *    them, and both survive to the playing camera because they are shape rather than shading.
  *
  * 2. THE EYE IS THE BOARD'S OWN EYE. `reference/mocks/gameplay-concepts.png` at `650 270 120 130 8`
  *    is the board's bird, and its eye is a third of the width of its head: a hard white ring, a
@@ -726,7 +737,7 @@ function paintSnail(img: Img, blink: boolean): void {
    * shell averaged near-white: blitted into the real world render beside the path it was the
    * brightest object in the frame, out-shouting Red, and on the sand it vanished altogether, which a
    * flat-grass preview cannot show you. Led by 0 its mean lands on Clay, where it was always
-   * specified, and the dark foot under a mid-pale shell becomes a two-value read at a 26-tile
+   * specified, and the dark foot under a mid-pale shell becomes a two-value read at the playing
    * camera, which is the only thing that makes a 14 px animal findable at all.
    */
   /*

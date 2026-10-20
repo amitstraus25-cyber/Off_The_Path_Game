@@ -7,70 +7,20 @@
  * on a phone, where there is no keyboard, a tap moves Red about 4px (WALK_SPEED is 120px/s and only
  * a held stick walks), and the pad is not drawn on the title screen at all.
  *
- * These are measurements, not a snapshot: the first test computes where Red actually renders from
- * the live camera and compares it with the panel's own box, so narrowing the column, panning the
- * camera or dropping the chip all satisfy it, and re-adding the claim over the column fails it.
+ * What is left here asserts the two claims the title screen still makes. The standing chip was
+ * removed rather than narrowed, so what guards it now is its ABSENCE, asserted by count.
+ *
+ * Two landscape tests used to live above, and both asserted nothing. Each opened with
+ * `const claimed = await page.locator('.otp-title__standing').isVisible()` and put its whole body
+ * behind `if (claimed)`; the chip is gone from apps/game/src, so `claimed` was false at both
+ * widths and the two tests booted a browser, resized it, read the live camera and finished. The
+ * measurement they would have made was wrong as well: `red.right - column.right` is the
+ * wrong-edge comparison e2e/css-contract.spec.ts documents in capitals as having passed at 340px
+ * with 10px of Red hidden behind the column. A guard that cannot fire is worse than no guard,
+ * because it reads as cover. The geometry() helper went with them -- that loop was its only caller.
  */
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
 import { ready } from './helpers';
-
-/** Red's rendered box in CSS pixels, next to the copy column's, read from the running game. */
-async function geometry(page: Page) {
-  return page.evaluate(() => {
-    const scene = window.__otp!.scene as unknown as {
-      redPosition: { x: number; y: number };
-      cameras: { main: { scrollX: number; scrollY: number; width: number } };
-    };
-    const canvas = document.querySelector('canvas');
-    const panel = document.querySelector('.otp-title-panel');
-    if (!canvas || !panel) throw new Error('title screen is not on screen');
-    const view = canvas.getBoundingClientRect();
-    const column = panel.getBoundingClientRect();
-    // CSS pixels per world pixel: ui/stage.ts sizes the canvas to view * zoom.
-    const zoom = view.width / scene.cameras.main.width;
-    const { x, y } = scene.redPosition;
-    // red.png frames are 32x48 with the origin at her feet (forest-scene.ts setOrigin(0.5, 1)).
-    const red = {
-      left: view.left + (x - 16 - scene.cameras.main.scrollX) * zoom,
-      right: view.left + (x + 16 - scene.cameras.main.scrollX) * zoom,
-      top: view.top + (y - 48 - scene.cameras.main.scrollY) * zoom,
-      bottom: view.top + (y - scene.cameras.main.scrollY) * zoom,
-    };
-    return { red, column: { left: column.left, right: column.right, width: column.width }, zoom };
-  });
-}
-
-/*
- * Landscape, where the column sits beside the world and the chip is not suppressed. Two widths,
- * because the claim was false at every landscape width, not just the review's 1280.
- */
-for (const [width, height] of [
-  [1280, 860],
-  [1024, 640],
-] as const) {
-  test(`the standing claim is only made where Red is visible at ${width}`, async ({ page }) => {
-    await page.setViewportSize({ width, height });
-    await page.goto('/');
-    await ready(page);
-
-    const claimed = await page.locator('.otp-title__standing').isVisible();
-    const { red, column } = await geometry(page);
-    // How far Red's right edge clears the column's right edge. Negative means she is behind it.
-    const clearance = Math.round(red.right - column.right);
-    console.log(
-      `${width}: claim ${claimed ? 'shown' : 'absent'}, column ${Math.round(column.width)}px, ` +
-        `Red ${Math.round(red.left)}..${Math.round(red.right)}, clearance ${clearance}px`,
-    );
-
-    if (claimed) {
-      expect(
-        clearance,
-        'the chip claims Red is on the path, so she must render clear of the copy column',
-      ).toBeGreaterThan(0);
-    }
-  });
-}
 
 /*
  * Touch, where the keyboard the hint names does not exist and the pad it promises is not drawn
@@ -102,7 +52,14 @@ test.describe('on a touch screen', () => {
   }) => {
     await page.goto('/');
     await ready(page);
-    await expect(page.locator('.otp-title__standing')).toBeHidden();
+    /*
+     * By COUNT, not by visibility: `toBeHidden()` passes on a locator that matches nothing, so
+     * against an element that no longer exists it was as vacuous as the two tests this file used
+     * to open with. Counting is the assertion screens.css already believes is being made -- see
+     * its "No .otp-title__standing rule" note -- and it is what turns this into a reintroduction
+     * guard: putting the chip back on the title screen fails here.
+     */
+    await expect(page.locator('.otp-title__standing')).toHaveCount(0);
   });
 });
 

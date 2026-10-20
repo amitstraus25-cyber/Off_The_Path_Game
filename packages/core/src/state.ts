@@ -33,8 +33,12 @@ export interface GameState {
   flags: Flag[];
   activeCharacter: CharacterId | null;
   log: RunEvent[];
+  /**
+   * When the run began. There is no `finishedAt` beside it: the duration the leaderboard ranks on
+   * runs from here to the `arrived` event (runlog.ts `durationMs`), so a finish stamp was written
+   * on FINISH and read by nobody.
+   */
   startedAt: number | null;
-  finishedAt: number | null;
 }
 
 export function createState(content: Content): GameState {
@@ -52,7 +56,6 @@ export function createState(content: Content): GameState {
     activeCharacter: null,
     log: [],
     startedAt: null,
-    finishedAt: null,
   };
 }
 

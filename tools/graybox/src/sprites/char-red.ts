@@ -49,19 +49,27 @@
  * The board's Red is a DARK figure on a LIGHT ground, 70 to 140 luma below everything around her.
  * Lilac at 175 against a lawn at 167..180 is not a findable figure, it is camouflage: identical
  * luma, and since the rebrand the same hue family as the flowers, the toadstools and the stall
- * awning. Option A's recommendation was a prediction about a 26-tile camera, and the prediction is
- * simply wrong about this lawn -- it assumed grass darker than the grass we have.
+ * awning. Option A's recommendation was a prediction about a camera, and the prediction is simply
+ * wrong about this lawn -- it assumed grass darker than the grass we have.
+ *
+ * AND THE CAMERA IT PREDICTED ABOUT DOES NOT EXIST EITHER, which is worth saying because the phrase
+ * is quoted verbatim above and should not be mistaken for a measurement. `ART_PRODUCTION` section 6a
+ * wrote "a 26-tile camera"; the game shows 19.41 x 11.22 tiles at 1280x800, and 26 x 15 was the
+ * field of view of a 1.5x zoom option `packages/core/src/camera.ts` rejects by name. The real camera
+ * is the more generous of the two, so it weakens the recommendation further rather than rescuing it.
+ * Ask `cameraFor` in `@otp/core` rather than quoting either figure again.
  *
  * Aubergine, #6d2d93 at luma 76, is the luminance-preserving match for that cape to within two
  * levels. So the ramp is inverted: Aubergine holds the mass, Lilac is the rim light, the hood crown
  * and the fold highlights and nothing else, Haze is a handful of specular pixels, and the keyline
  * stays near-black.
  *
- * The standing objection to this, which earlier headers in this file and in `red-sprite.ts` both
- * state, is that luma 76 "is the band every cast shadow in the world sits in" -- `shadow` runs 33
- * to 81 -- so she would read as a hole. That objection is half right and it cost us two rounds, so
- * it is worth being exact about why it does not bind. It measures one channel. `shadow` is a
- * desaturated GREEN (#2c4f2b is R44 G79 B43); Aubergine is a saturated PURPLE (R109 G45 B147).
+ * The standing objection to this, which earlier headers in this file and in the since-deleted
+ * `red-sprite.ts` both stated, is that luma 76 "is the band every cast shadow in the world sits in"
+ * -- `shadow` runs 33 to 81 -- so she would read as a hole. That objection is half right and it cost
+ * us two rounds, so it is worth being exact about why it does not bind. It measures one channel.
+ * `shadow` is a desaturated GREEN (#2c4f2b is R44 G79 B43); Aubergine is a saturated PURPLE
+ * (R109 G45 B147).
  * They share a luma band and nothing else, and the board settles the point by doing exactly this:
  * its scarlet cape at luma 74..83 sits in the same band as its own tree shade and is still the
  * first thing the eye lands on, because findability is hue contrast against the GROUND, not
@@ -1051,18 +1059,19 @@ export const RED_FRAMES: Record<string, (img: Img) => void> = Object.fromEntries
 );
 
 /*
- * THREE THINGS THE NEXT PASS HAS TO PICK UP, none of which can be done from inside this file.
+ * ONE RETRACTION, AND TWO THINGS THE NEXT PASS HAS TO PICK UP THAT CANNOT BE DONE FROM THIS FILE.
  *
  * 1. THE "NOTHING IMPORTS THIS FILE" WARNING THAT STOOD HERE IS OUT OF DATE, and it is retracted
  *    rather than deleted, because a stale warning that scares the next round off measuring is
- *    worse than no warning. `sprites.ts` line 14 now reads `from './sprites/char-red.ts'`, and the
+ *    worse than no warning. `sprites.ts` now imports Red `from './sprites/char-red.ts'`, and the
  *    committed `apps/game/src/assets/red.png` profiles identically to this file's own sheet on all
  *    six axes. This file is the shipped Red; `pnpm graybox` regenerates it from here.
  *
- *    What is still true is the tail of that warning: `red-sprite.ts` is a second, older Red, it is
- *    now imported by nothing, and leaving it there is exactly how the confusion happened in the
- *    first place. It should be deleted. That is a one-line change in a file this round did not
- *    own, so it is left for whoever owns `sprites/`.
+ *    The tail of that warning asked for `red-sprite.ts`, a second and older Red imported by
+ *    nothing, to be deleted. IT HAS BEEN, so there is no longer a second Red to confuse this one
+ *    with, and this item is kept only as the retraction. The ask that outlived it is the general
+ *    one: a sprite nothing imports is how the confusion happened, and `sprites.ts` is the one place
+ *    that says which painter ships.
  *
  * 2. RED HAS NO CAST SHADOW ANY MORE. `paintFrame` used to bake an opaque dark-green ellipse under
  *    every frame, which travelled with her onto the sand, the bridge and the cottage step; it is

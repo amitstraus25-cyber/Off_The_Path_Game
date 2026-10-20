@@ -107,10 +107,19 @@
  * per cent, applied at every level and through `toward()` so it moves hue without touching the
  * luma the rungs put there. See `leaf()`.
  */
-import { Img, keyline, lumaOf, noise, tone, valueNoise2D } from '../paint.ts';
+import {
+  clamp01,
+  Img,
+  keyline,
+  lumaOf,
+  mix,
+  noise,
+  smooth as smoothCurve,
+  TILE,
+  tone,
+  valueNoise2D,
+} from '../paint.ts';
 import type { Ramp, RGBA } from '../paint.ts';
-
-const TILE = 32;
 
 /**
  * Tree space. x is 0..63 across both columns of tiles. y 0..63 is the four canopy tiles; y 64..95
@@ -179,20 +188,17 @@ const CAP_ROOM = 2;
 
 /* ---------------------------------------------------------------------------- continuous tone */
 
-const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
-
-/** Smoothstep. Every falloff in this file goes through it, so nothing in the tree is a hard step. */
-const smooth = (a: number, b: number, x: number): number => {
-  const t = clamp01((x - a) / (b - a));
-  return t * t * (3 - 2 * t);
-};
-
-const mix = (a: RGBA, b: RGBA, f: number): RGBA => [
-  Math.round(a[0] + (b[0] - a[0]) * f),
-  Math.round(a[1] + (b[1] - a[1]) * f),
-  Math.round(a[2] + (b[2] - a[2]) * f),
-  255,
-];
+/**
+ * Smoothstep BETWEEN TWO EDGES. Every falloff in this file goes through it, so nothing in the tree
+ * is a hard step.
+ *
+ * Shares a name with `paint.ts`'s `smooth` and is NOT the same function: that one is the bare curve
+ * on an input already in 0..1, this one maps `a..b` onto 0..1 and clamps first. Kept local and kept
+ * whole for the same reason the two `clamp`s in this repo are kept apart -- same name, different
+ * arity, different job. It is the curve itself that is shared, and it is shared by being written
+ * once in `paint.ts` and called from here.
+ */
+const smooth = (a: number, b: number, x: number): number => smoothCurve(clamp01((x - a) / (b - a)));
 
 /**
  * A stop on a ladder: a ramp, and a position along it for `tone()`. `tone(r, i / 3)` is exactly

@@ -30,14 +30,21 @@
  * 4. ONE BODY PLAN PER CHARACTER (2026-10-19, UX review finding 19). Every figure in this file
  *    used to fill the frame: the four here measured 41 to 45 px tall inside a 48 px box, so the
  *    rabbit, the owl, the keeper and the wolf separated by interior detail and by nothing else --
- *    and interior detail is the one thing a 20-tile camera throws away. They are now drawn to the
+ *    and interior detail is the one thing the playing camera throws away. They are now drawn to the
  *    heights `docs/ART_DIRECTION.md` section 10.2 assigns, which span 26 to 44 here and 14 to 44
  *    across this file and `bystanders.ts` together. `CAST_PLAN` below is the table, the painters
  *    read their own geometry off it rather than repeating numbers, and `assertBodyPlans()` at the
  *    foot of this file refuses to let the art pipeline run if a silhouette drifts out of its box.
  *
- * SILHOUETTE. All four have to be told apart as flat black shapes at a 20-tile camera, and the
+ * SILHOUETTE. All four have to be told apart as flat black shapes at the playing camera, and the
  * test is section 10.1's: fill every opaque pixel black, downscale to 24 px, name each one.
+ *
+ * "THE PLAYING CAMERA" FOUR TIMES IN THIS FILE USED TO READ "a 20-tile camera", AND THAT WAS A
+ * FIGURE RATHER THAN A MEASUREMENT. The camera shows 19.41 x 11.22 tiles at 1280x800; `paint.ts`
+ * and nine other files simultaneously claimed 26 x 15, which was the field of view of a 1.5x zoom
+ * option `packages/core/src/camera.ts` rejects by name. Two different wrong numbers in one
+ * generator is how this project lost two rounds. Ask `cameraFor` in `@otp/core`; the silhouette
+ * argument above does not depend on the exact figure and is not weakened by dropping it.
  *
  *   rabbit  -- TALL AND NARROW: two upright ears, 14 px of a 34 px figure, four px of sky between
  *   owl     -- WIDE AND SQUAT: one flat-topped barrel 22 across and 26 high, two 3 px ear tufts
@@ -229,7 +236,7 @@ const RABBIT_DARK: RGBA = keyline('fur', 165);
  *
  * Painting the eyes in the value the sprite is outlined in is what made the face read as perforated
  * rather than as looking at you: the highest-contrast feature on a white animal was drawn in the
- * silhouette's own line, so at a 20-tile camera the eyes joined the outline and the head came back
+ * silhouette's own line, so at the playing camera the eyes joined the outline and the head came back
  * as a white shape with two holes in it. `ink` carries a trace of violet, so the eye is a dark
  * glossy bead INSIDE a white face and the keyline stays the darkest thing on the sprite, which is
  * where a keyline belongs.
@@ -320,7 +327,7 @@ const RABBIT_CLOTH_SEAT: RGBA = pull(keyline('gold', 70), 0.32, 0.24);
  * The board's rabbit is a chibi -- a head nearly as wide as the body is tall, two broad ears
  * leaning apart with a wide pink inner, two paws, two feet, a round tail, and a face of black oval
  * eyes, a warm nose, a small "w" mouth and a blush on each cheek. All of that is kept. What
- * changed on 2026-10-19 is the PROPORTION, and it is the only thing a 20-tile camera reads: he was
+ * changed on 2026-10-19 is the PROPORTION, and it is the only thing the playing camera reads: he was
  * 22 x 44, which put him in the same box as the cat and within three rows of Red, so the forest
  * held three upright figures of one size. At 21 x 34 he is two thirds of Red's height and the
  * tallest thing on him is a pair of ears with sky between them.
@@ -1592,9 +1599,13 @@ function silhouette(paint: (img: Img) => void): {
  * Sprite art reaches the game through exactly one door -- `pnpm graybox`, which imports this module
  * to write `apps/game/src/assets/npc-*.png`. Throwing from here means a cast that has drifted out
  * of its body plan cannot be baked into the assets at all, which is a stronger gate than a test
- * reporting it afterwards. `tools/graybox` has no `test` script and CI does not run `pnpm graybox`,
- * so a vitest spec would need `tools/graybox/package.json` and a new spec file; both are outside
- * this pass's remit and the ask is recorded for whoever owns them.
+ * reporting it afterwards. That is still the reason this lives here, and it is unchanged.
+ *
+ * THE ASK THIS PARAGRAPH USED TO RECORD HAS BEEN DONE. It said `tools/graybox` had no `test` script
+ * and that CI did not run `pnpm graybox`, so nothing ran these guards; both halves are now false.
+ * `tools/graybox/test/art-guards.test.ts` imports `CAST_FRAMES` from this module, and because the
+ * two calls at the foot of this file run at MODULE SCOPE, that import is what runs them -- so a
+ * drifted body plan fails `pnpm test` in CI as well as failing the bake.
  *
  * It checks the two things finding 19 is about, and nothing else:
  *
@@ -1846,10 +1857,9 @@ export function measureFace(name: string): FaceMetrics {
  *
  * Sprite art reaches the game through one door -- `pnpm graybox` imports this module to write
  * `apps/game/src/assets/npc-*.png` -- so throwing here means a face that has drifted back towards
- * the board's four complaints cannot be baked into the assets at all. `tools/graybox` still has no
- * `test` script and CI still does not run `pnpm graybox`, so this is the strongest gate available
- * from inside this file; the ask for a vitest spec is recorded with the one `assertBodyPlans()`
- * already raised.
+ * the board's four complaints cannot be baked into the assets at all. That is still why the gate is
+ * here. The vitest spec this paragraph asked for exists: see the note on `assertBodyPlans()`, which
+ * names `tools/graybox/test/art-guards.test.ts` and how the module-scope calls arm it.
  */
 export function assertFaceMetrics(): void {
   const faults: string[] = [];

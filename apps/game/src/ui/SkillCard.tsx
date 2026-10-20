@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { BASKET_SLOTS } from '@otp/core';
 import type { Content, Skill, Verdict } from '@otp/core';
 import { NotationChip, Panel, useFocusTrap } from './components';
 import { assetUrl } from '../world/assets';
@@ -236,8 +237,6 @@ export function SkillCard({
   );
 }
 
-const SLOTS = 5;
-
 export interface BasketProps {
   basket: readonly string[];
   items: Readonly<Record<string, string>>;
@@ -248,7 +247,7 @@ export function Basket({ basket, items }: BasketProps) {
     <section class="otp-basket" aria-label="Your basket">
       <p class="otp-basket__label">Your Basket</p>
       <ul class="otp-slots">
-        {Array.from({ length: SLOTS }, (_, i) => {
+        {Array.from({ length: BASKET_SLOTS }, (_, i) => {
           const item = basket[i];
           const icon = item ? items[item] : undefined;
           return (

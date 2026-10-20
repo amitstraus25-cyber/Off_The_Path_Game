@@ -109,8 +109,11 @@ export interface ResultsProps {
  * Every bonus `score()` adds into `total` must have a clause here, or the parts do not sum to the
  * headline and the screen that carries the argument is wrong about the player's own run -- the
  * same failure as finding 1, in arithmetic. `trustBonus` had no clause, so a clean
- * take-one-on-trust run showed parts totalling 800 under a headline of 900 (UX_REVIEW finding 13);
- * `trustBreakdown` is the copy that was written for it and never wired.
+ * take-one-on-trust run showed parts totalling 800 under a headline of 900 (UX_REVIEW finding 13).
+ * `trustBreakdown` is the copy that was written for it, and it IS wired -- sixteen lines below, in
+ * the `result.trustBonus > 0` clause. This sentence used to end "and never wired", which was true
+ * when the copy was first written and false from the moment the clause landed; it survived a round
+ * and was repeated in `test/strings.test.ts`'s docstring, which has since corrected itself.
  *
  * Exported for `test/results.test.ts`, which adds the clauses up and holds them against
  * `score().total` on every run shape, so the next bonus cannot be added without one.

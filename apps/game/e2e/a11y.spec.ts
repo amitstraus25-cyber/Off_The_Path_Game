@@ -19,7 +19,9 @@
  */
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { startGame } from './helpers';
+// tag/tagOf live in helpers.ts: e2e/world-reach.spec.ts uses the same node-identity trick, and it
+// was written out twice, byte for byte.
+import { startGame, tag, tagOf } from './helpers';
 
 const MEASURE = !!process.env['A11Y_MEASURE'];
 
@@ -77,17 +79,6 @@ const visibleText = (page: Page, selector: string): Promise<string> =>
       .filter(Boolean)
       .join(' '),
   );
-
-/** Tags a DOM node so a later render can be asked whether it is still the same object. */
-const tag = (page: Page, selector: string, mark: string): Promise<void> =>
-  page
-    .locator(selector)
-    .evaluate((el, m) => void ((el as unknown as Record<string, string>)['__otpTag'] = m), mark);
-
-const tagOf = (page: Page, selector: string): Promise<string | null> =>
-  page
-    .locator(selector)
-    .evaluate((el) => (el as unknown as Record<string, string>)['__otpTag'] ?? null);
 
 /** Drives a whole encounter through the store, the way the other specs do. */
 async function decide(page: Page, c: string, s: string, v: string): Promise<void> {
@@ -284,21 +275,8 @@ test('Esc closes the notice, the one modal the reducer never heard it on', async
   expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('explore');
 });
 
-test('Esc still leaves the card and the conversation the way it always did', async ({ page }) => {
-  await page.goto('/');
-  await startGame(page);
-  await page.evaluate(() => {
-    const { store } = window.__otp!;
-    store.dispatch({ type: 'MEET', c: 'rabbit' });
-    store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
-  });
-  await expect(page.locator('.otp-card')).toBeVisible();
-
-  // One Esc, one layer: the card goes back to the conversation and no further.
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.otp-dialogue')).toBeVisible();
-  expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('dialogue');
-});
+// Esc on the card and on the conversation is e2e/ui.spec.ts's, in "Esc backs out one level at a
+// time and never skips a verdict". A copy lived here and was the first half of it.
 
 /* ------------------------------------------------------------------ 16: the world, as text */
 

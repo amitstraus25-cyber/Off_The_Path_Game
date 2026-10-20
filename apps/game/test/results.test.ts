@@ -35,6 +35,34 @@ const PERFECT: Record<SkillId, Verdict> = {
   'night-light': 'restrict',
 };
 
+/** The run as the reducer would have produced it, so `score()` reads a real log. */
+function runLog(
+  verdicts: Record<string, Verdict>,
+  opts: { inspect?: boolean; read?: string[]; ask?: boolean } = {},
+): GameState {
+  // `at` is the run clock every action carries; nothing here reads it, so it stays 0.
+  let state = createState(content);
+  state = reduce(state, { type: 'START', runId: 'breakdown', at: 0 }, content);
+  state = reduce(state, { type: 'BEGIN' }, content);
+  for (const notice of opts.read ?? [])
+    state = reduce(state, { type: 'READ_NOTICE', n: notice, at: 0 }, content);
+  for (const [skillId, verdict] of Object.entries(verdicts)) {
+    const character = content.characters.find((c) => c.skillId === skillId)!;
+    state = reduce(state, { type: 'MEET', c: character.id, at: 0 }, content);
+    if (opts.ask)
+      state = reduce(
+        state,
+        { type: 'ASK', c: character.id, q: content.scoring.bonusQuestions[0]!, at: 0 },
+        content,
+      );
+    if (opts.inspect !== false)
+      state = reduce(state, { type: 'INSPECT', s: skillId, at: 0 }, content);
+    state = reduce(state, { type: 'VERDICT', s: skillId, v: verdict, at: 0 }, content);
+    if (state.phase !== 'explore') state = reduce(state, { type: 'BACK' }, content);
+  }
+  return state;
+}
+
 describe('an errand given up to keep the boundary is not a miss', () => {
   it('the perfect run shows one done and two traded, and nothing missed', () => {
     expect(rows(PERFECT)).toEqual({ route: 'met', word: 'traded', sign: 'traded' });
@@ -99,28 +127,6 @@ describe('an errand given up to keep the boundary is not a miss', () => {
  * string, not on a hardcoded list of bonus names.
  */
 describe('the breakdown sums to the score above it', () => {
-  /** The run as the reducer would have produced it, so `score()` reads a real log. */
-  function runLog(
-    verdicts: Record<string, Verdict>,
-    opts: { inspect?: boolean; read?: string[] } = {},
-  ): GameState {
-    // `at` is the run clock every action carries; the breakdown does not read it, so it stays 0.
-    let state = createState(content);
-    state = reduce(state, { type: 'START', runId: 'breakdown', at: 0 }, content);
-    state = reduce(state, { type: 'BEGIN' }, content);
-    for (const notice of opts.read ?? [])
-      state = reduce(state, { type: 'READ_NOTICE', n: notice, at: 0 }, content);
-    for (const [skillId, verdict] of Object.entries(verdicts)) {
-      const character = content.characters.find((c) => c.skillId === skillId)!;
-      state = reduce(state, { type: 'MEET', c: character.id, at: 0 }, content);
-      if (opts.inspect !== false)
-        state = reduce(state, { type: 'INSPECT', s: skillId, at: 0 }, content);
-      state = reduce(state, { type: 'VERDICT', s: skillId, v: verdict, at: 0 }, content);
-      if (state.phase !== 'explore') state = reduce(state, { type: 'BACK' }, content);
-    }
-    return state;
-  }
-
   /** Every number at the head of a clause in the sentence the screen prints. */
   const clauseTotal = (sentence: string): number =>
     sentence
@@ -175,5 +181,35 @@ describe('the breakdown sums to the score above it', () => {
     for (const [, state] of cases)
       for (const clause of breakdown(score(state.log, content), content).split(' · '))
         expect(clause, 'every clause opens with its own number').toMatch(/^\d+ \S/);
+  });
+});
+
+/*
+ * The headline is `result.total` followed by `scoreOutOf`, and the right-hand half was a hand-typed
+ * string with nothing holding it to the ceiling. Change a weight in content/game.json and the
+ * number on the left moves while the one on the right does not, so the screen quietly prints a run
+ * out of a total nobody can score -- which is the same false claim about the player's own run that
+ * findings 1, 13 and 15 above are all instances of, in the one line every player reads.
+ *
+ * CLAUDE.md rule 3 says adding a skill is a content change. It is, and this is what makes the
+ * sentence underneath it keep up.
+ */
+describe('the headline says what the run was out of', () => {
+  /** Best verdict everywhere, a bonus question of everyone, and the whole walk read. */
+  const ceiling = score(
+    runLog(PERFECT, { ask: true, read: content.notices.map((n) => n.id) }).log,
+    content,
+  ).total;
+
+  it('the run this is computed from really was played', () => {
+    // Without this the assertion below is vacuous: a short-circuited log scores 0, and "1,000"
+    // contains "0".
+    expect(ceiling).toBeGreaterThanOrEqual(content.scoring.maxPerSkill * content.skills.length);
+  });
+
+  it("'out of' names the perfect run's own total, in the digits Results prints", () => {
+    // Results.tsx renders `result.total.toLocaleString('en')` immediately before this string, so
+    // the grouping has to match it too: "1,000", not "1000".
+    expect(content.strings['scoreOutOf']).toContain(ceiling.toLocaleString('en'));
   });
 });

@@ -235,6 +235,10 @@ test('the verb primer lands on the first card opened, whoever Red meets first', 
   });
   await expect(page.locator('.otp-chip')).toContainText('Skill 2 of 3');
   await expect(page.locator('.otp-card__primer')).toContainText('Restrict:');
+  // Not just that Restrict is named, but that the primer says what it MEANS. This came from a
+  // second copy of this test in e2e/trifecta.spec.ts, which met the Rabbit -- Skill 1 of 3, the
+  // ordering that passed even while the bug above was live -- and so could never catch it.
+  await expect(page.locator('.otp-card__primer')).toContainText(/not the extras/);
 
   // And only once: the second card opened is a card, not a rulebook.
   await page.locator('.otp-card__back').click();

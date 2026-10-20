@@ -144,10 +144,8 @@
  *      -- the board's cottage is 49 pixels of wall under about 48 of roof. Ours is 42 under 54.
  *      Within seven pixels on a 96-pixel elevation, where it used to be 75 under 53.
  */
-import { ember, Img, keyline, lumaOf, rose, tone } from '../paint.ts';
-import type { RGBA } from '../paint.ts';
-
-const TILE = 32;
+import { ember, Img, keyline, lumaOf, mix, rose, smooth, TILE, tone } from '../paint.ts';
+import type { Painter, RGBA } from '../paint.ts';
 
 /**
  * How far in from the end of the facade the WALL stops, so that the roof above it can hang past it.
@@ -157,8 +155,6 @@ const TILE = 32;
  * only because `POST_L` is computed from it and module constants are evaluated in order.
  */
 const WALL_IN = 16;
-
-type Painter = (img: Img) => void;
 
 /*
  * The keylines. Each is its own ramp's darkest stop taken down 40 luma with the hue preserved, which
@@ -175,17 +171,17 @@ const WOOD_LINE = keyline('wood'); // luma 35 -- under the eave fascia, and roun
 const FRAME_LINE = keyline('trunk'); // luma 16 -- round the windows, the darkest line on the facade
 const BOX_LINE = keyline('gold', 60); // luma 58 -- round the flower box only
 
+/*
+ * `clamp` STAYS, and it stays under its own name, which is worth a line because it looks exactly
+ * like the `clamp01` this round deleted five copies of.
+ *
+ * `w-trees.ts` also has a `clamp` and it clamps to -1..1, not 0..1. Two functions with one name and
+ * different ranges is the trap here: merging by name would have silently rescaled every weight in
+ * one of the two files. They are left apart deliberately, and renaming this one to `clamp01` is a
+ * rename of every call site in this file for no behaviour change, which is not a ship-day edit. The
+ * promoted `clamp01` in `paint.ts` is the one new code should reach for.
+ */
 const clamp = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t);
-
-/** A straight lerp between two opaque colours. No alpha: `k` picks a colour, it does not blend one. */
-function mix(a: RGBA, b: RGBA, k: number): RGBA {
-  return [
-    Math.round(a[0] + (b[0] - a[0]) * k),
-    Math.round(a[1] + (b[1] - a[1]) * k),
-    Math.round(a[2] + (b[2] - a[2]) * k),
-    255,
-  ];
-}
 
 /*
  * The deepest row of the overhang's shadow on the plaster: the roof's own floor taken halfway to
@@ -286,15 +282,15 @@ function wrapNoise(seed: number, cells: number): (x: number, y: number) => numbe
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   };
-  const ease = (t: number): number => t * t * (3 - 2 * t);
   const step = TILE / cells;
   return (x, y) => {
     const fx = x / step;
     const fy = y / step;
     const x0 = Math.floor(fx);
     const y0 = Math.floor(fy);
-    const ax = ease(fx - x0);
-    const ay = ease(fy - y0);
+    // `fx - x0` is a fraction in 0..1 by construction, which is `smooth`'s precondition.
+    const ax = smooth(fx - x0);
+    const ay = smooth(fy - y0);
     const top = hash(x0, y0) * (1 - ax) + hash(x0 + 1, y0) * ax;
     const bottom = hash(x0, y0 + 1) * (1 - ax) + hash(x0 + 1, y0 + 1) * ax;
     return top * (1 - ay) + bottom * ay;
@@ -336,7 +332,7 @@ const COOL = [wrapNoise(21, 2), wrapNoise(22, 4), wrapNoise(23, 8), wrapNoise(24
  * not a motif: it has no shape to repeat, it closes on the tile in y (period 32/5), and its phase is
  * dragged about by the noise so it never rules a straight line. Six soft horizontal passes per tile
  * is what a plasterer's float leaves, it is visible on the board between the gable and the right
- * slope, and at about eight luma it reads at the 26-tile camera without touching the silhouette.
+ * slope, and at about eight luma it reads at the playing camera without touching the silhouette.
  */
 function plasterT(x: number, y: number): number {
   return (
@@ -654,7 +650,7 @@ const cottageWall: Painter = (img) => {
  * Timber is the better mark here anyway, and not only because it is what is drawn. Worked stone sits
  * about fifty luma below the plaster and brown timber sits about a hundred and twenty below it, so a
  * post is more than twice the corner event a quoin is, at the one place on the elevation where the
- * building has to stop against a bright lawn. A grey corner on a cream wall at a 26-tile camera is
+ * building has to stop against a bright lawn. A grey corner on a cream wall at the playing camera is
  * the "stain" this file's own ashlar note warned about.
  *
  * THE TILE IS ALSO WHAT MAKES THE ROOF OVERHANG, which is the half of its job that shows from across
@@ -866,7 +862,7 @@ function runs(seams: readonly number[]): [number, number][] {
  * tile as FLAT -- "almost all of the body sits inside forty luma" -- and drew a one-pixel catch on
  * the head with a single smooth fall of 0.55 beneath it. A smooth fall over six rows has no features
  * in it, so each cell came back as an evenly shaded lozenge, and a lattice of evenly shaded lozenges
- * is a cobbled street. Rendered at a 26-tile camera the roof read as grey masonry laid on its side.
+ * is a cobbled street. Rendered at the playing camera the roof read as grey masonry laid on its side.
  *
  * Measured off the board's roof crop at 5x, a tile is not flat and it is not a smooth gradient
  * either. It is THREE BANDS with hard transitions between them:
@@ -1677,7 +1673,7 @@ function pane(img: Img, x: number, y: number, w: number, h: number): void {
  *   - its amber tops out at luma 225 against a plaster wall at 222. The glass is NOT brighter than
  *     the wall. What makes it read as lit is that it is SATURATED warm inside a near-black frame,
  *     and a window needs no more than that. Ours reaching into `wall` put a white smudge behind a
- *     timber cross, which at a 26-tile camera is a smear, not a lamp;
+ *     timber cross, which at the playing camera is a smear, not a lamp;
  *   - the board's falloff is VERTICAL. It is brightest along the head of the opening and deepens
  *     evenly to the sill -- light coming into a room from above and falling down the glass -- with no
  *     hot spot anywhere. A radial core centred behind a mullion crossing reads as a blob.
@@ -1951,8 +1947,8 @@ function windowTile(lit: boolean): Painter {
      * crosses with a pale eye, not white ones.
      *
      * The catch stays. These sit on a bush at about luma 145 and a rose petal is 155, so hue is
-     * carrying nearly all of the contrast and ten luma is not enough to find a three-pixel mark at a
-     * 26-tile camera. One pale pixel at the top petal is what the board gives them too.
+     * carrying nearly all of the contrast and ten luma is not enough to find a three-pixel mark at the
+     * playing camera. One pale pixel at the top petal is what the board gives them too.
      */
     for (const [bx, by, warm] of [
       [6, 23, rose],
@@ -2017,7 +2013,7 @@ const STEP_Y = 28;
  *
  * Segmental rather than semicircular on purpose. A half round over a 22-wide opening is an 11-row
  * dome, which in a 32-row tile leaves no leaf under it; the board's arch is shallow, and shallow is
- * also what survives at a 26-tile camera, where a dome just reads as a blur.
+ * also what survives at the playing camera, where a dome just reads as a blur.
  */
 function archTop(x: number): number {
   const u = (x - (OPEN_L + OPEN_R) / 2) / ((OPEN_R - OPEN_L) / 2);
@@ -2034,7 +2030,7 @@ const PLANKS = [OPEN_L, OPEN_L + 6, OPEN_L + 11, OPEN_L + 17, OPEN_R + 1] as con
  * board's own door, its leaf sits between luma 76 and 102 against a wall at about 210: the opening
  * is less than half the value of what surrounds it, which is what makes it the focal point of the
  * Arrive frame from across the lawn. Ours ran 110 to 160 against a wall at 174 -- a 65-luma
- * difference where the board has 110 -- so at a 26-tile camera the door was a slightly darker patch
+ * difference where the board has 110 -- so at the playing camera the door was a slightly darker patch
  * of the same facade, and no amount of muntin light or ashlar detail survives at that separation.
  * Brightening the wall to 203 made it worse before this changed, not better.
  *
@@ -2085,7 +2081,7 @@ const DOOR_BUSH_R = [30, 28, 26, 25, 26, 28] as const;
  * It was set at 0.46 first and probed at 144 to 149 against the wall's 217, which is seventy luma --
  * past the board and into a pair of dark grey posts. 0.56 is where the probe lands on the board.
  *
- * What carries the surround at a 26-tile camera is this interval, the near-black bed joint every
+ * What carries the surround at the playing camera is this interval, the near-black bed joint every
  * seventh row, and the keyline up its outer edge. The last two are unchanged.
  */
 const COURSE_H = 7;
@@ -2188,8 +2184,8 @@ const cottageDoor: Painter = (img) => {
    * leaf at 100, is the one place on this elevation where two materials of very different value
    * meet with nothing between them.
    *
-   * It costs two of the leaf's twenty-two columns and buys the opening its depth, which at a
-   * 26-tile camera is the only thing about this door that is legible at all.
+   * It costs two of the leaf's twenty-two columns and buys the opening its depth, which at the
+   * playing camera is the only thing about this door that is legible at all.
    */
   img.rect(OPEN_L, archTop(OPEN_L) + 4, 1, DOOR_FOOT - archTop(OPEN_L) - 3, WOOD_LINE);
   img.rect(OPEN_R, archTop(OPEN_R) + 4, 1, DOOR_FOOT - archTop(OPEN_R) - 3, WOOD_LINE);
@@ -2275,7 +2271,7 @@ const cottageDoor: Painter = (img) => {
    *
    * Drawn in the window frames' own near-black `trunk`, which is mud rather than ink, on a tread at
    * about luma 190: the strongest small contrast anywhere on the facade, which is what a 5x3 mark
-   * needs to survive a 26-tile camera. Three toes over a pad, twice, the second one further in and
+   * needs to survive the playing camera. Three toes over a pad, twice, the second one further in and
    * half a step up, so they read as a stride rather than as a stamp.
    */
   for (const [px, py] of [
@@ -2351,7 +2347,7 @@ const BLOCK_H = 9;
  *
  * Three puffs "up and to the right" came out as a shallow dash. Measured on the painted tile: a
  * bounding box 13 wide by 6 tall, h/w = 0.46, widest in its middle and NARROW at the flue. At the
- * 26-tile camera that is a white tick flying off the chimney -- it reads as something thrown, not
+ * playing camera that is a white tick flying off the chimney -- it reads as something thrown, not
  * as something rising, and it was the last thing left on this building that the board does and we
  * did not.
  *

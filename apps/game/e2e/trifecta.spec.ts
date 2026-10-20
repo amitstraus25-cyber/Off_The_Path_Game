@@ -78,7 +78,10 @@ test('the skill card does not forecast what each verdict would leave running', a
   await expect(page.locator('.otp-card')).toBeVisible();
 
   await expect(page.locator('.otp-verdict')).toHaveCount(3);
-  await expect(page.locator('.otp-grants')).toHaveCount(0);
+  // Scoped to the card, which is the only place the grant marks were ever rendered. GrantMarks is
+  // deleted, so this is now a live reintroduction guard rather than a count of something that
+  // could come back anywhere: putting the answer key back on the skill card fails here.
+  await expect(page.locator('.otp-card .otp-grants')).toHaveCount(0);
   await expect(page.locator('.otp-card__asks')).toHaveCount(0);
   await expect(page.locator('.otp-running')).toHaveCount(0);
 
@@ -87,26 +90,15 @@ test('the skill card does not forecast what each verdict would leave running', a
   await expect(eyebrows).toHaveText(['What it does', 'What it asks for']);
 });
 
-test('the three verbs are defined once, on the first card only', async ({ page }) => {
-  // Cutting the per-verdict microcopy removes the answer key, but nothing else in the game says
-  // what Restrict does, and GAME_DESIGN section 4 wants the right answer discoverable.
-  await page.evaluate(() => {
-    const { store } = window.__otp!;
-    store.dispatch({ type: 'MEET', c: 'rabbit' });
-    store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
-  });
-  await expect(page.locator('.otp-card__primer')).toContainText(/Restrict/);
-  await expect(page.locator('.otp-card__primer')).toContainText(/not the extras/);
-
-  // Second card: the player has the rulebook already.
-  await page.evaluate(() => {
-    const { store } = window.__otp!;
-    store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'restrict' });
-    store.dispatch({ type: 'MEET', c: 'owl' });
-    store.dispatch({ type: 'INSPECT', s: 'word-weaver' });
-  });
-  await expect(page.locator('.otp-card__primer')).toHaveCount(0);
-});
+/*
+ * The verb primer -- that it defines Restrict, that it says "not the extras", and that it lands on
+ * the first card opened and no other -- is asserted once, in e2e/ui.spec.ts, by "the verb primer
+ * lands on the first card opened, whoever Red meets first". A near-identical test lived here and
+ * was the weaker of the two: it met the Rabbit first, and the Rabbit is Skill 1 of 3, so it passed
+ * even while the primer was rendering on `index === 1` and the player who met the Owl first never
+ * saw the rules at all. The ui.spec version meets the Owl, which is the ordering that was the
+ * actual bug; its `not the extras` assertion came from here.
+ */
 
 test('the notice is harmless when fewer than three legs are running', async ({ page }) => {
   await decide(page, { rabbit: 'restrict', 'lantern-keeper': 'allow' });
@@ -188,13 +180,22 @@ test('results lead with the boundary, and name the notice when it fired', async 
   await expect(boundary).toHaveClass(/otp-recap__row--missed/);
   await expect(boundary).toContainText(/all three ran at once/i);
   await expect(boundary).toContainText(/nothing on any card was false/i);
-  // 350 for the three verdicts plus 200 for the route and the word left at the post: no question
-  // bonus and no boundary bonus. Going to the post is both how the word goal gets done and how
-  // the letter leaves the basket -- the errand and the trap are the same walk.
-  await expect(page.locator('.otp-hero__score')).toContainText('550');
+  /*
+   * The score is shown, not spelled out. Totals belong to packages/core/test/scoring.test.ts,
+   * which pins every run shape under a 100% gate; asserting one here as well means a weight change
+   * in content/game.json reddens a screen test, which is the thing CLAUDE.md rule 3 promises
+   * cannot happen. Worth writing down, since that table does not name this shape: this run is 550
+   * -- 350 for the three verdicts plus 200 for the route and the word left at the post, with no
+   * question bonus and no boundary bonus -- and it is the only shape here that reads a notice.
+   * Going to the post is both how the word goal gets done and how the letter leaves the basket:
+   * the errand and the trap are the same walk.
+   */
+  await expect(page.locator('.otp-hero__score')).toBeVisible();
 });
 
-test('the careful reader keeps the boundary and scores 1,000', async ({ page }) => {
+test('the careful reader keeps the boundary and gives up two errands on purpose', async ({
+  page,
+}) => {
   await page.evaluate(() => {
     const { store } = window.__otp!;
     for (const [c, s, v] of [
@@ -224,7 +225,9 @@ test('the careful reader keeps the boundary and scores 1,000', async ({ page }) 
   }
   await page.getByRole('button', { name: /Step inside/ }).click();
 
-  await expect(page.locator('.otp-hero__score')).toContainText('1,000');
+  // The total this line reaches is the perfect run's, and e2e/results-payoff.spec.ts is where that
+  // one exact string is asserted; packages/core proves the arithmetic. Here it only has to appear.
+  await expect(page.locator('.otp-hero__score')).toBeVisible();
   await expect(page.locator('.otp-recap__row--boundary')).not.toHaveClass(/--missed/);
   // One of Grandma's three, and that is the top score: the other two need a messenger and a
   // lantern this line deliberately refused. Carrying out all three means running all three at

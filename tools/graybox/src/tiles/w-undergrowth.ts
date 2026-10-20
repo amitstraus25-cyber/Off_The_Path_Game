@@ -7,6 +7,40 @@
  * plays at (ask `cameraFor` in @otp/core; never write the number down again) and
  * uninteresting enough to survive being seen a hundred times.
  *
+ * 2026-10-20, TENTH PASS: THE VERTICAL BLEED IS TAPERED. THE LONE TILE STOPS BEING A PLUS SIGN AND
+ * THE FILE KEEPS EVERY SEAM THE NINTH PASS CLOSED.
+ *
+ * A REGRESSION FOUND IN THE RENDER AFTER THE NINTH PASS LANDED, not a retune. The ninth pass's
+ * reasoning is sound and is kept whole; what it did not account for is the tile with nothing to
+ * merge WITH on the vertical axis, and the map says that is most of them -- 201 horizontal
+ * adjacencies against 184 vertical, so the common plant has a neighbour beside it and lawn above and
+ * below. Its rise and settle therefore print against bare grass, and they printed as naked
+ * rectangular stubs: twelve columns wide at row 0 and still twelve at row 9, dead-straight sides,
+ * keyline round each. With the side bleed doing the same across rows 17..23, a lone `bush` at 10x
+ * was a PLUS SIGN, and at 1x the hero frame carried crosses and T-junctions.
+ *
+ * A TILE PAINTER CANNOT KNOW ITS NEIGHBOURS, so the fix is not conditional bleeding. It is that the
+ * tab itself has to read as foliage whether or not anything meets it. Every lobe in a vertical run
+ * is now GRADED -- shoulder, neck, one edge crescent, each narrower than the last and each set a
+ * column or two off it -- and the two broad diverging edge leaves are one narrow converging one. The
+ * full argument, and why the side runs never had the fault, is above `BUSH_BLEED_V`.
+ *
+ *     width of the vertical run at the tile edge      before        after
+ *     bush                       row 0 / row 31      12 / 13        7 / 7
+ *     flower-white               row 0 / row 31      12 / 12        7 / 6
+ *     flower-pink                row 0 / row 31      14 / 13        7 / 7
+ *     flower-red                 row 0 / row 31      12 / 12        6 / 7
+ *
+ * AND EVERY FIGURE THE NINTH PASS BOUGHT IS HELD. `map-forest.json` is byte-identical across this
+ * change, checked with sha256 rather than assumed -- no undergrowth painter feeds any placement
+ * decision, so no tile moves and the composition line does not shift a character. The four stacking
+ * tiles still pass guard 5 (f) in all 16 ordered pairs and all four mirror pairings, so the merge
+ * counts stand at 87 of 184 vertical and 249 of 385 either-axis by construction. Measured on the
+ * plant alone: self-mirror `bush` 0.734 -> 0.749, `bush-low` and `bush-tall` unmoved at 0.734 and
+ * 0.624, all three under the 0.80 cap; worst plain-bush pair 0.498 -> 0.526 against the 0.64 cap;
+ * `bush` 619 -> 584 px against a 300 floor; the stack fold (h) 8 -> 17 luma against a 40 cap.
+ * `bush-low` still refuses to stack, for the reason recorded where its vertical bleed would go.
+ *
  * 2026-10-20, NINTH PASS: THE BLEED GOES UP AND DOWN. FOUR TILES STACK, AND HALF THE WORLD'S
  * VERTICAL SEAMS CLOSE WHERE NONE DID.
  *
@@ -37,15 +71,16 @@
  *    at every join down a file. The top of a bled column is not the top of the plant: it is the part
  *    that goes UNDER the plant above it, and foliage under another mass is in its shadow. See the
  *    tuck in `seat()`, the leaves that keep it from being a slab, and guard 5's bound (h), which
- *    holds the two sides of a fold within 40 luma of each other and measured 7 to 20 after.
+ *    holds the two sides of a fold within 40 luma of each other and measured 7 to 20 after this pass
+ *    and 11 to 17 after the taper.
  *
  * 3. THE BAND IS OF COLUMNS, AND IT HAS TO SURVIVE THE MIRROR TWICE. A side seam is one tile's right
  *    edge against another's left and `forest-map.ts`'s flip exchanges those, so the eighth pass only
  *    had to make each tile's own two edges overlap in rows. A stack seam is one tile's bottom
  *    against another's top; the flip exchanges neither and mirrors each tile's COLUMNS
- *    independently. So every run in this axis lies near the middle of the tile -- the four share
- *    columns 12..20 -- and guard 5 floods all four pairings of all 16 ordered pairs rather than
- *    trusting the arithmetic.
+ *    independently. So every run in this axis lies near the middle of the tile -- the four shared
+ *    columns 12..20 when this pass landed and 15..18 since the taper narrowed them -- and guard 5
+ *    floods all four pairings of all 16 ordered pairs rather than trusting the arithmetic.
  *
  * 4. AND `bush-low` DOES NOT STACK. It is the round's one refusal, it cost 56 of the 97 vertical
  *    pairs that still do not merge, and the two numbers that settled it are recorded where its
@@ -364,26 +399,27 @@
  * patch of the OLD lawn, and the mismatch prints a hard rectangle round every plant in the field.
  */
 import {
+  clamp01,
   Img,
   chevron,
   ember,
   keyline,
   lumaOf,
+  mix,
   noise,
   pull,
   rose,
   rust,
+  smooth,
+  TILE,
   tone,
   tuftTone,
   valueNoise2D,
 } from '../paint.ts';
-import type { RGBA } from '../paint.ts';
+import type { Painter, RGBA } from '../paint.ts';
 import { GROUND_TILES } from './w-ground.ts';
 
-const TILE = 32;
 const AREA = TILE * TILE;
-
-type Painter = (img: Img) => void;
 
 /* ------------------------------------------------------------------------------- the three lines */
 
@@ -448,14 +484,6 @@ const CAP_LINE = pull(keyline('wood'), 0.62, 0.52);
  * still falls under the edge census's threshold, so a boulder's foot crosses without registering as
  * an edge at all.
  */
-/** An opaque blend of two ramp colours. Not alpha: the result is computed and fully opaque. */
-const mix = (a: RGBA, b: RGBA, w: number): RGBA => [
-  Math.round(a[0] + (b[0] - a[0]) * w),
-  Math.round(a[1] + (b[1] - a[1]) * w),
-  Math.round(a[2] + (b[2] - a[2]) * w),
-  255,
-];
-
 /*
  * The hue shifts with the light, and this is the fix for the colour-variety census.
  *
@@ -507,13 +535,14 @@ type Mass = { readonly t: Float32Array; readonly on: Uint8Array };
 
 const mass = (): Mass => ({ t: new Float32Array(AREA), on: new Uint8Array(AREA) });
 
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
-
-/** Smoothstep. Used wherever a plane turns, so the turn takes four pixels rather than one. */
-const ease = (v: number): number => {
-  const s = clamp01(v);
-  return s * s * (3 - 2 * s);
-};
+/**
+ * Smoothstep, CLAMPED. Used wherever a plane turns, so the turn takes four pixels rather than one.
+ *
+ * `paint.ts`'s `smooth` is the bare curve and takes an input already in 0..1; this file's callers
+ * pass unbounded distances, so the clamp is this wrapper's whole reason to exist. Kept under its own
+ * name because `smooth` now means the unclamped curve everywhere in the generator.
+ */
+const ease = (v: number): number => smooth(clamp01(v));
 
 /**
  * A slow, shallow wobble laid over a finished mass: the colour-variety fix, and the one place in
@@ -1773,44 +1802,99 @@ const BUSH_BLEED: readonly Lobe[] = [
  * closed and at the same pitch -- and closing it needs mass at row 31 of the upper tile AND at row 0
  * of the lower one, because the map lays the same tile in both positions.
  *
- * So the bottom is the side bleed again -- the body is already within three rows, two crescents
- * reach it -- and the top is the case `SPIRE` found the wall on: a bleed reads as foliage only where
- * the plant's own body already comes within three or four rows of the edge, and eight is not three.
- * What crossed it is `SPIRE`'s own answer rather than a longer limb: ONE SHOULDER CLUMP, inboard,
- * standing on the crown and carrying the two edge crescents. The mass runs crown-shoulder-crescent-
- * edge without a break, and the two leaves that run off the top edge lie ON that rather than
- * bridging a gap. The alternative -- crescents at row 0 with lawn under them -- is the fault the
- * side bleed's third draft printed, a dark BAR hanging off the plant, and at the top edge it would
- * have printed one at the camera's own tile pitch across the whole field, which is worse than the
- * gap it replaces.
+ * So the bottom is the side bleed again -- the body is already within three rows -- and the top is
+ * the case `SPIRE` found the wall on: a bleed reads as foliage only where the plant's own body
+ * already comes within three or four rows of the edge, and eight is not three. What crossed it is
+ * `SPIRE`'s own answer rather than a longer limb: SHOULDER CLUMPS, inboard, standing on the crown
+ * and carrying what reaches the edge. The mass runs crown-shoulder-neck-crescent-edge without a
+ * break, and the leaf that runs off the top edge lies ON that rather than bridging a gap. The
+ * alternative -- crescents at row 0 with lawn under them -- is the fault the side bleed's third
+ * draft printed, a dark BAR hanging off the plant, and at the top edge it would have printed one at
+ * the camera's own tile pitch across the whole field, which is worse than the gap it replaces.
  *
  * THE BAND IS OF COLUMNS AND IT HAS TO SURVIVE THE MIRROR TWICE. A side seam is one tile's right
  * edge against another's left, and `forest-map.ts`'s flip swaps those, so the side bleed only had to
  * make its own two edges overlap in rows. A vertical seam is one tile's BOTTOM against another's
  * TOP, and the flip does not swap those -- it mirrors the columns of each tile independently. So
- * every run below spans columns 12..21 or wider, nearly centred on the tile, and the guard at the
- * foot of this file floods all four pairings of every ordered pair rather than taking that on trust.
+ * every run below lies nearly centred on the tile, and the guard at the foot of this file floods all
+ * four pairings of every ordered pair rather than taking that on trust.
  *
- * AND IT IS A WAIST IN THE OTHER AXIS. The runs are 10 to 13 columns on a plant that is 32 wide, so
- * a file of these is lobe-waist-lobe down the column, with lawn coming back in either side of the
- * join, exactly as a bed of them is lobe-waist-lobe across the row.
+ * AND IT IS A WAIST IN THE OTHER AXIS. The runs are 6 or 7 columns on a plant that is 32 wide, so a
+ * file of these is lobe-waist-lobe down the column, with lawn coming back in either side of the
+ * join, exactly as a bed of them is lobe-waist-lobe across the row. (They were 10 to 13 when this
+ * pass landed; the tenth pass tapered them, and its note is below.)
+ */
+/*
+ * 2026-10-20, TENTH PASS: THE SAME BLEED, TAPERED. The ninth pass's arithmetic above is right and
+ * every bit of what it bought is kept; what it did not account for is the tile with nothing to merge
+ * WITH on this axis, and that is most of them.
+ *
+ * THE FAULT, and it is the ninth pass's own rule turned on its own work. The map reports only 4.7%
+ * lone bushes, but it reports 201 horizontal adjacencies against 184 vertical ones -- so the common
+ * case is a plant with a horizontal neighbour and NO vertical one, and that plant prints its rise
+ * and its settle against bare lawn. A tile painter cannot know its neighbours, so a bleed is drawn
+ * once and has to be right both ways; the side runs are, and these were not. Rendered alone at 20x,
+ * `bush` was 12 columns wide on row 0 and stayed 12, 11, 12, 12, 12, 12, 12, 12, 12, 11 all the way
+ * down to row 9 before the body widened at all -- a dead-straight-sided block ten rows tall with a
+ * keyline round it -- and 13, 11, 13, 12, 12 at the bottom. With the side bleed doing the same thing
+ * across rows 17..23, the lone tile printed as a PLUS SIGN, and the hero frame carried several
+ * unmistakable crosses and T-junctions at 1x. That is "the seam must read as foliage, not a
+ * rectangle", which the eighth pass named as the whole risk of bleeding at all.
+ *
+ * WHY THE SIDE RUNS GET AWAY WITH IT AND THESE DID NOT, which is the thing to understand before
+ * moving a number. It is not `rim()`: that resolves the outermost lane to a channel on all four
+ * edges and did its job on all four. It is how far the run stands PROUD of the body it leaves. A
+ * side run juts six columns past a body edge that is already at column 6, over the plant's widest
+ * eleven rows, so the eye reads it as the waist widening. The rise stood TEN rows past a crown at
+ * row 10 at a constant twelve columns, which is half the plant's height again at full width: a
+ * chimney, not a waist. The ninth pass wrote the rule down and did not apply it to itself.
+ *
+ * THE FIX IS THE SHAPE OF THE TAB, NOT A CONDITION ON DRAWING IT. Every lobe in the run is now
+ * GRADED -- on `bush`'s rise, shoulders at r 3.2 and 2.9, a neck at r 2.6 and 2.1, and ONE edge
+ * crescent at r 2.4 where the ninth pass had two at r 3.0 and 2.8 -- and each is set a column or two
+ * off the last, so the silhouette both narrows and LEANS as it leaves the body. With one narrow leaf
+ * converging into the crescent instead of two broad ones diverging under it (see `BUSH_BLADES`),
+ * `bush` now runs 7, 7, 10, 12, 12, 13 columns at rows 0, 2, 4, 6, 8, 10 and 7, 7, 10, 25 at rows
+ * 31, 29, 27, 25. That is a frond reaching out of the mass, and at a seam it is still a waist: two
+ * tiles meet at 7 columns against 7.
+ *
+ * NOTHING THE NINTH PASS BOUGHT IS SPENT. `map-forest.json` is byte-identical across this change --
+ * the undergrowth painters feed no placement decision, which is worth knowing and was checked rather
+ * than assumed -- and the four stacking tiles still pass guard 5 (f) in all 16 ordered pairs and all
+ * four mirror pairings, so the merge counts are the same 87 of 184 and 249 of 385 by construction.
+ * The caps moved the right way or barely: `bush` 0.734 -> 0.749 of its own mirror against a 0.80 cap,
+ * `bush-low` and `bush-tall` untouched, the worst plain-bush pair 0.498 -> 0.526 against 0.64, and
+ * the stack fold (h) 8 -> 17 luma against a 40 cap. `bush` lost 35 px of plant, 619 -> 584, which is
+ * the taper and is a long way above the 300 floor that exists to stop exactly that being overdone.
  */
 const BUSH_BLEED_V: readonly Lobe[] = [
-  // THE RISE. The shoulder first: its centre is INSIDE the safe box, unlike every crescent in this
-  // file, because it is not an edge lobe -- it is the piece of plant that carries them. At r 3.0 it
-  // spans rows 3.2..11.2 and meets the crown clump at (13.8, 12.4), whose own top is row 8.
-  { x: 12.6, y: 7.6, r: 3.2, band: 2 },
-  { x: 17.2, y: 6.4, r: 3.0, band: 2 },
-  // Then the two crescents, at different heights for the reason the side pair are: one clump alone
-  // is one arc, and its keyline runs dead straight down the side of the join.
-  { x: 12.0, y: 1.0, r: 3.0, band: 0 },
-  { x: 17.2, y: 0.2, r: 2.8, band: 0 },
-  // THE SETTLE, which needs no shoulder: the foot clumps at (14.6, 22.6) and (19.4, 22.4) already
-  // reach row 27, so a crescent centred just past row 31 lands on the plant and not beside it.
-  // Shifted right of the rise, so the plant does not become its own mirror about column 16 -- the
-  // two bands still share columns 12..21, which is what makes all four pairings join.
-  { x: 15.2, y: 30.8, r: 2.6, band: 0 },
-  { x: 19.4, y: 31.6, r: 2.4, band: 0 },
+  // THE RISE, AND IT IS A FROND RATHER THAN A CHIMNEY: see the tenth pass's note above for what two
+  // equal crescents under two diverging leaves printed, and why every lobe below is GRADED.
+  //
+  // The shoulder first: its centre is INSIDE the safe box, unlike every crescent in this file,
+  // because it is not an edge lobe -- it is the piece of plant that carries them. At r 3.2 it spans
+  // rows 5.7..11.5 and meets the crown clump at (13.8, 12.4), whose own top is row 8.
+  { x: 12.2, y: 8.6, r: 3.2, band: 2 },
+  { x: 16.6, y: 7.2, r: 2.9, band: 2 },
+  // THE NECK, narrower than the shoulders and gathered in towards the middle of the tile. Both
+  // halves of that are the taper: narrower closes the silhouette in as it leaves the body, and
+  // gathering it leans the frond, so the two flanks are not a pair of parallel rules five rows long.
+  { x: 14.0, y: 5.2, r: 2.6, band: 1 },
+  { x: 17.0, y: 4.0, r: 2.1, band: 1 },
+  // And ONE crescent at the edge, smaller again. Two is what the ninth pass used and two is what
+  // ruled the flanks: clumps of r 3.0 and 2.8 side by side five columns apart cover row 0 from
+  // column 9 to column 20 however narrow the plant behind them is, because a chord through a clump
+  // that big is nearly its own diameter. One of r 2.4 covers five, and the leaf below carries the
+  // point out of it.
+  { x: 16.0, y: 0.9, r: 2.4, band: 0 },
+  // THE SETTLE, graded the same way and for the same reason -- two equal crescents under two parallel
+  // leaves printed the same slab at the bottom edge that the rise printed at the top. The foot clumps
+  // at (14.6, 22.6) and (19.4, 22.4) already reach row 26, so the grade starts from them rather than
+  // from a shoulder of its own. It leans RIGHT where the rise leans LEFT, so the plant does not
+  // become its own mirror about column 16 and the two runs still share enough lanes to join in all
+  // four pairings.
+  { x: 17.4, y: 27.2, r: 2.5, band: 0 },
+  { x: 17.4, y: 30.6, r: 2.0, band: 0 },
 ];
 
 /*
@@ -2314,30 +2398,37 @@ const BUSH_BLADES: readonly Blade[] = [
   leaf(4.8, 20.8, 0.53, 5.0, 0.34, 2.4),
   leaf(26.6, 19.4, 0.97, 5.4, 0.34, 2.6),
   leaf(27.2, 22.4, 0.04, 4.8, 0.28, 2.4),
-  // AND THE FOUR THAT RUN OFF THE TOP AND THE BOTTOM, added with `BUSH_BLEED_V`. Same job as the
-  // four above and the same reason: without them a bleed is bare mass, a five-row pad of flat
-  // mid-green at each edge with no leaf in it, and a file of them reads as discs joined by webbing.
-  // Their tips land at rows -1.2 and 32.0, so what prints at the edge is the broad part of a leaf
-  // and the point is in the neighbouring tile. Least lit, and last, because `leafBlades` resolves an
-  // overlap in favour of the EARLIER blade and nothing at a tile edge should win a pixel from the
-  // body. The two at the top are the brighter pair: the rise is the top of the plant and the light
-  // comes from up and left, so a dark crown over a lit waist would be the one thing a single light
-  // across a plant cannot do.
-  // THE THREE THAT REACH THE TOP RIM, and they are the fix for the dark bar the first drafts of the
-  // rise printed across it -- the same fault `BUSH_LOW_BLADES` records at the plant's foot ("a
-  // straight horizontal near-black band the width of the plant -- a mouth"), in the other direction.
-  // `seat()`'s tuck clamps the top six rows to a roll, which is the right VALUE and, with no leaf on
-  // it, a flat one: row 1 came out 79, 79, 80, 80, 80, 80 across, a ruled line at the camera's own
-  // tile pitch. These two are ROOTED INSIDE THE TUCK, at rows 2.6 and 3.2, so `leafBlades` reads
-  // their level off clamped mass and they come out mid-green against it rather than at the ramp's
-  // ceiling: a leaf in the fold, which is what the board shows where one crown goes under another.
-  // The third is rooted on the lit crown and lies up into the rise, which breaks the straight channel
-  // the boundary between the two would otherwise leave -- the same job as the interior leaf above.
-  leaf(12.2, 3.2, 0.72, 5.2, 0.34, 2.6),
-  leaf(17.0, 2.6, 0.79, 4.8, 0.28, 2.4),
+  // AND ONE LEAF OFF THE TOP, ONE OFF THE BOTTOM, which is the tenth pass's half of the change and
+  // not the same arrangement as the four above. Same JOB -- without a leaf a bleed is bare mass, a
+  // pad of flat mid-green at the edge with nothing in it, and two tiles meet webbing rather than
+  // foliage -- and a different shape, because the vertical axis has a constraint the side axis does
+  // not.
+  //
+  // THE NINTH PASS PUT TWO A SIDE HERE AND THEY WERE WHAT RULED THE FLANKS. A leaf is widest a
+  // quarter of the way up from its base, so two of them rooted three rows from the top edge and
+  // DIVERGING -- one leaning left, one leaning right -- are at their broadest exactly where they
+  // cross row 2, five columns apart, and their far flanks are two parallel rules. Rows 0..9 came out
+  // 12, 11, 12, 12, 12, 12, 12, 12, 12, 11 columns wide: a chimney. One leaf, narrower (half-width
+  // 2.0 against 2.6) and leaning INTO the crescent above it rather than away from it, puts its
+  // broad part on the neck and its point on the edge, which is a frond.
+  //
+  // THE TOP ONE IS ROOTED INSIDE `seat()`'s TUCK, at row 3.0, and that constraint is load-bearing
+  // rather than incidental: `leafBlades` reads ONE level for a whole leaf off the mass at its root,
+  // and the tuck only clamps columns that actually reach row 0. A leaf rooted at row 7 on the
+  // shoulder -- which is where the first draft of the taper put it, to get a longer convergence --
+  // reads off unclamped mass and carries luma 175 to within four rows of the edge. Guard 5's bound
+  // (h) caught it at 59 apart against a 40 cap, which is what that bound is for. The same applies to
+  // the MASS: nothing in rows 1..4 may sit in a column that does not reach row 0, or the tuck misses
+  // it and the fold goes lopsided. This is the one thing to re-check after moving any number here.
+  //
+  // Least lit, because `leafBlades` resolves an overlap in favour of the EARLIER blade and nothing
+  // at a tile edge should win a pixel from the body. The one BETWEEN them is not an edge leaf at
+  // all: it is rooted on the lit crown and lies up into the rise, which breaks the straight channel
+  // the boundary between the crown and the shoulder would otherwise leave -- the same job as the
+  // interior leaf above, and the reason it keeps its ordinary width.
+  leaf(14.6, 3.0, 0.772, 4.6, 0.34, 2.0),
   leaf(14.6, 9.0, 0.6, 6.0, 0.46, 2.9),
-  leaf(15.6, 25.6, 0.25, 6.4, 0.32, 2.8),
-  leaf(19.8, 26.0, 0.22, 6.0, 0.26, 2.6),
+  leaf(17.0, 25.4, 0.238, 6.4, 0.32, 2.0),
 ];
 
 /*
@@ -2585,24 +2676,27 @@ const MOUND_PLAN: Flower = {
     { x: 0.4, y: 20.6, r: 3.0, band: 0 },
     { x: 30.6, y: 19.2, r: 3.0, band: 1 },
     { x: 31.4, y: 21.8, r: 2.8, band: 0 },
-    // The rise and the settle. The mound's crown already reaches row 6 at columns 16..21, so one
-    // shoulder carries the two crescents; its foot reaches row 27, so the settle needs none.
-    { x: 15.0, y: 6.2, r: 3.0, band: 2 },
-    { x: 13.2, y: 1.0, r: 3.0, band: 0 },
-    { x: 18.0, y: 0.4, r: 2.8, band: 0 },
-    { x: 15.4, y: 30.6, r: 2.8, band: 0 },
-    { x: 19.6, y: 31.4, r: 2.6, band: 0 },
+    // The rise and the settle, GRADED: shoulder, neck, one crescent, each narrower than the last.
+    // See the tenth pass's note above `BUSH_BLEED_V` for why two equal crescents under two diverging
+    // leaves is a chimney rather than a frond. The mound's crown already reaches row 8 at columns
+    // 12..20 and its foot row 25, so each grade starts from the plant's own mass.
+    { x: 14.0, y: 7.4, r: 3.0, band: 2 },
+    { x: 14.6, y: 4.8, r: 2.2, band: 1 },
+    { x: 15.0, y: 0.8, r: 2.4, band: 0 },
+    { x: 16.6, y: 27.4, r: 2.6, band: 0 },
+    { x: 16.8, y: 30.8, r: 1.9, band: 0 },
   ],
   edge: [
     leaf(5.2, 17.8, 0.47, 5.8, 0.36, 2.8),
     leaf(4.6, 20.8, 0.53, 5.4, 0.3, 2.6),
     leaf(26.8, 19.2, 0.97, 5.6, 0.3, 2.8),
     leaf(27.2, 21.8, 0.04, 5.2, 0.26, 2.6),
-    leaf(13.0, 3.0, 0.72, 5.0, 0.32, 2.6),
-    leaf(17.6, 2.4, 0.79, 4.6, 0.26, 2.4),
+    // ONE leaf out of each vertical edge, narrow, and rooted inside `seat()`'s tuck so it reads off
+    // clamped mass. Two of them diverging is what printed the flat-sided stub; one that tapers to a
+    // point is the leaf the board draws where one crown goes under another.
+    leaf(14.2, 3.2, 0.78, 4.6, 0.32, 2.0),
     leaf(15.0, 8.8, 0.62, 5.4, 0.4, 2.8),
-    leaf(15.4, 26.0, 0.25, 6.0, 0.3, 2.8),
-    leaf(19.4, 26.4, 0.22, 5.6, 0.26, 2.6),
+    leaf(16.2, 25.6, 0.235, 6.4, 0.3, 2.2),
   ],
   rosette: [16, 17, 5, 9.5, 5250, 6],
   // Far enough apart to keep a run of leaf between them. At eleven pixels across, blooms any closer
@@ -2687,25 +2781,25 @@ const SPRAWL_PLAN: Flower = {
     { x: 0.4, y: 21.2, r: 2.6, band: 0 },
     { x: 30.6, y: 16.8, r: 2.8, band: 1 },
     { x: 31.4, y: 19.0, r: 2.6, band: 0 },
-    // The rise comes off the sprawl's own stems, which already climb to row 8, so one shoulder does
-    // it. Its crescents lean the other way from the mound's, for the reason the side pair do: a
-    // bank that alternates the two must not print one fold at one place along it.
-    { x: 14.0, y: 7.4, r: 3.0, band: 2 },
-    { x: 12.6, y: 1.2, r: 2.8, band: 0 },
-    { x: 17.6, y: 0.6, r: 3.0, band: 0 },
-    { x: 14.6, y: 30.8, r: 2.6, band: 0 },
-    { x: 19.0, y: 31.6, r: 2.4, band: 0 },
+    // The rise comes off the sprawl's own stems, which already climb to row 8, so the shoulder has
+    // short work; a neck and one crescent grade it down to the edge, which is the tenth pass's
+    // taper -- see the note above `BUSH_BLEED_V`. The rise leans RIGHT and the settle LEFT, the
+    // other way round from the mound's, for the reason the side pair do: a bank that alternates the
+    // two must not print one fold at one place along it.
+    { x: 15.6, y: 7.6, r: 3.0, band: 2 },
+    { x: 16.6, y: 4.6, r: 2.2, band: 1 },
+    { x: 17.2, y: 0.8, r: 2.4, band: 0 },
+    { x: 15.2, y: 27.8, r: 2.6, band: 0 },
+    { x: 15.4, y: 30.8, r: 2.1, band: 0 },
   ],
   edge: [
     leaf(5.4, 19.2, 0.47, 5.8, 0.34, 2.8),
     leaf(4.8, 21.4, 0.53, 5.4, 0.28, 2.6),
     leaf(26.6, 17.0, 0.97, 5.6, 0.34, 2.8),
     leaf(27.0, 19.2, 0.04, 5.2, 0.28, 2.6),
-    leaf(12.4, 3.2, 0.71, 5.0, 0.3, 2.6),
-    leaf(17.2, 2.6, 0.8, 4.6, 0.26, 2.4),
+    leaf(17.6, 3.4, 0.7, 5.0, 0.3, 2.0),
     leaf(12.8, 10.8, 0.62, 5.0, 0.38, 2.8),
-    leaf(14.8, 26.2, 0.25, 5.8, 0.3, 2.8),
-    leaf(18.8, 26.6, 0.21, 5.4, 0.26, 2.6),
+    leaf(14.6, 26.2, 0.262, 6.2, 0.3, 2.2),
   ],
   rosette: [15, 19, 5, 8.5, 6350, 5.6],
   // Five open blooms gathered on the lit side with one reaching out right, which is how the board
@@ -2821,24 +2915,26 @@ const SPIRE_PLAN: Flower = {
     { x: 27.6, y: 20.6, r: 2.8, band: 1 },
     { x: 30.6, y: 19.4, r: 3.0, band: 1 },
     { x: 31.4, y: 21.6, r: 2.8, band: 0 },
-    // THE ONE RISE IN THIS FILE THAT NEEDS NO SHOULDER. The spire is the tall plant -- rows 3..28 --
-    // so its crown is already within three rows of the top edge at columns 13..18, which is exactly
-    // the condition the eighth pass's rule states. Two crescents and nothing else, and its bud at
-    // (16, 6) is still the highest bright mark on it.
-    { x: 13.6, y: 1.2, r: 2.8, band: 0 },
-    { x: 18.4, y: 0.6, r: 2.6, band: 0 },
-    { x: 14.6, y: 30.8, r: 2.6, band: 0 },
-    { x: 19.2, y: 31.4, r: 2.4, band: 0 },
+    // THE ONE RISE IN THIS FILE THAT NEEDS NO SHOULDER, AND NOW NO NECK EITHER. The spire is the
+    // tall plant -- rows 3..28 -- so its crown is already within three rows of the top edge at
+    // columns 13..18, which is exactly the condition the eighth pass's rule states, and the taper
+    // the tenth pass had to build out of graded clumps on the other three is simply the plant's own
+    // shape here. ONE crescent where the ninth pass used two: two at r 2.8 and 2.6, five columns
+    // apart, covered rows 0..3 at twelve columns flat however narrow the spire behind them was. Its
+    // bud at (16, 6) is still the highest bright mark on it.
+    { x: 16.0, y: 0.9, r: 2.3, band: 0 },
+    // The settle does need the grade, because the spray's foot is wider than its crown: one clump
+    // standing on the body at row 28 and a smaller one at the edge.
+    { x: 17.0, y: 28.0, r: 2.5, band: 0 },
+    { x: 16.8, y: 30.8, r: 2.2, band: 0 },
   ],
   edge: [
     leaf(4.6, 18.2, 0.47, 5.0, 0.34, 2.8),
     leaf(4.0, 20.4, 0.53, 4.6, 0.28, 2.6),
     leaf(27.2, 19.8, 0.97, 5.0, 0.32, 2.8),
     leaf(27.6, 22.0, 0.04, 4.6, 0.26, 2.6),
-    leaf(13.4, 3.4, 0.72, 5.2, 0.3, 2.6),
-    leaf(18.2, 2.8, 0.79, 4.8, 0.26, 2.4),
-    leaf(14.8, 26.0, 0.25, 5.8, 0.3, 2.8),
-    leaf(18.8, 26.4, 0.21, 5.4, 0.26, 2.6),
+    leaf(15.6, 3.4, 0.775, 4.8, 0.3, 2.0),
+    leaf(16.4, 26.0, 0.238, 6.2, 0.3, 2.2),
   ],
   rosette: [16, 15, 5, 8.5, 7450, 5.8],
   // One closed bud at the tip, then TWO open crosses at `arm` 3 -- nine pixels, the mound's own

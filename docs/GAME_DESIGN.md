@@ -115,10 +115,12 @@ because it carries the lesson; this one is a scored errand, and forcing the pane
 including the restrict/reject/restrict line where `strangers` is never earned and the goal cannot
 be met anyway, would buy nothing and cost a click.
 
-There are two 1,000-point lines, not one: restrict/reject/restrict keeps the lantern bounded and
-scores the ceiling with one errand goal, and restrict/reject/allow trades the lantern's best
-verdict for the capability that reads the door note and ties it with two. Carrying out all three
-goals costs the boundary and scores 750. `pnpm sim` prints all of this.
+There are two 1,000-point lines, not one, both with the two bonus questions asked:
+restrict/reject/restrict keeps the lantern bounded and scores the ceiling with one errand goal from
+anywhere on the map, and restrict/reject/allow trades the lantern's best verdict for the capability
+that reads the door note and ties it with two — but only if she actually reads both notices; walking
+straight past them it is 900. Carrying out all three goals costs the boundary and scores 750.
+`pnpm sim` prints all of this, on the shape that reads both notices.
 
 ## 5c. Taking an offer on trust (added 2026-10-18)
 
@@ -138,12 +140,15 @@ happen. The fortieth prompt of the day gets the same half-second as the first.
 what it is worth is `scoring.trustBonus`, paid once at the end and only if Red arrived with no
 flags. So:
 
-| Line                                               | Total              | Ending           |
-| -------------------------------------------------- | ------------------ | ---------------- |
-| Careful `restrict/reject/restrict`                 | 1,000              | Clean arrival    |
-| Careful `restrict/reject/allow`, both notices read | 1,000              | Clean arrival    |
-| Lantern **on trust**, the rest read                | 1,000              | Clean arrival    |
-| Three quick yeses                                  | lowest in the game | The wolf's house |
+Every row below asks the two bonus questions; the run shape is in its own column, because two of the
+three errand goals need a notice read and the same verdicts score differently without them.
+
+| Line                                | Run shape                       | Total              | Ending           |
+| ----------------------------------- | ------------------------------- | ------------------ | ---------------- |
+| Careful `restrict/reject/restrict`  | either                          | 1,000              | Clean arrival    |
+| Careful `restrict/reject/allow`     | both notices read (900 without) | 1,000              | Clean arrival    |
+| Lantern **on trust**, the rest read | both notices read (900 without) | 1,000              | Clean arrival    |
+| Three quick yeses                   | either                          | lowest in the game | The wolf's house |
 
 Trusting the Lantern Keeper ties the ceiling, because their card genuinely has nothing hidden in
 it. You only know that by having read it. Trusting all three lights every capability, fires the
@@ -190,10 +195,29 @@ Amended 2026-10-17: the errand became three goals (see **The errand** below). Th
   - `route` — find the cottage before dark. Needs `basket`. No act.
   - `word` — leave word at the post. Needs `word`, and the `forest-post` notice must have been read. **This is also where the trap is**: the errand and the trap are the same walk.
   - `sign` — read the note on Grandma's door. Needs `strangers`, and the `cottage-door` notice must have been read. This is the only thing `strangers` is good for, and it is why taking the lantern at its word is now rational rather than self-harm.
-- Maximum **1,000**. You cannot collect all three goals and keep the boundary: all three goals require all three capabilities, which is the trifecta. 300 in goals costs the 200 boundary bonus plus the per-skill price, so the full errand peaks at 750.
-- Totals as shipped, without questions and (with), walking straight to the cottage: perfect 900 (1,000); restrict-all 850 (950); reject-all 600 (700); allow-all 100 (200). Going to the post and the door is worth up to 200 more. Two lines reach 1,000: `restrict / reject / restrict` and `restrict / reject / **allow**`.
+- Maximum **1,000**. You cannot collect all three goals and keep the boundary: all three goals require all three capabilities, which is the trifecta. 300 in goals costs the 200 boundary bonus plus the per-skill price, so the full errand peaks at 750 — `restrict/restrict/allow`, both notices read, questions asked, and it draws the **close call** ending rather than a clean one, because reading the post with all three legs live is the trap firing.
+- **Totals as shipped. The run shape is part of the number** — two of the errand goals need a notice
+  read, so the same three verdicts score differently depending on where Red walked, and a table that
+  does not say which shape it is describing is not a table. Both columns are without questions and
+  (with the +100 question bonus). Printed by `pnpm sim`, which always reads both notices, so its table
+  is the right-hand column.
+
+  | Line                       | Straight to the cottage, no notice read | Both notices read |
+  | -------------------------- | --------------------------------------- | ----------------- |
+  | `restrict/reject/restrict` | 900 (1,000)                             | 900 (1,000)       |
+  | `restrict/reject/allow`    | 800 (900)                               | 900 (1,000)       |
+  | restrict-all               | **750 (850)**                           | 850 (950)         |
+  | reject-all                 | 600 (700)                               | 600 (700)         |
+  | allow-all                  | 100 (200)                               | 200 (300)         |
+  | `restrict/restrict/allow`  | 450 (550)                               | 650 (750)         |
+
+  The restrict-all cell used to read 850 (950) in the straight-to-the-cottage column. That is the
+  figure from the other column: restrict-all holds `word`, so the moment Red reads the forest post it
+  earns a second goal. Two lines reach 1,000, both of them with questions asked: `restrict/reject/restrict`
+  wherever she walks, and `restrict/reject/allow` only if she reads both notices.
+
 - **Resolved 2026-10-17:** refusing everything no longer outscores engaging. Reject-all is 700 and draws **The long way round**; the best full-errand line is 750; every compromised line is below both. `docs/MAKING_IT_BETTER.md` section 4's own numbers were modelled and rejected — they produce a three-way tie at 900 with restrict-all on top.
-- **Still open:** restrict-all reaches 950 of 1,000 (95%) by clicking the middle option three times and walking to the post. The gap is Word Weaver, which is exactly the card you have to read — but 95% is high for a strategy that reads nothing.
+- **Still open:** restrict-all reaches 950 of 1,000 (95%) by clicking the middle option three times, asking the two bonus questions and walking to the post. (Without the post it is 850.) The gap is Word Weaver, which is exactly the card you have to read — but 95% is high for a strategy that reads nothing.
 - A run is the ordered **run log** (events: `met`, `asked`, `inspected`, `verdict`, `arrived`). Score is a pure function of the log + content version.
 
 ## 8. Cottage finale and endings

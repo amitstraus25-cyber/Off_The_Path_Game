@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import { mapObject, probe, startGame, walkTo } from './helpers';
+import { probe, startGame, talkingDistance, walkTo } from './helpers';
 
 // Read rather than import: Playwright runs these as plain Node ESM, where a JSON import needs an
 // import attribute the rest of the workspace does not use.
@@ -24,8 +24,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('greeting a bystander says a line and changes nothing', async ({ page }) => {
-  const spot = await mapObject(page, toadstool.spawn);
-  await walkTo(page, { x: spot.x + 16, y: spot.y + 40 });
+  await walkTo(page, await talkingDistance(page, toadstool.spawn));
   const before = await probe(page);
 
   await page.keyboard.press('Space');
@@ -44,8 +43,7 @@ test('greeting a bystander says a line and changes nothing', async ({ page }) =>
 });
 
 test('greeting again moves to the next line, and the bubble fades on its own', async ({ page }) => {
-  const spot = await mapObject(page, toadstool.spawn);
-  await walkTo(page, { x: spot.x + 16, y: spot.y + 40 });
+  await walkTo(page, await talkingDistance(page, toadstool.spawn));
 
   await page.keyboard.press('Space');
   await expect(page.locator('.otp-say')).toContainText(toadstool.lines[0]!);
@@ -56,15 +54,11 @@ test('greeting again moves to the next line, and the bubble fades on its own', a
   await expect(page.locator('.otp-say')).toBeHidden({ timeout: 8000 });
 });
 
-test('a bystander does not count towards the cottage gate', async ({ page }) => {
-  const spot = await mapObject(page, toadstool.spawn);
-  await walkTo(page, { x: spot.x + 16, y: spot.y + 40 });
-  await page.keyboard.press('Space');
-  await expect(page.locator('.otp-say')).toBeVisible();
-
-  const locked = await page.evaluate(() => {
-    const { store } = window.__otp!;
-    return Object.keys(store.getState().verdicts).length;
-  });
-  expect(locked).toBe(0);
-});
+/*
+ * A third test used to follow, "a bystander does not count towards the cottage gate". It paid a
+ * second thirty-second walk to the same toadstool to assert that `verdicts` had no keys -- which
+ * the first test above already asserts, and more strongly, by comparing the whole verdict map
+ * before and against after rather than counting it once. It never went near the cottage gate, so
+ * its name promised a check it did not make; the gate itself is covered by e2e/world.spec.ts,
+ * "the cottage door stays shut until all three skills have a verdict".
+ */

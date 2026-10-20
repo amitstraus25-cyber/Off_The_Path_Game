@@ -118,15 +118,17 @@ transparency around it, and it **cannot** give you any of these:
 So: **a multi-tile object is composed on one scratch `Img` the size of the whole object, keylined
 there, and only then cut into tiles.** Draw a 3×3 crown as one 96×96 image, outline it, slice it.
 Call `outline()` per tile and the keyline appears on the internal seams and the tree looks quilted.
-`src/tiles/built.ts:492` is the only tile painter in the repo that calls `outline()` today; the other
-seventy-five tiles have no keyline at all, which is the mechanical root of §1.
+When this was written exactly one tile painter in the repo called `outline()` and the other
+seventy-five tiles had no keyline at all, which is the mechanical root of §1. (That painter lived in
+`src/tiles/built.ts`, which has since been deleted; `s-cottage.ts`, `w-trees.ts` and
+`w-undergrowth.ts` call it now. Grep for `.outline(` rather than trusting a count in prose.)
 
 ---
 
 ## 4. The light
 
 **One sun, from the top-left, at about 45°, in every frame of the game.** The board never breaks
-this, and a single object lit from elsewhere reads as a hole in the ground at a 26-tile camera.
+this, and a single object lit from elsewhere reads as a hole in the ground at the game's camera.
 
 **On a round mass** (a leaf clump, a boulder, Red's hood, a flower bloom): the lit arc is a band
 1–2 px wide hugging the upper-left edge, set **one pixel in from the keyline, never touching it**.
@@ -241,7 +243,7 @@ diameter**. Build from the back forward: place the rear clumps first in base and
 forward clumps over them, and wherever a forward clump covers a rear one, lay a **1 px deep-shade
 line** along the covered clump's upper-left arc. That line is what reads as depth. The outer
 silhouette of the pile is therefore scalloped — a ring of 12–14 bumps around a big crown — and it is
-that scallop, not any interior detail, that says "tree" at a 26-tile camera.
+that scallop, not any interior detail, that says "tree" at the game's camera.
 
 **7.3 Which clumps get the highlight.** Only clumps whose centre is in the upper-left half of the
 crown, and only if nothing overlaps them there. Expect 3–5 highlighted clumps on a 3-tile crown out
@@ -336,7 +338,9 @@ dark metal band. All of it keylined; the awning's stripes are keyline-free.
 
 ## 10. Characters: silhouette
 
-Sprites are 32 × 48, shown at 72 px on a 26-tile camera. At that size the outline is read before
+Sprites are 32 × 48, shown at **96 CSS px tall at zoom 2** — the game's own zoom, and 64 CSS px per
+tile. (This said 72 px, which is the abandoned 1.5× option, against a field of view to match;
+`PIXEL_STANDARD` §1 has the sizes and `camera.ts` has the reasoning.) At that size the outline is read before
 anything inside it. **If two characters have the same silhouette, one of them is wrong, whatever
 colour it is.**
 
@@ -409,8 +413,16 @@ brand disagrees, the fallback is `path[0]` sand, not a purple centre on a purple
 
 ## 13. What not to do — the current build, by name
 
-Every item here was observed on the contact sheets from `node src/preview.ts --out /tmp/dir-now
---zoom 5 --what tiles` or in the shipped PNGs.
+Every item here was observed on the contact sheets from `pnpm preview --out /tmp/dir-now --zoom 5
+--what tiles` or in the shipped PNGs.
+
+> **This section is a measurement of a build, not a standing rule, and that build has moved.** It was
+> written before the keyline work landed: several painters call `outline()` now, the retired tile
+> modules it named were deleted on 2026-10-20 (commit `f1a9819`), and the rabbit is no longer outlined
+> in `shade('fur', 0)`. Sections 1 to 12 and 14 to 17 are the binding part of this document; **re-measure
+> before working from the list below**, with `pnpm preview` and `pnpm world --frame title`. Items are
+> cited by symbol rather than by line because half of this file's line citations had gone wrong and two
+> pointed into a file that no longer exists.
 
 1. **`grass-0`…`grass-3`** — single-pixel white-noise speckle in three greens over a field that is 84
    per cent one flat colour at L124. No broad mottling, no tufts, and the four variants are
@@ -440,15 +452,19 @@ Every item here was observed on the contact sheets from `node src/preview.ts --o
     surround and a brass four-pane window. **`wall-window`** has the flower box but no stone surround.
 13. **`stall-awning-l/-m/-r`** — flat stripes, no keyline, no per-fold lighting.
 14. **`rock`** — two greys and a weak rim. Needs the L55 keyline and a faceted top-left light cap.
-15. **`npc-rabbit`** — `src/sprites/cast.ts:189` calls `img.outline(shade('fur', 0))`, and `fur[0]` is
-    `#c9c2b4` at **L194**. The rabbit is outlined in a colour **lighter than the grass she sits on**.
-    The board outlines her at L18. Her ears are also fused to her head with no gap, so the one
-    silhouette feature she owns is gone.
+15. **`npc-rabbit`** — the rabbit painter in `src/sprites/cast.ts` outlined her with `shade('fur', 0)`,
+    and `fur[0]` is `#c9c2b4` at **L194**: outlined in a colour **lighter than the grass she sits on**,
+    where the board outlines her at L18. Her ears were also fused to her head with no gap, so the one
+    silhouette feature she owns was gone. _Addressed since: that painter now outlines with its own
+    `RABBIT_DARK`. Re-measure before refiling._
 16. **Outline values across the cast**, all against the board's L15–57 keyline band:
     `cloak[0]` L35 ✓, `ink[0]` L15 ✓, `trunk[0]` L57 ✓, `wood[0]` L75 ✗, `roof[0]` L70 ✗,
     `stone[0]` L95 ✗, `gold[0]` L119 ✗, `wall[0]` L174 ✗, `fur[0]` L194 ✗✗.
-17. **Seventy-five of seventy-six tile painters never call `outline()` at all.** Only
-    `src/tiles/built.ts:492` does. This is the mechanical cause of §1 and the first thing to fix.
+17. **Seventy-five of seventy-six tile painters never call `outline()` at all.** Only the one in
+    `src/tiles/built.ts` did. This is the mechanical cause of §1 and was the first thing to fix.
+    _Since: `built.ts` was deleted with four other retired modules in `f1a9819`, and the painters that
+    replaced them — `s-cottage.ts`, `w-trees.ts`, `w-undergrowth.ts` — each call `outline()`. Count it
+    again rather than quoting this number._
 
 ---
 
@@ -552,7 +568,7 @@ All in our pixels, at `TILE = 32`, Red 48 tall.
 | Stone quoin                          | 14 × 10                                                   | —                   |
 | Cottage door / window                | 37 × 56 (arched) / 27 × 26                                | 1.2 × 1.75 / ~1     |
 | Cottage, overall                     | ~120 wide, 2 tiles wall + 1.5 roof                        | 4 wide              |
-| Character sprite                     | 32 × 48, shown at 72                                      | 1.5 tall            |
+| Character sprite                     | 32 × 48, shown at 96 CSS px (zoom 2)                      | 1.5 tall            |
 | Highlight budget                     | ≤12% of an object's pixels at level 3                     | —                   |
 | Dark census target                   | 15–30% below L81 (ground: <10%)                           | —                   |
 

@@ -14,23 +14,11 @@ export {
   TILE,
   CAMERA_FOCUS_Y,
   RED_FEET_BELOW_SPAWN,
-  PORTRAIT_WORLD_BAND,
-  cameraCentreTiles,
-  topEdgeRows,
-  TITLE_CARD_W,
-  visibleTitleColumns,
   MIN_VIEW,
-  MAX_VIEW,
   MAX_ZOOM,
   stageFit,
   availableFor,
-  cameraFor,
-  FRAME,
-  MARGIN,
-  PORTRAIT_WORLD,
-  REFERENCE_VIEWPORTS,
 } from '@otp/core';
-export type { StageFit, Camera, Size } from '@otp/core';
 import { TILE } from '@otp/core';
 
 /**

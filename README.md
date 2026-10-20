@@ -1,37 +1,98 @@
-# Off the Path: Claude Code starter kit
+# Off the Path: "That's Not My Grandma"
 
-Everything needed to start building **"That's Not My Grandma"**, the pixel adventure for Cyera's Off the Path research page, with Claude Code.
+A short browser pixel adventure for Cyera's **Off the Path** research page. Red walks a forest, three
+travellers offer her "skills", and the player decides what each is allowed to do: **Allow / Restrict /
+Reject**. A notice nailed to a post carries an instruction nobody wrote on any card, and it fires only
+if all three capabilities are live at once.
 
-## What's inside
+The lesson is Cyera's own research, [When Language Becomes the Attack
+Vector](https://www.cyera.com/research/when-language-becomes-the-attack-vector-the-lethal-trifecta-of-ai-agents):
+an agent holding all three legs of the **lethal trifecta** — reads your private data, reads untrusted
+content, can send word out — can be turned against you by an instruction hidden in ordinary prose.
+Careful reading is not the answer; a boundary is. The scoring says so: the fastest route through the
+forest is the worst outcome, and you cannot collect every errand goal and keep the boundary.
 
-| Path                      | What it is                                                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `CLAUDE.md`               | Project memory Claude Code loads every session: goal, golden rules, brand + security rules, definition of done.                     |
-| `docs/PLAN.md`            | **Start here.** Phased build plan (Phases 0 to 8) with tasks, effort sizes, acceptance criteria, milestones, open decisions, risks. |
-| `docs/GAME_DESIGN.md`     | Story, metaphor mapping, characters, skills, verdict rules, scoring, endings.                                                       |
-| `docs/ARCHITECTURE.md`    | Stack, repo layout, domain model, state machine, leaderboard API, embed contract, CSP, budgets, tests.                              |
-| `docs/BRAND_AND_UI.md`    | Cyera tokens and exact component specs lifted from the mocks; brand QA checklist.                                                   |
-| `docs/ASSETS.md`          | Art manifest, the production-art gap, and the graybox placeholder strategy.                                                         |
-| `docs/KICKOFF_PROMPTS.md` | Copy-paste prompts for each phase and how to run sessions.                                                                          |
-| `content/game.seed.json`  | Starter game content (data-driven; copy to `content/game.json`).                                                                    |
-| `.claude/agents/`         | `brand-reviewer`, `security-reviewer` subagents.                                                                                    |
-| `.claude/skills/`         | `add-skill`, `brand-check`, `phase-done` workflows.                                                                                 |
-| `.claude/settings.json`   | Conservative permissions (allow project scripts, block `.env` reads and `curl`).                                                    |
-| `reference/`              | Concept PDF, approved gameplay board, branded UI mocks (PNG + HTML), brand tokens and official logos.                               |
+> This was a Claude Code starter kit. It is a working project now. If you are looking for the
+> "copy this folder and `git init`" instructions that used to be here, they are gone — the repository
+> exists.
 
-## Getting started
+## Quick start
 
-1. Make a new repo, copy this folder's contents into it, `git init`.
-2. Open a terminal there, run `claude`, and paste **Prompt 0** from `docs/KICKOFF_PROMPTS.md`. Do not run `/init`.
-3. Resolve the open decisions in `docs/PLAN.md` (especially **D1 safe skill**, **D2 production art**, **D3 backend**).
-4. Work one phase per session; finish each with the `phase-done` skill and `/clear`.
+Node 22 (see `.nvmrc`), pnpm 11.
 
-## Things to know before you start
+```bash
+pnpm install
+pnpm dev          # http://localhost:5173
+```
 
-- **Production art does not exist yet.** The approved pixel art is a flattened concept board. Engineering proceeds on generated graybox placeholders; ask the design team for real tiles and sprites (spec in `docs/ASSETS.md`).
-- **Fonts are not included.** Haffer and Season Mix are licensed; request the `.woff2` files from the Brand Kit. Inter/Georgia fallbacks are used meanwhile.
-- **Illustrations and technical icons are not included** and must not be invented; they come from the design team.
-- **Some content is placeholder** (Word Weaver, Night Light, recap copy). Research must review every player-facing string.
-- The Results mock shows Night Light as malicious; the recommended design (D1) makes it safe. Update the mock copy to match whichever you choose.
-- The concept PDF lists Lilac as `#D390FF`; the brand kit value is `#D28EFF`. This kit uses the brand kit value.
-- Version numbers in the docs are intentionally unspecified. Claude Code should pin current stable versions that are at least 14 days old when scaffolding.
+## Commands
+
+```
+pnpm dev         dev server on :5173
+pnpm build       production build of apps/game
+pnpm test        unit tests in core, game and graybox; core gated at 100% on all four metrics
+pnpm typecheck   tsc across every workspace
+pnpm lint        eslint + prettier --check
+pnpm e2e         Playwright. Locally set CHROMIUM_PATH to reuse an installed Chromium
+pnpm sim         plays strategies through the real reducer and prints score + ending
+pnpm graybox     regenerate the placeholder art
+pnpm preview     contact sheets of that art at an integer zoom
+pnpm world       renders the map through the REAL camera (--frame title|arrive|portrait)
+pnpm score       measures a render against the concept board
+pnpm audit       high-severity dependency audit
+```
+
+`CLAUDE.md` carries the same list with what each one is for, and the rules anyone working here follows.
+
+## Layout
+
+```
+packages/core    pure TypeScript rules: state machine, scoring, run log, content schema, camera.
+                 No DOM, no Phaser, no clock, no randomness. 100% coverage, enforced.
+apps/game        Vite + Phaser 3 (world only) + Preact (all UI). The one deployed service.
+content/         the entire game as data. Adding a skill must not require code changes.
+tools/graybox    procedural placeholder art and the map generator.
+tools/sim        plays strategies through the real reducer.
+docs/            design, architecture, brand, and review findings.
+reference/       brand theme + logos (needed to build), plus design source material.
+.claude/         the brand-reviewer and security-reviewer subagents, and three skills.
+```
+
+## Where the truth lives
+
+Numbers in prose go stale; these do not. Read the source, not a copy of it.
+
+| Question                                    | Where                                                                         |
+| ------------------------------------------- | ----------------------------------------------------------------------------- |
+| How big is the camera? What is in frame?    | `cameraFor()` in `packages/core/src/camera.ts`, or `pnpm world --frame title` |
+| What is the content shape, and its rules?   | `contentSchema` and `loadContent` in `packages/core/src/content.ts`           |
+| What does a run score?                      | `pnpm sim` — and note which run shape a total belongs to                      |
+| What art ships, at what size?               | `apps/game/src/assets/manifest.json` and `docs/PIXEL_STANDARD.md` section 1   |
+| What does the deployed page send and allow? | `vercel.json`                                                                 |
+
+Binding documents, in order: `docs/UI_FOUNDATIONS.md` (supersedes `docs/BRAND_AND_UI.md` where they
+disagree), `docs/BRAND_AND_UI.md`, `docs/PIXEL_STANDARD.md`. Start with `docs/HANDOFF.md`, then
+`docs/PLAN.md` and `docs/ARCHITECTURE.md`.
+
+## Security and privacy posture
+
+This is a data security company's public asset, so the hygiene is part of the deliverable:
+
+- **Zero third-party scripts, fonts, analytics or CDNs at runtime.** Everything is self-hosted and
+  bundled. One Playwright request handler in `e2e/smoke.spec.ts` is the only thing enforcing it.
+- Strict CSP in `vercel.json`; no `eval`, no `innerHTML` with data; the built page has no inline
+  `<script>` or `<style>`, which is why `script-src 'self'` needs no relaxation.
+- No accounts, no cookies, no network calls. One `localStorage` boolean for the music toggle.
+- Every dependency pinned exactly, lockfile committed, `pnpm audit` in CI.
+
+## What is not done
+
+- **Phase 6 leaderboard.** `apps/api` does not exist; `createLeaderboardClient` is a stub that reports
+  the board unavailable and performs no network I/O. The game stays fully playable with it down.
+- **Real pixel art.** All art is generated by `tools/graybox`. Decision D2 (who draws production art)
+  is still open.
+- **Most player-facing copy is placeholder** and needs research sign-off — see `docs/COPY_REVIEW.md`,
+  which currently reaches 29 of the 86 `strings` keys.
+- **Fonts**: Haffer and Season Mix are self-hosted TTFs. WOFF2 subsetting is the largest unclaimed
+  win on the page weight and has not been done.
+- The open items in `docs/MAKING_IT_BETTER.md` and `docs/UX_REVIEW.md`.

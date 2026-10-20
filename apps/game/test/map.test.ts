@@ -78,9 +78,33 @@ const touches = (seen: Set<string>, o: MapObject): boolean => {
 
 describe('the generated forest is playable', () => {
   const open = reachable();
+  const cast = content.characters.map((c) => [c.name, c.id, c.spawn] as const);
 
-  it.each(['npc-rabbit', 'npc-owl', 'npc-lantern-keeper'])('Red can walk to %s', (name) => {
-    expect(touches(open, object(name))).toBe(true);
+  /*
+   * Driven from content, like the bystander block below, and for the same reason: typing the three
+   * spawn names out here is the one thing standing between CLAUDE.md rule 3 and a fourth character
+   * added as data. Such a character would be undrawn, the cottage would never open and the run
+   * would never end, and every test in the repo would stay green while it happened.
+   */
+  it('names at least one character, or these tests are vacuous', () => {
+    expect(cast.length).toBeGreaterThan(0);
+  });
+
+  it.each(cast)('%s has a spawn object on the map', (_name, _id, spawn) => {
+    expect(forest.objects.map((o) => o.name)).toContain(spawn);
+  });
+
+  /*
+   * world/map.ts's npcSpawns recovers the character id by stripping `npc-` off the object name,
+   * and forest-scene.ts then uses the whole object name as the texture key. So the content id and
+   * the spawn name are one contract written in two files, and this is the only thing asserting it.
+   */
+  it.each(cast)('%s spawns under the name the scene reads its id back out of', (_n, id, spawn) => {
+    expect(spawn).toBe(`npc-${id}`);
+  });
+
+  it.each(cast)('Red can walk to %s', (_name, _id, spawn) => {
+    expect(touches(open, object(spawn))).toBe(true);
   });
 
   it('Red can reach the cottage door', () => {
@@ -252,38 +276,13 @@ describe('errand goals are reachable in the world', () => {
     expect(forest.objects.map((o) => o.name)).toContain(`notice-${act}`);
   });
 
-  it.each(acts)('the notice "%s" can be walked to from the spawn', (act) => {
-    const spawn = object('spawn-red');
-    const start = { x: Math.floor(spawn.x / TILE), y: Math.floor(spawn.y / TILE) };
-    const seen = new Set([`${start.x},${start.y}`]);
-    const queue = [start];
-    while (queue.length > 0) {
-      const at = queue.shift()!;
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ] as const) {
-        const next = { x: at.x + dx, y: at.y + dy };
-        const key = `${next.x},${next.y}`;
-        if (seen.has(key)) continue;
-        const { collision } = forest;
-        const outside =
-          next.x < 0 || next.y < 0 || next.x >= collision.width || next.y >= collision.height;
-        if (outside || collision.tiles[next.y * collision.width + next.x] !== 0) continue;
-        seen.add(key);
-        queue.push(next);
-      }
-    }
-
-    const notice = object(`notice-${act}`);
-    const box = tiles(notice);
-    let reachable = false;
-    for (let tx = box.x0; tx <= box.x1; tx++)
-      for (let ty = box.y0; ty <= box.y1; ty++) if (seen.has(`${tx},${ty}`)) reachable = true;
-    expect(reachable).toBe(true);
-  });
+  /*
+   * There was a second flood fill here, re-inlining `reachable()` to assert each notice could be
+   * stood on from the spawn. It is strictly implied by the stronger assertion above, "the notice
+   * can be stood on before the walk ends": that one floods from the same spawn with the cottage
+   * trigger treated as a wall, so it searches a subset of the same tiles and makes the same
+   * `standsOn` claim. Blocking a rectangle can only remove reachable tiles, never add one.
+   */
 });
 
 describe('bystanders stand where they can be met', () => {

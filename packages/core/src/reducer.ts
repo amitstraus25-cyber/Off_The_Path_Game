@@ -4,6 +4,7 @@ import {
   applyOutcome,
   canEnterCottage,
   findNotice,
+  noticeOutcome,
   noticePending,
   trifectaLive,
 } from './outcomes.ts';
@@ -127,12 +128,7 @@ export function tryReduce(state: GameState, action: Action, content: Content): S
       // A notice with no hidden instruction is just a sign: nothing to act on, whoever is reading.
       const exposed = trifectaLive(state.verdicts, content) ? notice.whenExposed : undefined;
       const { basket, flags } = exposed
-        ? applyOutcome(state.basket, state.flags, {
-            ...exposed,
-            points: 0,
-            grants: [],
-            basketAdds: [],
-          })
+        ? applyOutcome(state.basket, state.flags, noticeOutcome(exposed))
         : { basket: state.basket, flags: state.flags };
       return ok({
         ...state,
@@ -163,7 +159,11 @@ export function tryReduce(state: GameState, action: Action, content: Content): S
 
     case 'FINISH':
       if (state.phase !== 'cottage') return no(state, 'wrong-phase');
-      return ok({ ...state, phase: 'results', finishedAt: action.at });
+      // `action.at` is still carried, and still checked against `lastAt` above: a FINISH stamped
+      // before the arrival is a tampered log. It is not STORED, because the duration the board
+      // ranks on is measured to the arrival (runlog.ts `durationMs`) -- reading the results card is
+      // not part of the walk. Nothing ever read the stored value.
+      return ok({ ...state, phase: 'results' });
 
     case 'LEADERBOARD':
       return state.phase === 'results'

@@ -1,4 +1,4 @@
-import { CAPABILITIES, findSkill } from './content.ts';
+import { CAPABILITIES, endingMatches, findSkill } from './content.ts';
 import type {
   Capability,
   Content,
@@ -103,6 +103,11 @@ export function errandGoals(
  * It used to key on the flag count alone. Refusing every skill sets no flags, so "I declined all
  * three and arrived with nothing done" and "I read every card and got all three right" produced
  * the identical card -- and the ending is the part a player repeats to someone else.
+ *
+ * The `!` is safe only because content.ts's lint proves exactly one ending matches every reachable
+ * pair, using `endingMatches` -- the same predicate this calls. That is why the rule is imported
+ * rather than restated: a second copy here could drift from the one the lint certifies, and the
+ * symptom would be an `undefined` ending rather than a lint failure.
  */
 export function ending(
   state: Pick<GameState, 'flags' | 'verdicts' | 'read'>,
@@ -110,13 +115,7 @@ export function ending(
 ): Ending {
   const n = state.flags.length;
   const met = errandGoals(state, content).filter((g) => g.met).length;
-  return content.endings.find(
-    (e) =>
-      n >= e.when.minFlags &&
-      n <= (e.when.maxFlags ?? Infinity) &&
-      met >= (e.when.minGoals ?? 0) &&
-      met <= (e.when.maxGoals ?? Infinity),
-  )!;
+  return content.endings.find((e) => endingMatches(e.when, n, met))!;
 }
 
 export interface Derived {
@@ -147,6 +146,23 @@ export const noticePending = (notice: Notice, flags: readonly Flag[]): boolean =
   // `whenExposed` that set nothing would be a content error, and content.ts would reject it.
   notice.whenExposed.flagsSet.some((f) => !flags.includes(f));
 
+/**
+ * A notice's hidden instruction, widened to the `Outcome` shape `applyOutcome` takes.
+ *
+ * A notice can only ever take something out of the basket and set flags, so the other three fields
+ * are fillers. Writing them out at the call site made one rule into two copies -- the live path in
+ * reducer.ts's READ_NOTICE and the replay path in `derive` below -- and those are precisely the two
+ * that must agree, because CLAUDE.md rule 6 has the server recompute the score from the log. A
+ * notice that cost a point or granted a capability on one path and not the other would be a
+ * leaderboard that disagrees with the game a player just finished.
+ */
+export const noticeOutcome = (exposed: NonNullable<Notice['whenExposed']>): Outcome => ({
+  ...exposed,
+  points: 0,
+  grants: [],
+  basketAdds: [],
+});
+
 /** Rebuilds basket, flags and verdicts from a log alone (used by the server and tests). */
 export function derive(log: readonly RunEvent[], content: Content): Derived {
   let basket = [...content.startBasket];
@@ -161,13 +177,7 @@ export function derive(log: readonly RunEvent[], content: Content): Derived {
     // carries a hidden instruction at all -- the sign on Grandma's door is just a sign.
     if (e.t === 'read' && trifectaLive(verdicts, content)) {
       const exposed = findNotice(content, e.n)?.whenExposed;
-      if (exposed)
-        ({ basket, flags } = applyOutcome(basket, flags, {
-          ...exposed,
-          points: 0,
-          grants: [],
-          basketAdds: [],
-        }));
+      if (exposed) ({ basket, flags } = applyOutcome(basket, flags, noticeOutcome(exposed)));
     }
   }
   return { basket, flags, verdicts };

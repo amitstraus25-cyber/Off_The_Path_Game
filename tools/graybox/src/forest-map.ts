@@ -14,6 +14,32 @@ import { COLUMNS, TILE, TILE_NAMES, TILE_PAINTERS, gid } from './tiles.ts';
 export const MAP_W = 60;
 export const MAP_H = 42;
 
+/*
+ * ===========================================================================
+ * THE TILED MIRROR BITS, OWNED IN ONE PLACE.
+ * ===========================================================================
+ *
+ * Tiled keeps a tile's mirror state in the top three bits of its gid and Phaser's `tilemapTiledJSON`
+ * loader honours them, so the generator writing the map and anything READING the map back have to
+ * agree about all four of these exactly. `world.ts` -- the renderer every framing decision is judged
+ * with -- declared its own copies, which is two files owning one wire format.
+ *
+ * They are up here rather than inside `generateForestMap` so that agreement is an import.
+ */
+export const FLIP_H = 0x80000000;
+export const FLIP_V = 0x40000000;
+/** The transpose. Only safe on a square texture with no up and no light in it: ground and water. */
+export const FLIP_D = 0x20000000;
+/*
+ * The gid with the three mirror bits taken off, and every pass that READS a tile back by name
+ * has to use it. It lives with the bits it undoes, because the passes that need it run both before
+ * the mirroring and after it -- `clearArea` is called from the verge and connectivity sweeps at the
+ * very bottom of the file -- and a comparison that forgot the mask is silent: the tile is simply
+ * never recognised, so a felled tree keeps its trunk on the map and loses its collision, which is
+ * the one thing this file warns about in three separate places.
+ */
+export const BASE_GID = 0x1fffffff;
+
 type Layer = number[];
 const blank = (): Layer => new Array<number>(MAP_W * MAP_H).fill(0);
 
@@ -27,9 +53,16 @@ const blank = (): Layer => new Array<number>(MAP_W * MAP_H).fill(0);
  * this file. No test could catch it and no renderer disagreed with it. The real camera is a third
  * smaller, and it is derived in `packages/core/src/camera.ts`, which this workspace depends on.
  *
- * So nothing below ever states a camera size. `cameraFor()` gives the size, the game's own focus
+ * So nothing below ever DERIVES a camera size. `cameraFor()` gives the size, the game's own focus
  * rule gives the centre, and `frameAt` turns the two into tiles. If the frame chrome, the margins
  * or the zoom rule change, the composition and the guards move with them or neither does.
+ *
+ * That sentence read "nothing below ever states a camera size", and thirteen comments below state
+ * one. All thirteen are correct today -- they quote 19.41 x 11.22, which is what `cameraFor()`
+ * returns for the desktop reference viewport -- but a reader who takes the banner at its word has
+ * no reason to doubt the fourteenth, and a quoted figure is exactly how the abandoned 26 x 15 came
+ * to survive three rounds of composition. A figure in prose here is an ILLUSTRATION of what the
+ * code computes. Nothing is allowed to compute from one.
  */
 interface Rect {
   x0: number;
@@ -501,7 +534,11 @@ export function generateForestMap(): GeneratedMap {
    * meadow light moving across it instead, which is what the board shows.
    */
   /*
-   * Raised again, from 17, because the ground painter's four grass variants are further apart in
+   * Changed again, from 17 -- DOWN, not up, which is what this line used to say. It went 9.5, then
+   * 17, then the 14.5 below, and the next paragraph explains why the middle move was overshot:
+   * raising PATCH makes the lattice artefact WORSE, so the fix for the rectangles was a rotated,
+   * warped sample frame rather than a broader field. The reason for moving off 9.5 in the first
+   * place still stands, and it is this: the ground painter's four grass variants are further apart in
    * tone than they were and a field tuned to the old spread no longer holds. The chequerboard this
    * guards against is not a property of the field alone: it is the field's amplitude AT TILE SCALE
    * multiplied by however far apart the two tones either side of a threshold happen to be. When
@@ -539,9 +576,13 @@ export function generateForestMap(): GeneratedMap {
    *      same amount, so the field they read is as smooth as it was.
    *
    * Three octaves at non-harmonic periods then stop the surviving lattice from repeating on
-   * itself. The finest is deliberately weak: an octave of 0.1 at a six-tile period swings the
-   * total by under 0.02 between neighbours, well under the gap between two quantile cuts, so it
-   * bends a boundary and still cannot cross one on its own.
+   * itself: weights 0.5, 0.35 and 0.15 at periods of PATCH, 7.3 and 3.9 tiles. The finest is
+   * deliberately the weakest. Measured over the whole map on 2026-10-20, it moves the total by at
+   * most 0.096 between two neighbouring tiles -- it bends a band boundary and cannot cross one on
+   * its own, which is the property that matters. (This paragraph said "an octave of 0.1 at a
+   * six-tile period swings the total by under 0.02". Neither the weight, the period nor the swing
+   * was the one in the code; the conclusion drawn from them happens to survive the real numbers,
+   * which is luck and not a reason to leave them standing.)
    */
   const PATCH = 14.5;
   /** A shade over 31 degrees: no small whole-number ratio, so the lattice never lines up twice. */
@@ -552,14 +593,17 @@ export function generateForestMap(): GeneratedMap {
   for (let y = 0; y < MAP_H; y++)
     for (let x = 0; x < MAP_W; x++) {
       /*
-       * A second, finer octave keeps the patch edges from looking like contour lines -- but only
-       * just. At a sixth of the field it swung the total by about half a band, which meant that
-       * over any broad stretch of ground the field crossed a threshold and crossed back every few
-       * tiles, and the four grass variants came out interleaved tile by tile. Two greens this far
-       * apart, alternating at 32px, is a chequerboard however the choice between them is made:
-       * it is the AMPLITUDE at tile scale that does it, not the dither.
+       * The finer octaves keep the patch edges from looking like contour lines -- but only just.
+       * Carrying a sixth of the field at a period of two tiles or so swung the total by about half
+       * a band, which meant that over any broad stretch of ground the field crossed a threshold and
+       * crossed back every few tiles, and the four grass variants came out interleaved tile by
+       * tile. Two greens this far apart, alternating at 32px, is a chequerboard however the choice
+       * between them is made: it is the AMPLITUDE at tile scale that does it, not the dither.
        *
-       * At a sixteenth it still bends a boundary and can no longer cross one on its own.
+       * What fixed it was the PERIOD, not the weight. The finest octave below still carries 0.15 --
+       * about a sixth of the total, which is where this note used to claim the fault was -- and at
+       * a 3.9-tile period it moves the total by at most 0.096 between neighbours (measured, whole
+       * map). It bends a boundary and cannot cross one on its own.
        */
       const wx = x + (warp(x / 9, y / 9) - 0.5) * 12;
       const wy = y + (warp(x / 9 + 37, y / 9 + 37) - 0.5) * 12;
@@ -757,9 +801,12 @@ export function generateForestMap(): GeneratedMap {
    * This eases the last three columns asymptotically instead, so the water bends away from a glade
    * the way it would bend away from a bluff and never quite reaches it.
    */
-  const nearLimit = (v: number, limit: number, sign: number, k = 3.2): number => {
+  /** How wide the asymptotic easing is, in tiles. Both calls below used the default; it is named
+   * here rather than offered as a parameter nothing ever passes. */
+  const EASE_K = 3.2;
+  const nearLimit = (v: number, limit: number, sign: number): number => {
     const slack = (v - limit) * sign;
-    return slack > k ? v : limit + sign * k * Math.exp((slack - k) / k);
+    return slack > EASE_K ? v : limit + sign * EASE_K * Math.exp((slack - EASE_K) / EASE_K);
   };
   /** The furthest east the water may reach: short of the well glade, and of Grandma's garden. */
   const westOf = (y: number): number => (y >= 34 ? 30 : y >= 22 ? 26.5 : y >= 8 ? 34 : 42);
@@ -1152,13 +1199,20 @@ export function generateForestMap(): GeneratedMap {
    * set square. The board's path bends about every three tiles: no straight segment longer than
    * roughly 15 per cent of the frame it is in.
    *
-   * So the two periods come inside the frame: 12.3 tiles and 28.9. The short one is what puts a bend
+   * So the two periods come inside the frame: `cos(x / 1.95)` is 12.25 tiles and `cos(x / 3.12)` is
+   * 19.60. The short one is what puts a bend
    * where the camera can see one -- a cosine spends about a quarter of its period near each extreme,
-   * so 12.3 gives flat runs of about three columns, which is the 15 per cent of a 19.41-tile frame
+   * so 12.25 gives flat runs of about three columns, which is the 15 per cent of a 19.41-tile frame
    * the board draws -- and the long one keeps the band travelling somewhere rather than oscillating
-   * about one row. Still incommensurate (the ratio is 2.36), so the pair never repeats inside sixty
-   * columns, and the slew limit of one row per column turns the steepest stretches into the one-tile
-   * jogs the stamp is built for.
+   * about one row.
+   *
+   * THE RATIO IS EXACTLY 8/5, AND IT IS NOT INCOMMENSURATE. This read "28.9" and "the ratio is
+   * 2.36", and both were wrong: 3.12 / 1.95 is 1.6 on the nose, so the two cosines share a common
+   * period of 98 tiles. What the file wanted from "incommensurate" it still gets, because 98 is
+   * comfortably more than the 60 columns of map -- the pair cannot repeat inside the world -- but
+   * it gets it from the map being short rather than from the periods being irrational, and anyone
+   * widening the map should know which of those two facts they are relying on. The slew limit of
+   * one row per column turns the steepest stretches into the one-tile jogs the stamp is built for.
    *
    * SHORTER THAN THIS COSTS MORE THAN IT BUYS, measured. At 9.4 tiles the band moved on nearly every
    * column, and three of this file's own guards failed at once: the tear needs a bitten column to
@@ -1763,34 +1817,37 @@ export function generateForestMap(): GeneratedMap {
    * 3.5% unique, one image on 22.3% of the map, five on 41.4%, with literal repeating motifs
    * printed across the border and canopy rows. Three previous passes attacked that by rearranging
    * WHERE tiles go -- thickets instead of a density field, clumped undergrowth, a wandering border
-   * -- and the comb survived all of them, because the comb is not in the arrangement. There are 53
-   * tiles, four of them cover most of the ground, and no arrangement of four images over 2520
-   * cells can avoid repeating.
+   * -- and the comb survived all of them, because the comb is not in the arrangement. At the time
+   * of that count there were 53 tiles, four of them covering most of the ground, and no arrangement
+   * of four images over 2520 cells can avoid repeating. (`TILE_NAMES` has since grown to 79 and is
+   * not frozen; the argument is about the four GROUND tiles, so it did not move with the count.)
    *
    * Tiled keeps three mirror bits in the top of every gid and Phaser's loader honours them, so a
-   * tile can be laid flipped at no cost: no new tile, no new painter, TILE_NAMES still frozen at
-   * 53. Four orientations of a grass tile are four different images to a hash and to the eye, so
+   * tile can be laid flipped at no cost: no new tile, no new painter, no new gid. Four orientations
+   * of a grass tile are four different images to a hash and to the eye, so
    * mirroring multiplies the ground's vocabulary by four and takes the phase out of every lattice
    * at the same time. It is invisible to all six scored axes -- a mirror preserves the luma
    * histogram and the palette exactly -- which is precisely why the score kept saying the map was
    * close while it plainly was not.
    *
-   * These live up here rather than beside the pass that uses them because the crowns are now
-   * stamped mirrored at the moment they are rebuilt, several hundred lines above that pass.
+   * The four constants themselves are at MODULE scope, above `generateForestMap`, because the map
+   * file is not the only thing that has to agree about them: `world.ts` renders the committed map
+   * and has to honour the same bits in the same order, and it kept its own private copies of all
+   * four until this round. Two files owning one wire format is how a change gets reported as landed
+   * when it has not.
    */
-  const FLIP_H = 0x80000000;
-  const FLIP_V = 0x40000000;
-  /** The transpose. Only safe on a square texture with no up and no light in it: ground and water. */
-  const FLIP_D = 0x20000000;
-  /*
-   * The gid with the three mirror bits taken off, and every pass that READS a tile back by name
-   * has to use it. This lives up here, with the bits it undoes, because the passes that need it run
-   * both before the mirroring and after it -- `clearArea` is called from the verge and connectivity
-   * sweeps at the very bottom of the file -- and a comparison that forgot the mask is silent: the
-   * tile is simply never recognised, so a felled tree keeps its trunk on the map and loses its
-   * collision, which is the one thing this file warns about in three separate places.
+  /**
+   * The NAME of the tile on a layer, masked, or `''` where there is nothing.
+   *
+   * It lived four hundred lines from the bottom, beside the audit that uses it most, while four
+   * passes above it read a tile back by name with their own `TILE_NAMES[at(layer, x, y) - 1]` and
+   * no mask. Those four all run BEFORE the mirror pass, so they were correct; they were correct by
+   * accident of ordering, and the comment directly above `BASE_GID` says what that costs if the
+   * ordering ever changes. It is declared here, with the mask it applies, so that the masked read
+   * is the easiest one to reach for anywhere in the file.
    */
-  const BASE_GID = 0x1fffffff;
+  const nameAt = (layer: Layer, x: number, y: number): string =>
+    TILE_NAMES[(at(layer, x, y) & BASE_GID) - 1] ?? '';
   const coin = valueNoise2D(20261041);
   /** Independent per-tile bits: `valueNoise2D` hashes exactly on integer coordinates. */
   const heads = (x: number, y: number, which: number): boolean => coin(x + which * 97, y) > 0.5;
@@ -2365,7 +2422,7 @@ export function generateForestMap(): GeneratedMap {
      * WHICH SCALE, and it is decided by where the tile sits in its wood rather than by a die.
      *
      * Rolling the scale per tree is the obvious thing and it produces a wood of mixed trees evenly
-     * mixed, which at a 26-tile camera reads as noise: three sizes alternating is as regular as one
+     * mixed, which in a camera 19.41 tiles wide reads as noise: three sizes alternating is as regular as one
      * size repeating, and it loses the one thing three scales are worth having for, which is DEPTH.
      * A wood reads as deep when its big trees are grouped -- a stand of elders with saplings coming
      * up between them and mid trees around the edge -- because that is what a wood does.
@@ -2874,8 +2931,8 @@ export function generateForestMap(): GeneratedMap {
    *
    * The undergrowth owner has appended `bush-low` and `bush-tall` to `TILE_NAMES` -- appended, so
    * no existing gid moves and the committed map stays valid -- and they differ from `bush` in
-   * FOOTPRINT rather than in outline detail, which is the only kind of difference that reads at a
-   * 26-tile camera: `bush` fills its tile, `bush-low` is a wide bank in the bottom half with lawn
+   * FOOTPRINT rather than in outline detail, which is the only kind of difference that reads in a
+   * camera 19.41 tiles wide: `bush` fills its tile, `bush-low` is a wide bank in the bottom half with lawn
    * showing above it, `bush-tall` a narrow leaning shrub with lawn either side.
    *
    * WHY THIS IS THE MAP'S PROBLEM AND NOT THE PAINTER'S. Counted on the committed map, 273 tiles
@@ -3378,9 +3435,17 @@ export function generateForestMap(): GeneratedMap {
 
   // --- landmarks ---------------------------------------------------------------
   const landmarks: Record<string, { x: number; y: number }> = {};
-  const place = (name: string, x: number, y: number, tile: string, makeSolid = true): void => {
+  /**
+   * Draw a landmark, make its tile solid, and record where it stands.
+   *
+   * It took a `makeSolid` flag and all five callers below left it at `true`, so the soft branch
+   * was never taken. A landmark the player walks through is the invisible-wall bug seen from the
+   * other side, which this file warns about in three places; if one ever needs to be soft, that is
+   * a decision to argue for at the call site rather than a default sitting here unused.
+   */
+  const place = (name: string, x: number, y: number, tile: string): void => {
     set(below, x, y, gid(tile));
-    if (makeSolid) solid(x, y);
+    solid(x, y);
     landmarks[name] = { x: x * TILE, y: y * TILE };
   };
   /*
@@ -3625,7 +3690,7 @@ export function generateForestMap(): GeneratedMap {
    * Declared up here, above the clearing it sizes, because every row and column of the building is
    * derived from these two and `cx`: the clearing, the roof loop, the wall course, the gable's
    * columns, the bank along the foot of the wall, the tabby against its east corner, the treeline's
-   * `clearOfRoof`, the `prop-cottage` rectangle the game points its payoff camera with, and the
+   * `standsOnTheRoof`, the `prop-cottage` rectangle the game points its payoff camera with, and the
    * audit that measures where the facade lands in that camera. The only figures written out below
    * are the ones the LEVEL fixes rather than the building: the gate rows and the notice's.
    */
@@ -4209,51 +4274,20 @@ export function generateForestMap(): GeneratedMap {
     x += planted.k.trunk.length + (grainAt(x, gardenTop) > 0.5 ? 2 : 1);
   }
   /*
-   * ===========================================================================
-   * ...AND THE WOOD COMES DOWN THE EAST MARGIN TOO, which is the other half of the same picture and
-   * the fix for the product manager's fourth complaint.
-   * ===========================================================================
+   * A DEDICATED EAST-MARGIN PLANTING PASS STOOD HERE AND IS DELETED, 2026-10-20.
    *
-   * The payoff frame runs to the very edge of the world -- `cameraFor()` makes it 19.41 tiles wide
-   * against a map 60 wide, so the camera clamps east and column 59 is fully in shot. What stood there
-   * was the sealed border band and nothing else: fourteen consecutive rows of bush and boulder, one
-   * per row, down the right-hand edge of the last frame of the game. A one-per-row file is the same
-   * fault as the fence rope eleven columns to its west, in a different material.
+   * It walked the seven rows between the garden's east fence and the bottom of the garden, lifting
+   * the seal's hedge off each one and offering `plantKind('mid', gardenEast + 1, y)` the cell. It
+   * reported `0 down the east margin` on every run -- seven attempts, seven refusals -- while the
+   * twenty-five lines of comment above it asserted a composition RESULT it did not produce: three
+   * trees closing the corner of the arrival frame. A comment that claims an effect the code does
+   * not have is the expensive kind, so the pass and the claim go together.
    *
-   * `breakHem` is supposed to answer this and cannot reach it. Every candidate it has for the east
-   * margin is anchored at column 58, and until this round column 58 was the inside of a two-column
-   * dead-end strip sealed off by the garden's east fence: plant a tree in it and the connectivity
-   * sweep fells the tree to open the strip again, and `sealBorder` fills the cell it vacated with
-   * scrub. That is the eighteen-tile hedge the design board names, and the reason the arrival framing
-   * band stops at the west fence.
-   *
-   * Taking the east fence out opens the strip to the garden, so the dead end is gone and the trees
-   * stand. Three of them, at a jittered pitch of two or three rows, which is enough to carry crown or
-   * trunk over nine of the fourteen rows -- and the first one's crown lands on the two rows the
-   * camera's top edge cuts, so the same change closes the corner of the frame that the fence used to
-   * fill with a post line. They are flagged as framing so the verge sweep reads them as composition.
+   * The margin is closed anyway, by the general wood and the sapling infill: the late `breakHem`
+   * call below finds the band already deep in canopy, which is the reason a dedicated pass finds no
+   * room. See the note on `breakHem` running twice for how the east margin actually gets its cover.
    */
-  let margin = 0;
-  for (let y = gardenTop + 4; y < gardenBottom - 1;) {
-    const lifted: [number, number][] = [];
-    for (const tx of [gardenEast + 1, gardenEast + 2]) {
-      if (at(below, tx, y) === 0 || !bandIsHedge(tx, y)) continue;
-      lifted.push([tx, at(below, tx, y)]);
-      set(below, tx, y, 0);
-    }
-    if (plantKind('mid', gardenEast + 1, y)) {
-      trees[trees.length - 1]!.framing = true;
-      margin++;
-      y += grainAt(gardenEast + 1, y) > 0.5 ? 3 : 2;
-      continue;
-    }
-    for (const [tx, tile] of lifted) set(below, tx, y, tile);
-    y += 1;
-  }
-  console.log(
-    `  cottage: ${behind} tree(s) of treeline behind the garden's north strip, ` +
-      `${margin} down the east margin`,
-  );
+  console.log(`  cottage: ${behind} tree(s) of treeline behind the garden's north strip`);
 
   /*
    * Make sure the path through the gate and up to the door is walkable -- AND THAT IT IS TRACK.
@@ -4438,9 +4472,18 @@ export function generateForestMap(): GeneratedMap {
   };
   /*
    * ===========================================================================
-   * ...AND NO BED EVER REACHES FOUR TILES IN A STRAIGHT LINE. One rule, in the one place every soft
-   * planting on the map goes through.
+   * ...AND NO BED EVER REACHES FOUR TILES IN A STRAIGHT LINE. One rule, in the one place the three
+   * passes that lay a BED go through.
    * ===========================================================================
+   *
+   * NOT "every soft planting on the map", which is what this said and it was not true. `clump` and
+   * the forest-floor sweep both write scrub and bloom straight to the `below` layer and neither
+   * goes anywhere near here, so neither is capped: `clump` is a grown mass that is allowed to be
+   * whatever shape the free ground leaves it, and the floor sweep is a continuous field cut at a
+   * level, which is a floor rather than a bed. Routing either through this cap would move hundreds
+   * of tiles and is not what the cap is for. What the cap owns is the three passes below, and the
+   * separate run cap `mayBush` carries is the matching rule for the other half; the note above the
+   * lone-bush sweep says why the same three cannot live in one place.
    *
    * Three passes lay planting -- the banks against the wall and the fences, the rings round the
    * landmarks, and the verge along the road -- and none of them can see the others. Each one is
@@ -4455,7 +4498,39 @@ export function generateForestMap(): GeneratedMap {
    * grown and starts reading as laid out. It is checked here because here is the only place that
    * knows what is already on the ground, whichever pass is asking.
    */
-  const tuft = (x: number, y: number, flowers: number): void => {
+  /*
+   * HALF, NOT SEVEN TENTHS, and it is the same finding `dress` already carries: a `flower-*` tile
+   * is a bloom bush drawn well inside its own 32x32, so a connected run of them reads at 1x as a
+   * row of bright dots at a one-tile pitch however tidily they are gathered. Mostly leaf with
+   * blooms set into it is one dark mass with colour in it, which is what the board banks against a
+   * wall. The two defaults being different was the whole reason the garden beds printed as rows
+   * while the verges did not.
+   */
+  /*
+   * The default bloom share comes down from 0.7, which is the last of the "neat rows" finding.
+   *
+   * A `flower-*` tile is a bloom bush drawn well inside its own 32x32, so it shows lawn at all four
+   * corners -- which means that even a CONNECTED bank of four of them reads at 1x as four separate
+   * bright dots at a one-tile pitch. That is why the beds kept looking like rows however they were
+   * gathered: gathering fixes where they are and cannot fix what one of them looks like beside
+   * another. `bush` is opaque and fills its tile, so a bank that is mostly leaf with two or three
+   * blooms set into it reads as one dark mass with colour in it, which is what the board's beds are.
+   * Half rather than seven tenths is the share that gets there without touching the settled decision
+   * that the blooms stay warm.
+   */
+  /*
+   * THE TWO NOTES ABOVE ARGUE ABOUT ONE NUMBER, so the number is declared once and they sit over it.
+   *
+   * It used to be a `flowers` parameter threaded through `tuft`, `bank` and `dress`, with the same
+   * 0.5 at every one of the fourteen call sites -- five of `bank`, eight of `dress` and one direct
+   * `tuft` -- and the two paragraphs above were each attached to one of the two defaults, which is
+   * how the two defaults came to disagree in the first place. The three cuts stay written as this
+   * share times 0.4, 0.7 and 0.85 rather than as 0.2, 0.35 and 0.425: the ratios between white,
+   * pink and red are a separate decision from how much bloom there is, and spelling the products
+   * out would pin them to the share's current value and let the two drift apart again.
+   */
+  const BLOOM_SHARE = 0.5;
+  const tuft = (x: number, y: number): void => {
     if (plantedRun(x, y, 1, 0) > 3 || plantedRun(x, y, 0, 1) > 3) return;
     const pick =
       bloom(x / 2.6 + 131, y / 2.6 + 131) * 0.72 + bloom(x / 1.3 + 83, y / 1.3 + 83) * 0.28;
@@ -4464,11 +4539,11 @@ export function generateForestMap(): GeneratedMap {
       x,
       y,
       gid(
-        pick < flowers * 0.4
+        pick < BLOOM_SHARE * 0.4
           ? 'flower-white'
-          : pick < flowers * 0.7
+          : pick < BLOOM_SHARE * 0.7
             ? 'flower-pink'
-            : pick < flowers * 0.85
+            : pick < BLOOM_SHARE * 0.85
               ? 'flower-red'
               : scrub(x, y),
       ),
@@ -4523,42 +4598,21 @@ export function generateForestMap(): GeneratedMap {
     len: number,
     /** Which way the bank may thicken: away from the thing it is banked against. */
     out: readonly [number, number],
-    /*
-     * HALF, NOT SEVEN TENTHS, and it is the same finding `dress` already carries: a `flower-*` tile
-     * is a bloom bush drawn well inside its own 32x32, so a connected run of them reads at 1x as a
-     * row of bright dots at a one-tile pitch however tidily they are gathered. Mostly leaf with
-     * blooms set into it is one dark mass with colour in it, which is what the board banks against a
-     * wall. The two defaults being different was the whole reason the garden beds printed as rows
-     * while the verges did not.
-     */
-    flowers = 0.5,
   ): void => {
     for (let i = 0; i < len; i++) {
       const x = ox + dx * i;
       const y = oy + dy * i;
-      if (onGrass(x, y)) tuft(x, y, flowers);
+      if (onGrass(x, y)) tuft(x, y);
       const swell =
         Math.cos(i / 1.15 + ox * 0.7 + oy * 1.3) * 0.6 +
         (deeper(x / 1.4 + 211, y / 1.4 + 211) - 0.5);
       if (swell <= 0.18) continue;
       const bx = x + out[0];
       const by = y + out[1];
-      if (onGrass(bx, by)) tuft(bx, by, flowers);
+      if (onGrass(bx, by)) tuft(bx, by);
     }
   };
-  /*
-   * The default bloom share comes down from 0.7, which is the last of the "neat rows" finding.
-   *
-   * A `flower-*` tile is a bloom bush drawn well inside its own 32x32, so it shows lawn at all four
-   * corners -- which means that even a CONNECTED bank of four of them reads at 1x as four separate
-   * bright dots at a one-tile pitch. That is why the beds kept looking like rows however they were
-   * gathered: gathering fixes where they are and cannot fix what one of them looks like beside
-   * another. `bush` is opaque and fills its tile, so a bank that is mostly leaf with two or three
-   * blooms set into it reads as one dark mass with colour in it, which is what the board's beds are.
-   * Half rather than seven tenths is the share that gets there without touching the settled decision
-   * that the blooms stay warm.
-   */
-  const dress = (ox: number, oy: number, spread: number, count: number, flowers = 0.5): void => {
+  const dress = (ox: number, oy: number, spread: number, count: number): void => {
     for (let i = 0; i < count; i++) {
       const angle = rnd() * Math.PI * 2;
       const r = 1 + rnd() * spread;
@@ -4568,7 +4622,7 @@ export function generateForestMap(): GeneratedMap {
       const x = ox + Math.round(Math.cos(angle) * r);
       const y = oy + Math.round(Math.sin(angle) * r * 0.75);
       if (!onGrass(x, y)) continue;
-      tuft(x, y, flowers);
+      tuft(x, y);
     }
   };
   /*
@@ -4583,13 +4637,13 @@ export function generateForestMap(): GeneratedMap {
    * seconds before she touches a key.
    */
   dress(SPAWN.x, SPAWN.y, 3.4, 18);
-  dress(9, 22, 2.6, 10, 0.5); // the shoulder south of the fork, so the junction has a floor
+  dress(9, 22, 2.6, 10); // the shoulder south of the fork, so the junction has a floor
   dress(34, 27, 3.2, 20); // the well
   dress(19, 13, 3.2, 16); // the fountain
-  dress(12, 18, 3.2, 14, 0.5); // the market
+  dress(12, 18, 3.2, 14); // the market
   dress(9, 19, 2.2, 8); // the signpost at the start of the walk
   dress(43, 19, 2.2, 8); // the forest notice on the gate approach
-  dress(36, 32, 2.8, 12, 0.5); // the lantern
+  dress(36, 32, 2.8, 12); // the lantern
   /*
    * ...AND THE GARDEN HARDEST OF ALL, because it is the last frame of the game.
    *
@@ -4659,8 +4713,8 @@ export function generateForestMap(): GeneratedMap {
   const verge = valueNoise2D(20261047);
   const besideSand = (x: number, y: number): boolean =>
     NEIGHBOURS.some(([dx, dy]) => {
-      const n = TILE_NAMES[at(ground, x + dx, y + dy) - 1];
-      return n !== undefined && (n.startsWith('path') || n.startsWith('bridge'));
+      const n = nameAt(ground, x + dx, y + dy);
+      return n.startsWith('path') || n.startsWith('bridge');
     });
   /*
    * ...AND THE SHOULDERS ARE PLANTED ALONG THE WHOLE LENGTH, not sprinkled.
@@ -4688,7 +4742,7 @@ export function generateForestMap(): GeneratedMap {
    * The pale band it was planted to cover is answered properly now, by the verge sweep at the foot
    * of the file letting the wood come down to the sand on two-lane stretches: cover from a treeline
    * rather than from a kerb of shrubs. So this goes back to about half cover, and the mix swings to
-   * BLOOM -- `flowers` at 0.72 is roughly two blooms to one bush -- which is what the board's verges
+   * BLOOM -- a bloom share of 0.72, roughly two blooms to one bush -- which is what the board's verges
    * are: lawn with beds of flower set along the edges of the sand, not a shrub border. With the mix
    * read off a field rather than a die (see `tuft`) those beds arrive gathered, two or three
    * together, instead of alternating tile by tile.
@@ -4721,7 +4775,7 @@ export function generateForestMap(): GeneratedMap {
     for (let x = 1; x < MAP_W - 1; x++) {
       if (!onGrass(x, y) || !besideSand(x, y)) continue;
       if (verge(x / 5.2 + 11, y / 5.2 + 11) < 0.62) continue;
-      tuft(x, y, 0.5);
+      tuft(x, y);
     }
 
   /*
@@ -4767,8 +4821,8 @@ export function generateForestMap(): GeneratedMap {
   ]);
   /** A bank tile that is the only shoreline its water will get: a step, or a corner. */
   const soleShoreline = (x: number, y: number): boolean => {
-    const bank = TILE_NAMES[at(ground, x, y) - 1];
-    if (bank === undefined || !bank.startsWith('shore')) return false;
+    const bank = nameAt(ground, x, y);
+    if (!bank.startsWith('shore')) return false;
     if (bank === 'shore-n' || bank === 'shore-s') return true;
     return NEIGHBOURS.filter(([dx, dy]) => isWater(x + dx, y + dy)).length > 1;
   };
@@ -4780,8 +4834,8 @@ export function generateForestMap(): GeneratedMap {
       // bush straight back anyway. A shoreline she can see and cannot walk onto is worse than one
       // under a bush: it is an invisible wall at the top of the frame.
       if (onBorder(x, y) || !soleShoreline(x, y)) continue;
-      const standing = TILE_NAMES[at(below, x, y) - 1];
-      if (standing === undefined || !OPAQUE_FLOOR.has(standing)) continue;
+      const standing = nameAt(below, x, y);
+      if (!OPAQUE_FLOOR.has(standing)) continue;
       set(below, x, y, 0);
       // Whatever it was is gone, and its collision goes with it -- `clump` and the stone drifts
       // both plant solid, and a solid tile with nothing drawn on it is the invisible wall this
@@ -4809,12 +4863,9 @@ export function generateForestMap(): GeneratedMap {
    * tree cluster is unreachable and would simply never be met, which is a bug nobody would see.
    */
   const bystander = (name: string, x: number, y: number) => {
-    const touchesTrack = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ].some(([dx, dy]) => isPath(x + dx!, y + dy!));
+    // `NEIGHBOURS` rather than a fifth copy of the same four vectors. It is typed as readonly
+    // tuples, so the non-null assertions this line used to carry on `dx` and `dy` are gone with it.
+    const touchesTrack = NEIGHBOURS.some(([dx, dy]) => isPath(x + dx, y + dy));
     if (!touchesTrack) throw new Error(`${name} at ${x},${y} does not touch the track`);
     clearArea(x, y, 1, 1);
     return { name, x: x * TILE, y: y * TILE, width: TILE, height: TILE };
@@ -4835,6 +4886,7 @@ export function generateForestMap(): GeneratedMap {
     return last + 1;
   };
 
+  // --- Red's pad and the spawn clearing ----------------------------------------------------------
   const spawnX = SPAWN.x;
   const spawnY = SPAWN.y;
   /*
@@ -4975,6 +5027,7 @@ export function generateForestMap(): GeneratedMap {
   // The gate tiles must stay walkable even after the fence loop.
   for (const y of [20, 21]) clear(fenceX, y);
 
+  // --- framing: canopy across the top of the three cameras ---------------------------------------
   /*
    * ===========================================================================
    * CANOPY ACROSS THE TOP OF THE CAMERA, which is the half of "creepy" still standing.
@@ -5215,6 +5268,7 @@ export function generateForestMap(): GeneratedMap {
     `  framing: ${framed} tree(s) planted and ${adopted} adopted, ` +
       'closing the top of the title, portrait and arrival cameras',
   );
+  // --- thinning: walls of foliage and topiary files ----------------------------------------------
   /*
    * ===========================================================================
    * THINNING: NO WALL OF FOLIAGE, AND NO TOPIARY FILE.
@@ -5302,6 +5356,7 @@ export function generateForestMap(): GeneratedMap {
   }
   console.log(`  thinning: ${thinned} tree(s) out of a wall of foliage or a topiary file`);
 
+  // --- the Tiled file: layers, tileset, objects --------------------------------------------------
   const tileLayer = (id: number, name: string, data: Layer) => ({
     id,
     name,
@@ -5366,6 +5421,7 @@ export function generateForestMap(): GeneratedMap {
       );
   }
 
+  // --- cast shadow -------------------------------------------------------------------------------
   /*
    * CAST SHADOW -- the last pass, and the one that stops nine hundred trees floating on a lawn.
    *
@@ -5460,6 +5516,7 @@ export function generateForestMap(): GeneratedMap {
   groundShadow(cx, cy + 1, 6, 4);
   groundShadow(11, 17, 4, 1);
 
+  // --- road keyline ------------------------------------------------------------------------------
   /*
    * AND THE ROAD IS KEYLINED, like everything else on the board.
    *
@@ -5477,10 +5534,8 @@ export function generateForestMap(): GeneratedMap {
   for (let y = 0; y < MAP_H; y++)
     for (let x = 0; x < MAP_W; x++) {
       if (grassStep.get(at(ground, x, y)) === undefined) continue;
-      const beside = NEIGHBOURS.some(([dx, dy]) => {
-        const n = TILE_NAMES[at(ground, x + dx, y + dy) - 1];
-        return n !== undefined && (n.startsWith('path') || n.startsWith('bridge'));
-      });
+      // `besideSand`, declared with the verge planting, rather than a second copy of its body.
+      const beside = besideSand(x, y);
       /*
        * MOSTLY ONE RUNG, OCCASIONALLY TWO -- and the threshold moved from 0.44 to 0.72 because of
        * what the pass below it does with the result.
@@ -5495,6 +5550,7 @@ export function generateForestMap(): GeneratedMap {
       if (beside) shade(x, y, verge(x / 2.7, y / 2.7) > 0.72 ? 1 : 2);
     }
 
+  // --- penumbra ----------------------------------------------------------------------------------
   /*
    * PENUMBRA -- no two grass tones more than one rung apart may share an edge.
    *
@@ -5546,6 +5602,7 @@ export function generateForestMap(): GeneratedMap {
     if (moved === 0) break;
   }
 
+  // --- mirroring: the rest of it -----------------------------------------------------------------
   /*
    * THE REST OF THE MIRRORING. The crowns were already laid flipped when the canopy was rebuilt;
    * the trunks waited for the cast shadow above to finish reading `trunk-l` by name, and now join
@@ -5611,6 +5668,13 @@ export function generateForestMap(): GeneratedMap {
   for (const layer of [ground, below, above])
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++) {
+        /*
+         * UNMASKED, AND IT HAS TO STAY UNMASKED. This is the one read in the file that `nameAt`
+         * must not replace: a tile that already carries flip bits is one this pass has flipped
+         * already, and the undefined it comes back with is what makes the pass skip it. Mask it
+         * and the pass would re-roll `heads` on a cell it has already decided and ADD a second set
+         * of bits to the gid, which is no longer a flip -- it is a gid pointing at nothing.
+         */
         const name = TILE_NAMES[at(layer, x, y) - 1];
         if (name === undefined) continue;
         const both = BOTH_AXES.has(name);
@@ -5624,6 +5688,7 @@ export function generateForestMap(): GeneratedMap {
         if (flips) set(layer, x, y, at(layer, x, y) + flips);
       }
 
+  // --- verges ------------------------------------------------------------------------------------
   /*
    * THE VERGES. A road you cannot walk beside is a corridor, not a road.
    *
@@ -5744,12 +5809,7 @@ export function generateForestMap(): GeneratedMap {
   for (let y = 2; y < MAP_H - 1; y++)
     for (let x = 1; x < MAP_W - 1; x++) {
       if (!isPath(x, y)) continue;
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ] as [number, number][]) {
+      for (const [dx, dy] of NEIGHBOURS) {
         const nx = x + dx;
         const ny = y + dy;
         if (!inside(nx, ny) || at(collision, nx, ny) === 0) continue;
@@ -5795,6 +5855,7 @@ export function generateForestMap(): GeneratedMap {
       `${pressed} left standing at the sand on a two-lane stretch`,
   );
 
+  // --- the due-east walk -------------------------------------------------------------------------
   /*
    * ===========================================================================
    * THE DUE-EAST LINE, which was an accident of the pass above and is now a stated invariant.
@@ -5863,31 +5924,16 @@ export function generateForestMap(): GeneratedMap {
    * a trunk tile on its own would leave a crown hanging in the air and, worse, the invisible solid
    * tile this file warns about twice already.
    */
-  const STEPS: [number, number][] = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ];
-  const reachableFromSpawn = (): Set<number> => {
-    const seen = new Set<number>([spawnY * MAP_W + spawnX]);
-    const queue = [spawnY * MAP_W + spawnX];
-    for (let head = 0; head < queue.length; head++) {
-      const key = queue[head]!;
-      const x = key % MAP_W;
-      const y = (key - x) / MAP_W;
-      for (const [dx, dy] of STEPS) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (!inside(nx, ny) || at(collision, nx, ny) !== 0) continue;
-        const next = ny * MAP_W + nx;
-        if (seen.has(next)) continue;
-        seen.add(next);
-        queue.push(next);
-      }
-    }
-    return seen;
-  };
+  /*
+   * Every walkable tile Red can reach on foot from the spawn.
+   *
+   * `floodPocket` below is the same breadth-first walk from an arbitrary seed, in the same
+   * `NEIGHBOURS` order, so this is that walk seeded at the spawn rather than a second copy of it.
+   * A private four-vector `STEPS` array stood above this and was `NEIGHBOURS` written out again;
+   * the order matters to both -- it fixes BFS visit order -- which is exactly why one array for
+   * both is safe and two are not.
+   */
+  const reachableFromSpawn = (): Set<number> => new Set(floodPocket(spawnY * MAP_W + spawnX));
 
   /*
    * ...AND ONE POCKET IT CANNOT OPEN MUST NOT ABANDON THE OTHER THIRTY.
@@ -5912,7 +5958,7 @@ export function generateForestMap(): GeneratedMap {
       const key = seen[head]!;
       const x = key % MAP_W;
       const y = (key - x) / MAP_W;
-      for (const [dx, dy] of STEPS) {
+      for (const [dx, dy] of NEIGHBOURS) {
         const nx = x + dx;
         const ny = y + dy;
         if (!inside(nx, ny) || at(collision, nx, ny) !== 0) continue;
@@ -5924,6 +5970,7 @@ export function generateForestMap(): GeneratedMap {
     }
     return seen;
   };
+  // --- the hem, a second time --------------------------------------------------------------------
   /*
    * AND THE TREELINE IS BROUGHT DOWN TO THE BAND AGAIN, for the same reason the seal runs twice.
    *
@@ -5949,6 +5996,7 @@ export function generateForestMap(): GeneratedMap {
 
   console.log(`  hem: ${hemTrees} tree(s) with the planting, ${hemTreesLate} after the felling`);
 
+  // --- connectivity: pockets opened --------------------------------------------------------------
   let felled = 0;
   for (let guard = 0; guard < 400; guard++) {
     const reachable = reachableFromSpawn();
@@ -5980,7 +6028,7 @@ export function generateForestMap(): GeneratedMap {
         const key = front[head]!;
         const x = key % MAP_W;
         const y = (key - x) / MAP_W;
-        for (const [dx, dy] of STEPS) {
+        for (const [dx, dy] of NEIGHBOURS) {
           const nx = x + dx;
           const ny = y + dy;
           if (nx < 1 || ny < 2 || nx >= MAP_W - 1 || ny >= MAP_H - 1) continue;
@@ -6033,6 +6081,7 @@ export function generateForestMap(): GeneratedMap {
     felled += cut;
   }
 
+  // --- pockets that would not open, sealed -------------------------------------------------------
   /*
    * WHAT IS LEFT OVER BECOMES THICKET, which is the honest answer rather than a patch.
    *
@@ -6075,6 +6124,7 @@ export function generateForestMap(): GeneratedMap {
   // `sealBorder`): felling a tree that straddles column 0 clears the border cell with it.
   sealBorder();
 
+  // --- hem stones --------------------------------------------------------------------------------
   /*
    * ===========================================================================
    * AND THE LAST WORD ON THE HEM IS MATERIAL, NOT PLANTING.
@@ -6098,8 +6148,10 @@ export function generateForestMap(): GeneratedMap {
   for (const cells of [across(0), across(1), across(MAP_H - 1), down(0), down(MAP_W - 1)]) {
     let run = 0;
     for (const [x, y] of cells) {
-      const drawnAsHedge =
-        SCRUB_GIDS.has(at(below, x, y) & BASE_GID) && at(above, x, y) === 0 && !isTrunk(x, y);
+      // No `&& !isTrunk(x, y)` clause: it stood here and could never fire. `SCRUB_GIDS` is the
+      // three bush silhouettes and `TRUNK_GIDS` is every trunk tile of every scale, and the two
+      // sets are disjoint by construction, so a gid that is in the first is never in the second.
+      const drawnAsHedge = SCRUB_GIDS.has(at(below, x, y) & BASE_GID) && at(above, x, y) === 0;
       if (!drawnAsHedge || at(collision, x, y) === 0) {
         run = 0;
         continue;
@@ -6120,6 +6172,7 @@ export function generateForestMap(): GeneratedMap {
       `(${Math.round((open / walkable) * 100)}%)`,
   );
 
+  // --- lone bushes and one-tile holes ------------------------------------------------------------
   /*
    * ===========================================================================
    * NO BUSH STANDS ALONE, AND NO SCRUB HAS A ONE-TILE HOLE IN IT.
@@ -6287,6 +6340,7 @@ export function generateForestMap(): GeneratedMap {
       `${wedged} left wedged against something`,
   );
 
+  // --- THE AUDIT. Nothing below writes a tile ----------------------------------------------------
   /*
    * ===========================================================================
    * THE TRAVERSAL AND SHORELINE AUDIT, checked rather than hoped for.
@@ -6309,8 +6363,6 @@ export function generateForestMap(): GeneratedMap {
    * where the fence and the collision layer are built, and again in `map.test.ts` against the
    * shipped artefact.
    */
-  const nameAt = (layer: Layer, x: number, y: number): string =>
-    TILE_NAMES[(at(layer, x, y) & BASE_GID) - 1] ?? '';
   const walkableAt = (x: number, y: number): boolean => inside(x, y) && at(collision, x, y) === 0;
   const faults: string[] = [];
   const fault = (what: string, where: [number, number][]): void => {
@@ -6451,7 +6503,7 @@ export function generateForestMap(): GeneratedMap {
        * through -- including the elder, whose crown is nine tiles and whose half-tree is therefore
        * the most visible one it is possible to leave on the map.
        */
-      if (!CANOPY_GIDS.has(at(above, x, y) & BASE_GID)) continue;
+      if (!isCanopy(x, y)) continue;
       if (!trees.some((t) => crownsOver(t, x, y))) hanging.push([x, y]);
     }
   fault('solid-looking tile(s) the player walks through', soft);
@@ -6491,7 +6543,7 @@ export function generateForestMap(): GeneratedMap {
       const key = queue[head]!;
       const x = key % MAP_W;
       const y = (key - x) / MAP_W;
-      for (const [dx, dy] of STEPS) {
+      for (const [dx, dy] of NEIGHBOURS) {
         const nx = x + dx;
         const ny = y + dy;
         if (!walkableAt(nx, ny)) continue;
@@ -6528,7 +6580,8 @@ export function generateForestMap(): GeneratedMap {
         const g = nameAt(ground, x, y);
         // Any scale of trunk. `startsWith('trunk')` caught the mid tree and missed the elder and
         // the sapling, which is how an NPC ends up standing inside a tree and never being met.
-        const inTree = TRUNK_GIDS.has(at(below, x, y) & BASE_GID);
+        // `isTrunk` is that question asked once, up with the gid sets; this was a fourth copy of it.
+        const inTree = isTrunk(x, y);
         if (g === 'water' || g === 'water-2' || g === 'waterfall' || inTree)
           onWater.push([x, y] as [number, number]);
       }
@@ -6608,9 +6661,11 @@ export function generateForestMap(): GeneratedMap {
    */
   const HEM_LIMIT = 6;
   {
-    const isCrown = (x: number, y: number): boolean => CANOPY_GIDS.has(at(above, x, y) & BASE_GID);
+    // `isCanopy` is the file's one answer to "is there a crown here". A private copy stood here
+    // under the name `isCrown`, character-identical to it, and a third under the name `crowned` in
+    // the composition audit below; both are deleted.
     const isHedge = (x: number, y: number): boolean =>
-      SCRUB_GIDS.has(at(below, x, y) & BASE_GID) && !isCrown(x, y);
+      SCRUB_GIDS.has(at(below, x, y) & BASE_GID) && !isCanopy(x, y);
     const bands: [string, [number, number][]][] = [
       ['row 0', Array.from({ length: MAP_W }, (_v, x) => [x, 0] as [number, number])],
       ['row 1', Array.from({ length: MAP_W }, (_v, x) => [x, 1] as [number, number])],
@@ -6642,15 +6697,62 @@ export function generateForestMap(): GeneratedMap {
    * ===========================================================================
    *
    * Every one of these is measured off the FINISHED layers rather than off the pass that produced
-   * it, and none of them is written in terms of the constant it is watching -- that mistake was
+   * it, and no BOUND here is written in terms of the constant it is watching -- that mistake was
    * made in this repo last round, where a guard restated the bound it was guarding, so putting the
    * constant back to the broken value moved the bound with it and the guard passed in silence.
    * Setting `TRACK_W` back to a straight stamp, deleting the edge tear, dropping the framing bands
    * or taking the anchor-column spacing out all fail here, because here the numbers come from the
    * map and the bounds are plain.
    *
-   * The bounds are set a little above what the map does today, on purpose: they are there to catch
-   * a RETURN of the defect, not to pin this seed's exact arithmetic.
+   * THAT USED TO SAY "none of them", FLATLY, AND TWO OF THEM DID IT. Corrected 2026-10-20, in the
+   * same edit that fixed the two. A preamble that overclaims is quoted back at the next reader as a
+   * reason not to check:
+   *
+   *   - 7c measured a file of crowns with `fileMate`, the PLANTER's own predicate for what counts
+   *     as a file. Widen the planter's idea of daylight between two crowns and its auditor widened
+   *     with it, so the planter could never fail its own test. The gap test is now written out at
+   *     the audit, deliberately restating the planter, with a comment on each saying so.
+   *   - 7a filtered the columns it measures with `TRACK_W - 1`, so two of its four bounds -- the
+   *     ruled edge and the bitten count -- loosened the moment the carriageway was widened, which
+   *     is the one change they exist to catch. It is written as `<= 1` now.
+   *
+   * There is a third kind of sharing on this page and it is RIGHT: `topEdgeRows` is shared between
+   * the framing planter and 7b, because that is a COORDINATE DERIVATION. A guard and a pass must
+   * agree about which rows they are talking about or the guard certifies rows nobody plants.
+   * Sharing a THRESHOLD is the opposite. Do not "unify" the first into the second.
+   *
+   * AND THE BOUNDS ARE RATCHETS PINNED TO THE TRUTH. NOT HEADROOM.
+   *
+   * The sentence that used to stand here said they were "set a little above what the map does
+   * today, on purpose", and it was false of most of them. It had also been quoted twice as a reason
+   * NOT to look at a failure here, which is the expensive half: a comment that misdescribes its own
+   * guards sends the next reader hunting for a defect that is not there. Counted on 2026-10-20,
+   * ELEVEN of the bounds below -- in six of this section's lettered parts -- sit at EXACT equality
+   * with what the map produces, so they have no margin at all:
+   *
+   *     7a         deepest column of sand in the hero frame       at most 4      4
+   *     7a         rows the carriageway's north edge sits on      at least 5      5
+   *     7b         columns of the title's top edge closed         at least 8     8 of 15
+   *     7b         the title's worst open run                      at most 7      7
+   *     7b-arrive  columns of the arrival's top edge closed       at least 9     9 of 20
+   *     7b-arrive  the arrival's worst open run                    at most 9      9
+   *     7g         unbroken planting file, in each of 3 cameras    at most 3      3 / 3 / 3
+   *     7h         fence run between posts                         at most 3      3
+   *     7c         longest file of crowns                          at most 3      3
+   *
+   * Four more carry one tile: 7a's straightest ruled edge (5 of 6) and bitten columns (9 of 8), 7e's
+   * tallest scree (3 of 4) and 7c's tallest stack (9 of 10). Only the rest are genuinely roomy --
+   * 7a's hero sand at 18.9% of 24% and 31 readable columns of 20, 7b-portrait's 29 tiles of 10 and
+   * 2 landmarks of 1, 7h's rail at 0 of 3, 7i's plaster at 1462px inside 480..2600 with its widest
+   * featureless patch 70px of 240, and 7d's ground shares of 34/47/16/3 against a 2.5..60 band.
+   *
+   * WHAT THAT MEANS FOR A CHANGE, which is the part worth carrying away. Anything that moves one
+   * tile of the generated map is odds-on to fail here, and a failure here is NOT by itself evidence
+   * that the change was wrong: it is this section asking to be re-measured. Re-read the composition
+   * line the run prints, satisfy yourself the picture is still the one `docs/DESIGN_BOARD.md`
+   * priority 1 asks for, and then move the bound to the new truth -- in either direction, in the
+   * same commit. What a ratchet buys is that the move is DELIBERATE and shows up in a diff, which is
+   * what catches a return of the defect. What it does not buy is room to move a tile for free.
    */
   {
     const notice = rectOf('notice-forest-post');
@@ -6684,10 +6786,20 @@ export function generateForestMap(): GeneratedMap {
      * Straightness and the count of rows travelled are then read off the columns where the trace is
      * the carriageway alone, and the comment says so instead of a silent skip doing it.
      */
-    const heroCols = columnsOf(HERO).filter((x) => {
-      const v = visibleTitleColumns();
-      return x >= Math.ceil(v.from) && x <= Math.floor(v.to);
-    });
+    /*
+     * `visibleTitleColumns()` answers in columns FROM THE CAMERA'S LEFT EDGE, and `columnsOf` gives
+     * map-absolute ones, so the frame's own origin has to be added before they can be compared.
+     *
+     * Without it this was right by luck. Red spawns at column 5 and the hero camera is 19.41 tiles
+     * wide, so `frameAt` clamps `HERO.x0` to exactly 0 and the two coordinate systems coincide --
+     * move the spawn east by one tile and this guard, and 7b below it, would quietly start reading
+     * the wrong columns while still reporting a number. The call is also lifted out of the filter
+     * callback, where it rebuilt the whole camera once per column.
+     */
+    const vis = visibleTitleColumns();
+    const visFirst = Math.ceil(HERO.x0 + vis.from);
+    const visLast = Math.floor(HERO.x0 + vis.to);
+    const heroCols = columnsOf(HERO).filter((x) => x >= visFirst && x <= visLast);
     const heroRows = rowsOf(HERO);
     let heroSand = 0;
     /*
@@ -6746,8 +6858,17 @@ export function generateForestMap(): GeneratedMap {
       traced.push({ x, ...run });
       through = Math.round((run.top + run.bottom) / 2);
     }
-    /** The columns where the trace is carriageway alone, which is where an EDGE can be read. */
-    const edges = traced.filter((e) => e.bottom - e.top <= TRACK_W - 1);
+    /**
+     * The columns where the trace is carriageway alone, which is where an EDGE can be read.
+     *
+     * The literal 1 is deliberate and must NOT go back to `TRACK_W - 1`. This filter decides which
+     * columns `straightest` and `bitten` are measured over, so writing it in terms of the track's
+     * own width meant that widening the track widened the guard's idea of "carriageway alone" with
+     * it -- and both of those bounds exist to catch exactly that widening. A guard may not take its
+     * threshold from the thing it is watching. Two tiles abreast is what this audit calls a
+     * carriageway, whatever the planter is currently stamping.
+     */
+    const edges = traced.filter((e) => e.bottom - e.top <= 1);
     const ruled = (pick: (e: { top: number; bottom: number }) => number): number => {
       let best = 0;
       let run = 0;
@@ -6817,10 +6938,12 @@ export function generateForestMap(): GeneratedMap {
      * rectangle -- the one the top edge cuts and the one directly below it -- so they follow the
      * camera and the spawn rather than a number typed here.
      */
-    const { from: visFrom, to: visTo } = visibleTitleColumns();
-    const firstVisible = Math.ceil(visFrom);
-    const lastVisible = Math.floor(visTo);
-    const crowned = (x: number, y: number): boolean => CANOPY_GIDS.has(at(above, x, y) & BASE_GID);
+    /*
+     * The visible range is `visFirst`..`visLast`, computed once up in 7a. This made a second
+     * `visibleTitleColumns()` call of its own and compared the camera-relative answer against
+     * map-absolute columns, the same way 7a did and with the same `HERO.x0 === 0` luck holding it
+     * up. One call, one offset, both guards.
+     */
     /**
      * How a frame's top edge reads: how many of its columns canopy closes, and -- the number the
      * design board actually named -- the longest UNBROKEN run of open sky across it.
@@ -6844,7 +6967,7 @@ export function generateForestMap(): GeneratedMap {
       let run = 0;
       let longest = 0;
       for (const x of cols) {
-        if (rows.some((y) => crowned(x, y))) {
+        if (rows.some((y) => isCanopy(x, y))) {
           run = 0;
           continue;
         }
@@ -6855,7 +6978,7 @@ export function generateForestMap(): GeneratedMap {
       return { closed: cols.length - open.length, open, run: longest, of: cols.length };
     };
     const visible: number[] = [];
-    for (let x = firstVisible; x <= lastVisible; x++) visible.push(x);
+    for (let x = visFirst; x <= visLast; x++) visible.push(x);
     const title = topEdge(HERO, visible);
     const closed = title.closed;
     const visibleCols = title.of;
@@ -6939,7 +7062,7 @@ export function generateForestMap(): GeneratedMap {
      * WHAT IS STILL OPEN, so the next owner does not re-derive it: columns 49 to 55 are the cottage.
      * Its roof occupies the two rows below this edge and its gable and chimney the two rows ON it, so
      * a crown there needs a trunk on row 15 or 16 -- which is the ridge and the wall. There is no
-     * routing for canopy over a house, and `clearOfRoof` is right to refuse a trunk directly above
+     * routing for canopy over a house, and `standsOnTheRoof` is right to refuse a trunk directly above
      * the roof's own top row. Closing that stretch means moving the building, which is a bigger
      * decision than a framing pass should take on its own.
      *
@@ -6987,7 +7110,7 @@ export function generateForestMap(): GeneratedMap {
      */
     const plantedCover = (x: number, y: number): boolean => {
       const b = nameAt(below, x, y);
-      return (b.startsWith('bush') || b.startsWith('flower')) && !crowned(x, y);
+      return (b.startsWith('bush') || b.startsWith('flower')) && !isCanopy(x, y);
     };
     const fileIn = (cols: number[], rows: number[]): { run: number; where: string } => {
       let worst = 0;
@@ -7398,7 +7521,19 @@ export function generateForestMap(): GeneratedMap {
      * all it was not a file by this definition and nothing counted it. Thirteen tiles is longer
      * than the camera is tall. So the stack is measured directly, off the canopy layer, where no
      * definition of a file can step over it.
+     *
+     * AND THE GAP TEST IS WRITTEN OUT HERE RATHER THAN CALLING `fileMate`. This guard used to call
+     * the planter's own predicate, which meant the planter set its own auditor's idea of what a
+     * file is: widen `fileMate`'s window and this count falls without a single tree moving. The
+     * duplication below is deliberate, it is the point, and the two are meant to be compared by
+     * eye rather than kept in step by sharing a body. If `fileMate` ever changes, come and decide
+     * separately whether the AUDIT's definition of a topiary column should change with it.
      */
+    /** Deliberately a copy of `fileMate`'s window, not a call to it. See directly above. */
+    const auditedFileMate = (a: number, b: number): boolean => {
+      const gap = Math.abs(a - b);
+      return gap >= 3 && gap <= 7;
+    };
     let longestFile = 0;
     let fileAt = '';
     const byColumn = new Map<number, number[]>();
@@ -7414,7 +7549,7 @@ export function generateForestMap(): GeneratedMap {
       const sorted = [...ys].sort((a, b) => a - b);
       let run = 1;
       for (let i = 1; i < sorted.length; i++) {
-        run = fileMate(sorted[i]!, sorted[i - 1]!) ? run + 1 : 1;
+        run = auditedFileMate(sorted[i]!, sorted[i - 1]!) ? run + 1 : 1;
         if (run > longestFile) {
           longestFile = run;
           fileAt = `column ${x}, rows ${sorted.slice(i - run + 1, i + 1).join(',')}`;
@@ -7432,7 +7567,7 @@ export function generateForestMap(): GeneratedMap {
     for (let x = 0; x < MAP_W; x++) {
       let run = 0;
       for (let y = 0; y < MAP_H; y++) {
-        run = crowned(x, y) ? run + 1 : 0;
+        run = isCanopy(x, y) ? run + 1 : 0;
         if (run > tallestStack) {
           tallestStack = run;
           stackAt = `column ${x}, rows ${y - run + 1}-${y}`;

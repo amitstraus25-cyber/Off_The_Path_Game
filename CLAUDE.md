@@ -13,25 +13,41 @@ This is a Cyera marketing/research asset. It must be on-brand, fast, accessible,
 
 - @docs/PLAN.md: phased build plan with checkboxes. **Work one phase at a time.**
 - @docs/ARCHITECTURE.md: stack, folder layout, state machine, data schemas, API contract.
-- @docs/BRAND_AND_UI.md: Cyera brand tokens and exact UI specs. Binding.
+- @docs/UI_FOUNDATIONS.md: binding, transcribed from the "Off the Path — Game UI" design deck.
+  **It supersedes BRAND_AND_UI.md wherever the two disagree.** Read it before BRAND_AND_UI, not after.
+- @docs/BRAND_AND_UI.md: Cyera brand tokens and component specs. Binding except where UI_FOUNDATIONS overrides.
+- docs/PIXEL_STANDARD.md: binding for every painter in `tools/graybox/src` — sizes, colour, light, edges.
 - docs/GAME_DESIGN.md: story, characters, skills, scoring, endings (read when touching content/logic).
-- docs/ASSETS.md: art/audio manifest and the placeholder strategy.
+- docs/ASSETS.md: the production-art gap and the placeholder strategy. Sizes live in PIXEL_STANDARD
+  section 1; the shipped file list is `apps/game/src/assets/manifest.json`.
 - docs/KICKOFF_PROMPTS.md: the prompts the human will use; useful for understanding intent.
 - `reference/`: concept PDF, the approved gameplay board, and the branded UI mocks (HTML + PNG).
-  The mocks in `reference/mocks/` are the visual source of truth for the DOM UI.
+  The mocks in `reference/mocks/` are **reference, not the source of truth**: the design deck
+  transcribed into UI_FOUNDATIONS supersedes them, and BRAND_AND_UI records specifically that they
+  set Season Mix in italic throughout and are superseded on it. Where a mock and UI_FOUNDATIONS
+  disagree, UI_FOUNDATIONS wins. `reference/mocks/gameplay-concepts.png` remains the approved
+  direction for **world art**, which is ART_DIRECTION's subject, not the DOM UI's.
 
 ## Commands
 
 ```
 pnpm install            # exact versions only, see Security rules
-pnpm dev                # game dev server (apps/game, Vite)
-pnpm test               # unit tests + coverage (packages/core, 100% branch gate) -- must stay green
-pnpm sim                # plays strategies through the real reducer; add --strategy perfect|reject-all|allow-all|restrict-all|random --questions --seed N
+pnpm dev                # game dev server (apps/game, Vite) on :5173
+pnpm test               # unit tests in every workspace that has them -- packages/core, apps/game and
+                        #   tools/graybox. packages/core is gated at 100% on ALL FOUR metrics
+                        #   (statements, branches, functions, lines); tools/graybox deliberately has
+                        #   no coverage threshold and gates on art measurements instead. Must stay green
 pnpm typecheck          # tsc in every workspace
 pnpm lint               # eslint + prettier --check
 pnpm format             # prettier --write
-pnpm e2e                # Playwright smoke (builds + previews on :4173). Locally set CHROMIUM_PATH to reuse an installed Chromium
 pnpm build              # production build of apps/game
+pnpm e2e                # Playwright (builds + previews on :4173). Locally set CHROMIUM_PATH to reuse an installed Chromium
+pnpm sim                # plays strategies through the real reducer; add --strategy perfect|errand|reject-all|allow-all|restrict-all|random --questions --seed N
+pnpm preview            # contact sheets of the generated art at an integer zoom (PIXEL_STANDARD section 7)
+pnpm world              # renders the map through the REAL camera: --frame title|arrive|portrait.
+                        #   The only way to see what a visitor sees. Two rounds were lost to composing
+                        #   against a camera size somebody remembered instead of one this printed
+pnpm score              # measures a render against the concept board on five axes
 pnpm graybox            # regenerate placeholder art into apps/game/src/assets
 pnpm audit              # high-severity dependency audit (also runs in CI)
 ```
@@ -50,7 +66,9 @@ Pinned: TypeScript 6.0.3, Vite 7.3.6, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29
 2. **`packages/core` is pure TypeScript.** No Phaser, no DOM, no `window`, no network, no randomness without
    an injected seed. All game rules (state machine, scoring, outcomes) live there and are unit tested first (TDD).
 3. **Content is data.** Characters, skills, questions, dialogue, outcomes, scoring weights live in
-   `content/game.json` (validated by a schema at build time and startup). Adding a skill must not require code changes.
+   `content/game.json`, validated by `contentSchema` and the content lint in `packages/core/src/content.ts`
+   — **at startup and in the test suite, not at build time**; there is no build-time validation step.
+   Adding a skill must not require code changes.
 4. **World in Phaser, UI in the DOM.** Phaser renders the forest only. Every panel (dialogue, skill card, basket,
    results, leaderboard, HUD) is accessible DOM over the canvas, styled with Cyera tokens. No UI text drawn on canvas.
 5. **Never invent brand assets.** Use only the logos, colors and fonts in `reference/brand/`. No made-up icons,
@@ -64,7 +82,9 @@ Pinned: TypeScript 6.0.3, Vite 7.3.6, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29
 - Colors come from CSS variables in `reference/brand/cyera-theme.css`. Never hard-code hex in components.
 - **Lime `#BFFFA2` appears once per screen** (the primary call to action). Aubergine, Stone, Ash are text/foreground only.
 - No red or green status colors. Use purple tints plus shape/icon (check mark, "!") and text.
-- Haffer for UI text (fallback Inter). Season Mix italic only for a single highlighted word in a heading. Never body text.
+- Haffer for UI text (fallback Inter). **Season Mix is upright only, never italic** — the brand book says
+  so outright, and BRAND_AND_UI section 2, UI_FOUNDATIONS section 3 and `tokens.css` all repeat it. The
+  mocks set it in italic throughout and are superseded. One highlighted word in a heading at most. Never body text.
 - Logos used as-is: black on light, white on dark. Do not recolor, stretch or redraw.
 - Pixel art stays pixel-crisp: `image-rendering: pixelated`, integer scaling in the canvas.
 
@@ -79,7 +99,8 @@ Pinned: TypeScript 6.0.3, Vite 7.3.6, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29
 
 ## Definition of done (every task)
 
-Typecheck, lint, unit tests green; new rules have tests; UI matches the mocks at 375px, 768px and 1280px widths;
+Typecheck, lint, unit tests green; new rules have tests; UI matches UI_FOUNDATIONS (and the mocks where it
+has not superseded them) at 375px, 768px and 1280px widths;
 keyboard-only playthrough still works; no new console errors; PLAN.md updated; a short note on anything you
 deferred or assumed.
 

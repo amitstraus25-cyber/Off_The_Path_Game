@@ -162,6 +162,15 @@ async function errandRows(page: Page): Promise<{ badge: string; missed: boolean;
 
 test('a perfect run is never marked with the failure glyph', async ({ page }) => {
   await playToResults(page, PERFECT);
+  /*
+   * THE ONE EXACT TOTAL IN THE E2E SUITE, deliberately. Five other specs used to spell a score out
+   * -- game.spec.ts three times, trifecta.spec.ts twice -- so a weight change in content/game.json
+   * reddened five browser tests, which is exactly what CLAUDE.md rule 3 says adding or rebalancing
+   * a skill must not do. The arithmetic belongs to packages/core/test/scoring.test.ts, which pins
+   * every run shape in one it.each table under a 100% gate. This one survives because it is also
+   * the premise of the assertions below: the glyphs and the Haze ground are only interesting on a
+   * run that genuinely scored full marks, so if the ceiling moves this should be read, not fixed.
+   */
   await expect(page.locator('.otp-hero__score')).toContainText('1,000');
 
   const rows = await errandRows(page);

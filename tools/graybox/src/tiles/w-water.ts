@@ -89,13 +89,17 @@
  * for the bank rock and its outline, `grass` and `shadow` for the land behind it. No raw hex, no
  * partial alpha, and no brand colour, because the forest stays a forest.
  */
-import { Img, keyline, shade, tone } from '../paint.ts';
-import type { RGBA } from '../paint.ts';
+import { clamp01, Img, keyline, mix, shade, TILE, tone } from '../paint.ts';
+import type { RGBA, Side } from '../paint.ts';
 
-/** Terrain tiles are 32x32 (docs/PIXEL_STANDARD.md section 1). */
-const S = 32;
-
-export const WATER_TILE_SIZE = S;
+/**
+ * Terrain tiles are one TILE square (docs/PIXEL_STANDARD.md section 1).
+ *
+ * `S` is kept as a one-line local alias rather than renamed: it is read at about fifty sites in this
+ * file, and fifty edits to spell one constant differently is churn with a pixel risk and no reader
+ * benefit. What mattered was that it stopped being its own `32`.
+ */
+const S = TILE;
 
 const TAU = Math.PI * 2;
 
@@ -103,8 +107,6 @@ const wrap = (v: number): number => ((Math.round(v) % S) + S) % S;
 
 /** Plot with both axes wrapped into the tile, so a feature that leaves one edge enters the other. */
 const wpx = (img: Img, x: number, y: number, c: RGBA): void => img.px(wrap(x), wrap(y), c);
-
-const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 type Phases = readonly [number, number, number, number];
 
@@ -310,8 +312,6 @@ function river(img: Img, ripples: readonly Ripple[], swirls: readonly Ripple[]):
 
 /* --- the bank ------------------------------------------------------------- */
 
-type Side = 'n' | 's' | 'e' | 'w';
-
 /**
  * How deep the land reaches into the tile, measured from the bank-side edge, at position `t` along
  * that edge. Mean 12 of 32, unchanged from the build this replaces, because the map's river width
@@ -384,13 +384,6 @@ const ROCK_CONTACT = keyline('stone', 14);
 
 /** The cracks the board draws across its larger boulders: dark grey, not black. Luma 74. */
 const ROCK_CRACK = keyline('stone', 22);
-
-const mix = (a: RGBA, b: RGBA, k: number): RGBA => [
-  Math.round(a[0] + (b[0] - a[0]) * k),
-  Math.round(a[1] + (b[1] - a[1]) * k),
-  Math.round(a[2] + (b[2] - a[2]) * k),
-  255,
-];
 
 const STONE_FLOOR = tone('stone', 0);
 

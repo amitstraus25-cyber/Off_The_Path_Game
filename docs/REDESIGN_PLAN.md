@@ -122,6 +122,10 @@ checked by someone who looked:
 - Red is the most findable thing on screen, and she is Cyera purple.
 - The cottage is somewhere you want to walk to.
 - The four animals are distinguishable by silhouette alone.
-- `TILE_NAMES` still holds 53 names in order and the map is fully playable to every goal.
+- `TILE_NAMES` still holds its names in the same order, and the map is fully playable to every goal.
+  (It held 53 when this plan was written and holds 79 today; the count is printed by
+  `tools/graybox/src/tiles.ts` and pinned in `tools/graybox/test/art-guards.test.ts`. What matters
+  here is the ORDER, because a gid is an index into that array and those gids are written into every
+  tile of the committed map.)
 - Zero partial alpha, no raw hex in a painter, no Lime anywhere in world art.
 - Typecheck, lint, unit and end-to-end all green, with no test weakened to make it pass.

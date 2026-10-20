@@ -6,10 +6,7 @@ import { availableFor, stageFit } from '../world/logic';
  * `availableFor` doing exactly what this function used to do inline, because tools/graybox has to
  * be able to work out what the camera shows WITHOUT a DOM -- and when it could not, it guessed,
  * and composed three rounds of art against a camera a third bigger than the real one.
- *
- * Re-exported rather than just imported: FRAME is part of this module's public surface.
  */
-export { FRAME } from '@otp/core';
 
 /** Tells Phaser the camera size changed, in game pixels. */
 export type StageSizer = (width: number, height: number) => void;

@@ -63,7 +63,18 @@ test('the title screen starts the run', async ({ page }) => {
   expect((await probe(page)).phase).toBe('explore');
 });
 
-test('a perfect run scores 1,000 and ends clean', async ({ page }) => {
+/*
+ * The three tests below used to name a total and assert it. They no longer do, and nor do their
+ * names. packages/core/test/scoring.test.ts proves every one of these run shapes in one it.each
+ * table -- perfect+needs = 1000, reject-all = 600, allow-all = 100 -- under a 100% coverage gate,
+ * so repeating the numbers in a browser meant that rebalancing a skill in content/game.json
+ * reddened three e2e tests, which is the one thing CLAUDE.md rule 3 promises cannot happen. What
+ * is left here is what only a browser can see: which ending card plays, which recap rows wear the
+ * miss treatment, and that a score reaches the screen at all. One exact total is still asserted in
+ * the suite, in e2e/results-payoff.spec.ts, where it is the premise of the test around it.
+ */
+
+test('a perfect run ends clean, with no skill row marked as a miss', async ({ page }) => {
   await page.getByRole('button', { name: /Begin the walk/ }).click();
   await playRun(page, { rabbit: 'restrict', owl: 'reject', 'lantern-keeper': 'restrict' }, [
     'needs',
@@ -71,13 +82,12 @@ test('a perfect run scores 1,000 and ends clean', async ({ page }) => {
 
   await expect(page.locator('.otp-ending__title')).toBeHidden();
   await finishArrival(page);
-  await expect(page.locator('.otp-hero__score')).toContainText('1,000');
   const rows = page.locator('.otp-recap__row--skill');
   await expect(rows).toHaveCount(3);
   await expect(page.locator('.otp-recap__row--skill.otp-recap__row--missed')).toHaveCount(0);
 });
 
-test('rejecting everything scores 600 and arrives with the errand undone', async ({ page }) => {
+test('rejecting everything arrives safely, with the errand undone', async ({ page }) => {
   await page.getByRole('button', { name: /Begin the walk/ }).click();
   await playRun(page, { rabbit: 'reject', owl: 'reject', 'lantern-keeper': 'reject' });
 
@@ -89,7 +99,6 @@ test('rejecting everything scores 600 and arrives with the errand undone', async
   await expect(page.locator('.otp-arrive__line--reveal').first()).toContainText('given up waiting');
   await page.getByRole('button', { name: /Step inside/ }).click();
   await expect(page.locator('.otp-hero__score')).toBeVisible();
-  await expect(page.locator('.otp-hero__score')).toContainText('600');
   // Rejecting Word Weaver is the best call, so only the compass and the lantern are misses:
   // refusing everything is safe but costly, which is the point of keeping one genuinely safe skill.
   await expect(page.locator('.otp-recap__row--skill.otp-recap__row--missed')).toHaveCount(2);
@@ -98,14 +107,13 @@ test('rejecting everything scores 600 and arrives with the errand undone', async
   );
 });
 
-test("allowing everything scores 100 and ends in the wolf's house", async ({ page }) => {
+test("allowing everything ends in the wolf's house", async ({ page }) => {
   await page.getByRole('button', { name: /Begin the walk/ }).click();
   await playRun(page, { rabbit: 'allow', owl: 'allow', 'lantern-keeper': 'allow' });
 
   await finishArrival(page);
   // A capability taken by allowing in full does not carry out Grandma's errand -- the word it
   // sent went to the wolf as well -- so allow-all earns no goal and keeps only the lantern's 100.
-  await expect(page.locator('.otp-hero__score')).toContainText('100');
   // Allowing the lantern is now a miss too: restricting it is the best verdict on that card.
   await expect(page.locator('.otp-recap__row--skill.otp-recap__row--missed')).toHaveCount(3);
   const flags = await page.evaluate(() => window.__otp!.store.getState().flags);

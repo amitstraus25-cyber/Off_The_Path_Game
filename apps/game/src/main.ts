@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import { h, render } from 'preact';
 import {
+  availableFor,
   canEnterCottage,
   ending,
   findNotice,
   loadContent,
   noticePending,
   score,
+  stageFit,
   trifectaLive,
 } from '@otp/core';
 import type { Verdict } from '@otp/core';
@@ -24,8 +26,6 @@ import { createLeaderboardClient } from './net/leaderboard';
 import { emit } from './embed/postMessage';
 import './ui/panels.css';
 import './ui/screens.css';
-
-const LOGICAL = { width: 480, height: 270 };
 
 /** Past tense of each verdict, for the confirmation line. */
 const VERDICT_STRING: Record<Verdict, string> = {
@@ -228,16 +228,28 @@ async function start(): Promise<void> {
     store.dispatch({ type: 'ENTER_COTTAGE' });
   });
 
+  /*
+   * The camera Phaser is born with.
+   *
+   * This was a literal `{ width: 480, height: 270 }` that fitStage overwrote on the first frame --
+   * a camera size written down rather than derived, which is the exact mistake packages/core's
+   * camera.ts exists to stop, and which cost this project two rounds of art composed against a
+   * rectangle that does not exist. Derived here from the same two pure functions ui/stage.ts
+   * calls, so the canvas is created at the size it is going to keep.
+   */
+  const firstView = stageFit(
+    availableFor({ width: innerWidth, height: innerHeight }).available,
+  ).view;
+
   // Phaser reads this too, so movement, prompts and triggers all stop together.
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: stage,
-    width: LOGICAL.width,
-    height: LOGICAL.height,
+    width: firstView.width,
+    height: firstView.height,
     pixelArt: true,
     roundPixels: true,
     backgroundColor: cssColor('--cyera-black'),
-    // The canvas keeps its logical size; ui/stage.ts scales it by whole device pixels.
     scale: { mode: Phaser.Scale.NONE },
     // Plain <img> loading keeps the strict CSP free of a blob: allowance.
     loader: { imageLoadType: 'HTMLImageElement' },
@@ -251,10 +263,39 @@ async function start(): Promise<void> {
     scene: [new BootScene(manifest), new ForestScene(store, bus, input, worldHasInput)],
   });
 
-  bus.on('worldReady', () => {
-    // The camera size is derived from the space available, so the canvas fills its frame instead
-    // of being letterboxed; the scene reads this.scale every frame and follows.
+  /*
+   * THE CANVAS BOX HAS TO REACH CSS BEFORE THE DOM PAINTS.
+   *
+   * ui/stage.ts publishes --otp-canvas-x/y/w/h, and three position:fixed panels -- the world
+   * frame, the title dock and the HUD -- are positioned entirely from them. This call used to sit
+   * in `bus.on('worldReady')`, which fires only once BootScene has loaded every asset, so the
+   * title screen painted first against the 0px fallbacks and then lurched into place: ONE layout
+   * shift, measured at 0.7811 at 1280x800 against a "good" threshold of 0.1, on the first screen
+   * of a public research-page asset. In landscape .otp-title-panel is
+   * `min(306px * var(--otp-ui), 62%)` of the dock, and 62% of a 0px dock leaves the copy column at
+   * nothing but its own 48px of padding before it snaps out to 306px, taking the heading,
+   * Grandma's note and the body copy with it.
+   *
+   * Phaser's Game.boot() calls AddToDOM before it emits BOOT, so game.canvas exists and is in the
+   * document by then -- before any scene preloads, and before the first `draw()` below. Boot runs
+   * SYNCHRONOUSLY inside the constructor whenever document.readyState is already 'interactive' or
+   * 'complete' (phaser/src/dom/DOMContentLoaded.js), which is the case here because this is a
+   * deferred module script that has already awaited the manifest, so by this line the event has
+   * usually been and gone: `isBooted` is the path actually taken, and the listener covers a boot
+   * still waiting on the DOM. Either way fitStage runs in this same task, so the first paint is
+   * already the final layout. The camera size is derived from the space available, so the canvas
+   * fills its frame instead of being letterboxed; the scene reads this.scale every frame.
+   *
+   * `stage.dataset['ready']` deliberately STAYS on worldReady. It is the gate every e2e spec
+   * waits on and it has to keep meaning "the world is loaded", not "the canvas has a size".
+   */
+  const fitToStage = (): void => {
     watchStage(stage, game.canvas, (w, h) => game.scale.resize(w, h));
+  };
+  if (game.isBooted) fitToStage();
+  else game.events.once('boot', fitToStage);
+
+  bus.on('worldReady', () => {
     stage.dataset['ready'] = 'true';
     emit('otp:ready', { version: content.version });
   });

@@ -294,19 +294,6 @@
   color: var(--cyera-haze);
 }
 
-.otp-sound {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 2px solid var(--cyera-deep-purple);
-  background: transparent;
-  color: var(--cyera-offwhite);
-  font-size: 15px;
-  cursor: pointer;
-}
-
 .otp-panel__body {
   border-radius: 0 0 var(--otp-r-panel) var(--otp-r-panel);
   overflow: hidden;
@@ -643,22 +630,6 @@
 .otp-dialogue__line {
   margin: 0 0 calc(3px * var(--otp-ui));
   font-weight: 400;
-}
-
-/* The caret that says "there is more to read". */
-.otp-dialogue__more {
-  position: absolute;
-  right: calc(20px * var(--otp-ui));
-  bottom: calc(14px * var(--otp-ui));
-  color: var(--cyera-deep-purple);
-  font-size: calc(22px * var(--otp-ui));
-  animation: otp-caret 900ms steps(2, end) infinite;
-}
-
-@keyframes otp-caret {
-  50% {
-    transform: translateY(2px);
-  }
 }
 
 /*
@@ -1037,7 +1008,6 @@
   margin: 0 0 calc(7px * var(--otp-ui));
   font-weight: 500;
   color: var(--cyera-deep-purple);
-  margin: 0 0 calc(7px * var(--otp-ui));
 }
 
 .otp-slots {
@@ -1195,12 +1165,6 @@
   box-shadow: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .otp-dialogue__more {
-    animation: none;
-  }
-}
-
 /* ---------------------------------------------------------------- trifecta */
 
 /*
@@ -1342,10 +1306,6 @@
 
 /* All three verdict pills share one surface now, so the marks need no per-button inversion. */
 
-.otp-grants--none {
-  font-style: normal;
-}
-
 /* ---------------------------------------------------------------- notice */
 
 .otp-notice {
@@ -1389,11 +1349,9 @@
   color: var(--cyera-ash);
 }
 
-@keyframes otp-fade-in {
-  from {
-    opacity: 0;
-  }
-}
+/* `otp-fade-in` above is defined once, in ui/screens.css beside the wolf reveal that is its other
+   caller. @keyframes are document-global and both sheets are loaded on every screen, so the copy
+   that used to sit here could only ever be the same two lines written twice. */
 
 @media (prefers-reduced-motion: reduce) {
   .otp-notice__hidden {
