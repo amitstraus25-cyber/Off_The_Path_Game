@@ -132,20 +132,43 @@ export async function mapObject(page: Page, name: string): Promise<MapObject> {
 /**
  * Where an NPC can actually be TALKED to, which is not where the map object is.
  *
- * `npc-rabbit` is a tile at (416, 608); the person standing on it answers at (432, 648), because
- * the spawn is centred in its tile and the sprite's origin is its feet. The difference is 56px and
- * INTERACT_RADIUS is 48, so walking to the object's own corner parks Red one tile short of being
- * able to say anything -- which is exactly how e2e/world-reach.spec.ts was wrong first time round.
+ * `npc-rabbit` is a tile at (416, 608); the person standing on it answers at (432, 640), because
+ * the spawn is centred in its tile and the sprite's origin is its feet. Walking to the object's own
+ * corner parks Red short of being able to say anything -- which is exactly how
+ * e2e/world-reach.spec.ts was wrong first time round.
  *
  * Both offsets are derived from TILE rather than typed: half a tile across to the centre of the
- * spawn tile, and a tile plus eight pixels down to where her feet stand. They used to be bare
- * `+16, +40` literals repeated across five spec files, which were right at TILE = 32 and silently
- * wrong at any other size -- the same drift that made the walking helpers above overshoot when the
- * art moved from 16px tiles to 32px.
+ * spawn tile, and a tile down to where her feet stand. They used to be bare `+16, +40` literals
+ * repeated across five spec files, which were right at TILE = 32 and silently wrong at any other
+ * size -- the same drift that made the walking helpers above overshoot when the art moved from
+ * 16px tiles to 32px.
+ *
+ * THE `+ 8` IS GONE, AND IT COST A ROUND. This read `spot.y + TILE + 8` from 37a94b9, where it was
+ * CORRECT: `createCharacter` then placed the sprite at `spawn.y + NPC_SPRITE.height / 2` and the
+ * NPC sheets are 48px tall, so the anchor was tile-centre + 24 = o.y + 40, and `TILE + 8` is
+ * literally 16 + 24 restated. The very next commit, 6452ece, changed that line to
+ * `spawn.y + TILE / 2` -- its own docstring says why: "every one of the eight stood 8px into the
+ * tile below their own" -- which moved the whole cast 8px north to o.y + 32. This file was not
+ * touched and kept encoding the old anchor.
+ *
+ * Eight pixels, and it read as a hole in the map. `walkTo`'s tolerance is `TILE * 1.25` = 40 and
+ * the north approach to a cast member is EXACTLY 40.00px, margin zero, so Red landing 3px off
+ * centre at (333,704) measured 40.11 to the stale target and threw "Something is in the corridor."
+ * Against the real anchor it is 32.14, inside tolerance with 8px to spare, and `INTERACT_RADIUS` is
+ * 48 -- she could always talk. The game was never broken; the test measured to a point that had
+ * moved. A whole round was spent hunting a collision tile at (10,22) that is the toadstool's own
+ * spawn cell, deliberately solid under the "nobody in the cast is a ghost" invariant.
+ *
+ * THERE ARE THREE ANCHORS FOR THIS ONE POINT and nothing asserts they agree: here (o.y + 32, now
+ * correct), `createCharacter` in src/world/forest-scene.ts (o.y + 32, the truth that `nearest()`
+ * measures against), and `map.test.ts`'s `centre` (o.y + 16, a different thing for a different
+ * purpose). That is why an 8px move landed silently in e2e instead of in `pnpm test`. The real fix
+ * is one exported `castAnchor()` both callers read; until then, `test/cast-anchor.test.ts` fails if
+ * these two drift again.
  */
 export async function talkingDistance(page: Page, name: string): Promise<{ x: number; y: number }> {
   const spot = await mapObject(page, name);
-  return { x: spot.x + TILE / 2, y: spot.y + TILE + 8 };
+  return { x: spot.x + TILE / 2, y: spot.y + TILE };
 }
 
 /** Closes a notice post if Red has walked up to one, so a walk across the map is not blocked. */

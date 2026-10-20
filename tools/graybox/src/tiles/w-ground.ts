@@ -17,6 +17,46 @@
  * own lawn tile was carrying. The lawn is calm; all the dark and all the busyness on that frame
  * belong to the canopies, the bushes and the objects.
  *
+ * 2026-10-20: THE QUILT IS BACK, IT IS NOT THE VIGNETTE, AND IT IS A SEED ACCIDENT IN THE RIM FIELD.
+ *
+ * A client looking at a phone reported "glitches" in the undergrowth and the lawn. On a phone the
+ * camera is zoom 1 and shows 11.5 x 16.7 tiles against the desktop's 19.4 x 11.2, so a per-tile
+ * artefact is about three times as frequent in the frame -- which is why this surfaced there first
+ * and had been passing on desktop.
+ *
+ * IT IS NOT THE VIGNETTE AND IT IS NOT UNDERGROWTH. Both were checked before anything was changed.
+ * The vignette depth really is gone -- `BANDS` are re-centred and the counterfactual with the
+ * envelope forced flat has a column ripple of exactly 0.0 on all four variants. And the undergrowth
+ * tiles do NOT replace their grass square: `w-undergrowth.ts` paints the shipped `GROUND_TILES`
+ * backing and their untouched border pixels measure 153.1 to 154.6 against the bare variants'
+ * 153.3 to 154.8, so the backing is correct to a luma and inherits whatever this file does.
+ *
+ * WHAT IT ACTUALLY IS: `SHARED.rim` is equalised to a field mean of exactly 0.500, but nothing ever
+ * asked its BORDER to be unbiased and it is not -- 0.273, every one of the four sides low, 7.7 luma
+ * of darkening on the outer two-pixel ring of every grass tile and every path verge in the world, in
+ * the same direction and the same phase. `massField` pins the envelope to zero on exactly that ring,
+ * so those are the pixels where the rim is the ONLY term and the accident is shown undiluted. The
+ * note above `EDGE_OCTAVES` had already measured this to three decimals and deferred it to "a round
+ * that owns the boundary figures". This is that round. See `levelBorder`.
+ *
+ *     composed lawn, 240 ground tiles of the spawn frame      before   after
+ *     folded peak-to-peak, column axis                          16.5    11.5
+ *     folded peak-to-peak, row axis                             12.2    10.8
+ *     worst frame deficit, ring against its own interior        +10.4    +4.7
+ *     `assertNoSeamBand`, worst of sixteen pairings              11.7     6.8
+ *
+ * AND `assertNoSeamBand` WAS GREEN THE WHOLE TIME, at 11.7 against its limit of 14, because a frame
+ * printed by every tile darkens its `band` and its `rest` together. That is a different fault from
+ * the one it names and it now has `assertRimBorderUnbiased` watching it.
+ *
+ * WHAT IT COST, recorded because it is not small and the next round has to pick it up: the mid-range
+ * share over the composed lawn falls 37.8% -> 29.6%. The dark ring is a quarter of every tile and it
+ * sat just under the 96-160 band's ceiling, so a quarter of the lawn was counting as mid-range
+ * BECAUSE it was too dark -- the figure the 2026-10-19 `EDGE_L` sweep tuned on was partly measuring
+ * the grid. Winning it back means bringing the CORES down to the ring rather than the ring up to the
+ * cores, which is `BANDS` and `EDGE_L`, and it is deliberately not done here: two large changes to
+ * the lawn in one round and neither can be judged. The full argument is in `levelBorder`.
+ *
  * 2026-10-20: THE LAWN HAS TUFTS. One chevron per variant, and it is the only mark in this file
  * drawn at an absolute tone rather than at a share of the ground under it. The design board's
  * finding was that "five by six tiles of w-grass.png at 5.6x contain not one three-blade sprig" and
@@ -710,8 +750,10 @@ const SHADE_MIX = 0.28;
  * to all four variants and the review scoped this one to grass-0.
  */
 /*
- * THE RIM'S DOMINANT OCTAVE HAS FOUR CELLS, AND FOUR DIVIDES SIXTEEN. FLAGGED, MEASURED, NOT FIXED
- * (2026-10-20).
+ * THE RIM'S DOMINANT OCTAVE HAS FOUR CELLS, AND FOUR DIVIDES SIXTEEN. FLAGGED AND MEASURED
+ * 2026-10-20; FIXED THE SAME DAY, AND NOT BY CHANGING THE OCTAVE. See `levelBorder`, which
+ * subtracts the measured border bias every load. Everything below stands as written -- it is the
+ * diagnosis the fix is built on, and the swept alternatives in it are still the ones NOT taken.
  *
  * `wrapNoise`'s own note, forty lines up, says it plainly: "a lattice of 5 or 9 cells gives a
  * pattern with no axis that lines up with the tile grid, where 4 or 8 quietly reintroduce the thing
@@ -735,14 +777,26 @@ const SHADE_MIX = 0.28;
  * left in the ground's fold over the tile pitch, larger than the vignette `BANDS` has just taken
  * out, and `assertNoSeamBand` measures its effect rather than this number.
  *
- * WHY IT IS NOT FIXED HERE. Swapping the 4 for a 5 takes the ground's folded peak-to-peak from
+ * WHY THE OCTAVE IS NOT THE FIX. Swapping the 4 for a 5 takes the ground's folded peak-to-peak from
  * x 22.0 / y 13.1 to x 12.1 / y 16.0 -- it halves the column axis and makes the row axis worse,
  * because the next seed's border bias is a different accident in a different axis -- and it moves
  * the 1024 grass-to-grass boundary pixels the design board protects: the share above 24 luma goes
  * 8.40% -> 11.62% and the maximum step 64.3 -> 69.3. Choosing a seed whose border happens to be
  * unbiased is luck, not a fix; the fix is a rim field whose border distribution matches its
- * interior BY CONSTRUCTION, and that is a round that owns the boundary figures and can re-ratchet
- * them. This round was scoped to the vignette depth and leaves them untouched.
+ * interior BY CONSTRUCTION.
+ *
+ * RE-SWEPT 2026-10-20 WITH `levelBorder` IN PLACE, which is the measurement that settles it. Even
+ * with the bias subtracted, swapping the octave only moves the lattice from one axis to the other:
+ *
+ *     [4, 7, 13] + levelBorder   col 14.6  row  8.9   above 24  9.08%   worst frame +7.2
+ *     [5, 7, 13] + levelBorder   col 10.0  row 14.4   above 24 11.62%   worst frame +4.8
+ *     [3, 7, 13] + levelBorder   col  9.3  row 13.7   above 24 10.25%   worst frame +4.1
+ *     [5, 9, 13] + levelBorder   col 11.2  row  9.0   above 24  9.86%   worst frame -4.6
+ *
+ * `[5, 9, 13]` is the tempting one and is still not taken: it buys a point of column axis for a
+ * point and a half of boundary share, it flips the frame deficit's SIGN (a bright frame is the same
+ * fault), and it is the same gamble on a different seed that this note has twice declined. The
+ * octaves stay where they are and the construction carries the fix.
  */
 const EDGE_OCTAVES: readonly Octave[] = [
   [4, 0.5],
@@ -806,6 +860,151 @@ interface Shared {
   readonly warm: Float64Array;
 }
 
+/**
+ * Take the seed's accidental bias off the rim field's BORDER, which is the fix the note above
+ * `EDGE_OCTAVES` named and deferred: "a rim field whose border distribution matches its interior BY
+ * CONSTRUCTION, and that is a round that owns the boundary figures and can re-ratchet them".
+ *
+ * THIS IS THAT ROUND, and the figures are re-ratcheted at the foot of this comment.
+ *
+ * `equalise` gets the WHOLE field to a mean of 0.500 exactly, which is what it is for. Nothing asked
+ * the BORDER SUBSET to be unbiased, and it was not: 0.273 against the field's 0.500, every one of the
+ * four sides low, which at `EDGE_SWING` is 7.7 luma of darkening on the outer ring of every grass
+ * tile in the world, in the same direction, in the same phase. That is a dark two-pixel frame stamped
+ * every 32 pixels -- the lattice this file exists to remove, arriving by a different route than the
+ * vignette `BANDS` took out, and bigger than the vignette was.
+ *
+ * TWO BORDER SETS APPEAR IN THESE NUMBERS AND THEY ARE NOT THE SAME SET. Read carefully, because a
+ * future round will otherwise take one figure for the other:
+ *
+ *     the outermost BLOCK ring, 60 blocks     mean 0.2733   7.7 luma under the field
+ *     every block with `mass === 0`, 91       mean 0.3714   4.4 luma under the field
+ *
+ * The second is larger because quantising the envelope rounds some near-border blocks down to zero as
+ * well. The note above `EDGE_OCTAVES` measured the FIRST, and the painted "frame deficit" in the
+ * table below is the first too, because a two-pixel ring is the thing that prints as a frame. But
+ * `levelBorder` corrects, and `assertRimBorderUnbiased` watches, the SECOND -- because `mass === 0`
+ * is the exact condition under which the rim is the only term in `lawnLuma`, and correcting a set
+ * defined by the geometry rather than by the envelope would leave the blocks the envelope happened to
+ * round to zero still carrying the bias.
+ *
+ * WHY IT SHOWS AND THE INTERIOR'S OWN BIAS DOES NOT. `lawnLuma` is `edge + (core - edge) * mass`, and
+ * `massField` pins `mass` to zero on exactly this ring. So these are the blocks where the rim is the
+ * ONLY term -- the core cannot pull them anywhere, and whatever the field happens to say here is what
+ * the player sees, undiluted, in every tile. Everywhere else the core is already pulling the pixel
+ * somewhere, and the rim's bias is diluted by exactly the amount the envelope has risen. The
+ * correction therefore applies to that set and nothing else, read off `mass === 0` rather than from a
+ * second copy of the ring's geometry, so it cannot drift from the pin that creates it.
+ *
+ * A DRAFT SMEARED THE CORRECTION INWARD, weighting it by `1 - mass` for continuity, and it was worse
+ * on three measures of four: it lifted interior pixels the core had already taken over, which bought
+ * 1.0 luma on the column axis and cost 1.2 on the row axis, 3.7 points of mid-range share and 1.9 of
+ * peak bucket. The envelope leaves no shallow band for the discontinuity to matter in -- it is pinned
+ * at 0 on the ring and its next block already averages 0.64 -- so the sharp version is both tighter
+ * to the argument and better in the frame.
+ *
+ * IT IS A CONSTRUCTION, NOT A SEED. The bias is measured from the field itself every time the module
+ * loads and subtracted, so a reseed, a different `EDGE_OCTAVES`, or a change to `EDGE_LEVELS` cannot
+ * bring it back -- which is the thing choosing a luckier octave could not promise. The note above
+ * `EDGE_OCTAVES` swept 5 and 3 in place of the 4 and measured exactly that: each halves one axis and
+ * makes the other worse, "because the next seed's border bias is a different accident in a different
+ * axis". Both are still true and neither is used.
+ *
+ * THE SEAM ARGUMENT IS UNTOUCHED. The correction is a function of the shared field and the shared
+ * mass, so every variant still evaluates the identical rim at the identical phase; the two pixels
+ * either side of a boundary stay the same colour for all sixteen pairings. Measured on the painted
+ * field with the marks off, all four variants' border rings read the same value to one decimal
+ * before this change and the same value to one decimal after it.
+ *
+ * WHAT MOVED. Two populations, because they answer different questions -- the four painted tiles are
+ * what the guards see, and the composed lawn is what the player sees. The lawn is the ground layer of
+ * the desktop spawn frame, 240 tiles, laid from the committed map:
+ *
+ *     four painted tiles                                  before   after
+ *     worst frame deficit, ring against its own interior   +10.4    +4.7
+ *     folded peak-to-peak, column axis                      18.0    12.6
+ *     folded peak-to-peak, row axis                         10.0    10.1
+ *     grass-to-grass boundary, share above 24 luma         8.40%   9.38%
+ *     grass-to-grass boundary, maximum step                 64.3    71.1
+ *
+ *     composed lawn, 240 tiles                            before   after
+ *     folded peak-to-peak, column axis                      16.5    11.5
+ *     folded peak-to-peak, row axis                         12.2    10.8
+ *     mid-range share (luma 96-160)                        37.8%   29.6%
+ *     peak bucket                                          49.3%   53.6%
+ *
+ * AND IT WAS LOOKED AT, because this file's own `EDGE_L` note says in as many words "look at the
+ * render before trusting this file's own metrics". Composed and rendered at 1x, the quilt that was
+ * plainly visible across the open grass in the before frame is substantially gone in the after one.
+ *
+ * THE BOUNDARY FIGURES AND THE MID-RANGE ARE A REAL COST, PAID DELIBERATELY, AND NEITHER IS WHAT IT
+ * LOOKS LIKE. The boundary steps are not the field -- with the marks off, the step across every
+ * boundary is zero, by the seam argument -- they are the chevron tufts `VARIANTS` plants ON the
+ * border ring, `grass-1`'s at column 31. Lifting the grass behind a dark mark by eight luma lifts the
+ * step across it by about seven, and nothing about the mark changed.
+ *
+ * The mid-range share is the sharper lesson: IT WAS BEING PROPPED UP BY THE LATTICE. The dark ring is
+ * 240 of every tile's 1024 pixels, it sat at 153 against a band whose ceiling is 160, and the core
+ * sits at 164 to 172 -- so a quarter of the lawn counted as mid-range precisely because it was too
+ * dark, and the figure the 2026-10-19 sweep tuned `EDGE_L` and `EDGE_SWING` on was partly measuring
+ * the grid. A number bought from the tile border is bought from the tile grid.
+ *
+ * WHAT IS LEFT, so the next round does not look for it here. With the bias gone, the residual frame
+ * deficit is no longer an accident at all -- it is `BANDS` sitting above `EDGE_L`, measured on the
+ * field alone as +5.6, +0.1, +7.2, +8.1 against band midpoints of 168, 158, 170 and 172 over a rim
+ * at 164. `grass-1` is 58.9% of the world's grass and `grass-0` is 30.6%, so the lawn the player
+ * actually walks on is at +0.1 and +5.6 and the two worst variants carry a tenth of it between them.
+ *
+ * THE REMAINING FRAME AND THE LOST MID-RANGE ARE THE SAME PROBLEM AND HAVE ONE FIX. The ring cannot
+ * be both level with the core and inside a band whose ceiling is four luma under it; the way to have
+ * both is to bring the CORES DOWN to the ring rather than the ring up to the cores, which is `BANDS`
+ * and `EDGE_L` and moves the distribution the 2026-10-19 sweep bought. That is a round that owns
+ * THOSE figures, it is the one that should re-take the mid-range, and it should take it from a term
+ * that is not locked to the tile grid -- `lit` is seeded per variant and is the obvious candidate.
+ * Not this round: two large changes to the lawn at once and neither can be judged.
+ */
+function levelBorder(rim: Float64Array, mass: Float64Array): void {
+  // SOLVED, NOT SUBTRACTED, and TWO drafts went wrong here before this one. Both were caught by
+  // `assertRimBorderUnbiased` rather than by reading the code, which is the whole case for the
+  // guard being a guard and not a docstring.
+  //
+  //   1. Shifting by the raw deficit and clamping delivers LESS than the deficit, because the ring
+  //      values already at the top of the ladder cannot move. Came up 0.0623 short.
+  //   2. Solving the clamp but against the PRE-correction field mean still misses, because the
+  //      correction is self-referential: `1 - mass` is non-zero over most of the tile, so lifting
+  //      the ring lifts the field mean it is being measured against. Came up 0.0593 short.
+  //
+  // So the quantity bisected is the DIFFERENCE between the two means, each evaluated at the same
+  // candidate shift. It is monotone in the shift because the border set takes the whole of it while
+  // the field mean, which that set is only a part of, takes its share -- so the difference always
+  // closes and one bisection settles it. The bracket is wide enough to cover a fully inverted field
+  // in either direction, so it is not an assumption about this seed.
+  const borderMean = (s: number): number => {
+    let sum = 0;
+    let n = 0;
+    for (let k = 0; k < rim.length; k++)
+      if (mass[k] === 0) {
+        sum += clamp01(rim[k]! + s);
+        n++;
+      }
+    return sum / n;
+  };
+  const wholeMean = (s: number): number => {
+    let sum = 0;
+    for (let k = 0; k < rim.length; k++) sum += clamp01(rim[k]! + (mass[k] === 0 ? s : 0));
+    return sum / rim.length;
+  };
+  let lo = -1;
+  let hi = 1;
+  for (let i = 0; i < 64; i++) {
+    const s = (lo + hi) / 2;
+    if (borderMean(s) < wholeMean(s)) lo = s;
+    else hi = s;
+  }
+  const shift = (lo + hi) / 2;
+  for (let k = 0; k < rim.length; k++) rim[k] = clamp01(rim[k]! + (mass[k] === 0 ? shift : 0));
+}
+
 const SHARED: Shared = (() => {
   const rim = field(6101, EDGE_OCTAVES);
   const warm = field(6577, WARM_OCTAVES);
@@ -813,7 +1012,9 @@ const SHARED: Shared = (() => {
   equalise(warm, warmCurve);
   quantise(rim, EDGE_LEVELS);
   quantise(warm, WARM_LEVELS);
-  return { rim, mass: massField(6373, BLOB_OCTAVES), warm };
+  const mass = massField(6373, BLOB_OCTAVES);
+  levelBorder(rim, mass);
+  return { rim, mass, warm };
 })();
 
 /** The tone a tile holds at its border, before the core pulls it anywhere. */
@@ -1813,6 +2014,64 @@ export const GROUND_TILES: Record<string, Painter> = {
 /* ----------------------------------------------------------------- guard -- */
 
 /*
+ * THE RIM FIELD'S BORDER MUST NOT BE BIASED, which is the property `levelBorder` constructs.
+ *
+ * WHY THIS IS NOT COVERED BY `assertNoSeamBand`, thirty lines down, and why a second guard earns its
+ * place. That one compares the four stripes STRADDLING a join against the rest of a two-tile strip.
+ * A biased border ring puts a dark stripe on BOTH sides of every join, so it lands in that guard's
+ * `band` AND drags down its `rest` -- and the two tiles contribute their bright left edge and their
+ * dark right edge to the same average. Measured on the shipped tiles with the bias at its full 7.7
+ * luma, `assertNoSeamBand` read 11.7 against its limit of 14 and stayed green while the lawn printed
+ * a grid. It is watching the right picture through an average that halves the thing it is looking
+ * for. This guard watches the cause instead.
+ *
+ * IT IS MEASURED ON THE FIELD, NOT ON THE PAINTED TILE, and that is deliberate. By the time a tile is
+ * painted, the residual frame deficit is dominated by `BANDS` sitting above `EDGE_L` -- a deliberate
+ * placement, +0.1 to +8.1 depending on variant -- so a bound loose enough to pass the design would be
+ * far too loose to catch the accident. The accident lives in one number and this checks that number.
+ *
+ * THE BOUND IS A FRACTION OF THE FIELD'S OWN 0..1 RANGE, not a luma figure, so it is not written in
+ * terms of `EDGE_SWING`, `EDGE_L`, `BANDS` or `INSET` -- any of which could move without this bias
+ * being either better or worse. The luma in the message is computed for the reader; it is not the
+ * test. Two-sided, because a border ring biased BRIGHT prints the same grid with the sign flipped,
+ * and `[5, 9, 13]` in the note above `EDGE_OCTAVES` is a real setting that does exactly that.
+ *
+ * Where it sits today: 0.0000, because `levelBorder` solves for the shift that lands it there. With
+ * the `levelBorder` call commented out it reads -0.1286, which is 4.4 luma, and this guard is what
+ * fired -- twice -- on the two drafts of `levelBorder` that did not reach zero. Note this is the
+ * `mass === 0` set, 91 blocks; the outermost two-pixel ring alone is the more biased 0.2267 and 7.7
+ * luma. See the table in `levelBorder` for why both figures are real and which is which.
+ */
+const BORDER_BIAS = 0.03;
+
+function assertRimBorderUnbiased(): void {
+  let border = 0;
+  let count = 0;
+  let whole = 0;
+  for (let k = 0; k < SHARED.rim.length; k++) {
+    whole += SHARED.rim[k]! / SHARED.rim.length;
+    if (SHARED.mass[k] === 0) {
+      border += SHARED.rim[k]!;
+      count++;
+    }
+  }
+  const bias = border / count - whole;
+  if (Math.abs(bias) > BORDER_BIAS)
+    throw new Error(
+      `w-ground: the rim field's border ring is biased ${bias >= 0 ? '+' : ''}${bias.toFixed(4)} ` +
+        `against its own field mean, over the ${BORDER_BIAS} it is allowed -- ` +
+        `${Math.abs(rimLuma(whole + bias) - rimLuma(whole)).toFixed(1)} luma on the outer ring of ` +
+        'every grass tile and every path verge in the world, in the same phase, which prints as a ' +
+        `${bias >= 0 ? 'bright' : 'dark'} two-pixel frame every ${TILE} pixels. The border blocks ` +
+        'are the ones `massField` pins to zero, where the rim is the only term in `lawnLuma` and ' +
+        'the core cannot pull them anywhere. Check that `levelBorder` still runs inside `SHARED` ' +
+        'and still reads its border set off `mass === 0`.',
+    );
+}
+
+assertRimBorderUnbiased();
+
+/*
  * A JOIN MUST NOT PRINT A BAND.
  *
  * This file already proves that two grass tiles meet with no STEP -- the border pixel is evaluated
@@ -1834,10 +2093,19 @@ export const GROUND_TILES: Record<string, Painter> = {
  * `EDGE_SWING`. A bound written in terms of the thing it watches moves when that thing moves, which
  * is the one way a guard can be green while the fault is back.
  *
- * Where it sits today: worst pairing 11.7 luma on the column axis (grass-3 | grass-2) and 9.0 on
- * the row axis (grass-0 over grass-0). Before the bands were re-centred it was 17.3 and 13.1. The
- * column axis is evaluated and reported first because the camera is a letterbox and it is the worse
- * of the two.
+ * Where it sits today: worst pairing 6.8 luma on the column axis (grass-3 | grass-2) and 4.7 on
+ * the row axis (grass-0 over grass-0). Before the bands were re-centred it was 17.3 and 13.1; with
+ * the bands re-centred but the rim field's border still biased it was 11.7 and 9.0, and
+ * `levelBorder` took it from there to here. The column axis is evaluated and reported first because
+ * the camera is a letterbox and it is the worse of the two.
+ *
+ * AND THIS GUARD DID NOT CATCH THAT BIAS, which belongs next to its own number and not only in
+ * `assertRimBorderUnbiased` where the argument is made. At 11.7 against a limit of 14 it was green,
+ * on a lawn that was visibly a quilt. The reason is in the arithmetic above: a biased border ring
+ * darkens BOTH tiles of every strip, so it lands in `band` and drags down `rest` at the same time,
+ * and each tile contributes its bright left edge and its dark right edge to the same average. This
+ * is still the right guard for the thing it names -- a join that prints a band -- but a frame
+ * printed by every tile at the same phase is a different fault and now has a guard of its own.
  *
  * It does NOT cover the path verge. A path tile's column mean mixes sand and grass, so the same
  * arithmetic on `path-n` measures the track rather than the join; the verge is held instead by the

@@ -734,6 +734,276 @@ const fenceCornerWith =
     railStub(img, side);
   };
 
+/*
+ * ===========================================================================
+ * THE GATE, which the opening has never had. Two leaves, standing open.
+ * ===========================================================================
+ *
+ * THE DEFECT, measured on the working tree rather than quoted. Column 46 of the finished
+ * `decor-below` layer reads, north to south:
+ *
+ *     row 19   fence-corner   ground grass-0   SOLID
+ *     row 20   (nothing)      ground path-n    walkable   <-- the gate
+ *     row 21   (nothing)      ground path-s    walkable   <-- the gate
+ *     row 22   fence-corner   ground grass-0   SOLID
+ *
+ * `decor-below[1246]` and `decor-below[1306]` are both literally `0`. The gate is not under-drawn,
+ * it is UNDRAWN -- an ABSENCE OF FENCE between two flat terminator posts, which is Paul's brief
+ * exactly: "post run, flat terminator plank, GAP, flat plank, post run". The placement loop in
+ * `forest-map.ts` writes a panel on every row of the enclosure except the two gate rows, and
+ * `continue` is the whole gate.
+ *
+ * WHY IT SURVIVED THREE QUEUED ROUNDS, which is worth more than the fix. Every test that watches
+ * the gate watches the BARRIER: `map.test.ts` floods refusing the notice and asserts the gate is
+ * unreachable, audit 2a asserts a due-east walk is unobstructed, audit 4 asserts the notice spans
+ * the approach. All of them pass perfectly on an EMPTY CELL. Reachability cannot see a picture,
+ * which is the same blind spot the north-south-run guard at the foot of this file records in its
+ * own words -- "neither `pnpm score` nor any test could see it". And the terminators look finished
+ * in isolation: the defect exists only in the composition of four cells, which is the identical
+ * class of fault as the rail stub above, where "nothing in the tile itself shows this; it only
+ * appears once two tiles are laid side by side, which is why four passes over the corner post
+ * missed it."
+ *
+ * ---------------------------------------------------------------------------
+ * WHY TWO TILES AND NOT ONE, which is the first thing a reader will ask.
+ * ---------------------------------------------------------------------------
+ *
+ * The opening is TWO cells tall, 64px, along the fence axis.
+ *
+ *   ONE TILE STAMPED TWICE is 32px of identical pixels repeated. It cannot carry a hinge at the
+ *   north end and a latch at the south, and it cannot leave daylight in the MIDDLE of the opening,
+ *   because a leaf folded back toward its own post is north-south asymmetric. The guard below
+ *   asserts the two are not the same drawing precisely so this cannot be quietly collapsed to one
+ *   gid later.
+ *
+ *   ONE TILE PLACED ONCE leaves the other cell empty, which is half a gateway and is the defect
+ *   again at half size.
+ *
+ * Two appended names is still an APPEND -- it renumbers nothing -- and it is the precedent this
+ * file already set for `fence-corner-e` / `fence-corner-w`, whose note says "which side is a
+ * property of the corner rather than of the post". Here: WHICH END is a property of the leaf
+ * rather than of the rail.
+ *
+ * THE PICTURE: the gate stands OPEN. Two leaves hang off the two `fence-corner` posts at rows 19
+ * and 22, folded back along the fence line, with clear track between them. Read north to south
+ * down column 46 the run becomes post, rail, daylight, rail, post -- two post tops flanking the
+ * gap with a narrow rail across, and the player walks through the middle. An open gate is also
+ * the only honest drawing: `map.test.ts` asserts these two cells stay walkable, so a rail drawn
+ * from post to post would be a picture of a shut gate over a cell the player strolls through.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TIMBER IS `fenceCorner`'s, NOT `fencePost`'s, AND THE BOUNDS ARE MEASURED.
+ * ---------------------------------------------------------------------------
+ *
+ * The gate's own posts ARE `fenceCorner` (`forest-map.ts` lays plain `fence-corner` at rows 19 and
+ * 22), so the leaf is made of its timber, at its light, inside its footprint, or the gateway comes
+ * apart the way the rail stub did. Measured off the RENDERED cell rather than off the constants:
+ *
+ *     fence-corner   wood x8..23, SIXTEEN columns, full width rows 0..25, tapering to row 30
+ *     fence-post     a thirteen-column channel x9..21, every row
+ *     fence-h        rails across x0..31 on rows 6..23
+ *
+ * -- so the fence axis is x15 in both tiles, and the leaf is centred on it.
+ *
+ * A TRAP-1 INSTANCE SITS IN THE SECTION THE NEXT GATE OWNER READS, and it is flagged here rather
+ * than fixed because `forest-map.ts` is not this owner's file. Its note at :4437-4439 states that
+ * `fence-post` "is now two post tops joined by a narrow dark rail, four columns against the post's
+ * ten". THE PAINTER DOES NOT DRAW THAT. Version six, above, draws a 13-column foreshortened channel
+ * with four caps a tile, and the post beside it is 16 columns, not ten. That sentence describes a
+ * drawing that was abandoned, and it is sitting in the exact paragraph somebody would read to size
+ * a gate rail. Nobody should size anything from it. Every number in this block was read off a
+ * rendered cell; the guard at the foot of this file re-reads `fenceCorner` at import and will not
+ * accept a leaf that has drifted off it.
+ *
+ * ---------------------------------------------------------------------------
+ * THREE THINGS DELIBERATELY NOT DONE.
+ * ---------------------------------------------------------------------------
+ *
+ * NO `turf()`, NO `CONTACT`, NO TUFTS, AND THIS IS A FLAGGED DEPARTURE. Both of those are GREENS --
+ * `CONTACT` is `turf(0.08)` and its own note calls it "grass in shade" -- and the gate stands on
+ * `path-n` / `path-s`, which is sand. A green cast-shadow column down a sand track, or a sprig of
+ * lawn growing out of the road, is simply wrong, and this file has NO ground-contact value for
+ * sand. So the leaf is seated by its 2px keyline on the shaded side (PIXEL_STANDARD 3.2) and by
+ * nothing else, where `fenceCorner` and `fencePost` both get an ellipse of `CONTACT` as well. If a
+ * reviewer wants it seated harder that is a new shared constant and a conversation, not a colour
+ * invented in this file. It has the side benefit the guard below leans on: these two tiles carry no
+ * green at all, so `g > r` filters nothing but is kept for symmetry with its neighbour.
+ *
+ * NO GRADIENT ALONG THE LENGTH. A sawn rail is not a dowel, and this file has learned that twice
+ * already: `PICKET_ALONG`'s note ("a continuously graded vertical object is a DOWEL ... which is
+ * why the run reads as a row of sausages") and the bridge's ("THE BOARD'S PLANKS ARE FLAT, NOT
+ * ROUND"). All of the leaf's tonal range is spent ACROSS it, on the picket run's own cross-section
+ * at the near rail's own crown -- see the note on `GATE_T`, which records what taking the tone off
+ * the POST's body instead looked like and why it was wrong. Along the length it does not move at
+ * all, and the ends are cut square with a line.
+ *
+ * NO `img.ellipse`, AND NO ALPHA ANYWHERE. An ellipse in this file means ground contact and the
+ * leaf hangs clear of the ground. Every pixel is opaque or absent, which is PIXEL_STANDARD's
+ * no-partial-alpha rule.
+ */
+
+/*
+ * THE LEAF'S FOOTPRINT IS THE RUN'S OWN COLUMNS, x9..21, flush with everything it touches.
+ *
+ * A NARROW LEAF WAS DRAWN FIRST AND IT FAILED, and this is the most useful thing in this note.
+ * The reasoning for narrow is good: eight columns against the post's sixteen, "narrow, which is
+ * what makes it a leaf rather than more fence", with a five-column rail centred on the fence axis
+ * at x15. Painted and composed as the map lays the four cells -- run, post, leaf, leaf, post, run
+ * -- and looked at on grass and sand at 1x, 2x, 3x and 4x, it does not read as a leaf. IT READS AS
+ * A SPIKE. The run is thirteen columns and the post sixteen, so a five-column rail hanging off the
+ * bottom of the post is a TAPER, and a fence that tapers to a point reads as a fence that has been
+ * snapped off, not as one with a gate in it. Four lengths of it were rendered (26, 18, 14 and 10
+ * rows of leaf, so 19, 44, 56 and 69 per cent daylight) and every one of them read as a spike;
+ * length was not the variable.
+ *
+ * So the leaf is the fence's own timber at the fence's own width:
+ *
+ *     x 9         near-black keyline, where `fencePost` puts RUN_X
+ *     x 10..18    the nine-column face, at `RUN_ACROSS`
+ *     x 19..20    the two columns of shaded timber down the far side, as the run's
+ *     x 21        the far near-black keyline, RUN_EDGE
+ *
+ * -- THIRTEEN COLUMNS, which `RUN_X`'s own note says is "`fenceCorner`'s own wood span (9 to 21)
+ * exactly, so the run and the post it dies into are flush on both sides instead of stepping in by
+ * two." The gate is now flush with both of them as well, and it is still three columns inside the
+ * post's measured sixteen, which is what the guard below demands.
+ *
+ * WHAT MAKES IT A GATE RATHER THAN MORE FENCE IS NOT WIDTH, and `fenceCorner` already said so
+ * about itself: it is "a column of the same timber with NO RHYTHM AT ALL, and that absence is what
+ * reads as 'this is where the fence turns'". The run pulses -- four caps a tile, luma 190 down to
+ * 95 and back. The leaf does not: it is one flat bar, it carries IRON (two hinge straps and a
+ * latch, in `WOOD_LINE`, which this file's palette note assigns to "ordinary edges, and the rails'
+ * dark bands"), and it STOPS, square-cut, with daylight after it. Rhythm, hardware and a cut end
+ * are three readings the run does not have, and they do not depend on counting pixels of width at
+ * the playing camera.
+ *
+ * Everything outside x9..21 stays transparent, so the sand track shows through the opening and Red
+ * walks on it.
+ */
+const GATE_X = RUN_X;
+const GATE_W = RUN_EDGE - RUN_X + 1; // 13, the run's own span rather than a second opinion on it
+
+/*
+ * ONE STEP OUT OF `RAIL_ROWS`, CHECKED.
+ *
+ * A slice is a position in a table, not a bound: a row inserted into `RAIL_ROWS` would silently
+ * hand the gate the wrong tone and nothing would fail. `Step` is `number | RGBA`, so asking for a
+ * tonal step and getting a colour is exactly the shape that mistake takes, and it is thrown on.
+ */
+function railStep(i: number): number {
+  const s = RAIL_ROWS[i];
+  if (typeof s !== 'number')
+    throw new Error(
+      `the gate leaf takes its tone from the picket run's near rail, and RAIL_ROWS has moved ` +
+        `under it: index ${i} is no longer a tonal step. Find the near rail's crown again rather ` +
+        `than nudging this index.`,
+    );
+  return s;
+}
+
+/*
+ * THE LEAF'S TONE, FLAT ALONG ITS LENGTH, at the picket run's near rail's own crown.
+ *
+ * THE POST'S BODY WAS THE FIRST SOURCE AND IS WRONG, kept here because the tie is the obvious one
+ * and somebody will reach for it again. `CORNER_BODY.filter((_, i) => i % 3 === 0)` -- indices 0,
+ * 3, 6, 9, 12, giving [0.44, 0.37, 0.38, 0.32, 0.22] -- welds the leaf to the post it hangs from,
+ * which is the right instinct. Rendered, those columns come out at luma 123, 113, 114, 106, 89: a
+ * 34-luma span with no light anywhere on it. The post peaks at 190 on its flat cap, so the thing
+ * hanging off it never gets within 67 luma of it and the eye takes the leaf for a cast shadow. A
+ * small object reads by its VALUE RANGE, which is the lesson `fencePost`'s guard at the foot of
+ * this file already records in its own words.
+ *
+ * `CORNER_BODY` is the post's body -- the part standing in the shade UNDER its cap -- so it was
+ * never the right source for a thing whose own top face is turned at the sky. A rail's top face
+ * catches the light, and this file measured that off the board for the picket run already: "a rail
+ * is dark, and the bright line along its top is the whole of how you read it as passing behind",
+ * and of the two rails it is the LOWER one whose "top face is the one turned towards the camera".
+ * Its crown is `RAIL_ROWS` index 11, absolute row 17, t = 0.84 -- luma 170 against the post's 190
+ * cap and the run's 95 troughs. Bright timber in the same light, a step below the cap that still
+ * has to be the brightest thing on the fence.
+ *
+ * Taken as a reference rather than as a copied number so that retuning the picket run retunes the
+ * gate with it: they are the same timber in the same light, and the next owner to touch
+ * `RAIL_ROWS` should not have to know this exists.
+ */
+const NEAR_RAIL_CROWN = 11; // index in RAIL_ROWS of the near rail's crown, its absolute row 17
+const GATE_T = railStep(NEAR_RAIL_CROWN);
+
+/*
+ * Where each leaf is cut, and the mirror is DERIVED rather than restated.
+ *
+ * `gate-n` hangs from the post above it and is cut at row 13; `gate-s` hangs from the post below
+ * and is cut at row 18, which is row 13 counted from the other end. That leaves eighteen rows of
+ * daylight in each tile -- THIRTY-SIX of the 64px opening, so the gap is over half of it and is by
+ * a long way the largest single thing in the gateway. That is what says "open".
+ *
+ * FOURTEEN ROWS OF LEAF IS A COMPOSITION CALL AND IS FLAGGED AS ONE. It was picked by rendering
+ * the four cells on their real ground at 3x beside 26-row, 18-row and 10-row leaves (19, 44 and 69
+ * per cent daylight). At 26 rows the two leaves nearly meet and the gate reads as AJAR rather than
+ * open -- four fifths of the opening is filled. At 10 the leaf is shorter than the post is wide
+ * and reads as a block of hardware with no rail to it. Fourteen is where it reads as a rail that
+ * swings. It has not been seen through `pnpm world --frame arrive`, which is the only thing that
+ * shows what a visitor sees, and this painter cannot run it: the tile is not placed yet. If the
+ * arrival frame disagrees, THIS is the number to move -- never `MIN_DAYLIGHT` in the guard below,
+ * which is deliberately not derived from it.
+ */
+const GATE_N_END = 13; // gate-n's free end: the cut row
+const GATE_S_END = TILE - 1 - GATE_N_END; // 18: the same cut, measured from the south
+const GATE_STRAP: readonly number[] = [2, 5]; // two hinge straps, iron wrapped round the rail
+const GATE_LATCH = GATE_S_END + 1; // the latch bar, where the two leaves meet when shut
+
+/** One band right across the leaf: a cut end, a hinge strap or the latch. */
+function gateBand(img: Img, y: number, c: RGBA): void {
+  img.rect(GATE_X, y, GATE_W, 1, c);
+}
+
+/**
+ * One row of the leaf's body: the run's own cross-section, held flat at `GATE_T`.
+ *
+ * Deliberately the run's columns and the run's offsets rather than a profile of its own, so the
+ * gate cannot drift off the fence it hangs in. What differs is along the length, where the run
+ * pulses through `CAP_ALONG` and this does not move at all.
+ */
+function gateBody(img: Img, y: number): void {
+  img.px(GATE_X, y, WOOD_BLACK);
+  for (let i = 0; i < RUN_FACE_W; i++)
+    img.px(RUN_FACE + i, y, timber(Math.max(GATE_T + RUN_ACROSS[i]!, 0.04)));
+  img.px(RUN_SHADE_X, y, timber(Math.max(GATE_T - 0.34, 0.04)));
+  img.px(RUN_SHADE_X + 1, y, timber(Math.max(GATE_T - 0.46, 0.04)));
+  img.px(RUN_EDGE, y, WOOD_BLACK);
+}
+
+/**
+ * One leaf of the gate, hung at whichever `end` of its tile meets a post.
+ *
+ * `north` hangs from the post at (46,19). Its row 0 is the hinge joint -- ONE row of near-black,
+ * because `fenceCorner`'s own note says two rows of it "read as a gap between two objects rather
+ * than as the seam of one". Then body, two iron straps across it, and a square-cut free end.
+ *
+ * `south` is the mirror, hung at row 31, with two differences that are the whole reason this is
+ * two tiles and not one stamped twice. Its hung row is BODY and deliberately not black: the
+ * `fence-corner` at (46,22) draws its own `WOOD_BLACK` joint across its row 0 immediately below,
+ * so a black row here would stack into exactly the two-row gap that note warns about. And it
+ * carries the LATCH bar inboard of its cut end, where the two leaves meet when the gate is shut --
+ * a latch has a bar on one leaf and a keeper on the other, so putting it on one of them is right
+ * as well as being what tells the two apart.
+ */
+const gateLeaf =
+  (end: 'north' | 'south'): Painter =>
+  (img) => {
+    if (end === 'north') {
+      gateBand(img, 0, WOOD_BLACK);
+      for (let y = 1; y < GATE_N_END; y++) gateBody(img, y);
+      for (const y of GATE_STRAP) gateBand(img, y, WOOD_LINE);
+      gateBand(img, GATE_N_END, WOOD_BLACK);
+      return;
+    }
+    gateBand(img, GATE_S_END, WOOD_BLACK);
+    gateBand(img, GATE_LATCH, WOOD_LINE);
+    for (let y = GATE_LATCH + 1; y < TILE; y++) gateBody(img, y);
+    for (const y of GATE_STRAP) gateBand(img, TILE - 1 - y, WOOD_LINE);
+  };
+
 /* ------------------------------------------------------------------- bridge */
 
 /*
@@ -1049,12 +1319,140 @@ function bridgePlank(kind: 'left' | 'middle' | 'right'): Painter {
     );
 }
 
+/*
+ * ===========================================================================
+ * THE GUARD ON THE GATE: the opening must never be an absence of fence again.
+ * ===========================================================================
+ *
+ * The gate was queued three times and lost three times, and the reason is in the long note above
+ * `GATE_X`: every test that watched it watched the BARRIER, and all four of them pass on an empty
+ * cell. So the tile is measured here, at import, where this file's other guard already stands.
+ *
+ * NOT ONE BOUND BELOW IS WRITTEN IN TERMS OF THE THING IT GUARDS. The footprint bounds come from
+ * `fenceCorner`'s RENDERED cell, measured fresh each run, never from `GATE_X` or `GATE_W` --
+ * a guard whose bound is written in terms of the constant it guards moves with the defect and
+ * passes in silence. Measure the post, then demand the leaf relate to it. Checks 2 and 3 therefore
+ * also fire if `fenceCorner` is ever reprofiled without the leaf following it, which is exactly
+ * the cross-tile joint four passes over the corner post missed.
+ *
+ * The one bound that is NOT derived is `MIN_DAYLIGHT`, and that is deliberate too: derived from
+ * the painter's own free-row count, shrinking the gap to nothing would carry the bound down with
+ * it and pass. Four is a plain floor under the drawn six.
+ */
+{
+  const woodOf = (cell: Img, y: number): number[] => {
+    const out: number[] = [];
+    for (let x = 0; x < TILE; x++) {
+      const [r, g, , a] = cell.get(x, y);
+      // Wood only, as the run's guard does it. These two tiles carry no green at all -- see the
+      // note on why the leaf gets no turf -- so this filter removes nothing and is kept for
+      // symmetry with the measurement of `fenceCorner`, which does have sprigs at its foot.
+      if (a < 40 || g > r) continue;
+      out.push(x);
+    }
+    return out;
+  };
+  const colsOf = (cell: Img): number[] => {
+    const seen = new Set<number>();
+    for (let y = 0; y < TILE; y++) for (const x of woodOf(cell, y)) seen.add(x);
+    return [...seen].sort((a, b) => a - b);
+  };
+  const rowsOf = (cell: Img): number[] => {
+    const out: number[] = [];
+    for (let y = 0; y < TILE; y++) if (woodOf(cell, y).length > 0) out.push(y);
+    return out;
+  };
+
+  const post = new Img(TILE, TILE);
+  fenceCorner(post);
+  const postCols = colsOf(post);
+
+  const leaves: Record<string, Painter> = {
+    'gate-n': gateLeaf('north'),
+    'gate-s': gateLeaf('south'),
+  };
+  const seen: string[] = [];
+  for (const [name, paint] of Object.entries(leaves)) {
+    const cell = new Img(TILE, TILE);
+    paint(cell);
+    const cols = colsOf(cell);
+    const rows = rowsOf(cell);
+
+    // 1. ABSENT. The opening was an absence of fence for three rounds; a blank tile is that same
+    //    fault wearing a gid.
+    if (rows.length === 0)
+      throw new Error(`${name} draws nothing: the gate opening is an absence of fence again`);
+
+    // 2. NARROWER THAN THE POST IT HANGS FROM. The bound is the post's MEASURED width, so widening
+    //    the leaf out to the post's own footprint fails here rather than moving the bound with it.
+    if (cols.length >= postCols.length)
+      throw new Error(
+        `${name} is ${cols.length} columns wide against fence-corner's ${postCols.length}: a gate ` +
+          `leaf as wide as its post reads as more fence, not as a gate`,
+      );
+
+    // 3. INSIDE THE POST'S FOOTPRINT, so the gateway lines up down one column of the map.
+    if (cols[0]! < postCols[0]! || cols.at(-1)! > postCols.at(-1)!)
+      throw new Error(
+        `${name} spans x${cols[0]}..${cols.at(-1)} and fence-corner spans ` +
+          `x${postCols[0]}..${postCols.at(-1)}: the leaf hangs outside its own post`,
+      );
+
+    // 4. IT MEETS ITS POST. `gate-n` is hung at the top of its tile, `gate-s` at the bottom.
+    const hung = name === 'gate-n' ? 0 : TILE - 1;
+    if (!rows.includes(hung))
+      throw new Error(
+        `${name} draws nothing on row ${hung}, so the leaf does not reach the post it hangs from ` +
+          `-- which is the "two lengths of picket ending in open lawn" the gate already was`,
+      );
+
+    // 5. IT LEAVES THE OPENING OPEN.
+    const MIN_DAYLIGHT = 4;
+    const free = TILE - rows.length;
+    if (free < MIN_DAYLIGHT)
+      throw new Error(
+        `${name} leaves only ${free} rows of the opening clear (floor ${MIN_DAYLIGHT}): a rail from ` +
+          `post to post is a gate standing shut, and the player walks through this one`,
+      );
+
+    // 6. CONTINUOUS. A leaf with a hole in it is a chain, which is the fault five versions of
+    //    `fencePost` had -- see the long note above RUN_X.
+    if (rows.at(-1)! - rows[0]! + 1 !== rows.length)
+      throw new Error(
+        `${name} has a hole in it: rows ${rows[0]}..${rows.at(-1)} carry only ${rows.length} ` +
+          `rows of wood`,
+      );
+
+    seen.push(cell.png().toString('base64'));
+  }
+
+  /*
+   * 7. THE TWO LEAVES ARE NOT THE SAME DRAWING. A 64px opening must not print one 32px tile twice,
+   *    which is precisely why this is two gids and not one.
+   *
+   *    IT IS A BACKSTOP AND IT IS CURRENTLY UNREACHABLE, which was found by trying to break it and
+   *    is written down so the next owner does not conclude it is dead code. Checks 4, 5 and 6
+   *    together already forbid identity: 4 demands `gate-n` draw row 0 and `gate-s` draw row 31,
+   *    so one drawing satisfying both must touch both ends; 6 then demands it be contiguous, which
+   *    makes it all 32 rows; and 5 refuses a tile with no daylight in it. Breaking the painter so
+   *    that both names return one drawing fires check 4, not this. It only fires once somebody
+   *    loosens one of those three -- which is the day it matters, and is why it stays.
+   */
+  if (seen[0] === seen[1])
+    throw new Error(
+      'gate-n and gate-s are the same pixels: the opening prints one tile twice and has no hung ' +
+        'end, no hinge and no latch -- see the note on why the gate is two tiles',
+    );
+}
+
 export const OUTDOOR_TILES: Record<string, (img: Img) => void> = {
   'fence-h': fenceRail,
   'fence-post': fencePost,
   'fence-corner': fenceCorner,
   'fence-corner-e': fenceCornerWith('east'),
   'fence-corner-w': fenceCornerWith('west'),
+  'gate-n': gateLeaf('north'),
+  'gate-s': gateLeaf('south'),
   'bridge-l': bridgePlank('left'),
   'bridge-m': bridgePlank('middle'),
   'bridge-r': bridgePlank('right'),

@@ -217,7 +217,7 @@
  * expected and is stated so the next round does not read it as a failure: see point 1 above, the
  * world render contains no sprites. PARTIAL 0 on all sixteen frames.
  */
-import { Img, keyline, shade, tone } from '../paint.ts';
+import { Img, keyline, lumaOf, shade, tone } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
 
 export const RED_FRAME_W = 32;
@@ -296,6 +296,35 @@ const DOME_BIAS = 1.15;
 const CLOTH_BIAS = 1.35;
 
 /**
+ * Where the dome's band starts climbing towards the rim -- `plateau`'s `upper`, for the sphere.
+ *
+ * Read the long note on `plateau` first: this exists because a fraction of the LIT RANGE is not a
+ * fraction of the SURFACE, and on a sphere the two diverge badly. Tuned by measuring the arc rather
+ * than by eye, on the back frame where the dome is the whole figure, by the review's own method:
+ * walk in from the left keyline on each row of the hood and count pixels until the plateau value.
+ * Rows 2 to 9 of `up-0`, pasted from the run:
+ *
+ *     upper    rows 2..9, px to the plateau    verdict
+ *     0.78     9 11 11 11 11 11 10  9          what shipped; the spec says two or three
+ *     0.88     6  8  8  8  7  7  6  5          still a gradient, just a shorter one
+ *     0.93     4  6  6  7  6  5  4  2
+ *     0.955    3  5  5  6  4  4  2  0          what this file now does
+ *     0.97     3  5  5  5  4  3  0  0          the arc starts breaking up row by row
+ *
+ * Read that column with the LUMAS beside it, because the count includes the falloff. At 0.78 row 3
+ * runs 114 161 161 159 152 143 133 123 112 99 87 -- three pixels of rim and then EIGHT of even
+ * descent, which is an airbrush. At 0.955 the same row runs 114 161 161 150 113 -- three pixels of
+ * rim and a two-pixel turn into the mass. That is `ART_DIRECTION`'s lit arc, and it is what the
+ * docstring above this function has promised since it was written.
+ *
+ * The flat mass is untouched by this: `plateau` returns `mid` everywhere below `upper`, so raising
+ * it GROWS the flat band and shrinks only the climb. That is the direction the previous round's
+ * caution asks for -- "the mass is not the problem" -- and it is why the dome's colour count falls
+ * without a single pixel of the plateau moving.
+ */
+const DOME_RIM = 0.955;
+
+/**
  * The lit fraction `u` mapped onto the band, with a FLAT PLATEAU across the middle.
  *
  * This is the correction to the previous round, and it is worth stating plainly because the
@@ -318,10 +347,29 @@ const CLOTH_BIAS = 1.35;
  * It is continuous at both joins, so nothing steps; it is flat in the middle, so the mass reads as
  * one colour; and it REMOVES edges rather than adding them, because half the surface now has no
  * internal boundaries at all.
+ *
+ * ---
+ *
+ * `upper` IS THE WHOLE ARGUMENT, and 2026-10-20 is the round that measured it instead of asserting
+ * it. The paragraph above promises "the lit arc, two or three pixels wide". On the shipped sheet
+ * the back hood's arc measured NINE TO ELEVEN pixels wide on rows 2 to 10, running luma 161 down to
+ * 87 in ten near-even steps -- a soft photographic falloff, which is the exact thing this function
+ * was written to remove, surviving in the one limb nobody re-measured. That is most of why the back
+ * view read as a latex balloon with a studio highlight on it.
+ *
+ * The cause is that 0.78 is a fraction of the LIT RANGE, not of the surface, and the two are not
+ * proportional. On a cylinder `lit` is nearly linear across the run, so the top 22 per cent of the
+ * range is the top 22 per cent of the pixels -- one pixel of a four-pixel sleeve, which is right.
+ * On a sphere `lit` flattens towards the pole, so the same 22 per cent of range spends nearly half
+ * the dome's radius. One constant could not serve both, and the dome is the surface that shows.
+ *
+ * So the join is a parameter: the cloth keeps 0.78, the dome takes `DOME_RIM`. The flat middle, the
+ * lower limb and both continuity guarantees are untouched, which is what the previous round's own
+ * caution asks for -- the mass is not the problem and must not be sanded again.
  */
-function plateau(u: number, lo: number, mid: number, hi: number): number {
+function plateau(u: number, lo: number, mid: number, hi: number, upper = 0.78): number {
   if (u < 0.24) return lo + (mid - lo) * (u / 0.24);
-  if (u > 0.78) return mid + (hi - mid) * ((u - 0.78) / 0.22);
+  if (u > upper) return mid + (hi - mid) * ((u - upper) / (1 - upper));
   return mid;
 }
 
@@ -434,56 +482,74 @@ const FRINGE = [6, 6, 5, 4, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6];
  */
 const MOTIF = 9;
 /*
- * TENTH PASS: IT HAD TO GET BOLDER, because at nine pixels it was invisible and the client asked
- * twice where it had gone.
+ * ELEVENTH PASS, 2026-10-20: THE FORM WAS RIGHT AND THE EXECUTION WAS NOT DRAWN, IT WAS SAMPLED.
  *
- * The previous version was right about the FORM and wrong about whether the form survives. Four
- * arms at the diagonals, one pixel wide, in two stops of the cloak's own ramp two steps apart --
- * `tone('cloak', 0.11)` against a cape body painted between 0.25 and 0.62 -- is a device you can
- * find at 8x and cannot see at 1x, which is the only size anybody plays at. The docstring above
- * predicted this about the real logo and then did it anyway with the motif: "at nine pixels those
- * arcs are one pixel each and the notches are nothing."
+ * The form is settled and this pass does not reopen it. Three shapes were tried and rejected before
+ * two arcs -- one-pixel spokes (invisible at 1x), two-pixel spokes (four sparkles), a four-notch
+ * ring (a jumble) -- and all three rejections stand. What changed is HOW the two arcs are produced.
  *
- * So: TWO-pixel arms, and the value inverted. Light arms on the purple cape rather than dark ones,
- * taken from the top of the cloak's own ramp (Haze), with the hub left dark so the centre still
- * reads as a centre. That keeps every brand constraint -- it is the cloak's own colours, it adds no
- * new hue, it is not Lime, and it stays rotationally symmetric so it cannot be mistaken for a
- * tilted or squashed logo, which is what commit ba44d80's revert was about. It is simply legible.
+ * Every version above computed the shape by evaluating `hypot` and `atan2` at integer offsets. That
+ * is sampling an analytic figure on a nine-pixel grid, and at nine pixels a grid does not have the
+ * angular resolution to carry the result. Measured off the shipped sheet, what it produced was:
  *
- * Measured: the arms sit 86 luma above the cape they lie on, against 13 before.
+ *     22 pixels of #e5beff, bounding box x13..20 y28..35
+ *     FOUR 4-connected components of 11 + 8 + 2 + 1 -- one of them a single orphan pixel
+ *     180 degrees about its own centre maps 10 of 22 pixels onto another; 90 degrees, 11 of 22
+ *     eight rows tall for a MOTIF = 9 design, because row 36 is the hem keyline and overwrote it
+ *
+ * So the docstring above claimed rotational symmetry -- the one property the revert in ba44d80 was
+ * about, the thing that is supposed to stop this being mistaken for a squashed logo -- and the
+ * pixels did not have it. A device that is four fragments, asymmetric, and clipped is not a device.
+ * It is also, at 122 luma over the cloth, the highest-contrast edge anywhere on the figure, so it
+ * was the first thing the eye landed on in the back view, ahead of her hood and her basket.
+ *
+ * Two changes, and neither touches the form:
+ *
+ * 1. IT IS DRAWN, NOT SAMPLED. `MOTIF_ROWS` below is the picture, literally. Nine by nine, so the
+ *    bound it is checked against is its own size; two 4-connected arcs of eleven pixels each; exact
+ *    180-degree symmetry by construction, since the grid is its own mirror. The top and bottom rows
+ *    are EMPTY, which is what keeps the hem keyline off it -- the clip is designed out rather than
+ *    moved one row and left to drift back.
+ *
+ * 2. THE CONTRAST COMES DOWN. The arcs were `tone('cloak', 0.95)`, which is a value nothing else on
+ *    her uses. They are now `CLOAK_RIM` -- the same stop as the hood's lit arc, the brim lip and
+ *    the hem gathers. It is still the brightest cloth on her, so it is findable; it is no longer
+ *    brighter than the protagonist's own rim light, so it stops shouting.
+ *
+ * The notches are at the top and the bottom rather than on the diagonals, which is the one visual
+ * consequence of drawing it by hand: on a nine-pixel grid the diagonal is the one direction a
+ * two-pixel arc cannot keep a constant thickness, and the four fragments above are what that looks
+ * like. Vertical notches put the two breaks on the axis the grid is exact about.
+ *
+ * IT STILL WANTS BRAND SIGN-OFF. See the docstring above: approve it as a deliberately-not-the-logo
+ * device, or leave the cape plain. Both are acceptable, and that question is not mine to close.
  */
+const MOTIF_ROWS = [
+  '.........',
+  '..XX.XX..',
+  '.XX...XX.',
+  '.X.....X.',
+  '.X..H..X.',
+  '.X.....X.',
+  '.XX...XX.',
+  '..XX.XX..',
+  '.........',
+] as const;
+
 function paintCapeMotif(img: Img, cx: number, top: number): void {
-  // Sits in the upper back, below the hood's overhang and above the hem, where the cape is widest.
-  const cy = top + 4;
+  // Sits in the upper back, below the cape's own hem line and above the skirt's, where the cloth
+  // is widest and flattest. `top` is the first row of the box, so the ink runs `top + 1` to
+  // `top + MOTIF - 2` and the hem can never reach it.
   const hubInk = tone('cloak', CLOAK_FOLD);
-  const armLit = tone('cloak', 0.95);
+  const armLit = tone('cloak', CLOAK_RIM);
   const r = (MOTIF - 1) / 2;
-  for (let dy = -r; dy <= r; dy++)
-    for (let dx = -r; dx <= r; dx++) {
-      const d = Math.hypot(dx, dy);
-      if (d > r) continue;
-      /*
-       * FOUR ARCS ABOUT A CENTRE, which is what the Cyera symbol actually is -- not four spokes.
-       * A first attempt at two-pixel spokes was legible and WRONG: at this size each spoke broke
-       * into its own little cross and the device read as four sparkles rather than one mark. A
-       * broken RING is both the more faithful abstraction and the one that survives nine pixels,
-       * because an arc two pixels thick is still an arc while a spoke two pixels thick is a blob.
-       */
-      const onRing = d >= 2.2 && d <= 4.05;
-      /*
-       * TWO notches, not four. Four was the faithful count and it does not survive the size: at a
-       * nine-pixel diameter each of the four arcs is about three pixels long, and four three-pixel
-       * fragments read as a jumble rather than as a ring. Two notches 180 degrees apart leave two
-       * long arcs that each read as an arc, which is the most of the mark's construction that
-       * nine pixels can actually carry. Rendered at 20x, looked at, and reduced from four.
-       */
-      const angle = Math.atan2(dy, dx);
-      const offNotch = Math.abs((((angle / Math.PI) * 180 + 360) % 180) - 45);
-      const inNotch = offNotch < 15;
-      const hub = d <= 0.9;
-      if (hub) img.px(cx + dx, cy + dy, hubInk);
-      else if (onRing && !inNotch) img.px(cx + dx, cy + dy, armLit);
+  MOTIF_ROWS.forEach((row, dy) => {
+    for (let dx = 0; dx < row.length; dx++) {
+      const cell = row[dx];
+      if (cell === 'X') img.px(cx - r + dx, top + dy, armLit);
+      else if (cell === 'H') img.px(cx - r + dx, top + dy, hubInk);
     }
+  });
 }
 
 function domeTone(dx: number, dy: number): number {
@@ -495,7 +561,7 @@ function domeTone(dx: number, dy: number): number {
   // `lit` spans about -0.93 to +0.93 over the disc. Normalise, then bias towards the light so the
   // dome's mass sits at Lilac and only the far lower-right quadrant descends towards the fold.
   const u = Math.max(0, Math.min(1, (lit + 0.95) / 1.9));
-  return plateau(Math.pow(u, DOME_BIAS), CLOAK_SHADE, CLOAK_BASE, CLOAK_RIM);
+  return plateau(Math.pow(u, DOME_BIAS), CLOAK_SHADE, CLOAK_BASE, CLOAK_RIM, DOME_RIM);
 }
 
 /**
@@ -509,6 +575,25 @@ function domeTone(dx: number, dy: number): number {
  * a featureless egg; with it the hood has a front and a back. It also puts cloth-coloured midtones
  * exactly where the measured histogram was thinnest.
  */
+/**
+ * Where the cowl crosses, as a fraction of the hood's height, for a column `nx` across it (0 at the
+ * centre, +/-1 at the flanks). It dips at the centre -- the nape, where the opening is -- and lifts
+ * at the temples, where the cloth bunches onto the shoulders.
+ *
+ * Pulled out of `domeRun` 2026-10-20 so that `paintNape` can hang the back of her head off the SAME
+ * curve the shading uses. Two copies of this expression would be two things free to drift, and the
+ * nape sitting one row off the fold it is supposed to be under is precisely the kind of
+ * near-miss this file has spent rounds on.
+ */
+function cowlAt(nx: number): number {
+  return 0.62 + 0.14 * Math.cos(nx * Math.PI);
+}
+
+/** The first row at or below the cowl, for a column `nx` of a hood whose first row is `top`. */
+function cowlRow(nx: number, top: number): number {
+  return top + Math.floor(cowlAt(nx) * HOOD_H) + 1;
+}
+
 function domeRun(img: Img, y: number, cx: number, hw: number, cy: number, top: number): void {
   const w = hw * 2;
   for (let i = 0; i < w; i++) {
@@ -516,7 +601,7 @@ function domeRun(img: Img, y: number, cx: number, hw: number, cy: number, top: n
     let t = domeTone((x + 0.5 - cx) / HOOD_RX, (y + 0.5 - cy) / HOOD_RY);
     const nx = hw === 0 ? 0 : (x + 0.5 - cx) / hw;
     const ny = (y - top) / HOOD_H;
-    const foldAt = 0.62 + 0.14 * Math.cos(nx * Math.PI);
+    const foldAt = cowlAt(nx);
     // The cowl seam, as a CRISP line rather than as a gradual darkening.
     //
     // This used to subtract 0.2 from `t` over about seven rows, which on a dome that is already
@@ -646,23 +731,56 @@ function paintFace(
   }
 
   if (side) {
-    // Profile: one eye, a pixel of nose at the leading edge, a cheek behind it, and -- added
-    // 2026-10-19 -- a mouth and a blush, because without them the four rows under the eye were a
-    // plain cream field and the review was right to call the side face a featureless oval.
-    //
-    // Two faults, not one. The mouth WAS here, at `shade('trunk', 0)` on the row above the jaw: a
-    // mid-brown at luma 58 laid on skin at luma 180 and sitting directly under a fringe drawn from
-    // the same ramp, so it read as one more strand of hair. The front face does not make that
-    // mistake -- its eyes are `keyline('trunk')` at luma 18 -- and the board's Red carries two dark
-    // eyes and a mouth at the same size in the same few pixels. So the mouth takes the keyline
-    // value too, and moves a row up and forward to sit under the eye rather than on the chin.
+    /*
+     * Profile: one eye, a pixel of nose at the leading edge, a cheek behind it, a mouth and a
+     * blush. Three faults were measured off the shipped sheet 2026-10-20 and all three are below.
+     *
+     * 1. THE EYE AND THE MOUTH WERE ONE BLACK SLOT. The previous round moved the mouth onto the
+     *    feature ink to make it visible -- right, and the front face does the same -- and then put
+     *    it on `fy + 8` with the eye ending on `fy + 7`. Measured, the ink was a single contiguous
+     *    2x4 block on all eight side frames: [[10,12],[11,12],[10,13],[11,13],[10,14],[11,14],
+     *    [10,15],[11,15]] on the left and its mirror on the right. The front face gets this right
+     *    by accident of layout -- two 2x3 eyes six pixels apart and a mouth two rows lower in a
+     *    mid-brown -- so only the profile fused. One row of skin between them is the whole fix, and
+     *    the mouth drops rather than the eye rising: the eye's rows are where the fringe ends, and
+     *    lifting it would have the hair growing over her eye instead.
+     *
+     * 2. THE OUTLINE HAD A HOLE IN IT, and on the right frames the pixel leaking through was the
+     *    brightest value on the sheet. `#ffe0c0` at luma 230 sat directly against cloth at luma 63
+     *    with no keyline between, a 167-luma step at (24,14) on idle and walk1 and (24,15) on
+     *    walk0 and walk2 -- while the rows immediately above and below DID carry the line. At a
+     *    zoomed crop that reads as damage, which is exactly the word the client used.
+     *
+     *    The cause was an off-by-one that only bit one way round. `paintFace` lays skin at offsets
+     *    -hw .. +hw-1 about `fx`, which is asymmetric by a pixel, and the nose was placed at a
+     *    FIXED `fx + dir * 5`. Facing left that landed on the face's own last column, so there was
+     *    no nose at all; facing right it landed one past it, on the opening's keyline ring, and
+     *    punched through. Both are now derived from the profile -- `proud()` is one pixel outside
+     *    the face's leading edge at that row, whichever way she is facing -- and the ring is re-laid
+     *    one pixel further out over the rows the nose occupies, so the hood's opening runs unbroken
+     *    AROUND it. She now has the same nose on both sides and an outline on both sides.
+     *
+     * 3. THE BLUSH WAS PAINTED OUTSIDE HER FACE on the left frames, for the same reason: a fixed
+     *    `fx - dir * 4` is inside the profile facing right and two pixels past it facing left,
+     *    where it landed on the ring and on the cloth beyond it. That was the second leak the probe
+     *    found, at (18,15). It is now placed from the profile as well.
+     */
+    const at = (k: number): number => profile[Math.min(Math.max(k, 0), profile.length - 1)]!;
+    /** One pixel outside the face's own leading edge at row `j` -- where a nose breaks the hood. */
+    const proud = (j: number): number => (dir > 0 ? fx + at(j) : fx - at(j) - 1);
+    /** The first column of the cheek at the BACK of the head, inside the profile either way. */
+    const behind = (j: number): number => (dir > 0 ? fx - at(j) : fx + at(j) - 2);
+
     const ex = fx + dir * 2 - (dir < 0 ? 1 : 0);
     img.rect(ex, fy + 5, 2, 3, keyline('trunk'));
-    img.px(fx + dir * 5, fy + 6, shade('skin', 0));
-    img.px(fx + dir * 5, fy + 7, shade('skin', 2));
-    img.rect(fx - dir * 4, fy + 8, 2, 1, shade('skin', 0));
+    // The nose, and the hood's opening re-laid around it so the line never breaks. One row above
+    // and one below the nub as well, so the ring steps out and back rather than ending in mid-air.
+    for (let j = 5; j <= 8; j++) img.px(proud(j) + dir, fy + j, keyline('cloak'));
+    img.px(proud(6), fy + 6, shade('skin', 0));
+    img.px(proud(7), fy + 7, shade('skin', 2));
+    img.rect(behind(8), fy + 8, 2, 1, shade('skin', 0));
     img.px(fx + (dir < 0 ? -1 : 0), fy + 7, shade('skin', 0));
-    img.rect(fx + (dir < 0 ? -3 : 2), fy + 8, 2, 1, keyline('trunk'));
+    img.rect(fx + (dir < 0 ? -3 : 2), fy + 9, 2, 1, keyline('trunk'));
     return;
   }
 
@@ -675,6 +793,105 @@ function paintFace(
   img.rect(fx - 5, fy + 8, 2, 1, shade('skin', 0));
   img.rect(fx + 3, fy + 8, 2, 1, shade('skin', 0));
   img.rect(fx - 1, fy + 9, 2, 1, shade('trunk', 0));
+}
+
+/**
+ * THE BACK OF HER HEAD. Four marks, on the `up` frames only, and this is the round's headline.
+ *
+ * What the client cropped and called messed up was this view, and the measurement agrees with them
+ * without needing an opinion: rows 1..19 of the shipped back frame are 422 opaque pixels of cloth
+ * carrying ZERO feature pixels -- no cowl opening, no hair, no nape, nothing that is not the
+ * garment -- between a 100 per cent keyline row at 0 and another at 20. Three flat purples and the
+ * keyline are 54.6 per cent of the whole frame. The front frame, over the same rows, carries a
+ * face. So she reads from behind as an aubergine with legs, and no amount of shading fixes that,
+ * because the fault is that there is nothing there to shade.
+ *
+ * The four marks, cheapest first:
+ *
+ * 1. THE COWL'S LIT LIP, one row above the fold. The fold itself has been a single dark chevron
+ *    since it was added, and a dark line alone on a dark dome is a crease. One row of lit cloth
+ *    above it makes it an EDGE the cloth turns over -- the same two-part device as the cape hem and
+ *    the skirt gathers, which is to say nothing new is being invented here.
+ *
+ * 2. THE OPENING'S KEYLINE, one pixel round the hair, which is section 10.3's interior ring doing
+ *    on the back exactly what it already does round the face on the other three facings. It is
+ *    what makes the hair something seen THROUGH the hood rather than painted onto it, and without
+ *    it her hair met her garment over sixteen adjacencies with no outline between.
+ *
+ * 3. HER HAIR AT THE NAPE, under the cowl's lowest point. This is the one that makes her a person,
+ *    and it is the one departure worth arguing for rather than slipping in. The board's own back
+ *    view has no hair: `domeRun`'s note quotes it as "a smooth dome for two thirds and then gathers
+ *    into a shallow scalloped shadow", and an earlier line in this file said outright "the board
+ *    draws no hair". That line was written about a mock at roughly 2.7x our resolution, where a
+ *    plain dome still carries a dozen values of modelling. At 32x48 it carries four, and the result
+ *    is measured above. Her hair already exists on the other three facings, in `trunk`, so this
+ *    adds no hue and no ramp -- it puts the colour she already has where the head already is. The
+ *    cowl dips at the nape precisely because that is where the opening is, so the hair lands in the
+ *    gather rather than on the crown.
+ *
+ * 4. THE RIM STEPS DOWN UNDER IT, which is `paintHood`'s business and is why this returns the
+ *    columns it covered.
+ *
+ * Deliberately NOT done: a collar, a second notch, or anything on the crown. The dome's flat mass
+ * is listed under what works and the previous round's caution about sanding it stands. A CENTRE
+ * SEAM down the back of the hood was drawn, rendered at 14x and taken out again: thirteen rows of
+ * channel-plus-highlight running into the chevron's apex read as a zip, and with the hair in place
+ * it was a second vertical competing with the one mark that matters. Recorded so the next round
+ * does not reach for it as the obvious missing thing.
+ */
+/**
+ * The hair at the nape, as half-widths down from the cowl: narrow where it leaves the opening,
+ * widening to the jaw. The last row reaches the hood's own last row, which is what lets the rim
+ * step down under it.
+ */
+const NAPE_HW = [3, 4, 5, 4];
+
+function paintNape(img: Img, cx: number, top: number): Set<number> {
+  // The cowl's own curve, so the hair cannot drift off the fold it is supposed to sit in.
+  const centreRow = cowlRow(0, top);
+
+  // 1. The cowl's lit lip, one row above the fold and only across the middle, where the cloth
+  //    actually rolls over the opening. Run the full span it doubles the chevron into a light line
+  //    over a dark one and the hood reads as an envelope; kept to the centre it reads as the edge
+  //    the hood turns on. Rendered both ways at 14x before choosing.
+  for (let x = cx - NAPE_HW[1]! - 1; x <= cx + NAPE_HW[1]!; x++) {
+    const lip = cowlRow((x + 0.5 - cx) / HOOD_HW[HOOD_H - 1]!, top) - 1;
+    if (img.get(x, lip)[3] !== 0) img.px(x, lip, tone('cloak', CLOAK_LIT));
+  }
+
+  // 2. The opening's own keyline, one pixel hugging the hair row by row, exactly as section 10.3's
+  //    interior ring does round the face on the other three facings. Without it the hair is
+  //    painted ONTO the hood rather than seen THROUGH it, and -- measured -- her hair met the
+  //    garment over sixteen adjacencies with no outline between, which is the same class of fault
+  //    as the nose leak on the side profiles. The cap row is pulled in a pixel so the opening arcs
+  //    over her instead of ending in a bar, which is the correction `paintHood` already records
+  //    having had to make to the face ring for the same reason.
+  img.rect(cx - NAPE_HW[0]!, centreRow - 1, NAPE_HW[0]! * 2, 1, keyline('cloak'));
+  NAPE_HW.forEach((hw, j) => {
+    img.rect(cx - hw - 1, centreRow + j, (hw + 1) * 2, 1, keyline('cloak'));
+  });
+
+  // 3. The hair, as a bob seen from behind: narrowest where it leaves the cowl, widening to the
+  //    jaw, with a parting one step darker down the middle. The ring above is its brim shadow, so
+  //    there is no second dark row inside it -- two of those together is the letterbox the face
+  //    ring was fixed for.
+  //
+  //    The profile is a bob and not a rectangle for a reason that cost a render: an even block of
+  //    `trunk` eight pixels wide across the bottom of the hood reads as a plank nailed to the back
+  //    of her head. Hair has to taper somewhere to be hair.
+  const covered = new Set<number>();
+  NAPE_HW.forEach((hw, j) => {
+    const y = centreRow + j;
+    for (let i = 0; i < hw * 2; i++) {
+      const x = cx - hw + i;
+      // Across the nape, lit at the sweep and falling to the far side; down it, into the parting.
+      const across = 1 - i / (hw * 2 - 1);
+      const parting = Math.abs(x - cx) < 1 ? 0.12 : 0;
+      img.px(x, y, tone('trunk', 0.24 + 0.46 * across - 0.08 * j - parting));
+      if (y >= top + HOOD_H - 1) covered.add(x);
+    }
+  });
+  return covered;
 }
 
 /** The hood: dome, then the opening carved back out of it with a lit brim over it. */
@@ -697,9 +914,15 @@ function paintHood(img: Img, t: number, facing: Facing, dir: number): void {
   // In the keyline value, not in `shade('cloak', 0)`: the board draws its interior boundaries as
   // dark as its outlines, and that is what sets one mass in front of another. At L43 this line was
   // a midtone pretending to be a shadow.
-  bottom.forEach((y, x) => img.px(x, y, keyline('cloak')));
+  //
+  // `nape` is the set of columns where the hair hangs below the hood's rim, so the rim steps down a
+  // row there and becomes the shadow under her hair instead of cutting across it. That step is also
+  // what breaks row 20: it was 18 px of unbroken keyline on every facing, the upper of the two bars
+  // that cut the figure into a dome, a box and a pair of legs.
+  const nape = facing === 'up' ? paintNape(img, hoodCx, t) : null;
+  bottom.forEach((y, x) => img.px(x, nape?.has(x) === true ? y + 1 : y, keyline('cloak')));
 
-  if (facing === 'up') return; // Turned away, the hood is the whole head. The board draws no hair.
+  if (facing === 'up') return; // Turned away, the hood is the whole head.
 
   const profile = side ? FACE_HW_SIDE : FACE_HW;
   const fx = hoodCx + dir * 2;
@@ -729,10 +952,27 @@ function paintHood(img: Img, t: number, facing: Facing, dir: number): void {
   paintFace(img, fx, fy, profile, dir);
 }
 
-/** Shoulders to hem: the bell, with the sleeve creases and a scalloped edge. */
-function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, sway: number): void {
+/**
+ * Shoulders to hem: the bell, with the sleeve creases and a scalloped edge.
+ *
+ * `stride` is the phase, -1 / 0 / +1. It drives two things: the hem notches, which it always did,
+ * and -- new 2026-10-20 -- the HEM SWAY. The review measured the walk cycle as moving rows 36..47
+ * and nothing above: no arm swing, no cloak sway, the basket pixel-identical in all four frames of
+ * a facing, and 63 to 69 per cent of the pixels that did move sitting at keyline darkness. A walk
+ * whose only animation is inside a near-black block is not read as a walk.
+ *
+ * So the bottom rows of the skirt lean one pixel OPPOSITE the leading foot, which is what cloth
+ * does: the hem trails the step. One pixel, on the last three rows, carrying the hem line and the
+ * gathers with it so the garment moves as one piece rather than shearing. It is derived here and
+ * passed down rather than recomputed anywhere, because a hem line that leaned and a silhouette
+ * that did not would come apart exactly the way the scallop and the hem line were warned about.
+ */
+function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, stride: number): void {
   const profile = dir !== 0 ? CLOAK_HW_SIDE : CLOAK_HW;
   const cx = CX + dir;
+  const sway = stride + 1;
+  /** One pixel of lean on the skirt's last rows, opposite the leading foot. */
+  const lean = (y: number): number => (y >= HEM - 2 ? -stride : 0);
   for (let y = HEM; y >= shoulder; y--) {
     const hw = profile[Math.min(HEM - y, profile.length - 1)]!;
     // Two shallow notches in the hem, phased by the stride so the cloth swings as she walks. Any
@@ -741,7 +981,7 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, swa
     // The rim light fades down the figure: full strength on the two rows of shoulder that stand
     // out from under the hood, gone by the row the cape ends on. See `clothRun` -- this used to be
     // `HEM - y > 9`, a hard on/off at the cape line, and the hard edge was the stripe.
-    clothRun(img, y, cx - hw, hw * 2, (shoulder + 6 - y) / 5, skip);
+    clothRun(img, y, cx - hw + lean(y), hw * 2, (shoulder + 6 - y) / 5, skip);
   }
 
   // The cape's hem, laid across the row where the profile stops narrowing and starts flaring again.
@@ -765,31 +1005,29 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, swa
     img.px(cx + 5, y, tone('cloak', CLOAK_SHADE));
   }
 
-  // Seen from behind, the cape has a centre seam running from the collar to its hem, and the frame
-  // badly needs it: turned away, Red has no face, no basket-side asymmetry and no brim, so the back
-  // frames were a plain dome over a plain bell and she read as an aubergine. One dark line down the
-  // middle with a lit edge beside it is the cheapest thing that says "this is the back of a
-  // garment" -- and it is what the board's own Question frame shows.
-  // It starts BELOW the cape's hem, not at the collar. Run the full height it crosses the cape line
-  // at right angles and the back of her reads as a graphic cross rather than as cloth; started
-  // under it, the two meet in a T, which is what a cape over a skirt actually does.
+  /*
+   * Seen from behind, the cape has a centre seam and carries the device, and this block is where
+   * the two were fighting over the same eight rows without anybody noticing.
+   *
+   * THE SEAM WAS NOT BEING DRAWN AT ALL. It ran `foldTop` (which evaluates to `capeY + 1`, 28) to
+   * `HEM` (36) and skipped `motifTop - 1 .. motifBottom + 1`, which with the device centred at
+   * `foldTop + 4` and a radius of 4 evaluates to 27..37 -- every row in the loop. So the clearance
+   * rule swallowed the whole seam, and the comment that argued for it has described a line nothing
+   * painted since the device was centred. That is also why the back frame measured as a plain dome
+   * over a plain bell: one of the two marks meant to prevent it was absent.
+   *
+   * They cannot both have the skirt, so they are separated by height rather than by a skip. The
+   * SKIRT, below the cape line, is the device's -- it is the flattest, widest cloth on her and it
+   * is where a cape carries a badge. The CAPE, above the line, takes the seam, which now stops ON
+   * the cape's hem instead of starting under it: the two still meet in a T, just the other way up,
+   * and a T is what the original comment was after.
+   */
   if (facing === 'up') {
-    const foldTop = Math.max(capeY + 1, shoulder + 1);
-    /*
-     * The seam breaks for the device. `BRAND_AND_UI` section 82 asks for clear space of at least
-     * the height of the "c" round the mark, and running the fold straight through it put a vertical
-     * line across a four-armed radial form -- which reads as a scuff on the cloth rather than as
-     * anything deliberate. Broken either side, the seam reads as a seam interrupted by a device,
-     * which is what a garment with a badge on it actually looks like.
-     */
-    const motifTop = foldTop + 4 - (MOTIF - 1) / 2;
-    const motifBottom = foldTop + 4 + (MOTIF - 1) / 2;
-    for (let y = foldTop; y < HEM; y++) {
-      if (y >= motifTop - 1 && y <= motifBottom + 1) continue;
+    for (let y = shoulder + 2; y < capeY; y++) {
       img.px(cx, y, keyline('cloak'));
       img.px(cx - 1, y, tone('cloak', CLOAK_LIT));
     }
-    paintCapeMotif(img, cx, foldTop);
+    paintCapeMotif(img, cx, capeY + 1);
   }
 
   // The hood's OVERHANG, cast down onto the shoulders.
@@ -822,11 +1060,20 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, swa
   // keep below the shoulder.
   //
   // Lifted one row 2026-10-19 to make room for the hem line below it.
+  //
+  // On the BACK they step outboard, because that is where the device is and the two were overlapping
+  // -- the gathers are painted after it, so they were drawing over the device's lower corners, which
+  // is most of how a nine-pixel ring came out as four disconnected fragments. Stepping them out
+  // leaves the clear space `BRAND_AND_UI` section 82 asks for round the mark, and a skirt that
+  // gathers a little wider apart at the back is what a skirt does anyway. The offset is derived from
+  // the device's own half-width so the two cannot drift back into each other.
+  const gatherOut = facing === 'up' ? (MOTIF - 1) / 2 - 1 : 0;
   for (let y = HEM - 4; y < HEM; y++) {
-    img.px(cx - 4, y, tone('cloak', CLOAK_RIM));
-    img.px(cx - 3, y, tone('cloak', CLOAK_FOLD));
-    img.px(cx + 2, y, tone('cloak', CLOAK_SHADE));
-    img.px(cx + 3, y, tone('cloak', CLOAK_FOLD));
+    const k = lean(y);
+    img.px(cx - 4 - gatherOut + k, y, tone('cloak', CLOAK_RIM));
+    img.px(cx - 3 - gatherOut + k, y, tone('cloak', CLOAK_FOLD));
+    img.px(cx + 2 + gatherOut + k, y, tone('cloak', CLOAK_SHADE));
+    img.px(cx + 3 + gatherOut + k, y, tone('cloak', CLOAK_FOLD));
   }
 
   // The HEM, as one dark line along the bottom of the cloth.
@@ -839,10 +1086,25 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, swa
   // The scallop is honoured, so the two notches the walk swings still cut through it; and the
   // columns are indexed exactly as `skip` indexes them in the main loop above, from the hem's own
   // half-width, so the line and the silhouette cannot drift apart.
+  //
+  // Its LIT END is one step up from the keyline, 2026-10-20. Measured, row 36 was 100 per cent of
+  // its opaque pixels below luma 35 on every facing, as was row 20, and the review's reading of
+  // that is right: two full-width dark rules plus the boot slab cut the silhouette into a dome, a
+  // box and a pair of legs. An edge the light reaches is not the same value as an edge in shadow,
+  // and `clothRun` already ends every row this way -- the hem is the one line that was uniform.
+  // The line survives: three pixels of `CLOAK_FOLD` at luma 54 against eighteen of keyline at 14
+  // is still emphatically a line, and the board's own hems catch light at one end.
+  //
+  // NOT TAKEN, and recorded so it is a decision rather than an omission: dropping the hem a row
+  // between her feet so the skirt hangs lowest at the centre. That is the fuller answer to the
+  // bar, it is what cloth does, and it changes the SILHOUETTE on every walk frame -- which is a
+  // bigger thing than this round should spend on a minor finding, with the stride moving the gap
+  // between her legs underneath it.
   const hemHw = profile[0]!;
+  const hemLean = lean(HEM);
   for (let i = 0; i < hemHw * 2; i++) {
     if ((i + sway) % 8 === 3) continue;
-    img.px(cx - hemHw + i, HEM, keyline('cloak'));
+    img.px(cx - hemHw + i + hemLean, HEM, i < 3 ? tone('cloak', CLOAK_FOLD) : keyline('cloak'));
   }
 }
 
@@ -1063,22 +1325,42 @@ function paintFrame(img: Img, facing: Facing, phase: 0 | 1 | 2 | 3): void {
 
   const body = new Img(RED_FRAME_W, RED_FRAME_H);
   paintLegs(body, facing, stride, dir);
-  paintCloak(body, shoulder, facing, dir, stride + 1);
+  paintCloak(body, shoulder, facing, dir, stride);
 
-  // Which side the basket hangs on. It is her left hand, so facing us it is on our right and facing
-  // away it is on our left; on the two side facings that hand would be hidden, so it swings
-  // forward, because a Red without a visible basket is just a girl in a coat.
-  const onRight = facing === 'down' || facing === 'right';
+  /*
+   * Which side the basket hangs on -- HER LEFT HAND, in all four facings, which is a change.
+   *
+   * It used to be `down || right`, i.e. her left hand facing us and facing away, and then the
+   * LEADING side on both profiles, which means it swapped arms between the two of them. Measured
+   * off the shipped sheet, the cost of that swap is a figure that slides sideways when the player
+   * turns on the spot: whole-figure ink centre 13.0 facing left against 18.0 facing right, five
+   * native pixels, ten CSS pixels at the zoom the desktop camera plays at. She is seated with
+   * origin (0.5, 1) so the FRAME is centred perfectly; it is the ink inside it that jumps, and
+   * most of the jump is the basket crossing her body.
+   *
+   * Keeping it on one arm costs nothing anatomically. Facing away it is on our left and facing us
+   * on our right, which is unchanged and correct. Facing right her left hand is the FAR one, so
+   * the basket trails behind her hip -- partly occluded, which is the honest read for a far hand
+   * and is the same drawing the `up` and `left` frames already use. Facing left it is the near
+   * hand and hangs in front, as now.
+   *
+   * It also swings. The review found the walk moves only rows 36..47 -- legs and nothing else, in
+   * the darkest band on the figure, so the only moving part of the protagonist was a handful of
+   * pixels inside a near-black block. A carried basket swings with the stride; one pixel is
+   * plenty at this size, and it puts ninety-odd pixels of motion at hip height. The rest position
+   * steps one column in from the frame edge so the swing has somewhere to go: nine pixels of
+   * basket plus its keyline is exactly the room beside a 24px hood, so an OUTWARD lean from flush
+   * would clip off the sheet. Flush is now the far end of the swing rather than the rest pose.
+   */
+  const onRight = facing === 'down';
   const by = shoulder + 3 - bob;
-  // Fixed columns, not offset by the facing: nine pixels of basket plus its keyline is exactly the
-  // room left beside a 24px hood, and a one-pixel lean would clip it off the sheet.
   // Order matters here and did not before: sleeve, then basket, then the hand on the handle. Nine
   // pixels of basket cannot clear a body that is twenty-four across inside a thirty-two pixel
   // frame, so the basket MUST overlap her -- the question is only which object is in front. Painted
   // sleeve-last, as it used to be, the arm was drawn across the wicker and the three of them came
   // out as one brown and purple smudge at her hip. Painted in this order, the sleeve goes behind
   // the basket, the basket's own keyline cuts it out of the cloak, and the hand closes over it.
-  const bx = onRight ? 22 : 1;
+  const bx = onRight ? 21 + stride : 2 - stride;
   const sleeveSign = onRight ? 1 : -1;
   paintSleeve(body, shoulder, CX + dir, sleeveSign, dir !== 0 ? CLOAK_HW_SIDE : CLOAK_HW);
   paintBasket(body, bx, by);
@@ -1161,7 +1443,232 @@ function assertContactLine(): void {
     throw new Error(`Red is not standing on the ground:\n  ` + faults.join('\n  '));
 }
 
+/** A frame, painted, for the guards below. */
+function frameOf(name: string): Img {
+  const img = new Img(RED_FRAME_W, RED_FRAME_H);
+  RED_FRAMES[name]!(img);
+  return img;
+}
+const isOpaque = (img: Img, x: number, y: number): boolean =>
+  x >= 0 && y >= 0 && x < RED_FRAME_W && y < RED_FRAME_H && img.get(x, y)[3] > 0;
+/** Her face and her hair: the warm ramps, `skin` and `trunk`, which are the only ones with R > B. */
+const isWarm = (c: RGBA): boolean => c[3] > 0 && c[0] > c[2];
+/** Her garment: the cloak's purples, which are the only ones with B > R, above outline darkness. */
+const isCloth = (c: RGBA): boolean => c[3] > 0 && c[2] > c[0] && lumaOf(c) >= 30;
+/** The count of 4-connected components in a set of points. */
+function componentsOf(pts: readonly (readonly [number, number])[]): number {
+  const key = new Set(pts.map(([x, y]) => `${x},${y}`));
+  const seen = new Set<string>();
+  let n = 0;
+  for (const [sx, sy] of pts) {
+    if (seen.has(`${sx},${sy}`)) continue;
+    n++;
+    const queue: [number, number][] = [[sx, sy]];
+    seen.add(`${sx},${sy}`);
+    while (queue.length) {
+      const [x, y] = queue.pop()!;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const k = `${x + dx},${y + dy}`;
+        if (key.has(k) && !seen.has(k)) {
+          seen.add(k);
+          queue.push([x + dx, y + dy]);
+        }
+      }
+    }
+  }
+  return n;
+}
+
+/**
+ * FOUR THINGS THE 2026-10-20 REVIEW FOUND AND THIS FILE NOW CANNOT LOSE AGAIN.
+ *
+ * Every one of them was live on the shipped sheet, every one is the kind of fault that survives a
+ * typecheck, a lint and a profile, and three of the four survived four rounds of honest measurement
+ * because nothing was looking for them. `assertContactLine` above is the model: a module-level
+ * throw, armed in CI by `test/art-guards.test.ts` importing the painter.
+ *
+ * The bounds are deliberately NOT restatements of the constants that produce them. `NAPE_HW` could
+ * be rewritten tomorrow and this still asks the question that matters -- is there anything on the
+ * back of her head that is not her coat -- rather than agreeing with whatever the file says today.
+ * Twelve pixels is a legibility floor at 32x48, not a measurement of the current drawing, which
+ * carries considerably more.
+ *
+ * 1. THE HOOD'S OPENING HAS NO HOLE IN IT. No warm pixel -- skin or hair -- may LEAK through to
+ *    the cloak: that is, sit directly against cloth with no keyline between AND differ from it by
+ *    enough luma to read as a break in the outline. The shipped sheet had eight: `#ffe0c0` at luma
+ *    230 against cloth at 63 on all four right-facing frames, a 167-luma step with no outline, and
+ *    four at 92 on the left. It is checked over the hood's own rows, which is where the rule is
+ *    "the face sits INSIDE the hood"; below that the basket and the boots meet the cloak on their
+ *    own keylines and have their own argument.
+ *
+ *    THE BOUND IS A LEAK, NOT AN ADJACENCY, and the difference is load-bearing. A first version
+ *    forbade the adjacency outright and fired on something that is not a fault: the fringe's own
+ *    brim-shadow row meets the hood's cloth at the opening's two upper corners, because the ring's
+ *    cap row is deliberately pulled in two pixels so the opening arcs over her rather than ending
+ *    in a bar above her head. That join is dark on dark -- 61 against 87 -- and nothing leaks
+ *    through it. Measured over all sixteen frames, every remaining warm-against-cloth adjacency on
+ *    this sheet is exactly that one join at 26 luma, and the two real defects were 92 and 167. The
+ *    floor sits at 60, with 34 luma of daylight below it and 32 above, so it is a gap in the
+ *    population rather than a number fitted to today's drawing.
+ *
+ * 2. HER EYE AND HER MOUTH ARE TWO MARKS, NOT ONE. On the side frames both are drawn in the
+ *    feature ink, and the previous round left them vertically adjacent -- one contiguous 2x4 block
+ *    on all eight side frames, which reads as a slot. The guard counts connected components of
+ *    that ink in the head and wants more than one. The front face already passes, and is included
+ *    so that a future layout change cannot fuse it either. The BACK is exempt, and exempt by name
+ *    rather than by the count happening to be zero: she has no face on those four frames, and a
+ *    guard that accepted zero marks everywhere would have accepted the fused slot too.
+ *
+ * 3. THE BACK OF HER HEAD IS NOT BLANK. The whole of the client's crop. Rows above the shoulder on
+ *    the `up` frames must carry some ink that is not the garment and not its outline.
+ *
+ * 4. THE WALK IS NOT LEGS-ONLY. Opposite stride frames must differ somewhere above the hem. The
+ *    shipped sheet differed in rows 36..47 and nowhere else, on every facing, with two thirds of
+ *    the moving pixels at keyline darkness -- so the only animated part of the protagonist was a
+ *    handful of pixels inside a near-black block.
+ */
+function assertRedReads(): void {
+  const faults: string[] = [];
+  const hoodRows = HOOD_H + 1; // the hood and the line under it; the shoulder starts below.
+  /** How far apart a warm pixel and a cloth pixel must be before a missing keyline is a leak. */
+  const LEAK = 60;
+
+  for (const name of Object.keys(RED_FRAMES)) {
+    const img = frameOf(name);
+
+    // 1. No warm pixel leaking into the cloth with no keyline between them.
+    const holes: string[] = [];
+    for (let y = 0; y < hoodRows; y++)
+      for (let x = 0; x < RED_FRAME_W; x++) {
+        if (!isOpaque(img, x, y)) continue;
+        for (const [dx, dy] of [
+          [1, 0],
+          [0, 1],
+        ] as const) {
+          if (!isOpaque(img, x + dx, y + dy)) continue;
+          const a = img.get(x, y);
+          const b = img.get(x + dx, y + dy);
+          const pair = (isWarm(a) && isCloth(b)) || (isCloth(a) && isWarm(b));
+          const step = Math.abs(lumaOf(a) - lumaOf(b));
+          if (pair && step >= LEAK)
+            holes.push(`(${x},${y})-(${x + dx},${y + dy}) ${Math.round(step)} luma`);
+        }
+      }
+    if (holes.length)
+      faults.push(
+        `${name}: the hood's opening has ${holes.length} hole(s) in its keyline, where her face ` +
+          `leaks into her cloak with no outline between: ${holes.join(' ')}`,
+      );
+
+    // 2. The feature ink in the head is at least two marks -- on the facings that have a face.
+    const ink = keyline('trunk');
+    const feature: [number, number][] = [];
+    for (let y = 0; y < hoodRows; y++)
+      for (let x = 0; x < RED_FRAME_W; x++) {
+        const c = img.get(x, y);
+        if (c[3] > 0 && c[0] === ink[0] && c[1] === ink[1] && c[2] === ink[2]) feature.push([x, y]);
+      }
+    const marks = componentsOf(feature);
+    if (!name.startsWith('up-') && marks < 2)
+      faults.push(
+        `${name}: her face carries ${marks} mark(s) of feature ink in ${feature.length} pixels -- ` +
+          `an eye and a mouth that touch are one slot, not two features`,
+      );
+
+    // 3. The back of her head carries something that is not her coat.
+    if (name.startsWith('up-')) {
+      let warm = 0;
+      for (let y = 0; y < hoodRows; y++)
+        for (let x = 0; x < RED_FRAME_W; x++) if (isWarm(img.get(x, y))) warm++;
+      if (warm < 12)
+        faults.push(
+          `${name}: the back of her head is ${warm} px of anything but garment -- she reads as a ` +
+            `dome of cloth rather than as a person seen from behind`,
+        );
+    }
+  }
+
+  // 4. Opposite strides differ above the hem.
+  for (const facing of FACINGS) {
+    const a = frameOf(`${facing}-1`);
+    const b = frameOf(`${facing}-3`);
+    let moved = 0;
+    for (let y = 0; y < HEM; y++)
+      for (let x = 0; x < RED_FRAME_W; x++) if (a.get(x, y).join() !== b.get(x, y).join()) moved++;
+    if (moved < 20)
+      faults.push(
+        `${facing}: the two stride frames differ by ${moved} px above the hem -- the walk is her ` +
+          `legs and nothing else, inside the darkest band on the figure`,
+      );
+  }
+
+  if (faults.length) throw new Error(`Red does not read:\n  ` + faults.join('\n  '));
+}
+
+/**
+ * THE DEVICE ON HER CAPE IS A DEVICE. Checked on the rendered frame, not on `MOTIF_ROWS`, which is
+ * the whole point: the grid was never the problem. What broke it was the hem gathers being painted
+ * over its lower corners afterwards, and a grid-only check would have passed a sheet carrying four
+ * disconnected fragments. Measured on what shipped: 4 components, 180-degree symmetry on 10 of its
+ * 22 pixels, and eight rows of a nine-row design because the hem keyline overwrote the ninth.
+ *
+ * Symmetry is tested about the ink's OWN bounding box rather than about a centre this file names,
+ * so a device that is symmetric but misplaced fails on the clearance check below instead of being
+ * quietly excused here.
+ */
+function assertCapeDevice(): void {
+  const faults: string[] = [];
+  const arm = tone('cloak', CLOAK_RIM);
+  const capeY = HEM - CAPE_EDGE;
+  for (const phase of [0, 1, 2, 3] as const) {
+    const name = `up-${phase}`;
+    const img = frameOf(name);
+    const pts: [number, number][] = [];
+    const r = (MOTIF - 1) / 2;
+    for (let y = capeY; y <= HEM; y++)
+      for (let x = CX - r; x <= CX + r; x++) {
+        const c = img.get(x, y);
+        if (c[3] > 0 && c[0] === arm[0] && c[1] === arm[1] && c[2] === arm[2]) pts.push([x, y]);
+      }
+    if (pts.length === 0) {
+      faults.push(`${name}: the cape carries no device at all`);
+      continue;
+    }
+    const comps = componentsOf(pts);
+    if (comps !== 2)
+      faults.push(
+        `${name}: the device is ${comps} piece(s) of ${pts.length} px -- it is meant to be two ` +
+          `arcs, and anything else is the jumble three earlier forms were rejected for`,
+      );
+    const xs = pts.map(([x]) => x);
+    const ys = pts.map(([, y]) => y);
+    const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+    const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+    const key = new Set(pts.map(([x, y]) => `${x},${y}`));
+    const odd = pts.filter(([x, y]) => !key.has(`${x0 + x1 - x},${y0 + y1 - y}`));
+    if (odd.length)
+      faults.push(
+        `${name}: ${odd.length} of ${pts.length} device pixels have no partner under a half turn ` +
+          `-- rotational symmetry is the property that stops this reading as a tilted logo`,
+      );
+    // Clearance: the device must not touch the cape line above it or the hem line below it.
+    if (y0 <= capeY || y1 >= HEM)
+      faults.push(
+        `${name}: the device runs from row ${y0} to row ${y1}, into the cape line at ${capeY} or ` +
+          `the hem at ${HEM} -- one of them will overwrite it and leave a clipped mark`,
+      );
+  }
+  if (faults.length) throw new Error(`Red's cape device is broken:\n  ` + faults.join('\n  '));
+}
+
 assertContactLine();
+assertRedReads();
+assertCapeDevice();
 
 /*
  * ONE RETRACTION, AND TWO THINGS THE NEXT PASS HAS TO PICK UP THAT CANNOT BE DONE FROM THIS FILE.

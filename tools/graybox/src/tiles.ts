@@ -249,6 +249,40 @@ export const TILE_NAMES: readonly string[] = [
    */
   'notice-board',
   'door-note',
+  /*
+   * THE GATE'S TWO LEAVES, appended for the reason above, 2026-10-21.
+   *
+   * THE RULE, restated here because this block is where somebody will be tempted to tidy: A GID IS
+   * THIS ARRAY'S INDEX PLUS ONE, and those numbers are written into every tile of
+   * `map-forest.json`. Inserting a name anywhere but the END renumbers every tile after it and
+   * silently repaints the forest -- grass becomes roof. Appending renumbers nothing: every existing
+   * gid keeps its value and the committed map stays valid as it is. REVIEW THE DIFF OF THIS FILE
+   * FOR POSITION, NOT ONLY FOR CONTENT.
+   *
+   * Measured, not assumed: this list held 79 names before these two, so `gate-n` is index 79 ->
+   * gid 80 and `gate-s` index 80 -> gid 81. At `COLUMNS = 12` those are sheet cells (7,6) and
+   * (8,6), pixels (224,192) and (256,192), and `Math.ceil(81 / 12)` is 7 exactly as
+   * `Math.ceil(79 / 12)` is -- so `tileset-forest.png` STAYS 384 x 224 and two previously blank
+   * cells simply get painted. `tools/graybox/test/art-guards.test.ts` pins the length and must
+   * move 79 -> 81 in the same commit; that assertion is the mirror of this list and is the one
+   * thing that catches an INSERT masquerading as an append.
+   *
+   * WHY TWO NAMES AND NOT ONE. The opening is two cells tall along the fence axis, so one tile
+   * stamped twice is 32px of identical pixels repeated: it can carry a hinge or a latch but not
+   * both, and it cannot leave daylight in the MIDDLE of the gap. Which END the leaf is hung at is
+   * a property of the leaf, exactly as `fence-corner-e` / `fence-corner-w` record that which SIDE
+   * a rail leaves on is a property of the corner. The gate stands open -- post, rail, daylight,
+   * rail, post, read down column 46 -- because `map.test.ts` requires those two cells to stay
+   * walkable and a rail drawn from post to post would be a picture of a shut gate over a cell the
+   * player strolls through. The painters, their measured bounds and their import-time guard are in
+   * s-outdoor.ts.
+   *
+   * As with every append before it, the tiles do not appear anywhere until the map owner PLACES
+   * them (`forest-map.ts`, the two gate rows at column 46) and `pnpm graybox` is re-run to get them
+   * onto the sheet and into `tileset-forest.gids.json`.
+   */
+  'gate-n',
+  'gate-s',
 ];
 
 /*

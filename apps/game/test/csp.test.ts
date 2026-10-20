@@ -170,10 +170,7 @@ describe.runIf(existsSync(DIST_INDEX))('the page that policy applies to', () => 
       const script = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i.exec(page)?.[1];
       expect(script, 'no module script in the built page -- is this a real build?').toBeTruthy();
 
-      const bundle = readFileSync(
-        fileURLToPath(new URL(`apps/game/dist${script!}`, ROOT)),
-        'utf8',
-      );
+      const bundle = readFileSync(fileURLToPath(new URL(`apps/game/dist${script!}`, ROOT)), 'utf8');
       expect(bundle.length, 'the bundle is empty').toBeGreaterThan(1000);
       for (const hook of ['__otp', 'isSolidAt', 'mapObjects'])
         expect(

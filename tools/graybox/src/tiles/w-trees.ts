@@ -577,6 +577,26 @@ const opaqueAt = (img: Img, x: number, y: number): boolean =>
   x >= 0 && y >= 0 && x < img.w && y < img.h && img.get(x, y)[3] !== 0;
 
 /**
+ * A clump's height against its width. Every leaf cluster, every matrix blob and every contour bump
+ * in this file is drawn at this and always was -- it is the `r * 0.9` that used to be written inside
+ * `lump` -- so lifting it out moves no pixel.
+ *
+ * It is a parameter because of ONE caller, the bleed crescent, and what it buys there is the FOLD'S
+ * HEIGHT -- how many rows of the crescent actually reach the drawing's side edge, which is how many
+ * rows of foliage two crowns meeting there join through. A crescent wide enough to shape a flank
+ * (see `THE TAB`) is not by itself tall enough to make a thick join, and growing a disc to get the
+ * rows grows its reach with them and pushes the lobe further out into the lawn. Stretching it
+ * instead gets the rows for nothing: measured over the six flanks, folds of 11/11, 8/12 and 8/10
+ * rows at the aspects specified, against 9/9, 6/10 and 7/8 with the same crescents drawn as discs.
+ * Rendered as pairs, that is a full waist against a pinched one.
+ *
+ * NO GUARD BELOW FAILS IF THIS IS FORCED BACK TO `LUMP_ASPECT`, and that was checked by doing it.
+ * Guard (b)'s fold floor is 4 rows and a disc still clears it. So this is a shaping choice with a
+ * measurement behind it, not a correctness requirement, and it is written down here as one.
+ */
+const LUMP_ASPECT = 0.9;
+
+/**
  * A leaf clump: a disc whose radius breathes around the circumference, so no clump is a clean
  * ellipse and the pile of them has the scalloped, slightly ragged silhouette the board's crowns
  * have. Three sine terms rather than noise, because the shape has to be the same every time the
@@ -586,6 +606,9 @@ const opaqueAt = (img: Img, x: number, y: number): boolean =>
  * It hands each pixel its NORMALISED position -- `dx`, `dy` in units of the radius, and `d` as the
  * fraction of the way from the centre to the wobbled rim. That is what lets the caller light the
  * clump as a sphere instead of filling it flat, which is the whole point of this redraw.
+ *
+ * `aspect` is how tall it is against how wide, and every caller but one leaves it alone. See
+ * `LUMP_ASPECT` for why it is a parameter at all.
  */
 function lump(
   img: Img,
@@ -594,12 +617,13 @@ function lump(
   r: number,
   seed: number,
   at: (x: number, y: number, dx: number, dy: number, d: number) => void,
+  aspect = LUMP_ASPECT,
 ): void {
-  const reach = r * 1.3;
+  const reach = r * 1.3 * Math.max(1, aspect / LUMP_ASPECT);
   for (let y = Math.floor(cy - reach); y <= Math.ceil(cy + reach); y++) {
-    for (let x = Math.floor(cx - reach); x <= Math.ceil(cx + reach); x++) {
+    for (let x = Math.floor(cx - r * 1.3); x <= Math.ceil(cx + r * 1.3); x++) {
       const dx = (x + 0.5 - cx) / r;
-      const dy = (y + 0.5 - cy) / (r * 0.9);
+      const dy = (y + 0.5 - cy) / (r * aspect);
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d > 1.3) continue;
       const th = Math.atan2(dy, dx);
@@ -848,23 +872,74 @@ function close(img: Img, fallback: RGBA): void {
  * WHAT THAT COSTS, STATED PLAINLY, BECAUSE IT IS THE TRADE THE BUSH OWNER NAMED. A bleed only reads
  * where the body is already close to the edge; at five to nine columns the crescent is a visible
  * lobe, so **every crown now carries a small lobe on each flank whether or not it has a neighbour**,
- * and a tree standing alone in the open pays it for nothing. Three things keep it cheap. It is
- * ONE lobe a side of radius 4.4 to 5.2, which is inside the range the crown's own contour bumps are
- * thrown at (4.0 to 8.0 on the mid tree), so it reads as one more bump on a scalloped silhouette
- * rather than as an ear. It carries a LEAF CLUSTER, so what reaches the tile edge is foliage with
- * the crown's own two dark columns in front of it -- the first render of this round had bare matrix
- * there and grew a near-black bracket out of both sides of all 318 crowns. And it sits at the
- * crown's flank rather than its cap or hem, so the crown still bulges well above and below it:
- * fourteen rows clear above the seam and thirty-three below on the mid tree.
+ * and a tree standing alone in the open pays it for nothing. It sits at the crown's flank rather
+ * than its cap or hem, so the crown still bulges well above and below it: fourteen rows clear above
+ * the seam and thirty-three below on the mid tree.
  *
  * WHAT IT BUYS: 119 of the 232 crown-to-crown seams in the world merge, from none.
+ *
+ * ------------------------------------------------------------------------------------------------
+ * THE TAB, 2026-10-21: the lobe above was ONE DISC A SIDE and it printed as a rectangular handle.
+ * The client's note is "look at the trees there in the middle, they're messed up", and a census off
+ * the generated map found 122 of the 1021 crown tiles standing with that lobe exposed against bare
+ * lawn. This is that answered, and the paragraph it replaces claimed the opposite in good faith --
+ * "it reads as one more bump on a scalloped silhouette rather than as an ear" -- so read WHY it was
+ * wrong before changing anything here, because the geometry is not obvious.
+ *
+ * MEASURED, the old lobe's flank was flat and at the sapling it was WIDER at the drawing's edge than
+ * anywhere inboard of it. Column heights walking outboard over the last six columns, before:
+ *
+ *   sapling  left 13 13 12 12 12 11   right 13 12 12 12 13 14   <- rises to its crest ON the edge
+ *   elder    left 18 16 14 12 13 11   right 15 14 13 14 14 15   <- same
+ *   mid      left 33 24 21 19 14 12   right 35 34 31 23 16 12   <- healthy, and it is the control
+ *
+ * The mid is healthy for a reason worth knowing: its body already comes within one to three columns
+ * of its own edge at the band, so what those columns show is the CROWN's flank falling away. The
+ * elder's body stands five to nine columns off and the sapling's five to nine, so on those two the
+ * last six columns are lobe and nothing else, and the lobe's own profile is all the eye gets.
+ *
+ * WHY ONE DISC CANNOT TAPER, which is the whole of it. A disc clipped by a straight edge shows its
+ * chord, and a chord is flattest at the disc's middle. Seat the disc so it reaches the edge at all
+ * and its parallel middle is what lands there: 8.8px of chord at the centre column against 7.4 at
+ * the edge, a fall of one and a half pixels over three columns, which the keyline's own two pixels
+ * then flatten to nothing. Seat it further out and the crest moves ONTO the edge, which is the
+ * sapling row above. Seat it further in and it stops reaching the edge and the merge is gone. The
+ * radius does not help either: the columns over which a chord visibly falls are the last fifth of
+ * the radius, so a six-column taper off one disc wants a radius near thirteen -- a lobe twice the
+ * height of the sapling's whole crown. **The flat tab was not a tuning error. It is what one disc
+ * does**, and three rounds of moving its centre and its radius could only ever trade one bad end
+ * for the other.
+ *
+ * SO IT IS A CHAIN, which is how the shape would be drawn by hand: an INNER crescent seated on the
+ * body, and a smaller OUTER one carrying the tip to the edge. Two ellipses of falling size step the
+ * silhouette out instead of jumping it, and each step is one or two columns rather than six. After,
+ * over the same six columns:
+ *
+ *   sapling  left 14 13 12 11 10 11   right 14 13 15 15 13 11
+ *   elder    left 18 15 12 13 11  8   right 17 17 14 14 13 10
+ *   mid      left 33 25 23 20 12  8   right 38 38 34 24 18 12
+ *
+ * The crest is now inboard on all six flanks and the edge column is 0.73 to 0.79 of it on the two
+ * crowns that were failing, against 1.00 before. Guard (h) at the foot of this file is that, and it
+ * is the one bound here that states the client's complaint rather than a proxy for it.
+ *
+ * AND THE CRESCENT IS AN ELLIPSE RATHER THAN A DISC, `CrownSpec.bleed`'s fourth number. See
+ * `LUMP_ASPECT`: the crescent has to reach the edge over enough rows to join through foliage and it
+ * must not stand proud of the body on the rows where it does not, and a disc grows both together.
+ *
+ * WHAT THIS COST, because it was not free and the next reader should not have to rediscover it. The
+ * scale guard's width measurement had to move onto a drawing with no bleed on it at all -- see
+ * `BARE_CROWNS` for the proof that the old measurement was reading the seam rather than the tree,
+ * and was quietly paying four pixels for a rounded tip and refunding them for a square one.
+ * ------------------------------------------------------------------------------------------------
  *
  * WHAT IT CANNOT BUY, AND IT IS AN ASK RATHER THAN A DEFECT. The other 113 are seams where the two
  * tiles are at alignments whose fold rows cannot coincide -- a crown's band falls in one of its tile
  * rows, so an upper tile beside a lower one shares no local row with it -- or where the face at the
  * seam is the elder's cap or the sapling's hem, which stand 20 to 30 columns inside the drawing and
  * no lobe can honestly reach. Closing those wants interior-vs-edge crown variants, which is a gid
- * round; the ask is written out in the handback.
+ * round; the ask is written out in the handback. A crown tile that knew whether it had a neighbour
+ * would also be the end of the exposed lobe, because it could simply not bleed on a bare face.
  * ================================================================================================
  */
 
@@ -993,10 +1068,11 @@ type CrownSpec = {
   readonly skirt: readonly (readonly [number, number, number])[];
   /**
    * THE BLEED: the crescents that carry the crown's mass off its left and right edges, so that two
-   * crowns standing side by side fuse into one canopy. Same form as `skirt` -- x, y, radius, in the
-   * crown's own space -- and the same clamp through `clearCap`. See the long note above `BLEED`.
+   * crowns standing side by side fuse into one canopy. x, y, radius and HEIGHT AGAINST WIDTH, in
+   * the crown's own space, with the same clamp through `clearCap`. See the long note above `BLEED`
+   * for what it is for and `LUMP_ASPECT` for why the fourth number exists.
    */
-  readonly bleed: readonly (readonly [number, number, number])[];
+  readonly bleed: readonly (readonly [number, number, number, number])[];
   /**
    * The bleed's own `noise()` seed, and it is separate from `seed` for one reason: every blob the
    * main stream draws moves every blob after it, and `forest-map.ts` plants trees by reading a
@@ -1215,6 +1291,11 @@ type Blob = {
    * leaves every value axis the rungs set exactly where it was.
    */
   readonly dull: number;
+  /**
+   * This blob's own height against its width, where it is not the one every other blob uses. Only
+   * the bleed crescent sets it; see `LUMP_ASPECT`.
+   */
+  readonly tall?: number;
 };
 
 /**
@@ -1258,7 +1339,7 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
 
   /** The same blob, out of the bleed's own stream. See `CrownSpec.bleedSeed`. */
   const BLEED_RND = noise(s.bleedSeed);
-  const bleedBlob = (x: number, y: number, r: number): Blob => ({
+  const bleedBlob = (x: number, y: number, r: number, tall: number): Blob => ({
     x,
     y,
     r,
@@ -1267,6 +1348,7 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
     hue: BLEED_RND() * 1.7 - 0.85,
     fine: (BLEED_RND() - 0.5) * 0.15,
     dull: BLEED_RND() * 0.26,
+    tall,
   });
 
   /**
@@ -1383,7 +1465,10 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
      * placed on exactly the draw it was placed on before, so the only alpha this round moves is the
      * crescents'.
      */
-    for (const [x, y, r] of s.bleed) out.push(bleedBlob(x, clearCap(y, r), r));
+    /* `clearCap` is written against a blob at `LUMP_ASPECT`, so a crescent of another aspect is
+     * clamped on its OWN vertical reach: at `tall` of 0.9 this is `clearCap(y, r)` exactly. */
+    for (const [x, y, r, tall] of s.bleed)
+      out.push(bleedBlob(x, clearCap(y, (r * tall) / LUMP_ASPECT), r, tall));
     return out;
   })();
 
@@ -1654,7 +1739,7 @@ function crownPainter(s: CrownSpec, shape: CrownShape, blobs: CrownBlobs) {
 
   /** One silhouette mass, filled with the dark matrix. */
   function paintMass(img: Img, b: Blob): void {
-    lump(img, b.x, b.y, b.r, b.seed, (x, y) => img.px(x, y, bodyAt(x, y)));
+    lump(img, b.x, b.y, b.r, b.seed, (x, y) => img.px(x, y, bodyAt(x, y)), b.tall);
   }
 
   /**
@@ -2063,12 +2148,15 @@ const MID_CROWN: CrownSpec = {
   /*
    * The mid tree's waist, rows 23..35 -- the only band on this drawing where the body is already
    * within seven columns of both edges (tile-local rows 23..31 run 5 to 7, and 0..3 run 4 to 6).
-   * Two crescents a side at different heights, radius 4.6 reaching nine columns inboard, so each
-   * meets the body with room rather than touching it. See `BLEED`.
+   * Inner crescent then outer on each side; see `THE TAB` in the `BLEED` note. This is the crown
+   * whose body already reaches its own edge, so its chain mostly disappears into the flank -- which
+   * is why the mid tree was the control that showed the other two were broken.
    */
   bleed: [
-    [3.4, 29.6, 4.4],
-    [60.6, 28.6, 4.4],
+    [5.0, 29.6, 3.8, 1.35],
+    [1.8, 29.6, 2.6, 1.35],
+    [59.0, 28.6, 3.8, 1.35],
+    [62.2, 28.6, 2.6, 1.35],
   ],
   bleedSeed: 26031,
 };
@@ -2192,11 +2280,14 @@ const ELDER_CROWN: CrownSpec = {
    * The elder's waist, rows 55..67, which is tile-local rows 23..31 of its MIDDLE row and 0..3 of
    * its bottom one -- the same local band the mid tree and the sapling bleed on, which is the whole
    * point (see `BLEED`). Its body is 5 to 9 columns off its edges there, further than the mid's, so
-   * the crescents are radius 6.0 and reach ten columns in.
+   * its chain is the longest of the three: the inner crescent is radius 4.4 and reaches twelve
+   * columns in, far enough to sit ON the body rather than to be stuck to it.
    */
   bleed: [
-    [3.8, 62.0, 5.2],
-    [92.2, 58.4, 5.2],
+    [7.2, 62.0, 4.4, 1.35],
+    [2.9, 62.0, 3.0, 1.35],
+    [88.8, 58.4, 4.4, 1.35],
+    [93.1, 58.4, 3.0, 1.35],
   ],
   bleedSeed: 26037,
 };
@@ -2361,14 +2452,21 @@ const SAPLING_CROWN: CrownSpec = {
   ],
   /*
    * The sapling's waist, rows 23..34: tile-local rows 23..31 of its top row and 0..2 of its bottom
-   * one, the same local band as the other two. Its body is 6 to 9 columns off its edges there --
+   * one, the same local band as the other two. Its body is 5 to 9 columns off its edges there --
    * this is the crown whose sides stand furthest from its own drawing (see the width note in the
-   * edge guards), so its crescents are the largest relative to its clusters: radius 5.6 against
-   * clusters of 2.6 to 6.8.
+   * edge guards).
+   *
+   * It is also the crown the 2026-10-21 census found the most exposed tabs on, 54 of the 122, and
+   * the one whose old flank was worst: 13 12 12 12 13 14 walking outboard on the right, i.e. the
+   * lobe's crest sat ON the drawing's edge and the tab was a square handle. Its chain is the
+   * shortest of the three because its fold has the least room -- the seam ceiling is 0.34 of a
+   * crown's own height and this crown is 46 rows, so 15 is all there is.
    */
   bleed: [
-    [3.4, 29.0, 4.6],
-    [60.6, 27.0, 4.6],
+    [4.8, 29.0, 3.6, 1.3],
+    [1.8, 29.0, 2.5, 1.35],
+    [59.2, 27.0, 3.6, 1.3],
+    [62.2, 27.0, 2.5, 1.35],
   ],
   bleedSeed: 26041,
 };
@@ -2432,6 +2530,35 @@ export const CROWNS: Readonly<Record<string, { readonly img: () => Img; readonly
   mid: { img: crown, h: TILE * 2 },
   elder: { img: elderCrown, h: TILE * 3 },
   sapling: { img: saplingCrown, h: 48 },
+};
+
+/**
+ * THE SAME THREE CROWNS WITH NO BLEED ON THEM, drawn for the scale guard and for nothing else.
+ *
+ * No tile is ever cut from these and nothing in the game ever sees one. They exist because the
+ * question "how big is this tree" has to be asked of the TREE, and the 2026-10-21 round proved the
+ * old way of asking it was answering about the seam instead.
+ *
+ * The old measurement was the drawing's bounding box taken over the rows that do NOT reach a side
+ * edge. That is exact only while the bleed is a slab: a crescent whose every row reaches the edge
+ * contributes no row to the box, so the box is the crown. The moment the crescent's TIP is rounded
+ * -- which is the whole of this round, because a square tip is the tab the client reported -- there
+ * are rows just past the fold where the crescent still stands proud of the body and reaches within
+ * a column or two of the edge, and those rows are not folded, so the box swallows them. Measured:
+ * the elder's figure went 89 -> 93 and the sapling's 52 -> 57 on a change that moved the body by
+ * nothing at all. A guard that reads 4px wider when a lobe is rounded, and narrower when it is
+ * squared off, is paying for the defect; it had to stop being able to see the bleed.
+ *
+ * Painting the spec again with `bleed: []` is the exact answer rather than a better estimate of the
+ * old one. It needs no constant, it cannot drift when a crescent moves, and every other number the
+ * edge guard takes -- the keyline's room, the fringe's rim, the lit arc -- is still read off the
+ * SHIPPED drawing, because those are properties of what renders.
+ */
+const bare = (s: CrownSpec): (() => Img) => makeCrown({ ...s, bleed: [] });
+const BARE_CROWNS: Readonly<Record<string, () => Img>> = {
+  mid: bare(MID_CROWN),
+  elder: bare(ELDER_CROWN),
+  sapling: bare(SAPLING_CROWN),
 };
 
 /*
@@ -3067,9 +3194,9 @@ export function crownEdge(img: Img): {
  */
 /* Smallest first, because the daylight check below reads the list in order. */
 const EDGE_GUARDS = [
-  { name: 'sapling', ...CROWNS.sapling!, wLo: 50, wHi: 60 },
-  { name: 'mid', ...CROWNS.mid!, wLo: 58, wHi: 68 },
-  { name: 'elder', ...CROWNS.elder!, wLo: 82, wHi: 94 },
+  { name: 'sapling', ...CROWNS.sapling!, bare: BARE_CROWNS.sapling!, wLo: 50, wHi: 60 },
+  { name: 'mid', ...CROWNS.mid!, bare: BARE_CROWNS.mid!, wLo: 58, wHi: 68 },
+  { name: 'elder', ...CROWNS.elder!, bare: BARE_CROWNS.elder!, wLo: 82, wHi: 94 },
 ] as const;
 
 /**
@@ -3095,7 +3222,9 @@ const widths: number[] = [];
 
 for (const g of EDGE_GUARDS) {
   const e = crownEdge(g.img());
-  const say = `${g.name}: body clears top ${e.top}, left ${e.left}, right ${e.right}; rim max ${e.rimMax.toFixed(0)}, median ${e.rimMedian.toFixed(0)}, brightest inside it ${e.insideMax.toFixed(0)}; width ${e.width}px`;
+  /* The crown's own scale, off the drawing the bleed was never painted on. See `BARE_CROWNS`. */
+  const width = crownEdge(g.bare()).width;
+  const say = `${g.name}: body clears top ${e.top}, left ${e.left}, right ${e.right}; rim max ${e.rimMax.toFixed(0)}, median ${e.rimMedian.toFixed(0)}, brightest inside it ${e.insideMax.toFixed(0)}; width ${width}px (bled drawing measures ${e.width}px)`;
   const wantTop = Math.max(RING_ROWS, CAP_ROOM);
   if (e.top < wantTop || e.left < RING_ROWS || e.right < RING_ROWS)
     throw new Error(
@@ -3109,11 +3238,11 @@ for (const g of EDGE_GUARDS) {
     throw new Error(
       `The crown's rim has gone dark, which is a second keyline rather than a fringe (want its median >= ${RIM_FLOOR.toFixed(0)}): ${say}. See \`fringe\`.`,
     );
-  if (e.width < g.wLo || e.width > g.wHi)
+  if (width < g.wLo || width > g.wHi)
     throw new Error(
       `Crown width has drifted off its scale (want ${g.wLo}..${g.wHi}, ART_DIRECTION section 7.5): ${say}.`,
     );
-  widths.push(e.width);
+  widths.push(width);
 }
 
 /* Three sizes, in order, with daylight between them: the whole argument for three crowns. */
@@ -3502,4 +3631,109 @@ const SEAM_COMMON_ROWS = 3;
           );
       }
     }
+}
+
+/*
+ * (h) EIGHT. THE FLANK TAPERS TO THE EDGE INSTEAD OF BEING CUT OFF SQUARE ACROSS IT.
+ *
+ * This is the 2026-10-21 client note held as a number: "look at the trees there in the middle,
+ * they're messed up". What they were looking at is a crown whose bleed lobe is as tall at the
+ * drawing's edge as it is anywhere on its flank, which prints as a rectangular handle stuck on the
+ * side of a round crown -- 122 of the world's 1021 crown tiles stood with one exposed against bare
+ * lawn. See `THE TAB` in the note above `foldEdges` for why one disc can only ever do that.
+ *
+ * WHAT IT ASKS, and it is the complaint itself rather than a proxy for it: over the columns the
+ * BLEED IS RESPONSIBLE FOR, the crown's painted height at the drawing's own edge must be below its
+ * crest -- the lobe must have turned over and started coming back before the edge cuts it.
+ *
+ * NEITHER OF ITS TWO NUMBERS IS A CONSTANT IN `bleed`, which is the property the three guards above
+ * are built on and the reason this one can be trusted.
+ *
+ * - The WINDOW is THE COLUMNS THE BLEED OWNS, read off the drawings: the outermost columns the
+ *   crown paints nothing in when it is painted with no bleed at all (`BARE_CROWNS`), plus the first
+ *   column its body does reach. It follows a crescent that is moved or resized instead of having to
+ *   be re-typed after it. Measured: 2 columns on the mid, 5 on the elder, 6 and 7 on the sapling.
+ *
+ *   A FIRST DRAFT TOOK THE WINDOW AS "every column where the shipped crown differs from the bare
+ *   one" AND IT WAS INERT ON THE ELDER, which is why it is written out here: the bleed's ring and
+ *   `close()` reach several columns further in than its mass does, so that window ran to 7 and 9
+ *   columns and swallowed the first columns of the BODY. The body is three times the lobe's height,
+ *   so it became the crest, and the elder's old square tab scored 0.68 against a bound of 0.866 and
+ *   sailed through. Caught by breaking the elder alone and watching nothing happen.
+ *
+ * - The BOUND is circle geometry. A round lobe cut at half its radius past its crest shows
+ *   sqrt(1 - 0.5^2) = 0.866 of its crest's chord, so "cut at least half a radius past the crest" IS
+ *   "the edge column is at most 0.866 of the tallest column in the window". A lobe seated so that
+ *   its middle, or its rising limb, lands on the edge cannot satisfy it at any radius.
+ *
+ * WHEN THE BODY ALREADY REACHES THE EDGE there is no window and nothing for the bleed to shape, so
+ * the test is skipped -- and that is a measurement rather than an exemption. It is the mid tree's
+ * case today: its body comes within one column of its own edge at the band, which is exactly why
+ * the mid was the one crown the client did not complain about and the control this whole diagnosis
+ * rests on. Narrow that crown's egg and its window opens and the guard engages on its own.
+ *
+ * Measured after, edge against crest: elder 0.50 and 0.71, sapling 0.58 and 0.73. Measured BEFORE,
+ * on the drawing the client was sent: sapling right 1.00 and elder right 1.00 -- the crest was ON
+ * the edge -- against sapling left 0.65, which passes, and is why one failing flank has to be
+ * enough and why the fix was a redraw rather than a nudge.
+ *
+ * PROVEN BY BREAKING, 2026-10-21, each edit made, the message read, the file restored from a copy
+ * and the restore verified with `cmp`:
+ *
+ *   every crown's chain back to its single pre-2026-10-21 disc  -> (h), sapling col 63, 14 of 14
+ *   the ELDER's chain alone back to its disc                    -> (h), elder col 95, 15 of 15
+ *   the outer crescent of every chain deleted                   -> (a), "must bleed ... not 0"
+ *   the inner crescent of every chain deleted                   -> (0), "2 separate masses, not 1"
+ *   every crescent forced back to `LUMP_ASPECT`                 -> NOTHING FIRES, and that is
+ *     recorded rather than fixed: the aspect buys fold height, not flank shape, and guard (b)'s
+ *     floor of 4 rows is a floor a disc still clears. See `LUMP_ASPECT`.
+ *   the width measurement put back on the bled drawing          -> NOTHING FIRES TODAY either, and
+ *     it is one pixel from firing: the elder measures 94 against a ceiling of 94 and the sapling 58
+ *     against a mid of 62 where the daylight rule wants 4. See `BARE_CROWNS` for why a guard that
+ *     reports a scale drift when a lobe was rounded is worth replacing before it does.
+ */
+const CREST_CUT = 0.5;
+const CREST_RATIO = Math.sqrt(1 - CREST_CUT * CREST_CUT);
+
+for (const g of EDGE_GUARDS) {
+  const img = g.img();
+  const bareImg = g.bare();
+  const heightAt = (im: Img, x: number): number => {
+    let n = 0;
+    for (let y = 0; y < im.h; y++) if (im.get(x, y)[3] !== 0) n++;
+    return n;
+  };
+  for (const side of [0, 1] as const) {
+    const at = (i: number): number => (side === 0 ? i : img.w - 1 - i);
+    /*
+     * The columns the bleed OWNS: the ones the crown paints nothing in without it, plus the first
+     * column its body does reach. Read off the two drawings, so it follows a crescent that moves.
+     * Taking every column the two drawings differ on instead was inert on the elder -- see the note
+     * above.
+     */
+    let clear = 0;
+    while (clear < bareImg.w && heightAt(bareImg, at(clear)) === 0) clear++;
+    const window = clear + 1;
+    /* The body already reaches this edge, so the flank is the body's and there is nothing here for
+     * the bleed to shape. The mid tree's case; see the note above. */
+    if (clear < 2) continue;
+    let crest = 0;
+    for (let i = 0; i < window; i++) crest = Math.max(crest, heightAt(img, at(i)));
+    const edge = heightAt(img, at(0));
+    const profile = Array.from({ length: window }, (_, i) =>
+      heightAt(img, at(window - 1 - i)),
+    ).join(' ');
+    const say =
+      `${g.name} column ${at(0)}: ${edge}px at the edge against a crest of ${crest}px over the ` +
+      `${window} column(s) the bleed owns (inboard to outboard: ${profile})`;
+    if (edge > crest * CREST_RATIO)
+      throw new Error(
+        `A crown's flank is cut off square at its own edge again -- ${say}, over the ` +
+          `${CREST_RATIO.toFixed(3)} a round lobe shows when the edge cuts it half a radius past ` +
+          `its crest. The lobe's widest point has to be INBOARD of the drawing's edge, so the ` +
+          `silhouette steps out and turns over instead of running dead level into the cut. A ` +
+          `single disc cannot do this at any radius or any seating -- see THE TAB above foldEdges ` +
+          `-- so the answer is an inner crescent plus a smaller outer one, not a nudge to these.`,
+      );
+  }
 }

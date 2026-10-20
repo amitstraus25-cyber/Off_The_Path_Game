@@ -172,16 +172,22 @@ describe('the map', () => {
    * Section 4.10: TILE_NAMES order IS gid order, and a tile added without regenerating the map
    * shifts every tile on it.
    *
-   * 79 since 2026-10-20: `notice-board` and `door-note` were APPENDED, which is the move that
-   * renumbers nothing -- every gid in the committed `map-forest.json` keeps its value and the map
-   * stays valid exactly as committed. The two new tiles are placed in `forest-map.ts` and appear
-   * once `pnpm graybox` is next run, which is the same deal the last three appends took.
+   * 81 since 2026-10-21: `gate-n` and `gate-s` were APPENDED at gids 80 and 81, which is the move
+   * that renumbers nothing -- every gid in the committed `map-forest.json` keeps its value and the
+   * map stays valid exactly as committed. It was 79 the day before, for `notice-board` and
+   * `door-note`, on the same terms.
+   *
+   * The append was verified rather than assumed, three ways, on the regeneration that produced the
+   * committed map: no non-zero gid changed value on any layer; the only gid-count deltas are gid 0
+   * losing two cells and gids 80 and 81 gaining one each; and all 79 original names keep their
+   * original gid in `tileset-forest.gids.json`, with none moved and none removed. The sheet stays
+   * 384x224, because `ceil(81 / 12)` is still 7 rows, and both new cells were 100% blank before.
    *
    * This number is not a second opinion; it is the mirror of `TILE_NAMES.length`, and it moves when
    * and only when that list does. The thing it is really watching is an INSERT, which leaves the
    * length looking plausible while repainting the whole map.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(79);
+    expect(TILE_NAMES).toHaveLength(81);
   });
 });

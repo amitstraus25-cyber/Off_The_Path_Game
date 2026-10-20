@@ -2305,6 +2305,55 @@ export function generateForestMap(): GeneratedMap {
     return left > right;
   };
 
+  /*
+   * ===========================================================================
+   * THE BRICK COURSE: A TRUNK BURIED UNDER A CROWN, AND THEN ANOTHER ONE ABOVE IT.
+   * ===========================================================================
+   *
+   * WHAT THE CLIENT IS LOOKING AT. "Look at the trees there in the middle, they're messed up."
+   * Rendered at the spawn camera and at 5x, the trees in the middle of that frame are a vertical
+   * FILE of crowns -- four of them, stacked -- with a dead-straight dark rule along every tile
+   * boundary between them and no trunk, no bark and no ground anywhere in the column. It reads as
+   * a course of green bricks, or as one tree drawn four times and cut up. It is the single worst
+   * thing in the wood and it is placement, not painting.
+   *
+   * HOW IT HAPPENS, and it is not an overlap bug. Two layers, no coverage rule between them: a
+   * tree's crown goes on `above` and a tree's trunk goes on `below`, and `above` draws over
+   * `below`. So a tree standing one row higher than its neighbour has its TRUNK painted and then
+   * painted over. Measured on the committed map, 248 cells are a crown over another tree's trunk
+   * and 56.6% of all trunk and root art drawn on this map -- 81,426 pixels of it -- never reaches
+   * the screen.
+   *
+   * ONE OF THEM IS A WOOD. A SECOND ONE DIRECTLY ABOVE IT IS A BRICK COURSE. A single buried
+   * trunk is a tree standing behind a neighbour's crown, which is what a wood looks like and what
+   * the note on the trunk loop above is defending; the crown above it still has that tree's own
+   * trunk under its own feet, so the column reads as depth. Stack TWO and there is no trunk left
+   * anywhere in the run: the only thing between one crown's hem and the next crown's cap is the
+   * tile boundary, and the hem keyline draws it as a rule. The committed map has 35 runs of two,
+   * seven of three, and one each of four, five and six -- the worst at column 54, rows 27 to 32.
+   *
+   * SO THE CAP IS ON THE RUN, NOT ON THE COUNT. Refusing every buried trunk was tried in the round
+   * that introduced the scales and is written up on the trunk loop below: it pins every tree onto
+   * its own three-row lattice and gives back the orchard. A cap keeps the interlock -- a tree may
+   * still stand behind its neighbour's crown, and 142 of them do -- and takes out only the ones
+   * that close a file.
+   *
+   * AND IT IS SWEPT, NOT REFUSED, which is the half of this that took two attempts to get right.
+   * The first version declined the site inside `plantKind`, which is where a tree can still be
+   * offered somewhere else, and it was plainly wrong: the passes that plant for a REASON do not
+   * take no for an answer usefully. Refusing them cost 13 of the 20 columns of the arrival
+   * camera's top edge, put a six-tile lattice file down column 54 and opened a hole in the garden's
+   * enclosure -- three composition guards firing at once, every one of them a pass being denied the
+   * tree it was written to place. So the rule lives in the thinning sweep below instead, with the
+   * wall and the topiary file: a shape that does not exist until several trees have gone in, judged
+   * once they all have, with framing and verge trees spared exactly as they are there.
+   *
+   * It is asserted again at the foot of the file, where it is the guard: felling can only shorten a
+   * run and the canopy rebuild replays the register, so anything that lengthens one afterwards is a
+   * pass stamping a crown or a trunk outside the register, which is what the audit should say out
+   * loud rather than leave in a screenshot.
+   */
+
   const plantKind = (kind: string, x: number, y: number): boolean => {
     const k = KINDS[kind]!;
     /*
@@ -4425,6 +4474,68 @@ export function generateForestMap(): GeneratedMap {
    */
   for (const y of [gateRows[0] - 1, gateRows[1] + 1])
     if (y !== gardenTop && y !== gardenBottom) panel(fenceX, y, 'fence-corner');
+  /*
+   * ===========================================================================
+   * ...AND THE GATE ITSELF, which the gap has never had.
+   * ===========================================================================
+   *
+   * THE OPENING WAS AN ABSENCE OF FENCE, not an under-drawn one. Read down column 46 before this
+   * loop existed: post run, flat terminator plank, NOTHING, NOTHING, flat plank, post run.
+   * `decor-below` at (46,20) and (46,21) was literally `0`. The two `fence-corner` terminators the
+   * loop above plants are the least-finished object in the payoff frame precisely because they
+   * terminate against thin air -- they are the right tile doing the right job with nothing to hand
+   * off to.
+   *
+   * WHY IT SURVIVED THREE QUEUED ROUNDS, and this is the part worth keeping, because the same
+   * blind spot will swallow the next picture-only defect:
+   *
+   *   1. THE GATE IS DEFINED AS A HOLE IN A BARRIER, AND EVERY TEST THAT WATCHES IT WATCHES THE
+   *      BARRIER. `map.test.ts` floods the map refusing the notice and asserts the gate is
+   *      unreachable; audit 2a asserts a due-east walk is unobstructed; audit 4 asserts the notice
+   *      spans the approach; the connectivity flood asserts the garden is reachable through it.
+   *      ALL FOUR PASS PERFECTLY ON AN EMPTY CELL -- an absence of fence is maximally reachable.
+   *      Reachability cannot see a picture. `tiles/s-outdoor.ts:1000-1021` records exactly the same
+   *      blind spot for the north-south run ("neither `pnpm score` nor any test could see it").
+   *   2. THERE WAS NO TILE TO PLACE. `TILE_NAMES` was frozen for most of this project's life, and
+   *      `fence-corner`, `fence-corner-e` and `fence-corner-w` were each appended to solve a
+   *      DIFFERENT joint. The note above is correct that plain `fence-corner` belongs at a gate
+   *      post because nothing runs horizontally INTO one -- and silent about the opening between
+   *      the two.
+   *   3. THE TERMINATORS LOOK FINISHED IN ISOLATION. `fence-corner` is an approved tile and renders
+   *      correctly at zoom 10. The defect exists only in the composition of four cells, which is
+   *      the same class of fault as the rail stub its own docstring records: "Nothing in the tile
+   *      itself shows this; it only appears once two tiles are laid side by side, which is why four
+   *      passes over the corner post missed it."
+   *
+   * WHY TWO LEAVES AND NOT ONE TILE STAMPED TWICE. The opening is two cells tall along the fence
+   * axis -- 64px -- so one tile repeated is 32px of identical pixels printed twice: it can carry a
+   * hinge or a latch but not both, and it cannot leave daylight in the MIDDLE of the gap, which is
+   * the one place daylight says "open". Which END a leaf is hung at is a property of the leaf,
+   * exactly as `fence-corner-e`/`-w` record that which SIDE a rail leaves on is a property of the
+   * corner. The painters and their measured bounds are in `tiles/s-outdoor.ts`.
+   *
+   * THE GATE STANDS OPEN, and that is forced rather than chosen: these two cells MUST stay
+   * walkable (`map.test.ts:240`, audit 2a's due-east walk, and the fact that the player walks
+   * through here to reach the cottage), so a rail drawn from post to post would be a picture of a
+   * shut gate over a cell Red strolls through. Read down column 46 now: post, rail, daylight,
+   * rail, post.
+   *
+   * NOT `panel`. `panel` clears the cell, draws AND makes it solid -- it is the barrier's helper
+   * and this is the opening, which is the one part of the fence that is not a barrier. `set` alone,
+   * and no `clearArea` either: both cells are measured empty on `decor-below` and `0` on collision
+   * at this point in the file, so there is nothing to strike off, and `clearArea` would reach for
+   * trees and collision it has no business touching. The `ground` layer is untouched either way --
+   * `clearArea` never writes `ground` -- so `path-n`/`path-s` survive regardless.
+   *
+   * Audit 13 at the foot of this file checks both halves of this: that the opening is DRAWN, and
+   * that what is drawn is still WALKABLE. Its bound is the published `gate-fence-gap` rectangle,
+   * not `gateRows`, so it also catches those two drifting apart.
+   *
+   * THE LEAVES THEMSELVES ARE NOT PLACED HERE, AND THAT IS MEASURED RATHER THAN PREFERRED. See the
+   * placement next to the gate lane further down this file, and the note there: the lane pass runs
+   * after this point and wipes `decor-below` on exactly these two cells, so a placement here draws
+   * the gate and then silently loses it. It was written here first and produced a zero-cell diff.
+   */
   for (let x = gardenEast; x < MAP_W; x++)
     for (const y of [gardenTop, gardenBottom]) {
       solid(x, y);
@@ -4534,6 +4645,40 @@ export function generateForestMap(): GeneratedMap {
     pathTiles.add(y * MAP_W + x);
   };
   for (let x = fenceX; x <= cx + 3; x++) for (const y of gateRows) lane(x, y);
+  /*
+   * ===========================================================================
+   * AND HERE THE GATE IS ACTUALLY DRAWN -- after the lane, because the lane erases it.
+   * ===========================================================================
+   *
+   * THE REASON THIS IS NOT UP WITH THE FENCE, WHERE IT BELONGS BY SUBJECT. `lane()` on the line
+   * above calls `clearArea`, and `clearArea` sets `below` to 0. The gate-lane loop runs from
+   * `fenceX` eastward across BOTH `gateRows` -- which is precisely (46,20) and (46,21), the two
+   * cells the gate is drawn on. So the fence section, 170 lines up, is upstream of a pass that
+   * wipes the exact cells it would be writing.
+   *
+   * THIS IS NOT A GUESS, IT IS THE MEASUREMENT, and it cost a round to make: the placement WAS
+   * written up with the two `fence-corner` terminators, the obvious and tidy home for it, and
+   * regenerating produced a diff of ZERO cells. Not a wrong tile, not a misplaced one -- no change
+   * at all, because the gate was drawn and then erased 170 lines later by a pass whose name says
+   * nothing about decor. Tracing every write to `below(46,20)` and `below(46,21)` gives exactly
+   * three: this placement, and the two `clearArea`s inside `lane()`. `lane()` is the LAST writer,
+   * and nothing below this point touches either cell -- which is why here, immediately after it,
+   * is both correct and the earliest correct position.
+   *
+   * THE GENERAL LESSON, because the next owner will hit it with a different tile: in this file the
+   * owner of a cell is WHATEVER WROTE IT LAST, not whichever pass the cell belongs to by subject.
+   * A tile placed in the section that is about it, by a pass that runs before a clearing pass, is
+   * a tile that does not exist in the output. The section above has the full note on what the gate
+   * is and why it is two leaves; this is only where the pixels survive to the artefact.
+   *
+   * NOT `panel`, and NOT `lane` either. `panel` would make the opening SOLID and close the only
+   * way into the garden -- audit 2a's due-east walk and `map.test.ts:240` both fail on that, which
+   * is the right way round: the barrier is the run either side of the opening, never the opening.
+   * `set` alone leaves `ground` (`path-n`/`path-s`, just laid by the lane) and `collision` (0)
+   * exactly as they are, and writes only the decor the gap has never had.
+   */
+  for (const [i, y] of gateRows.entries())
+    set(below, fenceX, y, gid(i === 0 ? 'gate-n' : 'gate-s'));
   /*
    * THE APRON AT THE DOOR IS LOAD-BEARING, and this is the note rather than the fix.
    *
@@ -5665,7 +5810,133 @@ export function generateForestMap(): GeneratedMap {
     clearArea(victim.x, victim.y, victim.k.trunk.length, 1);
     thinned++;
   }
-  console.log(`  thinning: ${thinned} tree(s) out of a wall of foliage or a topiary file`);
+  /*
+   * A BRICK COURSE is the third shape, and it is the one the client is pointing at. See the long
+   * note above `plantKind` for what it is and why it is swept rather than refused: a run of cells
+   * down one column where every trunk is painted and then painted over by somebody else's crown,
+   * so the only thing between one crown's hem and the next crown's cap is the tile boundary, and
+   * the hem keyline draws it as a rule. Four stacked discs with three dark rules through them and
+   * no bark anywhere, which is "the trees in the middle are messed up".
+   *
+   * TWO, NOT ONE AND NOT THREE. Read off the register, a run of ONE buried trunk is two crown rows
+   * meeting once with that tree's own trunk still on the ground beneath them -- a tree standing
+   * behind its neighbour, which is a wood, and there are 143 of those. A run of TWO is three crown
+   * rows and the middle tree has lost its feet; it is the shortest run that reads as a course, and
+   * a limit of one costs nine extra fellings to take out a shape the eye does not yet call a brick.
+   * A run of THREE is the picture in the client's screenshot. So the limit permits the pair and
+   * refuses the course: measured, the committed map has 35 runs of two, seven of three, and one
+   * each of four, five and six, and this sweep has to reach only the ten over the limit. Nine
+   * fellings later there are 31 runs of two and nothing longer.
+   *
+   * WHY IT ASKS THE REGISTER AND NOT THE LAYERS. The canopy rebuild below has not run yet, so
+   * `above` still holds what planting stamped rather than what will ship, and a felled tree's
+   * crown is cleared from the register before it is cleared from the raster. The register is what
+   * the rebuild replays, so the register is what this must agree with -- the same reason the wall
+   * sweep above counts `t.k.crown` rather than `isCanopy`.
+   *
+   * EITHER TREE ENDS THE RUN, so the victim is chosen from both: the tree whose crown is doing the
+   * burying and the tree whose trunk is buried both stop being a pair if either goes. Taking the
+   * one nearest the middle of the run breaks it into two short ones instead of shortening it by a
+   * tile, which is the wall sweep's rule and it is right for the same reason.
+   */
+  const BURIED_COURSE_LIMIT = 2;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const crownsBy = new Map<number, Tree>();
+    const trunksBy = new Map<number, Tree>();
+    for (const t of trees) {
+      for (const [dx, dy] of t.k.crown) crownsBy.set((t.y + dy) * MAP_W + (t.x + dx), t);
+      for (let dx = 0; dx < t.k.trunk.length; dx++) trunksBy.set(t.y * MAP_W + (t.x + dx), t);
+    }
+    const isBuried = (x: number, y: number): boolean => {
+      const key = y * MAP_W + x;
+      return crownsBy.has(key) && trunksBy.has(key);
+    };
+    const courses: { col: number; top: number; run: number }[] = [];
+    for (let x = 0; x < MAP_W; x++) {
+      let run = 0;
+      for (let y = 0; y <= MAP_H; y++) {
+        if (y < MAP_H && isBuried(x, y)) {
+          run++;
+          continue;
+        }
+        if (run > BURIED_COURSE_LIMIT) courses.push({ col: x, top: y - run, run });
+        run = 0;
+      }
+    }
+    /*
+     * A FRAMING TREE THAT IS NOT THE ONLY ONE CLOSING ITS COLUMN MAY GO AFTER ALL, and this is the
+     * difference between a sweep that answers the client and one that stops just short of him.
+     *
+     * `spare` as the two sweeps above use it is the right rule for a WALL and a FILE, because those
+     * are about the shape of the wood and a framing tree is there for the picture. It was the wrong
+     * rule here. The course the client photographed -- column 2, rows 15 to 17, in the middle of
+     * the phone's opening frame -- is held by FOUR trees and every one of them is framing, so the
+     * sweep looked at the one course the brief is about and declined it. They are framing because
+     * adoption marks any tree with a crown on the two rows a camera's top edge cuts, by position,
+     * which is right for the tree that closes the edge and says nothing at all about the three
+     * stacked behind it: a file is exactly the case where several trees claim the same columns.
+     *
+     * So the question is sharpened from "was this tree adopted" to "would felling it OPEN a
+     * column". Count, per band and per column, how many trees have a crown on the band's two rows;
+     * a framing tree whose every column is closed twice over is redundant there and may be felled,
+     * and one that is the sole closer of any column is spared as before. Guard 7b and the arrival
+     * edge guard measure the result independently, so if this is ever wrong the build says so
+     * rather than the frame quietly opening.
+     *
+     * A VERGE TREE IS STILL SPARED OUTRIGHT. It was put against the sand deliberately and there is
+     * no equivalent of "closed twice over" for it -- the road either has a treeline or it does not.
+     */
+    const closes = new Map<number, number>();
+    const closedBy = (t: Tree): number[] => {
+      const keys: number[] = [];
+      for (const [bi, band] of FRAMINGS.entries())
+        for (const [dx, dy] of t.k.crown) {
+          const cx = t.x + dx;
+          const cy = t.y + dy;
+          if (cx < band.x0 || cx > band.x1) continue;
+          if (cy !== band.row - 2 && cy !== band.row - 1) continue;
+          if (!keys.includes(bi * MAP_W + cx)) keys.push(bi * MAP_W + cx);
+        }
+      return keys;
+    };
+    closes.clear();
+    for (const t of trees)
+      for (const key of closedBy(t)) closes.set(key, (closes.get(key) ?? 0) + 1);
+    const heldForTheFrame = (t: Tree): boolean =>
+      t.verge === true ||
+      (t.framing === true && closedBy(t).some((key) => (closes.get(key) ?? 0) < 2));
+    const fellable = (c: { col: number; top: number; run: number }): Tree | undefined => {
+      const middle = c.top + Math.floor(c.run / 2);
+      const inRun: Tree[] = [];
+      for (let y = c.top; y < c.top + c.run; y++) {
+        const key = y * MAP_W + c.col;
+        for (const owner of [crownsBy.get(key), trunksBy.get(key)])
+          if (owner && !heldForTheFrame(owner) && !inRun.includes(owner)) inRun.push(owner);
+      }
+      return inRun.sort((a, b) => Math.abs(a.y - middle) - Math.abs(b.y - middle))[0];
+    };
+    /*
+     * THE LONGEST COURSE THAT CAN ACTUALLY BE BROKEN, not simply the longest.
+     *
+     * The first draft took the longest and stopped the sweep when every tree in it was spared --
+     * and that is not a rare case, it is the common one: a framing tree holds a camera's top edge
+     * open and the courses nearest a camera are where framing trees are. One unbreakable course at
+     * column 2 ended the sweep with seven more still standing, including the four-high file in the
+     * portrait frame. Falling through to the next longest leaves the unbreakable one standing --
+     * which is the honest outcome, since the alternative is felling the tree that holds the frame
+     * -- and takes out every course that is anybody's to take.
+     */
+    const course = courses
+      .filter((c) => fellable(c) !== undefined)
+      .sort((a, b) => b.run - a.run)[0];
+    if (!course) break;
+    const victim = fellable(course)!;
+    clearArea(victim.x, victim.y, victim.k.trunk.length, 1);
+    thinned++;
+  }
+  console.log(
+    `  thinning: ${thinned} tree(s) out of a wall of foliage, a topiary file or a brick course`,
+  );
 
   // --- the Tiled file: layers, tileset, objects --------------------------------------------------
   const tileLayer = (id: number, name: string, data: Layer) => ({
@@ -7684,6 +7955,74 @@ export function generateForestMap(): GeneratedMap {
 
   /*
    * ===========================================================================
+   * 13. THE GATE IS A GATE: the opening is DRAWN, and what is drawn is WALKABLE.
+   * ===========================================================================
+   *
+   * THE DEFECT THIS EXISTS FOR WAS AN ABSENCE, AND AN ABSENCE IS WHAT NOTHING HERE COULD SEE.
+   * `decor-below` at (46,20) and (46,21) was `0` -- the fence simply stopped and started again,
+   * with two flat terminator planks and a hole between them. It was queued three times and lost
+   * three times, and the reason it kept surviving is the thing worth writing down:
+   *
+   *   EVERY EXISTING TEST THAT WATCHES THE GATE WATCHES THE BARRIER, AND AN EMPTY CELL IS THE
+   *   BEST BARRIER-OPENING THERE IS. `map.test.ts` floods refusing the notice and asserts the gate
+   *   is unreachable; audit 2a asserts the due-east walk is unobstructed; audit 4 asserts the
+   *   notice spans the approach; connectivity asserts the garden is reachable. All four passed,
+   *   perfectly and honestly, on a cell with nothing drawn on it. Reachability cannot see a
+   *   picture. This audit is the one that looks at the picture.
+   *
+   * WHY THE BOUND IS THE PUBLISHED RECTANGLE AND NOT `gateRows`. `gateRows` is the constant the
+   * placement loop itself iterates; an audit written against it is an audit written in terms of
+   * the thing it guards, so moving the gate would move the audit with it and it would pass in
+   * silence -- the exact failure this repo has already paid for more than once. `gate-fence-gap`
+   * is an independent statement of the same fact, published into the objects layer and read by
+   * `map.test.ts` too, so checking against it ALSO catches the two drifting apart.
+   *
+   * THE SECOND FAULT IS NOT A FORMALITY. A gate the player cannot walk through is a worse bug than
+   * no gate, and it is invisible in a screenshot: `panel()` instead of `set()` draws exactly the
+   * same pixels and seals the only way into the garden. Audit 2a fires on that independently,
+   * which is the point -- two guards, two different measurements, one defect.
+   */
+  {
+    const GATE = new Set(['gate-n', 'gate-s']);
+    const gap = rectOf('gate-fence-gap');
+    const cells: [number, number][] = [];
+    for (let y = gap.y0; y <= gap.y1; y++)
+      for (let x = gap.x0; x <= gap.x1; x++) cells.push([x, y]);
+
+    fault(
+      'cell(s) of the gate opening with no gate drawn on them, so the fence stops and starts ' +
+        'again with a hole between its two terminators',
+      cells.filter(([x, y]) => !GATE.has(nameAt(below, x, y))),
+    );
+    fault(
+      'cell(s) of the gate opening made solid, which closes the only way into the garden',
+      cells.filter(([x, y]) => !walkableAt(x, y)),
+    );
+
+    const placed: [number, number][] = [];
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) if (GATE.has(nameAt(below, x, y))) placed.push([x, y]);
+    fault(
+      'gate leaf/leaves drawn outside the published gate opening',
+      placed.filter(([x, y]) => x < gap.x0 || x > gap.x1 || y < gap.y0 || y > gap.y1),
+    );
+
+    const distinct = new Set(placed.map(([x, y]) => nameAt(below, x, y)));
+    if (distinct.size < GATE.size)
+      faults.push(
+        `the gate is drawn with ${distinct.size} of its ${GATE.size} leaves: ` +
+          `${[...GATE].filter((n) => !distinct.has(n)).join(', ')} unplaced, so the opening is ` +
+          'half a gate',
+      );
+
+    verdictLines.push(
+      `gate: ${placed.length} leaf/leaves across the ${cells.length}-cell opening at column ` +
+        `${gap.x0}, rows ${gap.y0}-${gap.y1}`,
+    );
+  }
+
+  /*
+   * ===========================================================================
    * 7. COMPOSITION. The four things `docs/DESIGN_BOARD.md` priority 1 asks this file for.
    * ===========================================================================
    *
@@ -8586,6 +8925,102 @@ export function generateForestMap(): GeneratedMap {
         `${tallestStack} tiles of unbroken crown stand in one column at ${stackAt} ` +
           '(a wall of foliage taller than the camera, which a file test cannot see)',
       );
+
+    /*
+     * ===========================================================================
+     * 7j. NO BRICK COURSE: NO COLUMN WHERE TWO BURIED TRUNKS STAND ONE ABOVE ANOTHER.
+     * ===========================================================================
+     *
+     * The third shape, and the one the client is pointing at. A cell with a trunk on `below` and
+     * somebody else's crown on `above` paints the trunk and then paints over it -- see the long
+     * note above `plantKind` -- and a RUN of those down one column leaves no bark anywhere between
+     * one crown's hem and the next crown's cap, so the tile boundaries read as mortar and the
+     * column reads as a course of green bricks. 7c cannot see it: the crowns in a brick course are
+     * a solid stack, which `auditedFileMate` calls a mass, and the stack is nine high at worst,
+     * which is inside `tallestStack`'s ten.
+     *
+     * TWO IS WRITTEN OUT HERE AND IT IS NOT `BURIED_COURSE_LIMIT`, deliberately, and for the same
+     * reason 7c copies `fileMate`'s window instead of calling it: a guard that reads its subject's
+     * own constant cannot catch that constant being loosened. Raise the sweep's limit and this
+     * fires -- proved, by raising it to five and watching seven courses print. Compare the two by
+     * eye; do not join them.
+     *
+     * THE ESCAPE CLAUSE IS A DELIBERATE COPY OF THE SWEEP'S OWN TEST, NOT A CALL TO IT, and the
+     * first draft of it was wrong in a way worth recording. It excused any course whose trees were
+     * all flagged `framing` or `verge` -- the sweep's old, coarse rule -- and that is precisely the
+     * rule this round had to narrow. Proved by breaking it: put the coarse rule back in the sweep
+     * and the client's own course at column 2 rows 15-17 returns to the map AND THE GUARD STAYS
+     * SILENT, because the same coarseness that let the course stand also excused it. A guard whose
+     * exemption widens with its subject's is not a guard. So the copy below asks the sharpened
+     * question -- a verge tree, or a framing tree that is the SOLE closer of one of its columns --
+     * and the coarse version now fires. If `heldForTheFrame` changes again, come and decide
+     * separately whether this should; do not make them share a body.
+     *
+     * It fires on nothing today: the sweep reaches every course and the count is zero. The clause
+     * stays because the alternative is a build that cannot be made green without editing code -- if
+     * the only way to break a future course were to fell the one tree holding a camera's top edge
+     * open, this should record that decision rather than block on it.
+     *
+     * MEASURED, on the committed map before this round: 35 runs of two, seven of three, and one
+     * each of four, five and six, the worst at column 54 rows 27-32. After the sweep: 31 runs of
+     * two and nothing longer anywhere on the map.
+     */
+    {
+      const crownOwner = new Map<number, Tree>();
+      const trunkOwner = new Map<number, Tree>();
+      for (const t of trees) {
+        for (const [dx, dy] of t.k.crown) crownOwner.set((t.y + dy) * MAP_W + (t.x + dx), t);
+        for (let dx = 0; dx < t.k.trunk.length; dx++) trunkOwner.set(t.y * MAP_W + (t.x + dx), t);
+      }
+      /** Deliberately a copy of the sweep's cap, not a reference to it. See directly above. */
+      const AUDITED_COURSE = 2;
+      /** Deliberately a copy of `heldForTheFrame`, not a call to it. See directly above. */
+      const auditedHold = ((): ((t: Tree) => boolean) => {
+        const closing = new Map<number, number>();
+        const columns = (t: Tree): number[] => {
+          const keys: number[] = [];
+          for (const [bi, band] of FRAMINGS.entries())
+            for (const [dx, dy] of t.k.crown) {
+              const cx = t.x + dx;
+              const cy = t.y + dy;
+              if (cx < band.x0 || cx > band.x1) continue;
+              if (cy !== band.row - 2 && cy !== band.row - 1) continue;
+              if (!keys.includes(bi * MAP_W + cx)) keys.push(bi * MAP_W + cx);
+            }
+          return keys;
+        };
+        for (const t of trees)
+          for (const key of columns(t)) closing.set(key, (closing.get(key) ?? 0) + 1);
+        return (t) =>
+          t.verge === true ||
+          (t.framing === true && columns(t).some((key) => (closing.get(key) ?? 0) < 2));
+      })();
+      const courses: string[] = [];
+      for (let x = 0; x < MAP_W; x++) {
+        let run = 0;
+        for (let y = 0; y <= MAP_H; y++) {
+          const key = y * MAP_W + x;
+          if (y < MAP_H && crownOwner.has(key) && trunkOwner.has(key)) {
+            run++;
+            continue;
+          }
+          if (run > AUDITED_COURSE) {
+            const held: Tree[] = [];
+            for (let ry = y - run; ry < y; ry++)
+              for (const owner of [crownOwner.get(ry * MAP_W + x), trunkOwner.get(ry * MAP_W + x)])
+                if (owner && !held.includes(owner)) held.push(owner);
+            if (!held.every((t) => auditedHold(t)))
+              courses.push(`column ${x}, rows ${y - run}-${y - 1} (${run} deep)`);
+          }
+          run = 0;
+        }
+      }
+      if (courses.length > 0)
+        faults.push(
+          `${courses.length} brick course(s) of buried trunk under crown at ${courses.join('; ')} ` +
+            '(a column of stacked crowns with no bark between them: see composition guard 7j)',
+        );
+    }
 
     /*
      * 7d. ALL FOUR GROUND VARIANTS ARE IN USE WHERE THEY CAN BE SEEN. Measured over grass with no
