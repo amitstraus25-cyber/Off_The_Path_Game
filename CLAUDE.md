@@ -11,6 +11,8 @@ This is a Cyera marketing/research asset. It must be on-brand, fast, accessible,
 
 ## Read these first (in this order)
 
+- @docs/PAUL_BRIEF.md: the standing state of the world and the traps that have cost whole rounds.
+  **Read it before anything else**, including when you think you already know the answer.
 - @docs/PLAN.md: phased build plan with checkboxes. **Work one phase at a time.**
 - @docs/ARCHITECTURE.md: stack, folder layout, state machine, data schemas, API contract.
 - @docs/UI_FOUNDATIONS.md: binding, transcribed from the "Off the Path — Game UI" design deck.
