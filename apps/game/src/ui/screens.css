@@ -170,6 +170,31 @@
   color: var(--cyera-deep-purple);
 }
 
+/*
+ * A footer action that is not a pill, for "Walk it again".
+ *
+ * It shipped as `.otp-button--quiet`, the same class string the board's retry carried, so the one
+ * state production actually renders put two identical Deep Purple outline pills 15.4px apart: one
+ * re-reads a list, the other throws the finished run away and starts the game over. Differentiating
+ * them by shade was not available -- this screen's one Lime is already spent on the research call
+ * to action -- so they differ in KIND. docs/UI_FOUNDATIONS.md section 8 draws `Play again` on
+ * Results as a footer link rather than a pill, which is what this is.
+ *
+ * Still a <button> in the markup: it acts on this page rather than going anywhere, so it keeps the
+ * touch floor every control on this screen has and nothing that reaches it by role has to change.
+ */
+.otp-link-action {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--cyera-deep-purple);
+  font: 500 max(13px, calc(16px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  min-height: var(--otp-touch-min);
+  cursor: pointer;
+}
+
 /* ---------------------------------------------------------------- arrive */
 
 /*
@@ -513,6 +538,205 @@ h2.otp-section-label {
    Natural rather than Offwhite, for the reason on .otp-handle above: Offwhite is text-on-dark. */
 .otp-recap__row--missed .otp-recap__hidden {
   background: var(--cyera-natural);
+}
+
+/* --------------------------------------------------- results: 06 leaderboard
+
+   Rows are full-pill Black bars with gaps between them, not a divided table
+   (docs/UI_FOUNDATIONS.md section 8). Offwhite names and Haze scores with
+   tabular numerals (docs/BRAND_AND_UI.md section 3). Rank tints: 1 Lilac,
+   2 Haze, 3 Offwhite, 4+ a plain Clay numeral with no disc. Section 6 measures
+   Offwhite on Black at 18.5:1, Lilac on Black at 8.3:1 and Black on Lilac --
+   "your leaderboard row", under that name -- at 8.3:1, so every pairing below
+   passes at the sizes it is used at.
+
+   NO LIME ANYWHERE IN THIS BLOCK. Results spends its one on .otp-cta, and
+   test/board.test.ts fails if a hex literal, a Lime token, or any colour that
+   is not a var() reference appears here -- the hex-only scan missed
+   `rgb(191, 255, 162)`, which is the same colour spelled differently. */
+
+/*
+ * THE DEEP PURPLE BODY, which this block did not have and BRAND_AND_UI section 3 requires:
+ * "Leaderboard: Deep Purple body. Rows are full-pill Black bars with gaps between them."
+ * UI_FOUNDATIONS section 8 describes screen 06 without overriding that line, so it binds. Measured
+ * before this change, `.otp-board` computed to `rgba(0, 0, 0, 0)` and the Black rows sat directly
+ * on the Shell panel -- a silent divergence from a binding doc, which is the one option not
+ * available.
+ *
+ * It is the same card the CTA band two sections up already is (Deep Purple, --otp-r-panel), so the
+ * board reads as screen 06 embedded in Results rather than as a stray dark block: the deviation
+ * this section actually carries is that 06 is not its own screen yet, and that one is declared in
+ * Results.tsx and in docs/PLAN.md.
+ *
+ * Every foreground inside it moves with the ground. Measured against BRAND_AND_UI section 6's own
+ * method: Offwhite on Deep Purple 13.3:1 (title, retry), Haze on Deep Purple 9.2:1 (the status
+ * line), Lilac on Deep Purple 6.0:1 (the one Season Mix word). Ash, which the shared
+ * `.otp-section-label` and the old note rule both used, is 1.7:1 here and would have been
+ * unreadable the moment the ground landed -- it is replaced, not left to the cascade.
+ */
+.otp-board {
+  margin-top: calc(26px * var(--otp-ui));
+  background: var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: calc(18px * var(--otp-ui)) calc(20px * var(--otp-ui)) calc(20px * var(--otp-ui));
+}
+
+/*
+ * The title, INSIDE the section it names. Results.tsx carries the measurement: with the heading
+ * outside, the gap above it was 0.0px at 375, 768 and 1280, because `h2.otp-section-label` zeroes
+ * the top margin and both paragraphs that can precede the board end at `margin-bottom: 0`. The
+ * board's own margin and padding are that gap now.
+ */
+.otp-board__title {
+  color: var(--cyera-offwhite);
+}
+
+.otp-board__title .otp-serif {
+  color: var(--cyera-lilac);
+}
+
+.otp-board__note {
+  margin: 0 0 calc(12px * var(--otp-ui));
+  font-size: max(12px, calc(14px * var(--otp-ui)));
+  line-height: 1.35;
+  color: var(--cyera-haze);
+}
+
+.otp-board__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--otp-ui));
+}
+
+.otp-board__row {
+  background: var(--cyera-black);
+  border-radius: var(--otp-r-pill);
+  padding: calc(9px * var(--otp-ui)) calc(16px * var(--otp-ui));
+  min-height: calc(40px * var(--otp-ui));
+  display: flex;
+  align-items: center;
+}
+
+/* The three columns. `min-width: 0` on the handle for the reason .otp-recap__body
+   carries it: a flex item defaults to min-width: auto and would push the row wider
+   than the panel instead of wrapping. */
+.otp-board__visible {
+  display: flex;
+  align-items: center;
+  gap: calc(12px * var(--otp-ui));
+  width: 100%;
+}
+
+.otp-board__rank {
+  flex: none;
+  width: calc(26px * var(--otp-ui));
+  height: calc(26px * var(--otp-ui));
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: max(11px, calc(13px * var(--otp-ui)));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--cyera-clay);
+}
+
+.otp-board__rank[data-rank='1'] {
+  background: var(--cyera-lilac);
+  color: var(--cyera-black);
+}
+
+.otp-board__rank[data-rank='2'] {
+  background: var(--cyera-haze);
+  color: var(--cyera-black);
+}
+
+.otp-board__rank[data-rank='3'] {
+  background: var(--cyera-offwhite);
+  color: var(--cyera-black);
+}
+
+/* 4+ is a numeral, not a disc: no background at all, which is why there is no
+   rule for data-rank='plain'. */
+
+.otp-board__handle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: max(12px, calc(15px * var(--otp-ui)));
+  letter-spacing: 0.04em;
+  color: var(--cyera-offwhite);
+}
+
+/* "Your run" in words beside the fill, because no status in this game is carried
+   by colour alone (UI_FOUNDATIONS section 5). It only ever renders inside
+   .otp-board__row--you, so the Black below is what a player actually reads; the
+   Haze here is what it falls back to if the chip is ever shown on a Black row. */
+.otp-board__you {
+  flex: none;
+  font-size: max(11px, calc(12px * var(--otp-ui)));
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyera-haze);
+}
+
+.otp-board__score {
+  flex: none;
+  font-size: max(12px, calc(17px * var(--otp-ui)));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--cyera-haze);
+}
+
+/* Your row, filled Lilac with Black on it: 8.3:1, the pairing section 6 measures
+   under exactly this name. Every foreground in the row flips with the ground. */
+.otp-board__row--you {
+  background: var(--cyera-lilac);
+}
+
+.otp-board__row--you .otp-board__handle,
+.otp-board__row--you .otp-board__score,
+.otp-board__row--you .otp-board__you,
+.otp-board__row--you .otp-board__rank {
+  color: var(--cyera-black);
+}
+
+/* The one a reviewer misses: rank 1 is Lilac AND your row is Lilac, so a Lilac
+   disc on a Lilac bar disappears. On your row the disc inverts. Check rank 1. */
+.otp-board__row--you .otp-board__rank[data-rank='1'],
+.otp-board__row--you .otp-board__rank[data-rank='2'],
+.otp-board__row--you .otp-board__rank[data-rank='3'] {
+  background: var(--cyera-black);
+  color: var(--cyera-lilac);
+}
+
+.otp-board__retry {
+  margin-top: calc(10px * var(--otp-ui));
+}
+
+/*
+ * The retry pill, on the board's own Deep Purple ground.
+ *
+ * `.otp-button` is a Deep Purple fill with a Deep Purple border, and `--quiet` turns the fill off
+ * and leaves the border -- which on this ground is a purple outline on purple, i.e. nothing, and
+ * Deep Purple text at 1.0:1. So the modifier inverts instead: Offwhite outline and Offwhite label,
+ * 13.3:1.
+ *
+ * DECLARED IN THIS BLOCK ON PURPOSE even though the class is a generic modifier. The colour guard
+ * in test/board.test.ts reads this section and nothing else, so a rule that paints something inside
+ * the board belongs where that guard can see it. A Lime put on `.otp-button--quiet`, up in the
+ * shared buttons section, is caught by the computed-colour sweep in e2e/leaderboard.spec.ts
+ * instead -- which is why that sweep now runs in every board state rather than the two with rows.
+ */
+.otp-button--on-dark {
+  background: transparent;
+  color: var(--cyera-offwhite);
+  border-color: var(--cyera-offwhite);
 }
 
 /* ---------------------------------------------------------------------------

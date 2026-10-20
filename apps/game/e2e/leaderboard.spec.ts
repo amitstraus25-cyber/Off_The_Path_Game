@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
+import { HANDLE_FIRST_WORDS, HANDLE_SECOND_WORDS, isMintedHandle } from '@otp/core';
 import { ready } from './helpers';
 
 /*
- * The post form against an API that answers, in a real browser.
+ * The post form, and the board under it, against an API that answers, in a real browser.
  *
  * Everything else about the board is a unit test with `fetch` replaced, and `e2e/game.spec.ts`
  * covers the case that matters most -- no API deployed at all, which is what `vite preview` is.
@@ -20,6 +21,43 @@ import { ready } from './helpers';
 const CONTENT = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
 ) as { strings: Record<string, string> };
+
+/**
+ * Lime, as the browser will report it, read out of the brand file rather than typed here.
+ *
+ * The rule is "Lime appears once per screen", so a guard against a second one has to know the
+ * value -- and a value copied into a test is a fact in a comment with a semicolon on the end. It
+ * comes from reference/brand/cyera-theme.css, which is where the rule's subject is defined, so
+ * the day the token moves this moves with it instead of silently watching the wrong colour.
+ */
+const LIME_RGB = ((): string => {
+  const theme = readFileSync(
+    fileURLToPath(new URL('../../../reference/brand/cyera-theme.css', import.meta.url)),
+    'utf8',
+  );
+  const hex = /--cyera-lime:\s*#([0-9a-fA-F]{6})\b/.exec(theme)?.[1];
+  if (!hex) throw new Error('--cyera-lime is not in reference/brand/cyera-theme.css');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+})();
+
+/**
+ * How long the adapter waits before it gives up on a request, read out of the adapter.
+ *
+ * The race test below holds one read open while a newer one answers, and that only proves anything
+ * while the held read is still alive. Typing 6000 here would be a bound written in terms of the
+ * thing it guards: raise the adapter's timeout and this would start skipping runs it should check,
+ * lower it and it would assert against a request the browser had already abandoned.
+ */
+const ADAPTER_TIMEOUT_MS = ((): number => {
+  const src = readFileSync(
+    fileURLToPath(new URL('../src/net/leaderboard.ts', import.meta.url)),
+    'utf8',
+  );
+  const ms = /TIMEOUT_MS\s*=\s*(\d+)/.exec(src)?.[1];
+  if (!ms) throw new Error('TIMEOUT_MS is not in apps/game/src/net/leaderboard.ts');
+  return Number(ms);
+})();
 
 const SKILL_OF: Record<string, string> = {
   rabbit: 'cottage-finder',
@@ -149,3 +187,628 @@ test('a reply that never comes is given up on, in a real browser', async ({ page
   await expect(page.getByRole('button', { name: 'Post', exact: true })).toBeEnabled();
   await expect(page.locator('.otp-cta').first()).toBeVisible();
 });
+
+/* ------------------------------------------------------------------ the board itself */
+
+/*
+ * 06 Leaderboard, mounted on Results, in a browser.
+ *
+ * The unit guards in test/board.test.ts hold the adapter's three answers and the screen's copy
+ * table against each other, which is the defect's core. What they cannot see is the rendering:
+ * apps/game's vitest runs on the `node` environment with no DOM. These four are the parts that
+ * only a real page can show -- that an ABSENT board does not read as an EMPTY one on screen, that
+ * the rank tints land where the brand says and nowhere else, that the retry actually re-requests,
+ * and that the status line is a region that MUTATES rather than one that is replaced.
+ */
+
+interface TopReply {
+  status: number;
+  contentType: string;
+  body: string;
+}
+
+type Row = { rank: number; handle: string; score: number };
+
+const rowsReply = (entries: Row[]): TopReply => ({
+  status: 200,
+  contentType: 'application/json',
+  body: JSON.stringify({ entries }),
+});
+
+const EMPTY_BOARD = rowsReply([]);
+
+/*
+ * THE ONE THIS WHOLE BUILD EXISTS FOR, at the status and content type it was measured at on
+ * 2026-10-20: an undeployed /api/top answers 200 with text/html from the SPA catch-all. It is not
+ * a 404 and it is not loud, and before the read returned three answers the screen could only have
+ * called it "no runs on the board yet".
+ */
+const ABSENT_BOARD: TopReply = {
+  status: 200,
+  contentType: 'text/html',
+  body: '<!doctype html><title>Off the Path</title>',
+};
+
+/*
+ * Ten rows, with the handles BUILT FROM THE REAL WORDLISTS rather than invented.
+ *
+ * This cost a run of this very file, and the product was right both times. `topResponseSchema`
+ * checks every handle against `handleSchema`, which is the two fixed wordlists in packages/core,
+ * and it fails the WHOLE array when one row does not pass -- so ten plausible-looking names like
+ * `clever-basket-31` do not render as nine good rows and one bad one, they render as
+ * `unavailable`. That is the right way round and it is what test/leaderboard.test.ts pins with
+ * `'x'` and `'<img src=x>'`; a fixture that types its own names is just the first thing it
+ * catches.
+ *
+ * `avoiding` keeps the player's own minted handle out of the set, so "exactly one row is yours"
+ * is a fact about the fixture and not a 1-in-3,072 coin toss that CI's --fail-on-flaky-tests
+ * would eventually lose.
+ */
+const tenRows = (avoiding?: string): Row[] =>
+  Array.from({ length: 10 }, (_, i) => {
+    const first = HANDLE_FIRST_WORDS[i]!;
+    const second = HANDLE_SECOND_WORDS[i]!;
+    const handle = `${first}-${second}-${10 + i * 7}`;
+    return {
+      rank: i + 1,
+      handle: handle === avoiding ? `${first}-${second}-${11 + i * 7}` : handle,
+      score: 1000 - i * 50,
+    };
+  });
+
+const TEN: Row[] = tenRows();
+
+/** A mutable fake board: what it answers next, and how many times it has been asked. */
+interface Board {
+  reply: TopReply;
+  calls: number;
+}
+
+async function serveBoard(page: Page, board: Board): Promise<void> {
+  await page.route('**/api/top*', async (route: Route) => {
+    board.calls += 1;
+    await route.fulfill(board.reply);
+  });
+}
+
+const note = (page: Page) => page.locator('.otp-board__note');
+
+/**
+ * No Lime anywhere the board actually paints, measured off the rendered page.
+ *
+ * CALLED FROM EVERY BOARD STATE, and the reason is a defect this sweep has now had twice.
+ *
+ * The first version lived only in the test whose fixture has no row of the player's own, so
+ * `.otp-board__row--you` never rendered and a Lime fill put on exactly that rule passed in silence.
+ * That was widened to both row tests. It was still wrong in the same way: it ran in the two states
+ * that have ROWS, so `unavailable` -- the only state production renders today, with /api/top still
+ * 404ing -- was never swept at all. It happens to be safe, which is luck rather than a guard. So
+ * every test below that reaches a board state runs this, including loading, empty and unavailable.
+ *
+ * Three further things it did not look at and now does: the `.otp-board` element itself (the sweep
+ * queried descendants only, so a Lime ground on the board was invisible to it), border colours
+ * (the retry pill is an outline, which is where a fill would hide), and its own coverage -- the
+ * `> 20` floor was a number typed for the ten-row state and would have had to be lowered or
+ * deleted to let the four-element states through. The floor is derived now: the sweep must have
+ * read every element the board has, whatever state it is in.
+ */
+async function expectNoLime(page: Page): Promise<void> {
+  const swept = await page.locator('.otp-board').evaluate((root) => {
+    const all = [root, ...Array.from(root.querySelectorAll('*'))];
+    return {
+      elements: all.length,
+      used: all.flatMap((el) => {
+        const style = getComputedStyle(el);
+        return [style.backgroundColor, style.color, style.borderTopColor];
+      }),
+    };
+  });
+  expect(swept.elements, 'the board rendered nothing at all').toBeGreaterThan(1);
+  expect(swept.used.length, 'the sweep did not read every element in the board').toBe(
+    swept.elements * 3,
+  );
+  expect(swept.used, 'the board is spending the screen’s one Lime').not.toContain(LIME_RGB);
+  // The control group: the page's one Lime is still on the research call to action.
+  const cta = await page
+    .locator('.otp-cta')
+    .first()
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(cta, 'the research CTA is where this screen spends its Lime').toBe(LIME_RGB);
+}
+
+const say = (key: string): string => CONTENT.strings[key]!;
+
+test('a board with runs on it shows them, and marks nothing in Lime', async ({ page }) => {
+  // The fixture is only a board if the game could have minted every name on it.
+  expect(TEN.every((row) => isMintedHandle(row.handle))).toBe(true);
+
+  const board: Board = { reply: rowsReply(TEN), calls: 0 };
+  await serveBoard(page, board);
+  await reachResults(page);
+
+  await expect(page.locator('.otp-board__row')).toHaveCount(10);
+  await expect(note(page)).toHaveText(say('boardReady'));
+  await expect(note(page)).toHaveAttribute('data-board', 'rows');
+
+  /*
+   * The tints, measured rather than asserted by class name. 1, 2 and 3 are discs; 4+ is a plain
+   * numeral with NO disc, which is the half a reviewer forgets and the half that would quietly
+   * turn the board into a wall of fills.
+   */
+  const fill = (rank: string): Promise<string> =>
+    page
+      .locator(`.otp-board__rank[data-rank="${rank}"]`)
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  const transparent = 'rgba(0, 0, 0, 0)';
+  expect(await fill('1')).not.toBe(transparent);
+  expect(await fill('2')).not.toBe(transparent);
+  expect(await fill('3')).not.toBe(transparent);
+  // Rank 4 and everything below it: the attribute is there so the markup is uniform, and no rule
+  // answers it.
+  await expect(page.locator('.otp-board__rank[data-rank="plain"]')).toHaveCount(7);
+  expect(await fill('plain')).toBe(transparent);
+  // Three distinct discs, not one tint repeated.
+  expect(new Set([await fill('1'), await fill('2'), await fill('3')]).size).toBe(3);
+
+  /*
+   * NO LIME ON THIS BOARD. Results spends its one on the research call to action, and the value
+   * comes out of the brand file rather than being typed here -- a bound written in terms of the
+   * thing it guards moves with the defect and passes in silence.
+   */
+  await expectNoLime(page);
+});
+
+test('an empty board invites a first run and does not look like a failure', async ({ page }) => {
+  const board: Board = { reply: EMPTY_BOARD, calls: 0 };
+  await serveBoard(page, board);
+  await reachResults(page);
+
+  await expect(note(page)).toHaveText(say('boardEmpty'));
+  await expect(note(page)).toHaveAttribute('data-board', 'empty');
+  // No list at all rather than an empty one, so no bare rule sits under the invitation.
+  await expect(page.locator('.otp-board__rows')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: say('boardRetry'), exact: true })).toHaveCount(0);
+  await expectNoLime(page);
+});
+
+/*
+ * THE SEND-BACK, IN A BROWSER. The screen must not be able to say both things at once.
+ *
+ * Measured on a clean build before this fix: after a post the server took, `.otp-error` read
+ * "Posted to the board as brave-lantern-42." and the very next paragraph read "No runs on the board
+ * yet. Yours would be the first." It is the launch case rather than a corner -- apps/api serves
+ * GET /api/top with `s-maxage=60`, this screen re-reads the instant a post resolves, and on a fresh
+ * board the mount read has already primed that cache with an empty one. A board that answers EMPTY
+ * to the read that follows a post is exactly what production does for the first minute of its life,
+ * which is what this route serves.
+ *
+ * The board is not being asked to lie the other way: it still says nothing is showing. What it may
+ * not do is tell a player who has just posted that there are no runs and invite them to be first.
+ */
+test('a board that answers empty after a post never claims there are no runs', async ({ page }) => {
+  let sent: { handle?: string } = {};
+  await page.route('**/api/score', async (route: Route) => {
+    sent = JSON.parse(route.request().postData() ?? '{}') as typeof sent;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ handle: sent.handle, score: 900 }),
+    });
+  });
+  const board: Board = { reply: EMPTY_BOARD, calls: 0 };
+  await serveBoard(page, board);
+
+  await reachResults(page);
+  // The launch board, before anyone has posted: the invitation is still the right thing to show.
+  await expect(note(page)).toHaveText(say('boardEmpty'));
+
+  await post(page);
+
+  // The post succeeded and says so, which is one half of the contradiction.
+  const status = page.getByRole('status');
+  await expect(status).toContainText(sent.handle!);
+  // The board read that followed it really did answer "empty" -- this is the state, not a dodge.
+  await expect(note(page)).toHaveAttribute('data-board', 'empty');
+
+  /*
+   * And the other half is gone. Asserted against the CLAIM rather than against the key that
+   * replaced it: any copy that says there are no runs, or that this player's would be the first,
+   * is the same defect whatever it is called.
+   */
+  const together = await page.evaluate(() => ({
+    posted: document.querySelector('.otp-error')?.textContent ?? '',
+    board: document.querySelector('.otp-board__note')?.textContent ?? '',
+  }));
+  expect(
+    together.posted,
+    'the post notice is not on screen, so nothing is being contradicted',
+  ).toMatch(/posted to the board/i);
+  expect(
+    together.board,
+    `"${together.posted}" is sitting directly above "${together.board}"`,
+  ).not.toMatch(/no runs on the board|nothing on the board|would be the first/i);
+  // It explains the absence rather than going silent about it.
+  await expect(note(page)).toHaveText(say('boardEmptyAfterPost'));
+  await expectNoLime(page);
+});
+
+/*
+ * TWO READS IN FLIGHT SETTLE BY ISSUE ORDER, NOT BY ARRIVAL ORDER.
+ *
+ * Reproduced here before it was fixed: every call to `readBoard()` closed over its own private
+ * `live` flag and nothing invalidated the call before it, so a slow older answer overwrote a fast
+ * newer one. The sequence below is the reproduction, in the order it was found --
+ *
+ *   call 1  mount      answers at once with an absent board, so the retry renders
+ *   call 2  the retry  HELD OPEN, holding ten rows
+ *   call 3  the post   answers at once with an empty board
+ *   then    call 2 is released, and its ten rows arrive last
+ *
+ * -- and a board showing ten rows at the end of it is a board showing a state the server has
+ * already contradicted. The ordering rule itself is unit-tested in test/board.test.ts, where
+ * `boardReads()` is pure; this is the half that needed a real browser and three real requests.
+ */
+test('a slow older board read cannot overwrite a fast newer one', async ({ page }) => {
+  test.slow();
+  let calls = 0;
+  let delivered = false;
+  let release = (): void => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await page.route('**/api/score', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        handle: (JSON.parse(route.request().postData() ?? '{}') as { handle: string }).handle,
+        score: 900,
+      }),
+    }),
+  );
+  await page.route('**/api/top*', async (route: Route) => {
+    calls += 1;
+    if (calls === 1) return route.fulfill(ABSENT_BOARD);
+    if (calls === 2) {
+      await held;
+      await route.fulfill(rowsReply(TEN)).then(
+        () => {
+          delivered = true;
+        },
+        () => undefined,
+      );
+      return;
+    }
+    return route.fulfill(EMPTY_BOARD);
+  });
+
+  await reachResults(page);
+  await expect(note(page)).toHaveText(say('boardDown'));
+
+  // Call 2: the older read, held open with rows on it.
+  const heldFrom = Date.now();
+  await page.getByRole('button', { name: say('boardRetry'), exact: true }).click();
+  await expect(note(page)).toHaveAttribute('data-board', 'loading');
+
+  // Call 3: the newer read, answered at once, while call 2 is still in flight.
+  await post(page);
+  await expect(note(page)).toHaveAttribute('data-board', 'empty');
+  expect(calls, 'the post did not re-read the board').toBe(3);
+
+  /*
+   * THE RUN ONLY PROVES SOMETHING IF CALL 2 WAS STILL ALIVE. The adapter gives up on a request at
+   * its own timeout, read out of its source rather than typed here; past that, call 2 comes back as
+   * `unavailable` on its own and there is no race left to lose. A starved run skips rather than
+   * passing on a collision that never happened (docs/PAUL_BRIEF.md trap 6).
+   */
+  const heldFor = Date.now() - heldFrom;
+  test.skip(
+    heldFor >= ADAPTER_TIMEOUT_MS,
+    `the held read was abandoned after ${heldFor}ms, so no two reads were ever in flight`,
+  );
+
+  release();
+  await expect.poll(() => delivered).toBe(true);
+  // Long enough for the stale answer to be parsed and applied, if anything still would.
+  await page.waitForTimeout(400);
+
+  await expect(note(page), 'a stale read overwrote a newer one').toHaveAttribute(
+    'data-board',
+    'empty',
+  );
+  await expect(page.locator('.otp-board__row')).toHaveCount(0);
+  await expect(note(page)).toHaveText(say('boardEmptyAfterPost'));
+});
+
+/*
+ * THE HEADLINE TEST. A 200 that is not a board must not read as a board with nothing on it.
+ *
+ * This is the behaviour the product will actually show today, because /api/top still 404s in
+ * production, and it is correct: the first time this asset says out loud that the board is not
+ * there instead of silently showing nothing.
+ */
+test('a board that is not there says so, and never says it is empty', async ({ page }) => {
+  const board: Board = { reply: ABSENT_BOARD, calls: 0 };
+  await serveBoard(page, board);
+  await reachResults(page);
+
+  await expect(note(page)).toHaveText(say('boardDown'));
+  await expect(note(page)).toHaveAttribute('data-board', 'unavailable');
+  await expect(note(page), 'an absent board reported as an empty one').not.toHaveText(
+    say('boardEmpty'),
+  );
+  await expect(page.locator('.otp-board__rows')).toHaveCount(0);
+  // The player's score is still on the screen in front of them, which is what the line promises.
+  await expect(page.locator('.otp-hero__score')).toBeVisible();
+  /*
+   * THE STATE PRODUCTION RENDERS TODAY, swept for Lime for the first time. It was never swept
+   * before -- the sweep ran in the two states that have rows -- so it was safe by luck.
+   */
+  await expectNoLime(page);
+});
+
+/*
+ * THE TWO CONTROLS IN THE STATE EVERY VISITOR CURRENTLY SEES.
+ *
+ * With /api/top still 404ing, `unavailable` is what production renders, and in it "Ask the board
+ * again" and "Walk it again" shipped with the SAME class string, the same height and the same Deep
+ * Purple outline on no fill, 15.4px apart. One re-reads a list. The other throws the finished run
+ * away and restarts the game. A player reaching for the first and hitting the second loses the
+ * score they are looking at.
+ *
+ * Measured rather than asserted by class name: two controls that differ only in the markup are not
+ * differentiated for anybody actually looking at the screen. The screen's one Lime is spent on the
+ * research call to action, so neither of them may become the bright thing.
+ */
+test('the retry and the restart do not look like the same control', async ({ page }) => {
+  const board: Board = { reply: ABSENT_BOARD, calls: 0 };
+  await serveBoard(page, board);
+  await reachResults(page);
+  await expect(note(page)).toHaveText(say('boardDown'));
+
+  const look = (selector: string): Promise<Record<string, string>> =>
+    page.locator(selector).evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        background: style.backgroundColor,
+        color: style.color,
+        border: `${style.borderTopWidth} ${style.borderTopColor}`,
+        underline: style.textDecorationLine,
+        radius: style.borderTopLeftRadius,
+      };
+    });
+
+  const retry = await look('.otp-board__retry button');
+  const restart = await look('.otp-actions button');
+
+  // Not one difference that a reviewer could call a shade: ground, outline and shape all move.
+  expect(retry.color, 'the two controls still take the same colour').not.toBe(restart.color);
+  expect(retry.border, 'the two controls still carry the same outline').not.toBe(restart.border);
+  expect(
+    restart.underline,
+    'the restart is still a pill, not the footer link the deck draws',
+  ).toContain('underline');
+  expect(retry.underline).not.toContain('underline');
+
+  // And neither of them has become the screen's second Lime.
+  expect([retry.background, retry.color, retry.border]).not.toContain(LIME_RGB);
+  expect([restart.background, restart.color, restart.border]).not.toContain(LIME_RGB);
+
+  // Both are still real controls a thumb can hit: 44px is the floor every control here keeps.
+  for (const selector of ['.otp-board__retry button', '.otp-actions button']) {
+    const box = (await page.locator(selector).boundingBox())!;
+    expect(box.height, `${selector} is under the touch floor`).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test('the retry asks the board again, and your own row is marked when it arrives', async ({
+  page,
+}) => {
+  const board: Board = { reply: ABSENT_BOARD, calls: 0 };
+  await serveBoard(page, board);
+  await reachResults(page);
+  await expect(note(page)).toHaveText(say('boardDown'));
+  expect(board.calls).toBe(1);
+
+  /*
+   * The handle is minted on this screen and never typed, so the only way to build a board with
+   * YOUR row on it is to read the name the page is showing and answer with it. That is also the
+   * honest shape of the claim: your row is matched locally against that value and nothing extra
+   * goes over the wire to find it.
+   */
+  const mine = await page.locator('.otp-handle [data-handle]').getAttribute('data-handle');
+  expect(mine).toMatch(/^[a-z]+-[a-z]+-[1-9][0-9]$/);
+  const others = tenRows(mine!);
+  board.reply = rowsReply([
+    ...others.slice(0, 2),
+    { rank: 3, handle: mine!, score: 900 },
+    ...others.slice(3),
+  ]);
+
+  await page.getByRole('button', { name: say('boardRetry'), exact: true }).click();
+
+  await expect(note(page)).toHaveText(say('boardReady'));
+  expect(board.calls, 'the retry did not re-request the board').toBe(2);
+  await expect(page.locator('.otp-board__row')).toHaveCount(10);
+
+  const yours = page.locator('.otp-board__row--you');
+  await expect(yours).toHaveCount(1);
+  await expect(yours).toContainText(mine!);
+  // Said in words, not by fill alone, and read as a sentence rather than three columns.
+  await expect(yours).toContainText(say('boardYouLabel'));
+  await expect(yours.locator('.otp-visually-hidden')).toHaveText(
+    say('boardRowYou').replace('{rank}', '3').replace('{handle}', mine!).replace('{score}', '900'),
+  );
+  // And the row above it is somebody else's, read as the other sentence.
+  await expect(page.locator('.otp-board__row').nth(1).locator('.otp-visually-hidden')).toHaveText(
+    say('boardRow')
+      .replace('{rank}', '2')
+      .replace('{handle}', others[1]!.handle)
+      .replace('{score}', '950'),
+  );
+
+  // Your row is a Lilac fill, and Lilac is not Lime: the one state the sweep above cannot reach.
+  await expectNoLime(page);
+});
+
+/*
+ * The live-region property, which is the one an eye cannot check and a screenshot cannot show.
+ *
+ * A region inserted into the DOM already containing its text is never announced: screen readers
+ * announce MUTATIONS to a region that was already there. The naive `{loading && <p …>}` build
+ * announces nothing at all, and it looks identical. So the status line is mounted for the life of
+ * the section and only its text changes -- which is a claim about NODE IDENTITY, and the way to
+ * check it is to mark the node and see whether the mark survives the state change.
+ */
+test('the board speaks through one region that is never replaced', async ({ page }) => {
+  const board: Board = { reply: ABSENT_BOARD, calls: 0 };
+  await serveBoard(page, board);
+  await reachResults(page);
+  await expect(note(page)).toHaveText(say('boardDown'));
+
+  await note(page).evaluate((el) => el.setAttribute('data-same-node', 'marked'));
+
+  board.reply = EMPTY_BOARD;
+  await page.getByRole('button', { name: say('boardRetry'), exact: true }).click();
+  await expect(note(page)).toHaveText(say('boardEmpty'));
+
+  // Still one region, still the node that was marked: the text mutated, the element did not go.
+  await expect(page.locator('.otp-board__note')).toHaveCount(1);
+  await expect(note(page)).toHaveAttribute('data-same-node', 'marked');
+  await expect(note(page)).toHaveAttribute('aria-live', 'polite');
+  await expectNoLime(page);
+});
+
+/*
+ * The three reviewed widths, with a FULL board actually on the page.
+ *
+ * The preview build answers /api/top with a 404, so every other spec that reaches Results sees the
+ * `unavailable` state and measures a section with one sentence in it. The row -- disc, handle,
+ * "Your run" chip, score, all in one flex line -- only exists when the board answers, and 375px
+ * with `--otp-ui` at 0.7 is where it has the least room. So the widths are measured here, in the
+ * state that has something to overflow.
+ */
+for (const width of [375, 768, 1280] as const) {
+  test(`a full board fits the panel it sits in at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 860 });
+    await page.goto('/');
+    await ready(page);
+
+    const board: Board = { reply: ABSENT_BOARD, calls: 0 };
+    await serveBoard(page, board);
+    await reachResults(page);
+    /*
+     * WAIT FOR THE FIRST READ TO LAND BEFORE SWAPPING THE REPLY. The route handler reads
+     * `board.reply` when the request reaches it, not when it was registered, so mutating it while
+     * the mount's read is still in flight serves the rows to that read instead -- and the retry
+     * button this test then clicks never renders. That is what happened at 375px, where the page
+     * is slowest, and it was a race in the test rather than anything the product did.
+     */
+    await expect(note(page)).toHaveText(say('boardDown'));
+    expect(board.calls).toBe(1);
+
+    // Your row is the widest one: it carries the chip the other nine do not.
+    const mine = await page.locator('.otp-handle [data-handle]').getAttribute('data-handle');
+    const others = tenRows(mine!);
+    board.reply = rowsReply([
+      ...others.slice(0, 2),
+      { rank: 3, handle: mine!, score: 1000 },
+      ...others.slice(3),
+    ]);
+    await page.getByRole('button', { name: say('boardRetry'), exact: true }).click();
+    await expect(page.locator('.otp-board__row')).toHaveCount(10);
+
+    const body = (await page.locator('.otp-screen__body').boundingBox())!;
+    for (const row of await page.locator('.otp-board__row').all()) {
+      const box = (await row.boundingBox())!;
+      // A sub-pixel tolerance, because the panel body's own width is fractional at --otp-ui 0.7.
+      expect(box.x, `a row starts left of the panel at ${width}px`).toBeGreaterThanOrEqual(
+        body.x - 1,
+      );
+      expect(box.x + box.width, `a row runs past the panel at ${width}px`).toBeLessThanOrEqual(
+        body.x + body.width + 1,
+      );
+    }
+
+    /*
+     * The disc keeps the floor the stylesheet puts on it. `--otp-ui` scales type and spacing
+     * together, so at 0.7 an unfloored 26px disc lands at 18.2px with a numeral inside it -- which
+     * is the defect the floor rule at the head of panels.css exists for.
+     */
+    const disc = (await page.locator('.otp-board__rank').first().boundingBox())!;
+    expect(disc.width, `the rank disc is under its floor at ${width}px`).toBeGreaterThanOrEqual(22);
+    expect(disc.height).toBeGreaterThanOrEqual(22);
+
+    // And the handle is still in the row rather than clipped out of it.
+    const handle = (await page.locator('.otp-board__row--you .otp-board__handle').boundingBox())!;
+    const yours = (await page.locator('.otp-board__row--you').boundingBox())!;
+    expect(handle.width).toBeGreaterThan(0);
+    expect(handle.x + handle.width).toBeLessThanOrEqual(yours.x + yours.width + 1);
+  });
+}
+
+/*
+ * VERTICAL RHYTHM, WHICH NOTHING IN THIS SUITE MEASURED.
+ *
+ * The three width tests above measure horizontal overhang -- does a row run past the panel -- and
+ * that is all they measure. So "Wolf Spotters" shipped with a gap above it of 0.0px at 375, 768 AND
+ * 1280: the heading sat flush against the privacy line, through a review at every width the project
+ * reviews at, because no test in the suite could see it.
+ *
+ * The cause was structural rather than a missing margin. `h2.otp-section-label` zeroes the 24px top
+ * margin `.otp-section-label` carries (it is undoing the user agent's h2 margins), and `.otp-fine`
+ * and `.otp-error` -- the two paragraphs that can precede the board -- both end at
+ * `margin-bottom: 0`. The only separation in play was `.otp-board`'s own `margin-top`, and with the
+ * heading rendered OUTSIDE the section that margin fell between the heading and the board instead
+ * of above the heading.
+ *
+ * The floor comes from the drawing, not from the rule being guarded: a heading needs at least its
+ * own type size of air above it to read as a break rather than as the last line of the paragraph
+ * before it. Asserting the margin value instead would move with the defect and pass in silence.
+ */
+for (const width of [375, 768, 1280] as const) {
+  test(`the board heading is separated from what precedes it at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 860 });
+    await page.goto('/');
+    await ready(page);
+
+    const board: Board = { reply: ABSENT_BOARD, calls: 0 };
+    await serveBoard(page, board);
+    await reachResults(page);
+    await expect(note(page)).toHaveText(say('boardDown'));
+
+    /*
+     * Measured WITHOUT assuming the structure, so that the number is what fails rather than a
+     * selector. Whatever precedes the heading in document order is whatever the player sees
+     * directly above it -- the fine print when the heading sits in the section, and the same fine
+     * print one level up when it does not -- so the measurement is the same question either way
+     * and reports the gap it found.
+     */
+    const measured = await page.evaluate(() => {
+      const heading = document.getElementById('otp-board-heading')!;
+      const before = (heading.previousElementSibling ??
+        heading.parentElement!.previousElementSibling)!;
+      const note = document.querySelector('.otp-board__note')!;
+      return {
+        above: heading.getBoundingClientRect().top - before.getBoundingClientRect().bottom,
+        below: note.getBoundingClientRect().top - heading.getBoundingClientRect().bottom,
+        type: parseFloat(getComputedStyle(heading).fontSize),
+        precededBy: before.className,
+      };
+    });
+
+    expect(measured.precededBy, 'the board no longer follows the fine print').toMatch(/otp-/);
+    expect(
+      measured.above,
+      `the heading has ${measured.above.toFixed(1)}px above it at ${width}px`,
+    ).toBeGreaterThanOrEqual(measured.type);
+    // And the air did not simply move: the heading still stands off its own status line.
+    expect(measured.below).toBeGreaterThan(0);
+
+    // The fix that produced the gap: the heading names the section from inside it.
+    await expect(page.locator('.otp-board > .otp-board__title')).toHaveCount(1);
+  });
+}

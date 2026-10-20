@@ -225,6 +225,29 @@ why the shape changed.
       shipped in Phase 5 with a stub behind it, and Phase 6 replaced the stub with the real adapter
       behind the same interface. The board is **not a separate screen**: it renders inside
       `Results.tsx`, which is where the handle and the one Lime CTA already were.
+      **This sentence was ASPIRATIONAL for a round and is true only from 2026-10-21.** When it was
+      written, `top()` was implemented and tested and `grep -rn "\.top("` across `apps/game/src`
+      found no caller at all: there were no board elements on Results and no board rule in any
+      stylesheet, so a player posted a score and never saw a list, deployed or not
+      (docs/PAUL_BRIEF.md section 5 records the measurement). It is recorded here rather than
+      quietly corrected because the next reader has no other way to tell which claims in this file
+      are load-bearing and which are intent — and two reviewers took this one as evidence the board
+      existed.
+- [x] (S) The board on Results, and the three-state read behind it (2026-10-21). `readTop()` answers
+      `rows`, `empty` or `unavailable` and never reports an ABSENT board as an EMPTY one — the SPA
+      catch-all serves `200 text/html` for an undeployed `/api/top`, which the old `LeaderboardEntry[]`
+      return could only have rendered as "no runs yet". Rank tints, your own row matched locally,
+      one live region, no Lime, and nothing from the wire set as markup.
+- [x] (S) The payoff screen cannot state two contradictory things about its own state (2026-10-21).
+      After a post, an empty board read said "No runs on the board yet. Yours would be the first."
+      directly under "Posted to the board as …". It is the launch case, not a corner: `GET /api/top`
+      is served with `s-maxage=60`, and the mount read primes that cache with an empty board before
+      the post lands. The empty state now has copy for a visit that has posted, and
+      `test/board.test.ts` plus `e2e/leaderboard.spec.ts` fail if a post can sit above a sentence
+      claiming there are no runs. Same round: board reads settle by issue order rather than arrival
+      order, the board heading has air above it at 375/768/1280 (it had 0.0px at all three), the
+      board carries the Deep Purple body BRAND_AND_UI section 3 requires, and "Ask the board again"
+      no longer looks exactly like "Walk it again".
 - [x] (M) `apps/api` Vercel Functions (Node 22). **Shipped as `POST /api/score` and `GET /api/top`
       over Supabase/PostgREST.** ~~`POST /runs`, `POST /runs/:id/submit`, `GET /leaderboard`; HMAC
       token; D1 schema + migrations; week window logic (UTC)~~ — none of this was built. The token
@@ -247,6 +270,12 @@ why the shape changed.
       score, a verdict whose card was never opened, a run that never arrived, an oversized body, a
       duplicate. `apps/game/e2e/leaderboard.spec.ts` covers the board; the API-down path is the
       `503` case, asserted in `routes.test.ts` ("when the board is not there").
+      **"covers the board" was ASPIRATIONAL for a round, same as the bullet above.** Until
+      2026-10-21 that file covered the POST FORM only — four specs, all of them against
+      `/api/score` — because there was no board on the page to cover. It covers the board now:
+      the three read states, the rank tints, the live region, a successful post above an empty
+      board, two reads racing, the vertical rhythm at the three reviewed widths and a Lime sweep in
+      every state rather than only the two with rows.
 - [ ] (S) Moderation: admin delete endpoint, and `docs/RUNBOOK.md`. **Neither exists.** An
       unauthenticated delete endpoint would be worse than none, and the only secret the service may
       read is the Supabase key, so this needs Vercel deployment protection or a new server-only
@@ -268,6 +297,26 @@ write. These three are from `apps/api/README.md`; that file is the authority, th
    whose decision reads "handle and score only", so it **reopens D10** rather than being a quiet
    migration. The code does not write it today, so the SQL is safe to run early.
 3. **Set retention.** `created_at` exists and nothing prunes it, against D10's twelve months.
+
+### Phase 6: two calls that are a human's, not an agent's
+
+Neither blocks the work above; both are recorded here so they are not decided by default.
+
+1. **Nine player-facing strings have not been through the Legal review D10 requires.**
+   `docs/COPY_REVIEW.md` says leaderboard and privacy copy are reviewed by Legal against D10 and
+   that the review has not happened. The strings are `leaderboardTitle`, `leaderboardTitleHighlight`,
+   `boardLoading`, `boardReady`, `boardEmpty`, `boardEmptyAfterPost`, `boardDown`, `boardRetry`,
+   `boardYouLabel`, `boardRow` and `boardRowYou` — and `boardDown` in particular makes a
+   reassurance about where the player's score lives ("Your score is still on this page"), which is
+   the class of claim D10 exists to check. `test/board.test.ts` already pins that none of them
+   claims a weekly reset the service does not do.
+2. **"Wolf Spotters" ships with its Season Mix highlight on "Spotters", and the tension is real.**
+   UI_FOUNDATIONS section 8 and BRAND_AND_UI section 3 both name it outright, and BRAND_AND_UI uses
+   this exact title as its worked example of a correct highlight; against that, it is the third
+   Season Mix word on the Results screen, after "actually" and "agent". The brand rule is one
+   highlighted word per HEADING, and the only per-SCREEN budget in the brand is Lime's, so the
+   binding docs were followed. If design wants a per-screen cap on Season Mix, it is one line in
+   UI_FOUNDATIONS section 3 and one prop in `Results.tsx`.
 
 Also outstanding and cheap: **one preview deploy answers two questions at once** — whether Vercel's
 bundler follows `src/content.ts`'s import of `content/game.json` out of the service root, and

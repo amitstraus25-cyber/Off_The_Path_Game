@@ -13,10 +13,32 @@ export interface LeaderboardEntry {
   score: number;
 }
 
+/**
+ * What a read of the board came back with. THREE answers, not an array, because an array cannot
+ * say which of two quite different things happened and this product has to.
+ *
+ * `empty` is a board that answered, parsed, and holds no runs. On a just-launched research page it
+ * is the COMMON case and it is not an error.
+ *
+ * `unavailable` is everything else: a network failure, a timeout, a 4xx/5xx, a body in a shape we
+ * have never seen, AND -- the case this type exists for -- the 200 of `index.html` that the SPA
+ * catch-all serves when the `/api/(.*)` rewrite never reaches apps/api. Measured 2026-10-20 on a
+ * plain `vite preview`: GET /api/top?limit=10 -> 200, text/html, 654 bytes. It is not loud, it is
+ * not a 404, and before this type the screen could only have called it "no scores yet".
+ *
+ * A row whose handle is not one this game mints also lands here rather than in `empty`:
+ * `topResponseSchema` fails the WHOLE array, so one poisoned row drops the board. That is the
+ * right way round -- a board we cannot believe is a board that is not answering -- and it is what
+ * `test/leaderboard.test.ts` already pins with `'x'` and `'<img src=x>'`.
+ */
+export type BoardRead =
+  { state: 'rows'; entries: LeaderboardEntry[] } | { state: 'empty' } | { state: 'unavailable' };
+
 export interface LeaderboardClient {
   /** Returns a message to show the player, or null when there is nothing to say. Never throws. */
   submit(state: GameState, handle: string): Promise<string | null>;
-  top(limit: number): Promise<LeaderboardEntry[]>;
+  /** Never throws, never hangs, and never reports an absent board as an empty one. */
+  top(limit: number): Promise<BoardRead>;
 }
 
 /*
@@ -101,6 +123,28 @@ async function ask(path: string, init: RequestInit): Promise<Reply | null> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Reads the board. The three answers, never a throw and never a hang.
+ *
+ * A FREE FUNCTION rather than only a method, because it needs nothing from `Content`: it reads no
+ * string, so there is no reason for the one screen that shows a board to have to be handed a whole
+ * client to get at it. `createLeaderboardClient().top()` is this function, so there is one
+ * implementation and `test/leaderboard.test.ts` exercises it through the interface either way.
+ *
+ * THE THREE ANSWERS ARE DERIVED HERE, not written down anywhere else. `entries.length === 0` is
+ * what makes a board empty; nothing else may decide it. The alternative -- a screen that checks the
+ * array's length itself -- is how the absent board came to be renderable as an empty one.
+ */
+export async function readTop(limit: number): Promise<BoardRead> {
+  const wanted = topLimit(limit);
+  const reply = await ask(`${TOP_PATH}?limit=${wanted}`, { method: 'GET' });
+  if (!reply?.ok) return { state: 'unavailable' };
+  const parsed = topResponseSchema.safeParse(reply.body);
+  if (!parsed.success) return { state: 'unavailable' };
+  const entries = parsed.data.entries.slice(0, wanted);
+  return entries.length === 0 ? { state: 'empty' } : { state: 'rows', entries };
 }
 
 /*
@@ -192,11 +236,11 @@ export function createLeaderboardClient(content: Content): LeaderboardClient {
     },
 
     /*
-     * NOTHING IN THE GAME CALLS THIS, and whoever wires the board screen should read the next
-     * paragraph before they do.
+     * THE MEASUREMENT THAT MADE THIS RETURN A STATE AND NOT AN ARRAY, kept because it is the
+     * evidence and not the conclusion.
      *
-     * An empty array means one of two quite different things and this signature cannot tell them
-     * apart: a board that answered and has no rows yet, and no board at all. The second is not
+     * An empty array meant one of two quite different things and the old signature could not tell
+     * them apart: a board that answered and has no rows yet, and no board at all. The second is not
      * hypothetical and it is not loud. Measured on 2026-10-20 against the shipped build on a plain
      * `vite preview` -- and it is the same shape a deploy takes if the `/api/(.*)` rewrite never
      * reaches apps/api, because the catch-all rewrite serves the SPA for every path:
@@ -205,18 +249,11 @@ export function createLeaderboardClient(content: Content): LeaderboardClient {
      *     POST /api/score        ->  404, no body
      *
      * The 200 is not a board. `ask()` survives it -- `res.json()` throws on the HTML and the catch
-     * turns it into "no reply" -- so this returns `[]` either way, and `submit()` says the board is
-     * unavailable, which is right. But a screen that renders `[]` as "no scores yet" would be
-     * telling a visitor the board is empty when the truth is that it is not there. The board screen
-     * needs a third state, which means this needs to return one; the shape is a change to
-     * `LeaderboardClient` and to `test/leaderboard.test.ts`, and both have other owners today.
+     * turns it into "no reply" -- so this used to return `[]` either way, and a screen rendering
+     * that as "no scores yet" would have told a visitor to a data-security company's research page
+     * that the board was empty when the truth is that it is not there. `readTop` answers
+     * `unavailable` for it now, and `test/board.test.ts` fails if that ever becomes `empty` again.
      */
-    async top(limit) {
-      const wanted = topLimit(limit);
-      const reply = await ask(`${TOP_PATH}?limit=${wanted}`, { method: 'GET' });
-      if (!reply?.ok) return [];
-      const parsed = topResponseSchema.safeParse(reply.body);
-      return parsed.success ? parsed.data.entries.slice(0, wanted) : [];
-    },
+    top: readTop,
   };
 }

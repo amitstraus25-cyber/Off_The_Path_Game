@@ -323,20 +323,42 @@ describe('top', () => {
           }),
         ),
     );
-    const entries = await client.top(5);
+    const read = await client.top(5);
 
     expect(sent[0]!.url).toBe('/api/top?limit=5');
-    expect(entries).toHaveLength(2);
-    expect(entries[0]).toEqual({ rank: 1, handle: 'brave-lantern-42', score: 900 });
+    expect(read).toEqual({
+      state: 'rows',
+      entries: [
+        { rank: 1, handle: 'brave-lantern-42', score: 900 },
+        { rank: 2, handle: 'merry-kettle-73', score: 450 },
+      ],
+    });
   });
 
   it('clamps a limit the caller got wrong instead of asking for everything', async () => {
     const sent = intercept(() => new Response(JSON.stringify({ entries: [] })));
-    await client.top(100000);
+    expect(await client.top(100000)).toEqual({ state: 'empty' });
     expect(sent[0]!.url).toBe('/api/top?limit=25');
   });
 
-  it('comes back empty, never thrown, when the board is down or lying', async () => {
+  /*
+   * THE WHOLE REASON `top()` RETURNS A STATE AND NOT AN ARRAY.
+   *
+   * These two answers were indistinguishable until 2026-10-21 and the screen could only have
+   * rendered one sentence for both. The third reply is the one that is not loud: it is the 200 of
+   * index.html that the SPA catch-all serves when the /api/(.*) rewrite never reaches apps/api,
+   * measured on the shipped build on 2026-10-20 at 654 bytes of HTML.
+   */
+  it('tells an empty board apart from an absent one', async () => {
+    intercept(() => new Response(JSON.stringify({ entries: [] })));
+    expect(await client.top(10)).toEqual({ state: 'empty' });
+    vi.unstubAllGlobals();
+
+    intercept(() => new Response('<!doctype html><title>Off the Path</title>', { status: 200 }));
+    expect(await client.top(10)).toEqual({ state: 'unavailable' });
+  });
+
+  it('comes back unavailable, never thrown, when the board is down or lying', async () => {
     for (const reply of [
       (): never => {
         throw new TypeError('Failed to fetch');
@@ -349,17 +371,17 @@ describe('top', () => {
         new Response(JSON.stringify({ entries: [{ rank: 1, handle: '<img src=x>', score: 1 }] })),
     ]) {
       intercept(reply);
-      await expect(client.top(5)).resolves.toEqual([]);
+      await expect(client.top(5)).resolves.toEqual({ state: 'unavailable' });
       vi.unstubAllGlobals();
     }
   });
 
-  it('comes back empty rather than hanging on a body that never arrives', async () => {
+  it('comes back unavailable rather than hanging on a body that never arrives', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', stalledBody);
     const pending = client.top(5);
     await vi.advanceTimersByTimeAsync(10000);
-    await expect(pending).resolves.toEqual([]);
+    await expect(pending).resolves.toEqual({ state: 'unavailable' });
     vi.useRealTimers();
   });
 });

@@ -1,8 +1,24 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { VERDICTS, exposedNotices, liveCapabilities, recap, score } from '@otp/core';
+import {
+  DEFAULT_TOP_LIMIT,
+  VERDICTS,
+  exposedNotices,
+  liveCapabilities,
+  recap,
+  score,
+} from '@otp/core';
 import type { Content, GameState, GoalResult, RecapRow, SkillId, Verdict } from '@otp/core';
 import { RESEARCH_URL } from '../embed/postMessage';
+/*
+ * TWO STATEMENTS FROM ONE MODULE, DELIBERATELY. `test/handle-field.test.ts` matches this exact
+ * line -- `import { newHandle } from '../net/leaderboard'` -- to hold the screen and the wire to a
+ * single mint function, which is the guard that caught the round where the name on the screen and
+ * the name in the request body were different. Merging these into `{ newHandle, readTop }` reddens
+ * it. That file belongs to another owner, so the import stays split and this note is why.
+ */
 import { newHandle } from '../net/leaderboard';
+import { readTop } from '../net/leaderboard';
+import type { BoardRead } from '../net/leaderboard';
 import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
 import { Trifecta } from './Trifecta';
@@ -235,6 +251,16 @@ export interface ResultsProps {
   onReadResearch(): void;
   /** Posting arrives with the leaderboard in Phase 6; until then this reports it is unavailable. */
   onPost(handle: string): Promise<string | null>;
+  /**
+   * Reads the board. Resolves to one of three answers; never throws, never hangs.
+   *
+   * OPTIONAL, and that is a deliberate deviation from the build spec, which wires this through
+   * `App.tsx` and `main.ts` beside `onPost`. Both of those files belong to another owner this
+   * round and two owners never share a file, so the default is the adapter itself and the seam
+   * stays here for the moment they can be edited: pass `onTop` and nothing else changes. It is
+   * also what `test/board.test.ts` and the e2e board specs inject.
+   */
+  onTop?(limit: number): Promise<BoardRead>;
 }
 
 /**
@@ -274,7 +300,120 @@ export function breakdown(result: ReturnType<typeof score>, content: Content): s
   return parts.join(' · ');
 }
 
-export function Results({ content, state, onReplay, onReadResearch, onPost }: ResultsProps) {
+/**
+ * What the board section is showing. `loading` is the component's own fourth state; the other
+ * three are exactly what the adapter answered, carried through without being re-interpreted.
+ *
+ * The thing this type exists to make impossible: deriving "empty" from an array's length anywhere
+ * on this screen. `readTop` decides it once, and a screen that counted rows itself is how an
+ * ABSENT board came to be renderable as an EMPTY one.
+ */
+export type BoardState = { state: 'loading' } | BoardRead;
+
+/**
+ * Which string the board's one status line shows, per state. The whole mapping, in one place.
+ *
+ * EXPORTED BECAUSE IT IS THE HALF OF THE DEFECT THAT LIVES ON THIS SCREEN. `readTop` decides
+ * whether a board is empty or absent; this decides what the player is then told. Nothing else
+ * composes those two, so `test/board.test.ts` composes exactly this -- it drives a real HTTP reply
+ * through `readTop` and looks the answer up here -- and the SPA catch-all's 200 of index.html
+ * reaching `boardEmpty` fails there rather than on a research page.
+ *
+ * A ternary in the JSX could not be checked that way without a DOM, and apps/game's vitest has
+ * none. Typed as a total Record so a fifth state cannot be added without a line here.
+ */
+export const BOARD_NOTE: Record<BoardState['state'], string> = {
+  loading: 'boardLoading',
+  rows: 'boardReady',
+  empty: 'boardEmpty',
+  unavailable: 'boardDown',
+};
+
+/**
+ * THE SCREEN CANNOT SAY BOTH THINGS AT ONCE, and until 2026-10-21 it did.
+ *
+ * Measured in Chromium on a clean build, after a post the server took: `.otp-error` read
+ * "Posted to the board as brave-lantern-42." and the very next paragraph, `.otp-board__note`, read
+ * "No runs on the board yet. Yours would be the first." One screen, two adjacent sentences, and
+ * they contradict each other -- on the asset whose whole argument is that you should check whether
+ * a system is telling you the truth about itself.
+ *
+ * IT IS THE LAUNCH CASE, NOT A CORNER. `apps/api` serves GET /api/top with
+ * `s-maxage=60, stale-while-revalidate=300`, and this screen re-reads the instant a post resolves.
+ * On a board with nothing on it yet the mount read primes that cache with `{entries: []}`, the post
+ * lands, and the re-read is answered from the cached empty for up to a minute. So the board really
+ * did answer "empty" -- THE THREE-STATE READ IS NOT AT FAULT and is not touched here. What was
+ * wrong is the empty state's COPY, which was written for a board nobody had posted to.
+ *
+ * `boardReady` already carries the hedge for exactly this cache ("A run posted in the last minute
+ * may not be here yet"); `boardEmpty` was the one state that had none, and it is the state where
+ * the contradiction is total rather than partial. So the empty board gets a second line, chosen by
+ * whether this visit has posted.
+ *
+ * `posted` IS "A POST HAS BEEN ATTEMPTED", NOT "A POST SUCCEEDED", and the copy is written to be
+ * true either way. This screen cannot tell the two apart without reading `onPost`'s SENTENCE, which
+ * is copy a human owns and which `submit()` deliberately refuses to match on. So
+ * `boardEmptyAfterPost` claims nothing about the player's run: it says only that nothing is
+ * SHOWING, and why that may be. A refused post sits above it just as honestly as a successful one.
+ *
+ * Pure and exported so `test/board.test.ts` can drive a real HTTP reply through `readTop` and look
+ * the answer up here, with no DOM -- the same composition `BOARD_NOTE` exists for.
+ */
+export const boardNoteKey = (state: BoardState['state'], posted: boolean): string =>
+  posted && state === 'empty' ? 'boardEmptyAfterPost' : BOARD_NOTE[state];
+
+/**
+ * Which of several board reads is allowed to answer, and when none of them is.
+ *
+ * TWO DEFECTS, ONE MECHANISM, both reproduced in a real browser on 2026-10-21.
+ *
+ *  1. **Reads settled by ARRIVAL order, not ISSUE order.** Each call to `readBoard()` closed over
+ *     its own private `live` flag and nothing invalidated the call before it, so a slow older
+ *     answer overwrote a fast newer one: call 1 held open with ten rows, call 2 answered instantly
+ *     with an empty board, and the board ended up showing the ten rows that were already stale when
+ *     they arrived. On this screen that is not a flicker -- it is the board showing a state the
+ *     server has already contradicted.
+ *  2. **The disposer was thrown away on two of three call paths.** `submit()` called `readBoard()`
+ *     bare and the retry was `onClick={readBoard}`, so the comment promising "no setState after
+ *     unmount" was true for the mount path alone. `close()` is why that comment is true now: the
+ *     guarantee belongs to the gate, which every read asks, rather than to a return value three
+ *     callers have to remember to keep.
+ *
+ * A counter rather than an `AbortController`: the adapter already bounds itself at its own timeout
+ * and promises never to throw, so there is no request to cancel -- only an answer to ignore.
+ *
+ * Pure, and exported for `test/board.test.ts`, which holds the ordering rule without a DOM.
+ * apps/game's vitest runs on `node` and cannot render this component at all, so a rule left inside
+ * it would be checkable only in Playwright.
+ */
+export interface BoardReads {
+  /** Begins a read. Every read begun before this one is abandoned by the act of starting it. */
+  begin(): number;
+  /** True only for the newest read, and only while the screen is still open. */
+  mayAnswer(ticket: number): boolean;
+  /** Abandons one read without starting another. Newest or not, it may no longer answer. */
+  abandon(ticket: number): void;
+  /** The screen is gone. No read may answer again, whichever path started it. */
+  close(): void;
+}
+
+export function boardReads(): BoardReads {
+  let newest = 0;
+  let open = true;
+  return {
+    begin: () => (newest += 1),
+    mayAnswer: (ticket) => open && ticket === newest,
+    // Moving the mark past this ticket, which no later `begin()` can hand out again.
+    abandon: (ticket) => {
+      if (ticket === newest) newest += 1;
+    },
+    close: () => {
+      open = false;
+    },
+  };
+}
+
+export function Results({ content, state, onReplay, onReadResearch, onPost, onTop }: ResultsProps) {
   const s = (key: string): string => content.strings[key] ?? '';
   const result = score(state.log, content);
   const rows = recap(state.log, content);
@@ -319,6 +458,54 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
   const [handle, setHandle] = useState(newHandle);
   const [notice, setNotice] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
+  const [board, setBoard] = useState<BoardState>({ state: 'loading' });
+  /*
+   * Whether this visit has tried to post. It only ever goes true, and it is what `boardNoteKey`
+   * turns on -- see the long note over that function for why "attempted" and not "succeeded".
+   */
+  const [posted, setPosted] = useState(false);
+
+  /*
+   * One read on mount, and one more after any post attempt.
+   *
+   * Unconditional after a post, not "on success": `onPost` resolves to a SENTENCE, and deciding
+   * success by matching that sentence would couple this screen to copy a human owns. A wasted read
+   * of a same-origin, edge-cached GET costs nothing; misreading the copy costs the player their row.
+   *
+   * THE GATE, NOT A FLAG PER CALL. `boardReads()` above carries the whole argument: reads used to
+   * settle by arrival order rather than issue order, and the disposer that was supposed to stop a
+   * setState after unmount was dropped on two of the three call paths. Every read now asks the gate
+   * before it writes, so "no read answers after this screen is gone" holds on all three -- the
+   * mount effect, the retry button and `submit()` -- rather than on whoever remembered the return
+   * value. The disposer is still returned, and it still means something: it abandons THIS read
+   * without starting another.
+   *
+   * `useRef(boardReads())` evaluates the factory every render and keeps the first result, which is
+   * the documented shape `useFocusTrap`'s `mountedAt` uses. The object it allocates and throws away
+   * is two closures over two numbers.
+   *
+   * `DEFAULT_TOP_LIMIT` is imported, never written as `10`. A page size typed into a component is
+   * the comment-instead-of-derivation trap in miniature: the number would then exist in two places
+   * and only one of them is the one the server clamps against.
+   */
+  const reads = useRef(boardReads()).current;
+
+  const readBoard = (): (() => void) => {
+    const ticket = reads.begin();
+    setBoard({ state: 'loading' });
+    void (onTop ?? readTop)(DEFAULT_TOP_LIMIT).then((read) => {
+      if (reads.mayAnswer(ticket)) setBoard(read);
+    });
+    return () => reads.abandon(ticket);
+  };
+
+  useEffect(() => {
+    const abandon = readBoard();
+    return () => {
+      abandon();
+      reads.close();
+    };
+  }, []);
 
   /** A different name, and the stale "Posted as ..." line cleared with it. */
   const reroll = (): void => {
@@ -330,8 +517,17 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
     e.preventDefault();
     setNotice(null);
     setPosting(true);
+    /*
+     * Set AT THE PRESS, not after the reply, and that is the point rather than an optimisation.
+     * `posted` only chooses which of two true sentences the empty board shows, so there is no
+     * reason to wait -- and waiting is what leaves a window, however many ticks wide, in which
+     * "Posted to the board as ..." can be painted above "Yours would be the first". The defect
+     * being closed is two sentences on one screen, so the flag moves before either can be.
+     */
+    setPosted(true);
     setNotice(await onPost(handle));
     setPosting(false);
+    void readBoard();
   };
 
   return (
@@ -365,6 +561,23 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
 
             {/* The boundary is the headline result, above the per-skill rows. */}
             <h2 class="otp-section-label">{s('trifectaLabel')}</h2>
+            {/*
+             * The three things a skill can be given, in the words the HUD discs are marked with.
+             * This is the ONLY place `content.capabilities[*].detail` renders: it came off the
+             * inspect card, where the client asked for three verbs and nothing else, and the
+             * non-compact Trifecta that draws these sentences was mounted nowhere at all, so for
+             * the whole project so far this lesson reached no one. It belongs here, beside the
+             * discs it explains and directly under the heading that already names it.
+             *
+             * `hideLabel` because that heading IS the label -- the component draws its own
+             * otherwise, and the first cut of this shipped "WHAT YOUR SKILLS CAN DO" twice, once
+             * as the <h2> and again inside the component, two lines apart.
+             */}
+            <Trifecta
+              content={content}
+              live={liveCapabilities(state.verdicts, content)}
+              hideLabel
+            />
             <div
               class={`otp-recap__row otp-recap__row--boundary${result.boundaryHeld ? '' : ' otp-recap__row--missed'}`}
             >
@@ -394,13 +607,6 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                 ))}
               </div>
             </div>
-
-            {/* The three things a skill can be given, in the words the HUD discs are marked with.
-                This is the ONLY place content.capabilities[*].detail renders: it came off the
-                inspect card, which the client asked for three verbs and nothing else, and the
-                non-compact Trifecta that draws these sentences was mounted nowhere. It belongs
-                here, beside the discs it explains. */}
-            <Trifecta content={content} live={liveCapabilities(state.verdicts, content)} />
 
             <h2 class="otp-section-label">
               <Highlighted text={s('recapHeading')} word={s('recapHeadingHighlight')} />
@@ -613,8 +819,169 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
               </p>
             )}
 
+            {/*
+              06 Leaderboard, mounted where a run actually ends. docs/UI_FOUNDATIONS.md section 8
+              draws this as its own screen; `phase: 'leaderboard'` exists in the reducer and is
+              one-way -- LEADERBOARD only from results, no action back, RESET the only exit -- so a
+              link to it would discard the recap, the trifecta and the Lime band to show ten rows.
+              It lives here until that branch and its core test can be written.
+
+              THE DEFECT THIS CLOSES: the post form is the only thing on the page that mentions a
+              board, and "Posted to the board as deft-cloak-81" has had no board under it since
+              Phase 6 shipped. `top()` was written, tested, and called by nothing.
+
+              NO LIME. This screen spends its one on `.otp-cta` above (UI_FOUNDATIONS section 2),
+              and a board that tinted its top row Lime would be a second call to action on a page
+              that already has a hierarchy problem.
+            */}
+            <section class="otp-board" aria-labelledby="otp-board-heading">
+              {/*
+                THE HEADING IS INSIDE THE SECTION, and it was outside until 2026-10-21.
+
+                Measured on the built preview at 375, 768 and 1280: the gap above this heading was
+                0.0px at every one of the three reviewed widths. `h2.otp-section-label` zeroes the
+                24px top margin `.otp-section-label` carries (it has to -- it is undoing the UA's h2
+                margins), and `.otp-fine` and `.otp-error`, the two paragraphs that can precede the
+                board, both end with `margin-bottom: 0`. So the only separation in play was
+                `.otp-board`'s own `margin-top`, and with the heading OUTSIDE the section that margin
+                landed between the heading and the board instead of above the heading: the title sat
+                flush against the privacy line, and the air it should have had was spent inside its
+                own section.
+
+                Moving it in puts the board's margin and padding above the heading, where they were
+                always meant to be, and makes the `aria-labelledby` relationship structural as well
+                as declared. `e2e/leaderboard.spec.ts` measures the gap at the three widths now --
+                nothing in the suite measured vertical rhythm at all, which is how 0px at every
+                reviewed width shipped past a width review.
+              */}
+              <h2 class="otp-section-label otp-board__title" id="otp-board-heading">
+                {/*
+                  Season Mix on "Spotters", which UI_FOUNDATIONS section 8 and BRAND_AND_UI
+                  section 3 both name outright -- BRAND_AND_UI uses this exact title as its worked
+                  example of a correct highlight. It is the screen's third Season Mix word, after
+                  "actually" in the recap heading and "agent" in the CTA band; the brand rule is one
+                  per HEADING and there is no per-screen cap on it (that rule is Lime's). The
+                  tension is real and is in the handover for the human to settle.
+                */}
+                <Highlighted text={s('leaderboardTitle')} word={s('leaderboardTitleHighlight')} />
+              </h2>
+              {/*
+                MOUNTED IN EVERY STATE, text swapped, never conditionally rendered. App.tsx records
+                why over the world announcements: a live region inserted into the DOM already
+                holding its text announces nothing, because screen readers announce MUTATIONS to a
+                region that was already there. The naive `{loading && <p …>}` announces nothing at
+                all. This is also the deck's subtitle slot, so one element carries both jobs and
+                they cannot drift apart.
+
+                `aria-live` WITHOUT `role="status"`, which is the one place this markup departs from
+                the build spec. The behaviour is the same -- `role="status"` is a polite, atomic
+                live region and this says so directly -- but the role would put a SECOND status on
+                Results, and `e2e/game.spec.ts:204` and four tests in `e2e/leaderboard.spec.ts`
+                resolve the post notice with `getByRole('status')`. A second one turns every one of
+                them into a strict-mode violation, and `game.spec.ts` belongs to another owner.
+                The post notice keeps the role; the board speaks through aria-live.
+              */}
+              <p
+                class="otp-board__note"
+                data-board={board.state}
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {s(boardNoteKey(board.state, posted))}
+              </p>
+
+              {board.state === 'rows' && (
+                <ol class="otp-board__rows">
+                  {board.entries.map((entry) => {
+                    /*
+                     * Your row is matched LOCALLY, against the name already in state above.
+                     * Nothing extra goes over the wire to find it, and the board still stores a
+                     * handle and a score only -- which is what `privacyLine` on this same screen
+                     * promises eight lines up.
+                     */
+                    const yours = entry.handle === handle;
+                    const say = (yours ? s('boardRowYou') : s('boardRow'))
+                      .replace('{rank}', String(entry.rank))
+                      .replace('{handle}', entry.handle)
+                      .replace('{score}', entry.score.toLocaleString('en'));
+                    return (
+                      <li
+                        key={`${entry.rank}-${entry.handle}`}
+                        class={`otp-board__row${yours ? ' otp-board__row--you' : ''}`}
+                      >
+                        {/*
+                          The visible row is one composed line to a screen reader and three columns
+                          to an eye, so the eye's version is hidden from AT and the sentence below
+                          is what is read. Same split App.tsx uses for the world announcements, and
+                          for the same reason: "3 merry-kettle-73 450" is not a sentence.
+                        */}
+                        <span class="otp-board__visible" aria-hidden="true">
+                          {/*
+                            `data-rank` rather than a class per rank or a style prop.
+                            test/inline-style.test.ts bans a static `style={{ background }}`, and an
+                            attribute selector keeps the four tints in the stylesheet where a brand
+                            reviewer reads them. Same shape as the `data-glyph` on the recap badge.
+                          */}
+                          <span
+                            class="otp-board__rank"
+                            data-rank={entry.rank < 4 ? entry.rank : 'plain'}
+                          >
+                            {entry.rank}
+                          </span>
+                          <span class="otp-board__handle">{entry.handle}</span>
+                          {/* Status in words, never by fill alone (UI_FOUNDATIONS section 5). */}
+                          {yours && <span class="otp-board__you">{s('boardYouLabel')}</span>}
+                          <span class="otp-board__score">{entry.score.toLocaleString('en')}</span>
+                        </span>
+                        <span class="otp-visually-hidden">{say}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+
+              {board.state === 'unavailable' && (
+                <div class="otp-board__retry">
+                  {/*
+                    `() => void readBoard()` rather than `onClick={readBoard}`. Two things were
+                    wrong with the bare form: it handed the click event to a function that takes no
+                    arguments, and it threw away the disposer `readBoard` returns -- which is half
+                    of the defect `boardReads()` documents. The gate makes the unmount guarantee
+                    hold either way; this makes the call site say what it is doing.
+                  */}
+                  <button
+                    type="button"
+                    class="otp-button otp-button--on-dark"
+                    onClick={() => void readBoard()}
+                  >
+                    {s('boardRetry')}
+                  </button>
+                </div>
+              )}
+            </section>
+
+            {/*
+              TWO CONTROLS THAT DO COMPLETELY DIFFERENT THINGS MUST NOT LOOK THE SAME.
+
+              With /api/top still 404ing in production, `unavailable` is the state every visitor
+              sees, and in it "Ask the board again" and "Walk it again" rendered with the SAME class
+              string, the same height and the same Deep Purple outline on no fill, 15.4px apart. One
+              re-reads a list; the other throws the finished run away and restarts the game. A
+              player reaching for the first and hitting the second loses the score they are looking
+              at.
+
+              They are now different in kind, not in shade. The retry is a pill INSIDE the board's
+              own Deep Purple body, outlined in Offwhite, sitting with the thing it acts on. This is
+              an underlined text action on the Shell panel below, which is what UI_FOUNDATIONS
+              section 8 draws for `Play again` in the first place -- "a footer link", not a pill.
+              Lime is spent on the research call to action and is not available to either of them.
+
+              Still a <button>: it does something to this page rather than going anywhere, and four
+              specs in another owner's files reach it by `getByRole('button', { name: /Walk it
+              again/ })`.
+            */}
             <div class="otp-actions">
-              <button type="button" class="otp-button otp-button--quiet" onClick={onReplay}>
+              <button type="button" class="otp-link-action" onClick={onReplay}>
                 {s('replay')}
               </button>
             </div>

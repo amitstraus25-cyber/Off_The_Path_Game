@@ -407,7 +407,17 @@ test('Results keeps every surface inside the viewport', async ({ page }) => {
      */
     const clipped = await page.evaluate(() =>
       Array.from(document.querySelectorAll<HTMLElement>('.otp-screen *'))
-        .filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
+        /*
+         * `.otp-visually-hidden` is EXEMPT, and not as a convenience: it is a 1px box with
+         * `overflow: hidden` whose entire job is to hold text the eye never sees, so
+         * `scrollWidth > clientWidth` is its mechanism rather than a symptom. It reads 241>1 and
+         * always will. What this assertion is for is VISIBLE content silently swallowed by an
+         * ancestor's `overflow: hidden`, which is why the filter is a visible box, not any box.
+         * Without the exemption the first screen-reader-only string on Results reddens the suite:
+         * that is exactly what happened when the non-compact Trifecta moved here.
+         */
+        .filter((el) => !el.classList.contains('otp-visually-hidden'))
+        .filter((el) => el.clientWidth > 1 && el.scrollWidth > el.clientWidth + 1)
         .map((el) => `${el.className || el.tagName} ${el.scrollWidth}>${el.clientWidth}`),
     );
     expect(clipped, `content wider than its own box at ${width}px`).toEqual([]);
