@@ -16,9 +16,12 @@ async function openDialogue(page: Page): Promise<void> {
 test('the dialogue shows the speaker, the greeting and the two questions', async ({ page }) => {
   await openDialogue(page);
 
-  await expect(page.locator('.otp-panel__number')).toHaveText('02');
-  await expect(page.locator('.otp-panel__title')).toHaveText('Question');
-  await expect(page.locator('.otp-chip')).toContainText('Asking costs nothing');
+  // Scoped to `.otp-panel`, which is only ever the modal: the world frame no longer unmounts
+  // behind a panel, so `.otp-panel__number` and `.otp-chip` each match twice -- the frame's and
+  // the modal's. The assertion is unchanged; it just has to say which one it means.
+  await expect(page.locator('.otp-panel .otp-panel__number')).toHaveText('02');
+  await expect(page.locator('.otp-panel .otp-panel__title')).toHaveText('Question');
+  await expect(page.locator('.otp-panel .otp-chip')).toContainText('Asking costs nothing');
   await expect(page.locator('.otp-dialogue__speaker')).toHaveText('Rabbit');
   await expect(page.getByRole('img', { name: 'Rabbit' })).toBeVisible();
   await expect(page.locator('.otp-dialogue__line')).toContainText('compass', { timeout: 4000 });
@@ -98,8 +101,8 @@ test('the skill card shows provenance, two neutral rows and three identical verd
   await openDialogue(page);
   await page.locator('.otp-dialogue__show').click();
 
-  await expect(page.locator('.otp-panel__number')).toHaveText('03');
-  await expect(page.locator('.otp-chip')).toContainText('Skill 1 of 3');
+  await expect(page.locator('.otp-panel .otp-panel__number')).toHaveText('03');
+  await expect(page.locator('.otp-panel .otp-chip')).toContainText('Skill 1 of 3');
   await expect(page.locator('.otp-card__eyebrow')).toHaveText('Offered by the Rabbit');
   await expect(page.locator('.otp-card__title')).toHaveText('Cottage Finder');
 
@@ -233,14 +236,28 @@ test('the verb primer lands on the first card opened, whoever Red meets first', 
     store.dispatch({ type: 'MEET', c: 'owl' });
     store.dispatch({ type: 'INSPECT', s: 'word-weaver' });
   });
-  await expect(page.locator('.otp-chip')).toContainText('Skill 2 of 3');
+  /*
+   * "Skill 1 of 3", not "Skill 2 of 3". The card is now numbered by the cards the player has
+   * actually opened (`state.inspected.indexOf(id) + 1`) rather than by the skill's position in
+   * content/game.json, so the FIRST card opened says 1 whoever offered it. The old expectation was
+   * the content-file ordinal -- which is the defect this test's own comment describes, written down
+   * as the expected value, so it would have gone red on the correct build.
+   */
+  await expect(page.locator('.otp-panel .otp-chip')).toContainText('Skill 1 of 3');
   await expect(page.locator('.otp-card__primer')).toContainText('Restrict:');
   // Not just that Restrict is named, but that the primer says what it MEANS. This came from a
   // second copy of this test in e2e/trifecta.spec.ts, which met the Rabbit -- Skill 1 of 3, the
   // ordering that passed even while the bug above was live -- and so could never catch it.
   await expect(page.locator('.otp-card__primer')).toContainText(/not the extras/);
 
-  // And only once: the second card opened is a card, not a rulebook.
+  /*
+   * And on EVERY card, not only the first. This tail used to assert `toHaveCount(0)` on the second
+   * card -- "the second card opened is a card, not a rulebook" -- which was the defect, not the
+   * rule: the primer is the only place the game defines Allow, Restrict and Reject, and Night Light
+   * is card three, so two verdicts out of three were decided with no definition on screen at all.
+   * The rulebook now rides on every card. e2e/card-rulebook.spec.ts checks all three in order; this
+   * checks the one a unit test cannot, that the second card still carries it.
+   */
   await page.locator('.otp-card__back').click();
   await page.keyboard.press('Escape');
   await page.evaluate(() => {
@@ -249,7 +266,9 @@ test('the verb primer lands on the first card opened, whoever Red meets first', 
     store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
   });
   await expect(page.locator('.otp-card__title')).toHaveText('Cottage Finder');
-  await expect(page.locator('.otp-card__primer')).toHaveCount(0);
+  await expect(page.locator('.otp-panel .otp-chip')).toContainText('Skill 2 of 3');
+  await expect(page.locator('.otp-card__primer')).toContainText('Restrict:');
+  await expect(page.locator('.otp-card__primer')).toContainText(/not the extras/);
 });
 
 test('a verdict updates the basket and returns to the world', async ({ page }) => {
@@ -420,8 +439,16 @@ test('the notation chip shows the quest and the skills-seen count while explorin
   await expect(chip).toContainText('Find Grandma');
   await expect(chip).toContainText('0 of 3 skills seen');
 
+  /*
+   * The quest chip STAYS when 02 Question opens. This used to assert `toBeHidden()` -- the HUD
+   * vanishing behind a panel was the client's "things that jump", and the expectation was the
+   * defect written down, the same trap as Title's old `ctaReachable` check which scrolled the card
+   * before measuring it. The world frame and its HUD are now hoisted out of the phase switch and
+   * the modal is laid over them, so the chip is still there and still counting.
+   */
   await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
-  await expect(page.locator('.otp-hud .otp-chip')).toBeHidden();
+  await expect(page.locator('.otp-hud .otp-chip')).toBeVisible();
+  await expect(page.locator('.otp-hud .otp-chip')).toContainText('Find Grandma');
 });
 
 test('the decorative dots are gone and only brand radii are used', async ({ page }) => {
@@ -436,20 +463,43 @@ test('the decorative dots are gone and only brand radii are used', async ({ page
   });
   await expect(page.locator('.otp-card')).toBeVisible();
 
-  // Binding change 5: three radii only (plus 50% for discs).
-  const radii = await page.evaluate(() => {
+  /*
+   * Binding change 5: three radii only (plus 50% for discs).
+   *
+   * One addition, and it is a shape a player never sees as its own corner. `.otp-world-frame`
+   * is a 20px panel with a 3px Deep Purple border, and its header bar sits INSIDE that border, so
+   * for the header to follow the frame's curve its radius must be the frame's inset by the border
+   * -- 17px here. That is one corner, not two: the outer edge the player looks at is still 20px.
+   * The frame used to unmount for 02 Question and 03 Inspect, and this guard only samples after
+   * opening the card, which was the single moment the frame was absent -- so a value that is on
+   * screen for the whole of Explore was never measured until the frame stopped unmounting.
+   *
+   * The concession is measured, not hardcoded: the inner radius is read off the frame's own
+   * computed radius and border width in the same frame, so moving `--otp-r-panel` moves both sides
+   * and 17 never becomes a magic number. The visible OUTER corner is asserted separately below,
+   * which is the thing the rule is actually about.
+   */
+  const shape = await page.evaluate(() => {
+    const frame = document.querySelector('.otp-world-frame');
+    const fs = frame ? getComputedStyle(frame) : null;
+    const outer = fs ? parseFloat(fs.borderTopLeftRadius) : NaN;
+    const border = fs ? parseFloat(fs.borderTopWidth) : NaN;
     const seen = new Set<string>();
     for (const el of document.querySelectorAll('.otp-ui *')) {
       const r = getComputedStyle(el).borderTopLeftRadius;
       if (r && r !== '0px') seen.add(r);
     }
-    return [...seen];
+    return { radii: [...seen], outer, border };
   });
+  // The frame's own visible corner is a brand radius. This is what a player sees.
+  expect(shape.outer, 'the world frame has stopped using the 20px panel radius').toBe(20);
+  const concentric = `${shape.outer - shape.border}px`;
   const allowed = (r: string): boolean =>
-    r === '20px' || r === '10px' || r === '50%' || parseFloat(r) >= 100;
+    r === '20px' || r === '10px' || r === '50%' || r === concentric || parseFloat(r) >= 100;
   expect(
-    radii.filter((r) => !allowed(r)),
-    `unexpected radii: ${radii.join(', ')}`,
+    shape.radii.filter((r) => !allowed(r)),
+    `unexpected radii: ${shape.radii.filter((r) => !allowed(r)).join(', ')} ` +
+      `(all seen: ${shape.radii.join(', ')}; the frame's concentric inner corner is ${concentric})`,
   ).toEqual([]);
 });
 
