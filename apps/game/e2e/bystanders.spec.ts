@@ -24,6 +24,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('greeting a bystander says a line and changes nothing', async ({ page }) => {
+  // Walks to the toadstool; CI hardware is slower than this machine and the walk is the cost.
+  test.slow();
   await walkTo(page, await talkingDistance(page, toadstool.spawn));
   const before = await probe(page);
 

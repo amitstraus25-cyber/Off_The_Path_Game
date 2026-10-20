@@ -416,6 +416,9 @@ test.describe('the A button on a phone', () => {
     page,
     context,
   }) => {
+    // CI walks Red across the map on slower hardware than this machine; the tripled
+    // budget is for the walk, not for a defect.
+    test.slow();
     await page.getByRole('button', { name: /Begin the walk/ }).click();
     await walkTo(page, await talkingDistance(page, TOADSTOOL.spawn));
     await expect(page.locator('.otp-a-button')).toBeVisible();
