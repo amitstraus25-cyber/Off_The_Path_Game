@@ -196,6 +196,17 @@ is `display: none` below 560px, so the hero screen of a marketing asset carries 
 → _Right:_ delete `titleStanding` (`Title.tsx:53` already guards it) or narrow the column from 430px to
 340px; a coarse-pointer variant of `titleMeta`; the mark in the title card itself, where the deck puts it.
 
+> **The 340px in that recommendation was wrong, and the test written to enforce it agreed with it.**
+> Measured on the built preview, Red's painted pixels run x 349..396 at every landscape size from
+> 1280×800 to 1920×1080, and her 32px sprite box starts at 339 — a 340px column ends at 359 and
+> covers her. The column is **306px**. The guard that was supposed to catch this compared her sprite
+> box's _right_ edge to the column's, which stays comfortably positive while her left side is buried,
+> so it passed for the whole time she was hidden; it measures the left edge now. The 88%-black column
+> is gone too — the card is Shell, which took the landing screen from 41% near-black to 12%.
+> Still open and not fixable from the stylesheet: at **844×390** the camera puts Red at x 183..206
+> behind a 218px column, so a short landscape phone hides her completely. Only a 156px column would
+> clear her there, which the copy cannot live in. That one needs the camera.
+
 ### Fix soon after
 
 **12. Question options are 21px tall with zero gap.** `padding: 2px 8px`, no `min-height`: 20.8px on a
