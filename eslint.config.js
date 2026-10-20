@@ -82,10 +82,27 @@ const CORE_PURITY_SYNTAX = [
  *
  * `apps/api/api` is listed beside `apps/api/src` because that is where the deployed functions
  * live: the two entry points a request actually reaches are not under src at all.
+ *
+ * AND THEN THE DEPLOYED FUNCTIONS MOVED, AND THIS LIST DID NOT. On 2026-10-21 the routes became
+ * `apps/game/api/score.ts` and `top.ts`, because a second Vercel service produced no functions at
+ * all. `apps/api/api` still exists and still matches this glob -- but nothing serves it, so for
+ * most of a day every rule below was armed on a DEAD COPY and unset on the live one.
+ * `eslint --print-config apps/game/api/top.ts` reported `no-eval`, `no-implied-eval`,
+ * `no-restricted-properties` and `no-restricted-syntax` all undefined: the two files a request
+ * actually reaches were the only shipped code in the repository with no shipped-code rules.
+ *
+ * Both locations are listed now. The dead copy keeps its rules because a glob that is wrong in the
+ * harmless direction costs nothing, and because if that service is ever revived it must arrive
+ * already covered rather than needing someone to remember this paragraph.
+ *
+ * THE REAL LESSON IS THAT THIS LIST IS A SECOND OPINION ABOUT WHAT SHIPS. `vercel.json` is the
+ * first, and when the two disagree this one loses silently -- no error, no warning, just rules
+ * quietly not applying. If the routes move again, they must move here in the same commit.
  */
 const SHIPPED_SOURCE = [
   'apps/game/src/**/*.ts',
   'apps/game/src/**/*.tsx',
+  'apps/game/api/**/*.ts',
   'apps/api/src/**/*.ts',
   'apps/api/api/**/*.ts',
   'packages/core/src/**/*.ts',
