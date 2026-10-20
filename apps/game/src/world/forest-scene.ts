@@ -6,6 +6,7 @@ import type { Bus } from '../bus';
 import type { Input } from './input';
 import {
   CAMERA_FOCUS_Y,
+  RED_FEET_BELOW_SPAWN,
   INTERACT_RADIUS,
   PX_PER_WALK_FRAME,
   blocked,
@@ -152,7 +153,7 @@ export class ForestScene extends Phaser.Scene {
 
     const spawn = findObject(this.map, 'spawn-red');
     if (!spawn) throw new Error('Map has no "spawn-red" object');
-    this.position = { x: spawn.x + TILE / 2, y: spawn.y + TILE };
+    this.position = { x: spawn.x + TILE / 2, y: spawn.y + RED_FEET_BELOW_SPAWN };
     this.red = this.add
       .sprite(this.position.x, this.position.y, 'red', 'red-idle-down-0')
       .setOrigin(0.5, 1);
@@ -190,7 +191,7 @@ export class ForestScene extends Phaser.Scene {
   private resetToSpawn(): void {
     const spawn = findObject(this.map, 'spawn-red');
     if (!spawn) return;
-    this.position = { x: spawn.x + TILE / 2, y: spawn.y + TILE };
+    this.position = { x: spawn.x + TILE / 2, y: spawn.y + RED_FEET_BELOW_SPAWN };
     this.facing = 'down';
     this.stopWalking();
     this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));

@@ -12,6 +12,13 @@ export interface Vec {
  */
 export {
   TILE,
+  CAMERA_FOCUS_Y,
+  RED_FEET_BELOW_SPAWN,
+  PORTRAIT_WORLD_BAND,
+  cameraCentreTiles,
+  topEdgeRows,
+  TITLE_CARD_W,
+  visibleTitleColumns,
   MIN_VIEW,
   MAX_VIEW,
   MAX_ZOOM,
@@ -140,12 +147,6 @@ export const CAMERA_DEADZONE = { x: TILE, y: TILE * (5 / 8) } as const;
  * 63% of the remaining distance. Lower is snappier.
  */
 export const CAMERA_TAU = 120;
-
-/**
- * How far above her feet the camera frames Red, in game pixels. Centring on the feet puts her
- * head in the middle of the shot and wastes the top of the screen on sky.
- */
-export const CAMERA_FOCUS_Y = -TILE * (5 / 8);
 
 /**
  * Ground covered per frame of the walk cycle. Ties the cadence to WALK_SPEED, so changing the

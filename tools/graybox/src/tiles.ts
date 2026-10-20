@@ -216,6 +216,31 @@ export const TILE_NAMES: readonly string[] = [
   'gable',
   'wall-corner',
   'wall-window-lit',
+  /*
+   * The two things the game scores the player for READING, appended for the reason above,
+   * 2026-10-20.
+   *
+   * `content/game.json` has paid a hundred points for `cottage-door` since the errand existed and
+   * nothing was ever drawn for it: the trigger covered two tiles of flower bed and four of sand,
+   * both decor layers were empty over all six, and this list had no notice in it at all. The other
+   * notice WAS drawn, as `signpost` -- the identical tile to the decorative one four tiles from the
+   * spawn -- so the first post a player met taught them that a post with arms on it means nothing
+   * and the level's one mandatory beat then rested on a post with arms on it.
+   *
+   *   notice-board  the forest post on the gate approach: a pale portrait page nailed to a capped
+   *                 post, ruled with writing and dog-eared at the foot. `signpost` is unchanged and
+   *                 keeps the fork at (9,18), because a fork still needs marking and because arrows
+   *                 and paper now say two different things. See the long note in s-props.ts.
+   *   door-note     the cottage owner's `door`, repainted exactly, with a sheet pinned to its west
+   *                 leaf. A tile rather than a decor-above overlay: decor-above draws over Red, so
+   *                 a note laid there is painted across her face on the doorstep.
+   *
+   * Appending renumbers nothing, so `map-forest.json` stays valid as committed. Both have to be
+   * PLACED -- two lines in `forest-map.ts`, already done -- and `pnpm graybox` re-run to get them
+   * onto the sheet and into `tileset-forest.gids.json`.
+   */
+  'notice-board',
+  'door-note',
 ];
 
 /*

@@ -519,7 +519,25 @@ h2.otp-section-label {
      the first 10px of it being transparent. A 340px column ended at 359, covering her left side.
      306 ends at 325: 14px of air to the sprite box, 24 to the first pixel of her cape. The
      reading column loses about three characters a line, which the copy can afford; being able to
-     see who you are playing, it cannot. e2e/css-contract.spec.ts guards the number. */
+     see who you are playing, it cannot. e2e/css-contract.spec.ts guards the number.
+
+     AND THIS COLUMN STILL CANNOT BE MADE TO WORK ON A PHONE HELD SIDEWAYS. Measured on the built
+     preview at 844x390, 812x375, 740x360 and 667x375 -- the four landscape phone sizes the e2e
+     suite visits -- the numbers are identical at all four, because --otp-ui is 0.7, the zoom is 1
+     and scrollX is clamped at 0 on every one of them:
+
+       canvas starts at x 19      column 306 x 0.7 = 214px, ending at 233
+       Red's sprite box at 179    her painted cloak at 184..206
+       she is covered by 54px of box, 49px of paint: ALL of her
+
+     To leave her the 12px of air the landscape guard asks for, the column would have to end at
+     167 -- 148px wide here, which is 211px declared. 211 is not a column this copy can live in:
+     the note above records "Off the Path" alone as 235px of the 292px that 306 leaves inside the
+     padding, so the same change breaks the heading on the 1280 hero. The card is already scrolling
+     436px of copy through 278-308px at these sizes; taking a third of its width makes that worse.
+     So the stylesheet cannot fix it. scrollX being 0 says where the fix is: she is 160px from the
+     canvas's left edge because the camera is against the map's left bound and has nowhere to pan,
+     which is the camera's call and not this file's. docs/UX_REVIEW.md finding 11, still open. */
   width: min(calc(306px * var(--otp-ui)), 62%);
   height: 100%;
   overflow-y: auto;
@@ -527,8 +545,18 @@ h2.otp-section-label {
   display: flex;
   flex-direction: column;
   /* Centred as one block rather than pinned top-and-bottom: the column is as tall as the world,
-     and on a desktop that left a few hundred pixels of void between the intro and the button. */
-  justify-content: center;
+     and on a desktop that left a few hundred pixels of void between the intro and the button.
+
+     `safe`, because a centred flex column that overflows its scroller pushes its first child off
+     the START edge, where no scrollbar and no wheel reach: a browser will only scroll towards the
+     end. Measured on the built preview at 844x390, where the copy needs 436px in a 308px column,
+     the heading "Off the Path" sat 48.5px above the top of the card and could not be brought
+     back by any gesture, so the landscape phone's hero screen opened mid-sentence. (Centred, that
+     column reported a scrollHeight of 372 rather than 436: the overflow off the start edge is not
+     counted, which is the same blind spot in a number.) `safe` falls back to start alignment
+     exactly when the content overflows and changes nothing when it does not, so every size that
+     fits is pixel-identical -- 375x812 renders byte for byte as it did before. */
+  justify-content: safe center;
   padding: calc(22px * var(--otp-ui)) calc(24px * var(--otp-ui));
   /* A LIGHT CARD, as every other panel in the game already is: Shell body, Deep Purple frame
      (see .otp-dialogue, .otp-card). This was 88% Black, and it was the single largest reason the
@@ -582,6 +610,25 @@ h2.otp-section-label {
 }
 .otp-title__foot {
   padding-top: calc(16px * var(--otp-ui));
+  /*
+   * NOT STICKY, AND THE REASON IS WORTH KEEPING. Capping the card against the camera (the portrait
+   * block below) buys Red her feet back by letting the copy scroll on a short phone, and the first
+   * thing to scroll out of a card is its last child -- here, the primary call to action. Measured
+   * with the cap in: "Begin the walk" sits below the card's own fold at 568 and 600px tall, and in
+   * landscape at 844x390, where the copy needs 436px of a 308px column.
+   *
+   * `position: sticky` pins it, and every ground it can be given is wrong. The card is 94% Shell
+   * so that a little forest moves behind it, and a sticky strip paints ITS ground over the card's:
+   *   - the card's own mix, restated or inherited: 94% over 94% still leaves six per cent of the
+   *     prose showing, and at 844x390 the tail of "...what it does" ghosted legibly through the
+   *     hint line;
+   *   - flat Shell, or the mix plus `backdrop-filter`, which is the same stack by another route:
+   *     the ghost goes and on the 1280 hero the strip becomes a visibly lighter rectangle around
+   *     the button, because the card's six per cent is a blurred forest and the strip's is not.
+   * The two ends of one dial, and the hero screen is the wrong place to pay. Pinning it properly
+   * wants the prose in a scroll box of its own with the foot outside it, which is a wrapper in
+   * ui/Title.tsx -- not this file. Raised in the handback.
+   */
 }
 
 /*
@@ -613,7 +660,46 @@ h2.otp-section-label {
   .otp-title-panel {
     width: 100%;
     height: auto;
-    max-height: 64vh;
+    /*
+     * THE PORTRAIT TWIN OF THE COLUMN FIX ABOVE: a card docked to the bottom hides Red's FEET the
+     * way a column docked to the left hid her left side, and portrait was never checked.
+     *
+     * 64vh alone never bound -- the copy is 342-384px tall at every phone size -- so the only
+     * thing deciding where the card's top edge landed was the height of its own text, and on a
+     * short phone that put it over her. Measured on the built preview, air between the card's top
+     * edge and the bottom of her 32x48 sprite box:
+     *
+     *     375x812   +104      390x844   +99       430x932  +144      768x1024  +184
+     *     375x667    +11      360x640    -22      390x600   -50      320x568    -49
+     *
+     * Negative is the card standing on her boots. Everything at or below about 700px tall was
+     * negative or nearly so, and 320x568, 360x640 and 375x667 are all in the suite's own scale
+     * matrix.
+     *
+     * So the cap is taken off the WORLD rather than off the window. `--otp-canvas-y/h` are
+     * published by ui/stage.ts straight out of @otp/core's cameraFor(), so this moves when the
+     * camera moves instead of quoting a rectangle at it -- which is the whole lesson of the round
+     * the camera turned out to be 19.41 x 11.22 tiles and not 26 x 15.
+     *
+     * Why three fifths of the canvas. The camera is centred on Red: forest-scene.ts focuses
+     * `position.y + CAMERA_FOCUS_Y`, and CAMERA_FOCUS_Y is -TILE * 5/8, so her feet -- which are
+     * the bottom of her sprite box, the edge a bottom-docked card can cover -- sit five eighths of
+     * a tile BELOW the camera's midline, at every zoom. Three fifths leaves a tenth of the camera
+     * under that midline; the smallest portrait camera the game can make is 358 game px tall (a
+     * 568px phone: cameraFor({width: 320, height: 568})), and a tenth of 358 is 35px against the
+     * 20px her feet need -- so the remainder is air, and it only grows on a bigger camera.
+     *
+     * 64vh stays as the floor of the min() so a renderer that has not published the canvas box yet
+     * -- a test harness, the first frame -- gets the old cap rather than no cap at all.
+     * e2e/css-contract.spec.ts measures the air against Red's real position, not against this rule.
+     */
+    max-height: min(
+      64vh,
+      calc(
+        100dvh - var(--otp-canvas-y, 0px) - 0.6 * var(--otp-canvas-h, 0px) -
+          (10px * var(--otp-ui) + env(safe-area-inset-bottom))
+      )
+    );
     border: var(--otp-panel-border) solid var(--cyera-deep-purple);
     border-radius: var(--otp-r-panel);
     /* Portrait sat at 94% Black and is where the near-black measured worst (42% of the screen at

@@ -14,6 +14,11 @@
  */
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+// The camera, asked rather than quoted. cameraFor() is the one place the game and the art tooling
+// both derive the view from, so a test that wants to know whether a viewport is portrait, or what
+// zoom it runs at, asks it instead of restating a rectangle that was wrong for three rounds.
+import { REFERENCE_VIEWPORTS, TILE, cameraFor } from '@otp/core';
+import type { Size } from '@otp/core';
 import { startGame } from './helpers';
 
 const MEASURE = !!process.env['CSS_MEASURE'];
@@ -719,6 +724,182 @@ test('the title column leaves Red on the path it says she is standing on', async
       seen.clear,
       `air between the title column and Red's left edge at ${w}x${h}`,
     ).toBeGreaterThanOrEqual(12);
+  }
+});
+
+/* ---------------------- finding 11, the portrait half: the card and Red's FEET */
+
+interface TitleFrame {
+  /** Air between the card's top edge and the bottom of Red's sprite box. Negative is over her. */
+  clear: number;
+  /** Whole CSS pixels per game pixel, read off the running canvas. */
+  zoom: number;
+  /** How far the card's first line sits ABOVE the card. Positive means off the start edge. */
+  startEdge: number;
+  /** Whether the call to action can be brought wholly into the card's box by scrolling. */
+  ctaReachable: boolean;
+  /** The world left uncovered above the card, in TILES, which is the unit framing is argued in. */
+  bandTiles: number;
+  cardHeight: number;
+  feet: number;
+}
+
+/**
+ * Where Red is on the screen, and what the title card is doing about it.
+ *
+ * `red.png` frames are 32x48 with the origin at her FEET (world/forest-scene.ts), so her world y
+ * IS the bottom edge of her sprite box -- the edge a card docked to the bottom of the viewport
+ * covers first, exactly as the column covers her left edge in landscape. Her painted boots stop
+ * three rows above it (`RED_FRAME_H` 48 against `FOOT` 45 in tools/graybox), so measuring the box
+ * is the stricter of the two readings, which is the same choice the landscape test makes and for
+ * the same reason: the round before it, that test measured the edge that could not be covered and
+ * passed for a round while she was buried.
+ */
+function titleFrame(page: Page, tile: number): Promise<TitleFrame> {
+  return page.evaluate((px) => {
+    const scene = window.__otp!.scene as unknown as {
+      redPosition: { x: number; y: number };
+      cameras: { main: { width: number; scrollY: number } };
+    };
+    const canvas = document.querySelector('#game canvas')!.getBoundingClientRect();
+    const panel = document.querySelector<HTMLElement>('.otp-title-panel')!;
+    const card = panel.getBoundingClientRect();
+    const zoom = canvas.width / scene.cameras.main.width;
+    const feet = canvas.top + (scene.redPosition.y - scene.cameras.main.scrollY) * zoom;
+    const first = panel.firstElementChild!.getBoundingClientRect();
+
+    // Can a player actually get to the button? Scroll the card as far as it goes and look, then
+    // put it back: a card that merely CONTAINS its CTA somewhere below the fold is not the same
+    // claim, and a card whose content is stuck off the start edge cannot be scrolled at all.
+    const was = panel.scrollTop;
+    panel.scrollTop = panel.scrollHeight;
+    const cta = panel.querySelector('.otp-cta')!.getBoundingClientRect();
+    const reachable = cta.top >= card.top - 0.5 && cta.bottom <= card.bottom + 0.5;
+    panel.scrollTop = was;
+
+    return {
+      clear: Math.round(card.top - feet),
+      zoom,
+      startEdge: Math.round((card.top - first.top) * 10) / 10,
+      ctaReachable: reachable,
+      bandTiles: Math.round(((card.top - canvas.top) / (px * zoom)) * 100) / 100,
+      cardHeight: Math.round(card.height),
+      feet: Math.round(feet),
+    };
+  }, tile);
+}
+
+test('the title card leaves Red on the path in portrait, as the column does in landscape', async ({
+  page,
+}) => {
+  test.slow();
+  /*
+   * THE LANDSCAPE FIX ABOVE HAS A PORTRAIT TWIN, AND NOBODY HAD EVER LOOKED AT IT. Portrait docks
+   * the card UNDER the world rather than beside it, so the edge it can cover is her feet; and
+   * where landscape at least had a declared column width deciding the overlap, portrait had
+   * nothing. `max-height: 64vh` never bound -- the copy is 342-384px tall at every phone size and
+   * 64vh is 363 at the shortest of them -- so the card's top edge was wherever its own text
+   * happened to end, and on a short phone that was on her boots.
+   *
+   * Measured on the built preview before the fix, air between the card's top edge and the bottom
+   * of her 32x48 sprite box:
+   *
+   *     375x812  +104     390x844  +99     430x932  +144     768x1024  +184
+   *     375x667   +11     360x640  -22     390x600   -50     320x568    -49
+   *
+   * Negative is the card standing on her boots, and everything at or below about 700px tall was
+   * negative or within a dozen pixels of it. 320x568, 360x640 and 375x667 are all in this file's
+   * own --otp-ui scale matrix, so the suite was already visiting the sizes it was broken at.
+   *
+   * THE BOUND IS NOT TAKEN FROM THE STYLESHEET. screens.css caps the card against three fifths of
+   * the canvas box ui/stage.ts publishes; this reads Red's real position out of the running scene
+   * and the card's real rect out of the DOM. Change that fraction and the MEASUREMENT moves while
+   * the threshold stays put, which is the opposite of the guard the last round had to throw away.
+   * 12px is the landscape test's figure, deliberately the same number.
+   */
+  const sizes: Size[] = [
+    REFERENCE_VIEWPORTS.phone,
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+    { width: 375, height: 667 },
+    { width: 360, height: 640 },
+    // Both of the worst two, because they are not the same case: 390x600 takes --otp-ui 0.78 and
+    // 320x568 takes 0.7, so the card is a different height on each and only one of them would
+    // have proved the other.
+    { width: 390, height: 600 },
+    { width: 320, height: 568 },
+    REFERENCE_VIEWPORTS.tablet,
+  ];
+
+  for (const size of sizes) {
+    const where = `${size.width}x${size.height}`;
+    const camera = cameraFor(size);
+    /*
+     * Ask the camera whether this is even the frame under test. If the portrait rule ever moves,
+     * a size listed here could become a landscape camera and this test would quietly start
+     * measuring the side column -- passing, at a size nobody had checked.
+     */
+    expect(camera.portrait, `${where} is a portrait camera`).toBe(true);
+
+    await page.setViewportSize(size);
+    await page.goto('/');
+    await page.waitForSelector('#game[data-ready="true"]');
+
+    const seen = await titleFrame(page, TILE);
+    expect(seen.zoom, `the camera at ${where} is the one cameraFor() derives`).toBe(camera.zoom);
+    expect(
+      seen.clear,
+      `air between the title card and the bottom of Red's sprite box at ${where} ` +
+        `(card top ${seen.feet + seen.clear}, her feet ${seen.feet}, ` +
+        `${seen.bandTiles} tiles of world above the card)`,
+    ).toBeGreaterThanOrEqual(12);
+    /*
+     * And the price of the cap has to stay payable. A shorter card means the copy scrolls on a
+     * short phone, and a landing screen whose one Lime cannot be reached is not a trade worth
+     * making -- so the button has to come wholly into view.
+     */
+    expect(
+      seen.ctaReachable,
+      `"Begin the walk" can be scrolled wholly into the ${seen.cardHeight}px card at ${where}`,
+    ).toBe(true);
+  }
+});
+
+test('the title card never pushes its own first line off the top of its scroller', async ({
+  page,
+}) => {
+  test.slow();
+  /*
+   * A centred flex column that overflows its scroller pushes its FIRST child past the start edge,
+   * where no scrollbar and no wheel can reach it: the browser will only scroll towards the end.
+   * Measured on the built preview at 844x390, where the copy needs 436px of a 308px column: "Off
+   * the Path" sat 64px above the top of the card, so the hero screen of a marketing asset opened
+   * mid-sentence on a phone held sideways, with the title unreachable by any gesture.
+   *
+   * `justify-content: safe center` falls back to start alignment exactly when the content
+   * overflows and is identical to plain `center` when it does not, which is why 1280x800 is in
+   * the list -- it is the case that must not change.
+   *
+   * Both orientations, because the card overflows in both now: landscape phones by their height,
+   * and short portrait phones because the card above is capped against the camera.
+   */
+  for (const size of [
+    REFERENCE_VIEWPORTS.phoneLandscape,
+    { width: 667, height: 375 },
+    { width: 320, height: 568 },
+    { width: 360, height: 640 },
+    REFERENCE_VIEWPORTS.desktop,
+  ] as Size[]) {
+    const where = `${size.width}x${size.height}`;
+    await page.setViewportSize(size);
+    await page.goto('/');
+    await page.waitForSelector('#game[data-ready="true"]');
+
+    const seen = await titleFrame(page, TILE);
+    expect(
+      seen.startEdge,
+      `the title card's first line sits ${seen.startEdge}px above the card at ${where}`,
+    ).toBeLessThanOrEqual(0.5);
   }
 });
 

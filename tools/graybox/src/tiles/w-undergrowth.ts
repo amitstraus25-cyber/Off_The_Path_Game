@@ -3,8 +3,54 @@
  *
  * `bush`, `bush-low`, `bush-tall`, `flower-white`, `flower-pink`, `flower-red`, `rock`,
  * `toadstool-ring`. These are the most repeated frames in the game -- `forest-map.ts` scatters them
- * more than a hundred times between them -- so each one has to be legible at a 26-tile camera and
+ * more than a hundred times between them -- so each one has to be legible at the camera the player
+ * plays at (ask `cameraFor` in @otp/core; never write the number down again) and
  * uninteresting enough to survive being seen a hundred times.
+ *
+ * 2026-10-20, EIGHTH PASS: THE BLEED IS FINISHED. FIVE TILES MERGE, AND 92 PER CENT OF THE WORLD'S
+ * UNDERGROWTH SEAMS CLOSE WHERE 41 PER CENT DID.
+ *
+ * The seventh pass bled `bush` alone. Counted on the rendered tiles rather than argued about -- two
+ * plants laid side by side, flooded as one 64 x 32 strip, in each of the four pairings
+ * `forest-map.ts`'s flip can produce, weighted by how often the map actually lays that pair:
+ *
+ *     seams that merge in ALL four pairings     before    after
+ *     of the world's 178 adjacent pairs         73 (41%)  163 (92%)
+ *
+ * The 15 that still do not are every pair involving `bush-tall`, which does not bleed and should
+ * not; see the note on `BLEEDERS`.
+ *
+ * 1. `bush-low` BLEEDS, AND ITS SEAM IS PINNED TO `bush`'s ROWS. It carries 38 same-tile seams on
+ *    its own, but the number that mattered is 32: `bush|bush-low`, the second largest group in the
+ *    world after `bush|bush`, and the one no amount of work on either tile alone can close. A seam
+ *    between two different plants joins only where one tile reaches its right edge on a row the
+ *    other reaches its left. So every bleeding tile in this file now carries both of its edge runs
+ *    across a COMMON BAND -- rows 17..23 today, and the guard holds three. See `BUSH_LOW_BLEED`.
+ *
+ * 2. THE THREE FLOWER BUSHES BLEED. The Arrive frame is the payoff and the board banks flower
+ *    bushes along the whole base of the cottage wall; ours were still printing a row of discs there.
+ *    `MOUND_PLAN` carries the note. `flowerPlant` was split out of the three painters first, the way
+ *    `plainBushPlant` was in the sixth pass, so a guard can measure a silhouette -- the tiles are
+ *    byte-identical across that split, proved with `cmp`.
+ *
+ * 3. AND `SPIRE` FOUND THE LIMIT OF THE TECHNIQUE, which is the one finding here worth more than
+ *    the number. A bleed reads as foliage only where the plant's own body already comes within
+ *    three or four columns of the tile edge at the seam rows. `flower-red`'s body stopped six or
+ *    seven columns short, and three drafts -- long leaves, bare crescents, both -- each printed a
+ *    rectangular dark TAB hanging off the plant, visible only when the tile stands alone, which is
+ *    7 of its 10 tiles. The fix was to widen the plant's own waist rather than to hang a limb on it.
+ *    `bush-tall` fails the same test and is left unbled.
+ *
+ * 4. `CHEVRON`, `chevron()` and the tuft tone ladder MOVED TO `paint.ts`, which is this file's own
+ *    seventh-pass ask granted. The lawn and the plants' feet were drawing one mark from two copies
+ *    of one table. `w-ground.ts` is another owner's file and still carries its copy; raised again.
+ *
+ * THE GUARD IS AT THE FOOT OF THIS FILE and it is stricter than the seventh pass's in two ways that
+ * were both proved by breaking this pass's own work and watching them fire. It holds every ORDERED
+ * PAIR of the five as one connected mass, not each tile against itself; and it requires the plant
+ * to stand clear of its seam ABOVE AND BELOW rather than eight rows in total -- a seam slid onto a
+ * plant's foot leaves 16 rows clear above it, sails past a total, and prints a row of plants
+ * hanging off a rail.
  *
  * 2026-10-20, SEVENTH PASS: `bush` BLEEDS TO ITS SIDE EDGES, SO A BED OF THEM IS ONE MASS.
  *
@@ -138,10 +184,10 @@
  *   it was indistinguishable from `flower-pink` and bloom COUNT AND SIZE is what the board separates
  *   them by. `toadstool-ring` is two caps, not three.
  *
- * ON THE SIX-AXIS SCORE, SO NOBODY SPENDS A ROUND UNDOING THIS. Measured on a 26x15 camera of these
- * (the camera is really 19.41 x 11.22 tiles -- same aspect, a third fewer tiles, so the luma shares
- * below stand and only the absolute tile counts would move)
- * tiles alone, the pass is WORSE: distance 1.123 to 1.177, deep shade 4.97 to 4.51, keyline 3.91 to
+ * ON THE SIX-AXIS SCORE, SO NOBODY SPENDS A ROUND UNDOING THIS. These figures were taken on a grid
+ * of these tiles alone, a third larger than the real camera -- ask `cameraFor` in @otp/core, which
+ * is the only place that number may live. Same aspect, so the luma SHARES below stand and only the
+ * absolute tile counts would move. On them the pass is WORSE: distance 1.123 to 1.177, deep shade 4.97 to 4.51, keyline 3.91 to
  * 3.29, spread 30.98 to 29.08, only edge density up at 10.17 to 10.63. That is the arithmetic of
  * lightening the objects and it was predicted before it was measured. The counter-evidence is a
  * direct like-for-like probe of the board: its plain bush runs median luma 106 with 28 per cent of
@@ -173,9 +219,9 @@
  * **Measured before and after, with the lawn held constant.** This matters: `w-ground.ts` changed
  * during this pass and every tile here paints its own grass from it, so a straight before/after of
  * the finished tiles would have scored the lawn owner's work as mine. Both sides below are the
- * same six objects composited onto the same current grass, tiled to a 26x15 camera (really 19.41 x
- * 11.22 -- same aspect, so these shares hold; see @otp/core camera.ts) (the size the
- * variety axis is calibrated for):
+ * same six objects composited onto the same current grass, tiled to the same oversized grid as the
+ * paragraph above -- same aspect as the real camera, so these shares hold; `cameraFor` in @otp/core
+ * is the one place the size itself lives:
  *
  *     axis                          before   after   board   ratio after
  *     deep shade (% under luma 81)   25.28   24.54   25.71   0.95
@@ -256,6 +302,7 @@
  */
 import {
   Img,
+  chevron,
   ember,
   keyline,
   lumaOf,
@@ -264,6 +311,7 @@ import {
   rose,
   rust,
   tone,
+  tuftTone,
   valueNoise2D,
 } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
@@ -500,76 +548,31 @@ function contactShadow(img: Img, cx: number, cy: number, rx: number): void {
  * grass variant -- and the plants' feet carried dashes, so the two halves of the same world were
  * drawing grass two different ways. These are the same three blades at the same three tones.
  *
- * WHY THIS FILE REPEATS THE SHAPE INSTEAD OF IMPORTING IT. `CHEVRON` and `chevron()` are private to
- * `w-ground.ts`, which is not this round's file, and that file's chevron writes a LUMA into its
- * mark field rather than a colour -- it is built for a surface that has to resolve against its own
- * tone field, and these tiles paint onto finished pixels. The two halves agree by value today
- * (`tone('grass', 0.34 - i * 0.1)`, which `w-ground.ts` records as "the same three this project's
- * decor tiles have always cut their tufts in") and that agreement is currently maintained by hand.
- * It wants one home in `paint.ts`, the way `rose`, `ember` and `rust` got one; raised as an ask.
+ * THE SHAPE NOW HAS ONE HOME, which is this file's own ask from the seventh pass answered. `CHEVRON`,
+ * `chevron()`, `tuftTone()` and the `away()` rounding were private here and are now in `paint.ts`,
+ * moved unchanged -- the tiles they paint are byte-identical -- beside `rose`, `ember` and `rust`,
+ * which left this file the same way and for the same reason. The lawn and the plants' feet were
+ * drawing one mark from two copies of one table, agreeing by hand; the agreement is now structural.
+ * `w-ground.ts` is another owner's file this round and still carries its copy, so this is one home
+ * and not yet the only one. Raised as an ask again, with the one-pixel fault its copy still has.
  *
- * A TUFT STAYS WHOLE INSIDE ITS TILE, which is the one place this must NOT copy the lawn. The
- * lawn's chevrons deliberately wrap across a tile edge, because a grass tile is laid against its
- * own kind and a mark cut by the pitch is harder to find than one centred in every square. These
- * tiles are scattered, never tiled, so a wrapped tuft would print half a plant against whatever
- * grass tile happens to sit next door. Every root below is placed so the whole fan lands inside
- * 1..30 on both axes; the guard at the foot of this file checks it rather than trusting the
- * arithmetic.
+ * A TUFT STAYS WHOLE INSIDE ITS TILE, which is the one place this must NOT copy the lawn, and it is
+ * why the shared `chevron()` hands its caller a pixel rather than placing one. The lawn's chevrons
+ * deliberately wrap across a tile edge, because a grass tile is laid against its own kind and a mark
+ * cut by the pitch is harder to find than one centred in every square. These tiles are scattered,
+ * never tiled, so a wrapped tuft would print half a plant against whatever grass tile happens to sit
+ * next door. Every root below is placed so the whole fan lands inside 1..30 on both axes; the guard
+ * at the foot of this file checks it rather than trusting the arithmetic.
  */
-const TUFT_TOP = 0.34;
-const TUFT_STEP = 0.1;
-
-/**
- * `[base dx, tip dx, height relative to the centre blade]`, the lawn's own chevron.
- *
- * The centre blade is tallest and vertical; the two flankers spring from beside it and splay out,
- * so the fan is seven pixels across at the tips and one at the root. Three and not five: five welds
- * into one dark mass inside seven pixels and the tuft reads as a small mushroom, which is the
- * failure `w-ground.ts` records from the same experiment.
- */
-const SPRIG: readonly (readonly [number, number, number])[] = [
-  [0, 0, 0],
-  [-1, -2, -1],
-  [1, 2, -1],
-];
-
-/**
- * Round away from zero, which `Math.round` does not do and which this fan needs.
- *
- * `Math.round(0.5)` is 1 and `Math.round(-0.5)` is -0: it rounds half UP, not away from zero, so a
- * splay curve that is symmetric in the arithmetic comes out asymmetric on the pixels. The first
- * render of this tuft had it exactly: the right blade stepped 9, 8, 7 across three rows and the
- * left one stepped 3, 5, 5, which leaves the tip a single pixel two columns clear of the rest of
- * the mark. The guard at the foot of this file is what found it -- it was not visible at zoom 9 and
- * nothing in the six axes can see a one-pixel hole.
- */
-const away = (v: number): number => Math.sign(v) * Math.round(Math.abs(v));
 
 /**
  * One tuft per entry: `[x, y, h]` is the ROOT of the centre blade and its height, not the top.
  *
- * `i` counts DOWN from the point, which is where the tone ramp starts: a blade is lightest where it
- * catches the light and darkest at the root. The sideways step is squared in the remaining height,
- * so a blade stands vertical for its lower half and gives way only near its point -- a blade that
- * steps sideways on every row is a 45-degree dash, and a handful of those is pen hatching.
+ * The fan's geometry and its tone ladder are `paint.ts`'s; what is this file's is that the pixel is
+ * CLIPPED to the tile rather than wrapped round it, which `Img.px` does.
  */
 function blades(img: Img, spots: readonly (readonly [number, number, number])[]): void {
-  for (const [bx, by, h] of spots)
-    for (const [bdx, tdx, dh] of SPRIG) {
-      const n = h + dh;
-      // A BLADE MAY NOT STEP SIDEWAYS FASTER THAN ONE PIXEL A ROW, so the splay is capped by the
-      // blade's own height. Without the cap a short flanker reaches its full splay in a single row
-      // and lands two columns clear of the pixel below it: the stroke comes apart into a dash and a
-      // speck, which is what the three-row tufts did until the guard counted the marks. It also
-      // gives the two sizes their own silhouettes for free -- the four-row fan is seven across, the
-      // three-row one five -- rather than making the small one a clipped copy of the big one.
-      const splay = Math.sign(tdx) * Math.min(Math.abs(tdx), n - 1);
-      for (let i = 0; i < n; i++) {
-        const u = n < 2 ? 1 : i / (n - 1);
-        const x = bx + bdx + away(splay * (1 - u) ** 2);
-        img.px(x, by - (n - 1) + i, tone('grass', TUFT_TOP - i * TUFT_STEP));
-      }
-    }
+  for (const [bx, by, h] of spots) chevron(bx, by, h, (x, y, i) => img.px(x, y, tuftTone(i)));
 }
 
 /**
@@ -1282,8 +1285,10 @@ function leafBlades(m: Mass, list: readonly Blade[], gap = 0.3): void {
  * plant -- hard against the grass tile next door. The guard at the foot of this file holds the
  * resulting columns under luma 72, which no leaf on this plant can pass.
  *
- * On `bush-low`, `bush-tall` and the four flower bushes nothing reaches an edge, so this is a
- * no-op on them and needs no flag to say so.
+ * It is a property of the EDGE and not of a flag, and that is what let the eighth pass bleed four
+ * more tiles without touching a line of this function. `bush-low` and the three flower bushes now
+ * reach their edges and are resolved here on the way past; `bush-tall`, which does not reach them,
+ * is a no-op. Nothing had to be told which is which.
  */
 function rim(m: Mass, gap = 0.3): void {
   for (let y = 0; y < TILE; y++)
@@ -1549,7 +1554,7 @@ type Petals = {
  * it is symmetric about, and the mirror pass therefore buys a second silhouette for nothing.
  *
  * `bush-low` and `bush-tall` are the two new ones, and they differ in FOOTPRINT rather than in
- * outline detail, which is what reads at a 26-tile camera: `bush` fills its tile, `bush-low` is a
+ * outline detail, which is what reads at the camera: `bush` fills its tile, `bush-low` is a
  * wide bank in the bottom half with lawn above it, `bush-tall` is a narrow leaning shrub with lawn
  * either side. Three plants with three footprints and a meaningful mirror is six frames where
  * there was one.
@@ -1575,6 +1580,11 @@ type Petals = {
  * After: the same two tiles touch on 9 rows, and on 9, 11, 11 and 9 of the four pairings
  * `forest-map.ts`'s flip can produce. The 12 rows that still have lawn between them are the crowns
  * and the feet, which is the waist this is meant to be and not a failure to merge.
+ *
+ * (THE EIGHTH PASS ANSWERED THE QUESTION THE NEXT PARAGRAPH LEAVES OPEN: `bush-low` and the three
+ * flower bushes bleed too, and `bush-tall` still does not. The reasoning below is why `bush` went
+ * FIRST and it stands; `BUSH_LOW_BLEED` and `MOUND_PLAN` carry the rest, and `BLEEDERS` carries why
+ * `bush-tall` is the one that stays out.)
  *
  * WHY `bush` AND NOT ONE OF THE OTHER TWO. Counted off the map as it generates today -- the map
  * owner is mid-pass, so these move by a few either way: 187 `bush`, 118 `bush-low`, 16 `bush-tall`,
@@ -1686,7 +1696,7 @@ const BUSH: readonly Lobe[] = [
  * under a spray of spade leaves, so all three came out of `plainBush` with the same solidity to
  * three decimal places -- 0.775, 0.762, 0.779 -- and the same perimeter-to-area ratio, 10.5 to
  * 10.8. Measured where it matters: `bush` and `bush-low` are 189 and 142 of the map's 353 bushes
- * and their silhouettes agreed on 70 per cent of their pixels. At a 26-tile camera that is one
+ * and their silhouettes agreed on 70 per cent of their pixels. At the camera that is one
  * plant, and the spawn frame shows it -- a row of four by the stall reads as four copies.
  *
  * TWO HYPOTHESES ARE ALREADY DISPROVEN HERE AND NEITHER IS BEING RE-RUN. Mirroring is a no-op on a
@@ -1713,6 +1723,62 @@ const BUSH: readonly Lobe[] = [
  * instead of from a point, and they are six to nine long, so the gaps between them WIDEN outwards
  * into lawn notches instead of closing into a net. Rendered and looked at, not assumed.
  */
+/*
+ * 2026-10-20, EIGHTH PASS: `bush-low` BLEEDS TOO, and its seam is pinned to the same rows as
+ * `bush`'s, which is the half of this that is not a copy of the seventh pass.
+ *
+ * WHY IT IS NEXT, counted off the map as it generates today. Of the world's 178 horizontally
+ * adjacent undergrowth pairs, `bush|bush` is 73 and already merged; the next two groups are
+ * `bush-low|bush-low` at 38 and `bush|bush-low` at 32 -- and the 32 are the interesting ones,
+ * because no amount of work on either tile ALONE closes them. A seam between two different plants
+ * joins only if the row where one tile's mass reaches its right edge is a row where the other's
+ * reaches its left. The seventh pass left `bush` bleeding on rows 14..24 and 16..26 and nothing else
+ * bleeding at all, so a `bush` standing beside a `bush-low` was still a disc beside a disc.
+ *
+ * SO THERE IS A COMMON BAND, and it is the one new idea in this pass. Every tile in this file that
+ * bleeds carries both of its edge runs ACROSS ROWS 19..22, whatever else each run does above or
+ * below that. Four rows is enough for the mass to be four-connected across any join; keeping them
+ * common makes every bleeding tile join every other one, in all four of the pairings
+ * `forest-map.ts`'s flip can produce, without pinning the runs themselves to one height -- `bush`
+ * runs 14..24 and 16..26, this plant 17..24 and 18..25, and the three flower bushes differ again.
+ * The guard at the foot of this file proves the joins by flooding every ordered pair rather than by
+ * checking the band, which is the same distinction as between (b) and (f) in the seventh pass.
+ *
+ * It cannot rule a line across a bed, which was the worry worth having: a seam is two columns of the
+ * plants' own near-black, so it is a VERTICAL mark, and the horizontal edge a bed shows is each
+ * plant's own crown, which these five do not share.
+ *
+ * AND IT IS STILL A WAIST ON A BANK. This plant is the one the seventh pass declined to bleed, for a
+ * stated reason: it is a bank in the bottom third and "merging a run of those end to end is how you
+ * draw the 26-tile hedge `forest-map.ts` has its own guard against". That reason is answered rather
+ * than overruled. The bank's widest rows are 21..27 and the seam deliberately does NOT sit there: it
+ * is pinned up at 17..25, so a bed of these joins at the waist and leaves the lawn coming back in
+ * under the join, between one bank's foot and the next. Five rows of plant stand clear above the
+ * seam and four below it.
+ */
+const BUSH_LOW_BLEED: readonly Lobe[] = [
+  // Two crescents a side at different heights, for the reason `BUSH_BLEED` records: one clump a side
+  // bridges correctly and prints a flat-topped slab doing it, because a single crescent is a single
+  // arc and its keyline runs dead straight across the top of the join.
+  //
+  // Radii are smaller than `bush`'s -- 2.6 to 3.0 against 2.8 to 3.2 -- because this plant's own
+  // clumps are 2.0 to 3.0 and a crescent fatter than the body it grows out of reads as a separate
+  // object pushed against the tile edge. They reach `r * 1.32` inboard, so the left pair covers
+  // columns 0..5 against a body whose left edge is column 3 or 4 over these rows, and the right pair
+  // columns 26..31 against a body reaching 27 or 28.
+  //
+  // THE LEFT PAIR SITS TWO AND A HALF ROWS ABOVE THE RIGHT PAIR, and that offset is not decoration:
+  // a bleed laid at the same height on both edges makes the plant its own mirror across its widest
+  // rows. Measured on this drawing, equal heights took `bush-low` from 0.712 of its own mirror to
+  // 0.786 against a 0.80 cap -- a hundredth and a half from costing `forest-map.ts`'s flip the
+  // second frame it buys on 142 tiles. Offset, it sits at 0.731. `BUSH_BLEED` carries the same
+  // offset for the same reason and records it.
+  { x: 1.6, y: 18.6, r: 2.8, band: 1 },
+  { x: 0.4, y: 20.8, r: 2.6, band: 0 },
+  { x: 30.6, y: 21.2, r: 2.8, band: 1 },
+  { x: 31.4, y: 23.2, r: 2.4, band: 0 },
+];
+
 const BUSH_LOW: readonly Lobe[] = [
   { x: 10.6, y: 21.6, r: 3.0, band: 2 },
   { x: 14.8, y: 20.8, r: 2.9, band: 2 },
@@ -1724,6 +1790,7 @@ const BUSH_LOW: readonly Lobe[] = [
   { x: 17.0, y: 24.6, r: 2.6, band: 0 },
   { x: 21.4, y: 23.6, r: 2.4, band: 0 },
   { x: 24.4, y: 24.8, r: 2.0, band: 0 },
+  ...BUSH_LOW_BLEED,
 ];
 
 /*
@@ -1791,7 +1858,7 @@ const BUSH_TALL: readonly Lobe[] = [
  * zoom 9. At matched scale the board's bush is unmistakably a BRIGHT object: six or seven big flat
  * leaves at luma 110 to 170 covering most of it, with the dark reduced to one-pixel lines between
  * them and the scallop round the outside. Ours was the photographic negative of that -- a dark body
- * with narrow pale slivers lying on it -- and at a 26-tile camera a field of them reads as holes
+ * with narrow pale slivers lying on it -- and at the camera a field of them reads as holes
  * punched in the lawn, which is the complaint the client has made twice.
  *
  * The histogram did not say so, and that is worth recording because it cost most of a round. Probed
@@ -2077,6 +2144,19 @@ const BUSH_LOW_BLADES: readonly Blade[] = [
   // break the straight channel the radiating fronds leave up the middle.
   leaf(11.4, 24.4, 0.3, 4.6, 0.42, 2.4),
   leaf(16.6, 24.6, 0.21, 4.2, 0.36, 2.4),
+  // THE FOUR FRONDS THAT RUN OFF THE TILE. Same job as `bush`'s two pairs and the same reason:
+  // without them a bleed is bare mass, a five-pixel pad of flat mid-green at each edge with no leaf
+  // in it, and a bed of these reads as banks joined by webbing. With them two adjacent tiles meet
+  // frond to frond across the fold.
+  //
+  // Narrow and long like the rest of this plant -- half-width 2.3 to 2.5 against `bush`'s spades at
+  // 2.4 to 2.6, and six long -- so the bleed is made of the same leaf the plant is. Last in the
+  // list, and least lit, because `leafBlades` resolves an overlap in favour of the EARLIER blade and
+  // nothing at a tile edge should win a pixel from the body.
+  leaf(5.4, 18.8, 0.47, 5.8, 0.4, 2.5),
+  leaf(4.8, 21.0, 0.53, 5.4, 0.32, 2.3),
+  leaf(26.6, 21.2, 0.97, 5.6, 0.32, 2.5),
+  leaf(27.0, 23.4, 0.04, 5.2, 0.26, 2.3),
 ];
 
 /*
@@ -2137,31 +2217,185 @@ const MOUND: readonly Lobe[] = [
   { x: 22, y: 20, r: 4.5, band: 0 },
 ];
 
-const moundFlower = (b: Petals): Painter =>
-  function paintMoundFlower(img) {
-    ground(img, 1);
-    contactShadow(img, 16, 27, 12);
-    const m = mass();
-    foliage(m, MOUND, 5200);
-    lift(m, BUSH_LIFT);
-    slope(m, 0.62);
-    seat(m, 4, 3, 0.75);
-    weather(m, 5233, 0.07);
-    leafBlades(m, rosette(16, 17, 5, 9.5, 5250, 6));
-    // Fewer blades than a plain bush, and none where a bloom is going to land. A flower bush on the
-    // board carries both -- `55 620 170 110 7` shows three lit leaf patches between its two daisies
-    // -- but a blade under a bloom is nine pixels of drawing nobody will ever see.
-    const plant = render(m, leafTone);
-    // Far enough apart to keep a run of leaf between them. At eleven pixels across, blooms any
-    // closer than this merge into one white mass and the plant loses its count.
-    bloom(plant, 10, 14, 3, b, 0.04);
-    bloom(plant, 19, 13, 3, b, -0.05);
-    bloom(plant, 15, 21, 3, b, 0);
-    bloom(plant, 24, 19, 2, b, -0.08);
-    ring(plant, LEAF_LINE);
-    img.blit(plant, 0, 0);
-    blades(img, FOOT_TUFTS['flower-white']!);
+/**
+ * A flower bush, written as data rather than as three near-identical painters.
+ *
+ * Gathered this round for the same reason `plainBushPlant` was split out of `plainBush` in the
+ * sixth: the guards at the foot of this file have to measure a SILHOUETTE, and a finished tile is
+ * opaque ground with the plant blitted onto it -- a diff against the bare lawn also catches the
+ * contact shadow, which is a solid ellipse filling in exactly the notches the shape is carried by.
+ * Until now only the three plain bushes had that handle, so the three flower bushes were the half of
+ * this file no guard could see, and this round bleeds all three of them.
+ *
+ * Nothing about any of the three drawings changed in the gathering: the tiles are byte-identical
+ * across it, proved with `cmp` rather than assumed.
+ */
+type Mark = readonly [x: number, y: number, arm: number, drift: number];
+
+type Flower = {
+  /** Which lawn the painter stands on, and where its contact shadow sits. */
+  readonly variant: 1 | 2;
+  readonly shadow: readonly [number, number, number];
+  /** `[x, top, foot, lean]` each, laid in before the clumps so they grow over them. */
+  readonly stems?: readonly (readonly [number, number, number, number])[];
+  readonly lobes: readonly Lobe[];
+  readonly seed: number;
+  /**
+   * The four crescents and four leaves that run this plant's mass off its two side edges, so a bank
+   * of them prints as one mass. See the note above `FLOWER_BLEED`.
+   */
+  readonly bleed: readonly Lobe[];
+  readonly edge: readonly Blade[];
+  /** `[cx, cy, n, rx, seed, len]` for `rosette`. */
+  readonly rosette: readonly [number, number, number, number, number, number];
+  /** `arm` 0 is a bud: the same flower a week earlier. Drawn in order, so later marks sit on top. */
+  readonly marks: readonly Mark[];
+  readonly tufts: string;
+};
+
+/**
+ * The plant alone, blooms included, ringed on its own transparent scratch.
+ *
+ * `rim()` runs last for the reason it runs last on a plain bush: any mass that has reached a tile
+ * edge resolves to the plant's own near-black there, so a bed of these merges at the fold instead of
+ * printing a lit leaf cut off square against the lawn. It is a no-op on a plant that reaches no
+ * edge, so it needs no flag.
+ */
+const flowerPlant = (f: Flower, b: Petals): Img => {
+  const m = mass();
+  for (const [x, top, foot, lean] of f.stems ?? []) stemInto(m, x, top, foot, lean);
+  foliage(m, [...f.lobes, ...f.bleed], f.seed);
+  lift(m, BUSH_LIFT);
+  slope(m, 0.62);
+  seat(m, 4, 3, 0.75);
+  weather(m, f.seed + 33, 0.07);
+  // Fewer blades than a plain bush, and none where a bloom is going to land. A flower bush on the
+  // board carries both -- `55 620 170 110 7` shows three lit leaf patches between its two daisies
+  // -- but a blade under a bloom is nine pixels of drawing nobody will ever see.
+  //
+  // The edge leaves come LAST, after the rosette, because `leafBlades` resolves an overlap in
+  // favour of the earlier blade and nothing at a tile edge should win a pixel from the body.
+  const [rx, ry, n, rr, rseed, rlen] = f.rosette;
+  leafBlades(m, [...rosette(rx, ry, n, rr, rseed, rlen), ...f.edge]);
+  rim(m);
+  const plant = render(m, leafTone);
+  for (const [x, y, arm, drift] of f.marks) {
+    if (arm === 0) budAt(plant, x, y, b);
+    else bloom(plant, x, y, arm, b, drift);
+  }
+  ring(plant, LEAF_LINE);
+  return plant;
+};
+
+const flowerTile =
+  (f: Flower, b: Petals): Painter =>
+  (img) => {
+    ground(img, f.variant);
+    contactShadow(img, f.shadow[0], f.shadow[1], f.shadow[2]);
+    img.blit(flowerPlant(f, b), 0, 0);
+    blades(img, FOOT_TUFTS[f.tufts]!);
   };
+
+/*
+ * THE THREE FLOWER BUSHES BLEED TOO, and the Arrive frame is the whole reason.
+ *
+ * DESIGN_BOARD section 3 calls the arrival frame the payoff and the single biggest gap on the
+ * board, and the board's own cottage has "flower bushes banked along the whole base of the wall".
+ * `forest-map.ts` banks ours the same way. So however well the map clumps them, the payoff shot was
+ * still going to print a row of separate discs with eleven pixels of lawn between each pair, at
+ * exactly the camera's tile pitch -- the same fault the seventh pass fixed for `bush` and for
+ * nothing else.
+ *
+ * Counted on the map as it generates today, the flower bushes carry 21 of the world's 178 adjacent
+ * undergrowth pairs, and eight of those 21 are between two DIFFERENT flower bushes or between a
+ * flower bush and a plain one. That is why all three go in one pass rather than the biggest one
+ * first: a mixed bank only merges if every tile in it reaches its edges on rows the others do too.
+ * Hence the common band (see the note above `BUSH_LOW_BLEED`) -- every run below spans rows 19..22,
+ * and the guard at the foot of this file floods every ordered pair rather than taking that on
+ * trust.
+ *
+ * WHAT IS THE SAME AS THE PLAIN BUSHES' BLEED: two crescents a side at different heights, their
+ * centres outside the safe box so `lobeInto` clips each to an inboard crescent whose edge at column
+ * 0 or 31 is its own wobbled rim rather than a ruled line; two leaves a side running off the tile,
+ * so the join is leaf to leaf and not a pad of bare mass; the left pair offset from the right so
+ * the plant does not become its own mirror; and `rim()`, which takes the outermost column to a
+ * channel, so the same drawing is a fold at a seam and a keyline at the end of a run.
+ *
+ * WHAT IS DIFFERENT: these three are built from `rosette` rather than from written-out leaves, and
+ * a rosette's blades radiate from one centre, so there is nothing in it that can reach a tile edge.
+ * The edge leaves are therefore written out per plant, which is also why `Flower` carries them.
+ * `flower-red` needs the longest of them -- its spire is only 20 columns wide against the mound's
+ * 28, so its leaves are six and a half pixels where the mound's are five and a half.
+ */
+const MOUND_PLAN: Flower = {
+  variant: 1,
+  shadow: [16, 27, 12],
+  lobes: MOUND,
+  seed: 5200,
+  // The mound already reaches column 29 on rows 18..20, so its right bleed has barely a pixel to
+  // travel; its left edge sits at column 2 to 5, which is what sets the leaves' length.
+  // A MEASURED NEGATIVE RESULT, left here because it looked like the obvious move and the render
+  // disagreed. A mound is very nearly a disc, so it has the least of its own asymmetry to spend:
+  // bled with matched crescents it comes back 0.82 of its own mirror against 0.75 before, and
+  // `forest-map.ts` flips about half its decor. Shrinking the LEFT pair to r 2.4-2.6 bought that
+  // back -- 0.79 -- and printed a bad join: two of these laid left edge to left edge, which is one
+  // of the four pairings, met as a thin dark spike with lawn either side of it rather than as
+  // foliage. The mirror score is not guarded on the flower bushes and the join is the whole point
+  // of the round, so the crescents are matched and the asymmetry is spent on HEIGHT alone.
+  bleed: [
+    { x: 1.6, y: 17.6, r: 2.8, band: 1 },
+    { x: 0.4, y: 20.6, r: 3.0, band: 0 },
+    { x: 30.6, y: 19.2, r: 3.0, band: 1 },
+    { x: 31.4, y: 21.8, r: 2.8, band: 0 },
+  ],
+  edge: [
+    leaf(5.2, 17.8, 0.47, 5.8, 0.36, 2.8),
+    leaf(4.6, 20.8, 0.53, 5.4, 0.3, 2.6),
+    leaf(26.8, 19.2, 0.97, 5.6, 0.3, 2.8),
+    leaf(27.2, 21.8, 0.04, 5.2, 0.26, 2.6),
+  ],
+  rosette: [16, 17, 5, 9.5, 5250, 6],
+  // Far enough apart to keep a run of leaf between them. At eleven pixels across, blooms any closer
+  // than this merge into one white mass and the plant loses its count.
+  marks: [
+    [10, 14, 3, 0.04],
+    [19, 13, 3, -0.05],
+    [15, 21, 3, 0],
+    [24, 19, 2, -0.08],
+  ],
+  tufts: 'flower-white',
+};
+
+/*
+ * Three plants, three silhouettes, three bloom sizes -- and three hues, which is the separator these
+ * tiles were missing until the third pass. `flower-pink` and `flower-red` both came off `cloak` and
+ * shape alone had to tell them apart; they are the board's own white daisy, its coral pink and its
+ * vermilion, and a player can name them at the camera they play at.
+ *
+ * Each takes the eye the board gives it: orange in the white daisy, pale gold in the red cross, and
+ * cream in the pink one, which is where its white pips go at this size.
+ */
+
+/**
+ * `fur` held to the bottom of its own range, not the whole of it.
+ *
+ * The petals used to run `tone('fur', 0..1)` -- 196 to 255 -- and peaked at a measured 247, which
+ * made them the brightest thing in any frame they appear in at the map's current flower density.
+ * The board's own daisy does reach white, but it reaches it on a bush whose body probes at a median
+ * of 124 with a quarter of it under luma 72, and against that a white cross is a flower. Against our
+ * foliage it was a headlight.
+ *
+ * Held over 0 to 0.42 the petals run 196 to about 232, which is within a few levels of the 226 the
+ * review asked for and still unmistakably white: the step from petal to the leaf under it is over
+ * eighty levels, where the board's is about a hundred. The eye stays `gold` and stays bright -- one
+ * orange pixel is what the board gives it and it is three per cent of the bloom.
+ */
+const MOUND_PETALS: Petals = {
+  tone: (t) => tone('fur', t),
+  lo: 0,
+  hi: 0.42,
+  eye: (t) => tone('gold', t),
+};
 
 /**
  * `flower-pink`: the board's other bedding plant, the one growing beside the daisies at 1180 600.
@@ -2186,41 +2420,61 @@ const SPRAWL: readonly Lobe[] = [
   { x: 21, y: 22, r: 4, band: 0 },
 ];
 
-const sprawlFlower = (b: Petals): Painter =>
-  function paintSprawlFlower(img) {
-    ground(img, 2);
-    contactShadow(img, 16, 27, 12);
-    const m = mass();
-    stemInto(m, 9, 9, 20, -2);
-    stemInto(m, 15, 8, 21, 2);
-    stemInto(m, 22, 11, 22, 3);
-    foliage(m, SPRAWL, 6300);
-    lift(m, BUSH_LIFT);
-    slope(m, 0.62);
-    seat(m, 4, 3, 0.75);
-    weather(m, 6333, 0.07);
-    leafBlades(m, rosette(15, 19, 5, 8.5, 6350, 5.6));
-    const plant = render(m, leafTone);
-    // Five open blooms gathered on the lit side with one reaching out right, which is how the board
-    // strings them: a clump, not a scattering. They sit ON the foliage with only a pixel or two of
-    // stem showing above -- a bloom with a clear run of bare stem under it is the one thing the
-    // board never draws.
-    bloom(plant, 8, 11, 2, b, 0.05);
-    bloom(plant, 16, 9, 2, b, -0.04);
-    bloom(plant, 12, 16, 2, b, 0.02);
-    bloom(plant, 24, 14, 2, b, -0.07);
-    budAt(plant, 20, 12, b);
-    ring(plant, LEAF_LINE);
-    img.blit(plant, 0, 0);
-    blades(img, FOOT_TUFTS['flower-pink']!);
-  };
+const SPRAWL_PLAN: Flower = {
+  variant: 2,
+  shadow: [16, 27, 12],
+  stems: [
+    [9, 9, 20, -2],
+    [15, 8, 21, 2],
+    [22, 11, 22, 3],
+  ],
+  lobes: SPRAWL,
+  seed: 6300,
+  // This one is offset the other way round from the mound's -- its RIGHT pair is the high one -- so
+  // a bank that alternates the two does not print one fold at one height all the way along it.
+  bleed: [
+    { x: 1.6, y: 19.0, r: 2.8, band: 1 },
+    { x: 0.4, y: 21.2, r: 2.6, band: 0 },
+    { x: 30.6, y: 16.8, r: 2.8, band: 1 },
+    { x: 31.4, y: 19.0, r: 2.6, band: 0 },
+  ],
+  edge: [
+    leaf(5.4, 19.2, 0.47, 5.8, 0.34, 2.8),
+    leaf(4.8, 21.4, 0.53, 5.4, 0.28, 2.6),
+    leaf(26.6, 17.0, 0.97, 5.6, 0.34, 2.8),
+    leaf(27.0, 19.2, 0.04, 5.2, 0.28, 2.6),
+  ],
+  rosette: [15, 19, 5, 8.5, 6350, 5.6],
+  // Five open blooms gathered on the lit side with one reaching out right, which is how the board
+  // strings them: a clump, not a scattering. They sit ON the foliage with only a pixel or two of
+  // stem showing above -- a bloom with a clear run of bare stem under it is the one thing the board
+  // never draws.
+  marks: [
+    [8, 11, 2, 0.05],
+    [16, 9, 2, -0.04],
+    [12, 16, 2, 0.02],
+    [24, 14, 2, -0.07],
+    [20, 12, 0, 0],
+  ],
+  tufts: 'flower-pink',
+};
+
+/**
+ * `rose` held LOW on its ramp, not high, which is the opposite of the obvious choice.
+ *
+ * The pull keeps the red channel untouched, so the top of the ramp is pinned near luma 165 --
+ * lighter than the lawn it stands on, which is both wrong against the board (its pink cross probes
+ * 101 to 141) and the one thing a flower must never be. Held over 0 to 0.42 the petals run 108 to
+ * 145 and the plant reads as a pink mass sitting ON the grass instead of dissolving into it.
+ */
+const SPRAWL_PETALS: Petals = { tone: rose, lo: 0, hi: 0.42, eye: (t) => tone('wall', t) };
 
 /**
  * `flower-red`: the board's vermilion spray, Explore frame at `889 389 194 167 6`.
  *
  * REBUILT THIS ROUND, and the reason is the one thing a review can see that a measurement cannot.
  * `flower-pink` and `flower-red` were reported as near-indistinguishable at 1x, and putting the two
- * tiles side by side at a 26-tile camera says that is right -- not because the hues failed, but
+ * tiles side by side at the camera says that is right -- not because the hues failed, but
  * because both plants carried FIVE blooms of the same size, so both read as "small red dots on a
  * green mound" and the sprawl-versus-spire distinction lived entirely in a silhouette that is only
  * six pixels different in height.
@@ -2235,44 +2489,97 @@ const sprawlFlower = (b: Petals): Painter =>
  * twenty pixels wide rather than sixteen, because a nine-pixel bloom on a sixteen-pixel plant
  * covers it. The clumps climb in a zigzag with real gaps, which is what the board's spray does --
  * its foliage is an open, lacy thing with lawn showing through it, not a column.
+ *
+ * EIGHTH PASS: THE WAIST OPENS FOUR COLUMNS FURTHER, AND IT IS THE LIMIT OF THE BLEED RATHER THAN A
+ * RETUNE. Read this before narrowing it again.
+ *
+ * This is the plant that found where the technique stops working. Its body reached columns 6 to 25
+ * at its widest, so the bleed was being asked to cross six or seven columns of bare lawn on each
+ * side -- against three or four on `flower-pink` and one on `flower-white`. Three drafts were
+ * rendered and all three failed the same way, and ONLY when the tile stands alone on grass, which
+ * is 7 of the 10 the map lays:
+ *
+ *   - two long leaves a side (half-width 2.4, length 6.6): a rectangular dark TAB hanging off each
+ *     flank. `leafBlades` resolves a shared border into a channel, and a leaf that long abuts the
+ *     rosette's own blades head-on, so its whole root end came out as a two-pixel, eight-row
+ *     near-black wall separating the tab from the body. Measured at columns 6 and 7: 43 to 63 luma
+ *     for eight consecutive rows, where `bush` at the same place runs 158, 63, 160, 160.
+ *   - the leaves pulled outboard and shortened: the wall broke up, the tab did not.
+ *   - crescents alone and no leaf at all: two dark horizontal BARS, which is worse than either.
+ *
+ * The answer was not a better limb. It was to stop asking for one: `(10,16)` and `(21,16)` move out
+ * to `(8.4,17.4)` and `(22.8,17.0)` and the two clumps at y 21 spread by a column each, so the
+ * plant's own waist reaches columns 4 to 27 and the bleed has the same three columns to cross that
+ * `flower-pink` has. The spire's identity is its top half -- rows 3 to 15 at columns 11 to 20, one
+ * bud and two big crosses -- and not one clump there moves.
+ *
+ * THE RULE THIS LEAVES, which is what `bush-tall` is also judged by: a bleed reads as foliage only
+ * where the plant's own body already comes within three or four columns of the tile edge on the
+ * seam rows. Further than that and whatever crosses the gap is a limb, however it is drawn.
  */
 const SPIRE: readonly Lobe[] = [
   { x: 16, y: 7, r: 2.8, band: 2 },
   { x: 12, y: 10, r: 3, band: 2 },
   { x: 20, y: 11, r: 2.8, band: 1 },
   { x: 15, y: 13, r: 3.2, band: 1 },
-  { x: 10, y: 16, r: 3, band: 2 },
-  { x: 21, y: 16, r: 3, band: 1 },
+  // The waist, opened out. See the eighth-pass note above: these four are what make the bleed a
+  // widening of the plant rather than a pair of ears stuck on it.
+  { x: 8.4, y: 17.4, r: 3.2, band: 2 },
+  { x: 22.8, y: 17.0, r: 3.2, band: 1 },
   { x: 16, y: 17, r: 3.2, band: 1 },
-  { x: 12, y: 21, r: 3.2, band: 0 },
-  { x: 20, y: 21, r: 3.2, band: 0 },
+  { x: 11.2, y: 21, r: 3.2, band: 0 },
+  { x: 20.8, y: 21, r: 3.2, band: 0 },
   { x: 16, y: 23, r: 3.4, band: 0 },
 ];
 
-const spireFlower = (b: Petals): Painter =>
-  function paintSpireFlower(img) {
-    ground(img, 1);
-    contactShadow(img, 16, 27, 11);
-    const m = mass();
-    stemInto(m, 16, 4, 26, -1);
-    foliage(m, SPIRE, 7400);
-    lift(m, BUSH_LIFT);
-    slope(m, 0.62);
-    seat(m, 4, 3, 0.75);
-    weather(m, 7433, 0.07);
-    leafBlades(m, rosette(16, 15, 5, 8.5, 7450, 5.8));
-    const plant = render(m, leafTone);
-    // One closed bud at the tip, then TWO open crosses at `arm` 3 -- nine pixels, the mound's own
-    // bloom size -- one high on the lit side and one low and forward. Three marks, not five, and
-    // two of them big: that is the whole difference from `flower-pink` at a distance, and it is the
-    // board's own arrangement rather than a guess.
-    budAt(plant, 16, 6, b);
-    bloom(plant, 12, 12, 3, b, 0.05);
-    bloom(plant, 19, 19, 3, b, -0.04);
-    ring(plant, LEAF_LINE);
-    img.blit(plant, 0, 0);
-    blades(img, FOOT_TUFTS['flower-red']!);
-  };
+const SPIRE_PLAN: Flower = {
+  variant: 1,
+  shadow: [16, 27, 11],
+  stems: [[16, 4, 26, -1]],
+  lobes: SPIRE,
+  seed: 7400,
+  // SIX CRESCENTS, NOT FOUR, and the two extra ones are a fault the render caught and no number
+  // did. The spire is the narrow one -- columns 6 to 25 at its waist against the mound's 2 to 29 --
+  // so the first draft of this bleed asked one long leaf a side to cross six columns of lawn on its
+  // own. Rendered alone on grass, which is how 7 of its 10 tiles stand, each side came out as a
+  // rectangular dark TAB hanging off the plant with a notch of lawn between the tab and the body:
+  // the thing the brief names as the whole risk, a merged mass reading as a rectangle, and it was
+  // invisible in a bed because a neighbour fills the notch.
+  //
+  // So each side gets a SHOULDER clump inboard of the two edge ones, at x 4.6 and 27.6, which is
+  // where the gap was. The mass now runs body-shoulder-crescent-edge without a break and the leaf
+  // lies on it rather than bridging it. It widens the plant's waist, which is the price of bleeding
+  // a narrow plant at all; the spire's identity is its top half -- rows 3..15 at columns 11..20 --
+  // and nothing there moves.
+  bleed: [
+    { x: 4.6, y: 19.0, r: 2.8, band: 1 },
+    { x: 1.6, y: 17.8, r: 3.0, band: 1 },
+    { x: 0.4, y: 20.0, r: 2.8, band: 0 },
+    { x: 27.6, y: 20.6, r: 2.8, band: 1 },
+    { x: 30.6, y: 19.4, r: 3.0, band: 1 },
+    { x: 31.4, y: 21.6, r: 2.8, band: 0 },
+  ],
+  edge: [
+    leaf(4.6, 18.2, 0.47, 5.0, 0.34, 2.8),
+    leaf(4.0, 20.4, 0.53, 4.6, 0.28, 2.6),
+    leaf(27.2, 19.8, 0.97, 5.0, 0.32, 2.8),
+    leaf(27.6, 22.0, 0.04, 4.6, 0.26, 2.6),
+  ],
+  rosette: [16, 15, 5, 8.5, 7450, 5.8],
+  // One closed bud at the tip, then TWO open crosses at `arm` 3 -- nine pixels, the mound's own
+  // bloom size -- one high on the lit side and one low and forward. Three marks, not five, and two
+  // of them big: that is the whole difference from `flower-pink` at a distance, and it is the
+  // board's own arrangement rather than a guess.
+  marks: [
+    [16, 6, 0, 0],
+    [12, 12, 3, 0.05],
+    [19, 19, 3, -0.04],
+  ],
+  tufts: 'flower-red',
+};
+
+/** The board's vermilion, taken over nearly the whole of `ember`: the one bloom that is a colour. */
+const SPIRE_PETALS: Petals = { tone: ember, lo: 0.08, hi: 0.95, eye: (t) => tone('gold', t) };
 
 /* ------------------------------------------------------------------------------------- the rock */
 
@@ -2562,7 +2869,7 @@ const toadstoolRing: Painter = (img) => {
   // per tile the map owner can group them without the group becoming a blob.
   //
   // They sit left of centre so the mirror pass finally buys something here too: flipped, the big
-  // cap stands on the right and the pair leans the other way, which at a 26-tile camera is a
+  // cap stands on the right and the pair leans the other way, which at the camera is a
   // different clump rather than the same one twice. The three still stand clear of one another --
   // domes that touch keyline their outsides only and read as one lumpy mass.
   one(22, 13, 4.2, 2.7, 21, [
@@ -2580,40 +2887,9 @@ const toadstoolRing: Painter = (img) => {
 /* ----------------------------------------------------------------------------------- the tiles */
 
 export const UNDERGROWTH_TILES: Record<string, (img: Img) => void> = {
-  // Three plants, three silhouettes, three bloom sizes -- and now three hues, which is the one
-  // separator these tiles were missing. Until this pass `flower-pink` and `flower-red` both came
-  // off `cloak` and shape alone had to tell them apart; they are now the board's own white daisy,
-  // its coral pink and its vermilion, and a player can name them at a 26-tile camera.
-  //
-  // Each takes the eye the board gives it: orange in the white daisy, pale gold in the red cross,
-  // and cream in the pink one, which is where its white pips go at this size.
-  /*
-   * `fur` held to the bottom of its own range, not the whole of it.
-   *
-   * The petals used to run `tone('fur', 0..1)` -- 196 to 255 -- and peaked at a measured 247, which
-   * made them the brightest thing in any frame they appear in at the map's current flower density.
-   * The board's own daisy does reach white, but it reaches it on a bush whose body probes at a
-   * median of 124 with a quarter of it under luma 72, and against that a white cross is a flower.
-   * Against our foliage it was a headlight.
-   *
-   * Held over 0 to 0.42 the petals run 196 to about 232, which is within a few levels of the 226 the
-   * review asked for and still unmistakably white: the step from petal to the leaf under it is over
-   * eighty levels, where the board's is about a hundred. The eye stays `gold` and stays bright --
-   * one orange pixel is what the board gives it and it is three per cent of the bloom.
-   */
-  'flower-white': moundFlower({
-    tone: (t) => tone('fur', t),
-    lo: 0,
-    hi: 0.42,
-    eye: (t) => tone('gold', t),
-  }),
-  // `rose` is held LOW on its ramp, not high, and that is the opposite of the obvious choice. The
-  // pull keeps the red channel untouched, so the top of the ramp is pinned near luma 165 -- lighter
-  // than the lawn it stands on, which is both wrong against the board (its pink cross probes 101 to
-  // 141) and the one thing a flower must never be. Held over 0 to 0.42 the petals run 108 to 145
-  // and the plant reads as a pink mass sitting ON the grass instead of dissolving into it.
-  'flower-pink': sprawlFlower({ tone: rose, lo: 0, hi: 0.42, eye: (t) => tone('wall', t) }),
-  'flower-red': spireFlower({ tone: ember, lo: 0.08, hi: 0.95, eye: (t) => tone('gold', t) }),
+  'flower-white': flowerTile(MOUND_PLAN, MOUND_PETALS),
+  'flower-pink': flowerTile(SPRAWL_PLAN, SPRAWL_PETALS),
+  'flower-red': flowerTile(SPIRE_PLAN, SPIRE_PETALS),
   // TWO PLANTS IN THREE TILES, which is not what this comment used to claim. `bush` and `bush-tall`
   // are one plant at two footprints -- a mound of clumps under a spray of broad spade leaves --
   // and `bush-low` is now a second species: a low clump of long narrow fronds with lawn cutting
@@ -2674,12 +2950,15 @@ export const UNDERGROWTH_TILES: Record<string, (img: Img) => void> = {
  *      laid next door -- DESIGN_BOARD section 4.2, "the shared border ring". Checked by holding
  *      every border pixel within 32 levels of one of the four bare grass variants, which a clipped
  *      blade cannot be.
- *   5. AND `bush` BLEEDS ON PURPOSE. The seventh pass runs `bush`'s mass off its two side edges so
- *      a bed of them merges, which is the one place 4 above had to give way -- and it gives way to
- *      a stricter check rather than to a hole. Guard 5 owns those two columns: one run on each,
- *      its height, the plant standing clear above and below it, the rows the two share, the
- *      darkness of every pixel in them, and that two tiles side by side are ONE connected mass in
- *      all four mirror pairings. Row 0 and row 31 stay under 4 on every tile including this one.
+ *   5. AND FIVE TILES BLEED ON PURPOSE. The seventh pass ran `bush`'s mass off its two side edges
+ *      so a bed of them merges; the eighth does the same for `bush-low` and the three flower
+ *      bushes, which between them carry 105 of the world's 178 adjacent undergrowth pairs. That is
+ *      the one place 4 above had to give way, and it gives way to a stricter check rather than to
+ *      a hole. Guard 5 owns those two columns on all five: one run on each, its height against the
+ *      plant's own, the plant standing clear above AND below it, the rows the two edges share, the
+ *      darkness of every pixel in them, the band all five hold in common, and that ANY TWO of them
+ *      laid side by side are ONE connected mass in all four mirror pairings. Row 0 and row 31 stay
+ *      under 4 on every tile including these.
  */
 
 /** The eight neighbours, for marks the eye reads as one stroke along a diagonal. */
@@ -2855,8 +3134,28 @@ export const PLANT_GUARDS = [
   // the four edge lobes and their leaves add a measured 93 px of plant (358 -> 451), which is the
   // whole of the change. The floor is untouched, which is the end of this bound that does the work.
   { name: 'bush', plant: plainBushPlant(BUSH, BUSH_BLADES, 4100), lo: 300, hi: 470 },
-  { name: 'bush-low', plant: plainBushPlant(BUSH_LOW, BUSH_LOW_BLADES, 4300), lo: 215, hi: 320 },
+  // And `bush-low`'s went 320 -> 380 in the eighth for exactly the same reason: its four edge
+  // clumps and four edge fronds add a measured 90 px of plant (272 -> 362), against `bush`'s 93.
+  // Both floors are untouched, which is the end of these bounds that does the work -- the cheap way
+  // to pass the overlap cap below is to shrink a plant, and nothing here has got smaller.
+  { name: 'bush-low', plant: plainBushPlant(BUSH_LOW, BUSH_LOW_BLADES, 4300), lo: 215, hi: 380 },
   { name: 'bush-tall', plant: plainBushPlant(BUSH_TALL, BUSH_TALL_BLADES, 4400), lo: 260, hi: 370 },
+] as const;
+
+/**
+ * And the three flower bushes' plants, which until this round no guard in this file could see.
+ *
+ * Same handle, same reason: `flowerPlant` exists so a SILHOUETTE can be recovered without diffing a
+ * finished tile against the bare lawn, which also catches the contact shadow. They are not in the
+ * overlap guard above -- that one is DESIGN_BOARD section 3's "two or three bush silhouettes", which
+ * is about the plain bushes, and the three flower bushes are already three shapes with three bloom
+ * counts. What they are in is the bleed guard below, which this round extends to all five tiles that
+ * merge.
+ */
+export const FLOWER_PLANTS = [
+  { name: 'flower-white', plant: flowerPlant(MOUND_PLAN, MOUND_PETALS) },
+  { name: 'flower-pink', plant: flowerPlant(SPRAWL_PLAN, SPRAWL_PETALS) },
+  { name: 'flower-red', plant: flowerPlant(SPIRE_PLAN, SPIRE_PETALS) },
 ] as const;
 
 const PLANT_OVERLAP_CAP = 0.64;
@@ -2933,19 +3232,31 @@ const TOADSTOOL_CAPS = 2;
 /* 4. Nothing DRAWN lands on a tile's own edge, except where a tile bleeds ON PURPOSE. */
 
 /*
- * THE ONE EXEMPTION, and why it is named here rather than widened into the cap.
+ * THE FIVE THAT BLEED, in one list, because two guards need the same set and a set written twice
+ * drifts. Guard 4 exempts their side columns; guard 5 owns them.
  *
- * `bush` runs its mass off its left and right edges so a bed of them merges (see the note above
- * `BUSH_BLEED`), so those two columns cannot be held against bare lawn -- they are 138 levels off
- * it, which is the whole point of the change. They are not unguarded: guard 5 below owns them, and
- * it is stricter than this one, because it holds the shape of the run, its height, the plant
- * standing clear above and below it, and the darkness of every pixel in it.
- *
- * TOP AND BOTTOM STAY GUARDED ON EVERY TILE INCLUDING THIS ONE. A tile bleeds sideways because a
- * bed of bushes is a horizontal run; nothing in this file has any business on row 0 or row 31, and
- * the vertical seam a bleed downward would print has no fix.
+ * `bush-tall` is the one plant with a bleed and no business having one, and it is left out on
+ * purpose rather than by omission: it is deliberately narrow with lawn either side of it, the map
+ * lays 18 of them in 15 adjacent pairs, and the seventh pass's reasoning for declining it holds.
+ * The eighth pass found the same wall from the other side -- see the note above `SPIRE`.
  */
-const EDGE_BLEEDS: readonly string[] = ['bush'];
+const BLEEDERS = [...PLANT_GUARDS, ...FLOWER_PLANTS].filter((p) => p.name !== 'bush-tall');
+
+/*
+ * THE EXEMPTION, and why it is named here rather than widened into the cap.
+ *
+ * These five run their mass off their left and right edges so a bed of them merges (see the note
+ * above `BUSH_BLEED`), so those two columns cannot be held against bare lawn -- they are 138 levels
+ * off it, which is the whole point of the change. They are not unguarded: guard 5 below owns them,
+ * and it is stricter than this one, because it holds the shape of each run, its height against the
+ * plant's own, the plant standing clear above and below it, the darkness of every pixel in it, and
+ * the merge itself.
+ *
+ * TOP AND BOTTOM STAY GUARDED ON EVERY TILE INCLUDING THESE. A tile bleeds sideways because a bed
+ * of bushes is a horizontal run; nothing in this file has any business on row 0 or row 31, and the
+ * vertical seam a bleed downward would print has no fix.
+ */
+const EDGE_BLEEDS: readonly string[] = BLEEDERS.map((p) => p.name);
 
 /*
  * The cap is a step, not an equality, and the difference is a finding rather than a convenience.
@@ -3015,26 +3326,27 @@ const BORDER_STEP_CAP = 32;
   }
 }
 
-/* 5. The bush bleeds, it bleeds as a waist, the seam is dark, and two of them are ONE mass. */
+/* 5. The five that bleed bleed as a waist, the seam is dark, and any two of them are ONE mass. */
 
 /*
  * This guard exists because the fault it protects against is invisible to everything else we have.
  *
- * The thing being held is a MERGE: `bush` runs its mass off its left and right edges so that a bed
- * of them prints as one lobed mass rather than as separate discs with lawn between (see the note
- * above `BUSH_BLEED`). Nothing already in this file can see that. The border guard above cannot --
- * it is the check the bleed had to be exempted from. The six-axis score cannot: swapping a 26-tile
- * hedge for a treeline moved its distance by 0.006, because a bush and a crown have nearly the same
- * luma histogram, and closing an 11-pixel moat between two bushes moves rather less than that. And
- * a render cannot be relied on either, because the failure mode is a quiet one -- pull the two
- * edge lobes out of `BUSH` and the tile still paints, still passes every other guard in this file,
- * and goes straight back to the market garden.
+ * The thing being held is a MERGE: five tiles run their mass off their left and right edges so that
+ * a bed of them prints as one lobed mass rather than as separate discs with lawn between (see the
+ * notes above `BUSH_BLEED`, `BUSH_LOW_BLEED` and `MOUND_PLAN`). Nothing already in this file can
+ * see that. The border guard above cannot -- it is the check the bleed had to be exempted from. The
+ * six-axis score cannot: swapping a 26-tile hedge for a treeline moved its distance by 0.006,
+ * because a bush and a crown have nearly the same luma histogram, and closing an 11-pixel moat
+ * between two bushes moves rather less than that. And a render cannot be relied on either, because
+ * the failure mode is a quiet one -- pull the edge lobes out of any one of these and the tile still
+ * paints, still passes every other guard in this file, and goes straight back to the market garden.
  *
- * SIX BOUNDS, AND NONE OF THEM IS WRITTEN IN TERMS OF THE CONSTANT IT GUARDS. The numbers below are
- * literals chosen from the drawing -- a plant 23 rows tall, a board channel one or two pixels wide,
- * leaves that run 107 to 175 on this plant -- not from `BUSH_BLEED`'s radii or centres. Putting the
- * lobes back where they were, or shrinking them, or lifting the seam column to a lit value, each
- * fails at least one of these, and (f) fails on all of them.
+ * SEVEN BOUNDS, AND NONE OF THEM IS WRITTEN IN TERMS OF THE CONSTANT IT GUARDS. Every number below
+ * is read off the RENDERED plant -- its own height, its own run, its own luma -- or is a literal
+ * taken from the drawing: a board channel one or two pixels wide, leaves that bottom out at 107 on
+ * these plants. None of them comes from a bleed list's radii or centres. Putting any plant's lobes
+ * back where they were, or shrinking them, or lifting a seam column to a lit value, each fails at
+ * least one of these, and (f) fails on all of them.
  *
  *   (0) THE PLANT IS ONE MASS. Checked first, because every bound below is satisfiable by a lobe
  *       that has drifted off the body entirely, and what that leaves is a chip of foliage ringed on
@@ -3042,161 +3354,238 @@ const BORDER_STEP_CAP = 32;
  *   (a) ONE RUN PER EDGE. Column 0 and column 31 each carry exactly one contiguous run of plant.
  *       Two runs means a stray tip has been clipped somewhere else on the edge, which is the fault
  *       the border guard catches on every other tile and which this one would otherwise hide.
- *   (b) THE RUN IS A WAIST. 4 to 14 rows. Under four will not survive the neighbour's own wobble
- *       and the merge comes apart into a dotted join; over fourteen on a plant 23 rows tall is a
- *       bar, and a run of bars is the rectangle this change is meant not to be.
- *   (c) THE PLANT STANDS CLEAR of its own seam, above and below, by at least 8 rows in total. This
- *       is what makes a bed read as lobe-waist-lobe rather than as a hedge with a scalloped top:
- *       satisfying (b) by letting the whole plant shrink to the height of its seam would pass (b)
- *       and fail the drawing.
+ *   (b) THE RUN IS A WAIST, held two ways because the two plants at the extremes need different
+ *       ones. At least 4 rows: under that the merge comes apart into a dotted join once the
+ *       neighbour's own wobble is counted. At most 14 rows AND at most 0.62 of the plant's own
+ *       rendered height: the absolute ceiling is the drawing's -- a bar on a plant 21 rows tall --
+ *       and the ratio is what carries the same rule onto `bush-low`, which is 18 rows, and onto
+ *       `flower-red`, which is 26. A fixed ceiling alone would let a short plant be bled to a bar;
+ *       a ratio alone would let a tall one carry a 16-row seam.
+ *   (c) THE PLANT STANDS CLEAR of its own seam, ABOVE AND BELOW, two rows each at the very least
+ *       and six in total. This is what makes a bed read as lobe-waist-lobe rather than as a hedge
+ *       with a scalloped top. The seventh pass asked for eight rows TOTAL and nothing else, which a
+ *       seam pinned hard against the top of a plant passes while printing a plant hanging off a
+ *       rail; the per-side floor is what this pass added, and it is the half that sees the picture.
  *   (d) THE TWO EDGES OVERLAP by at least 4 rows. `forest-map.ts` flips about half its decor, so a
  *       seam is one of four pairings; rows the two edges share are the rows that join in ALL of
  *       them. They are deliberately not identical -- see the note on `BUSH_BLEED` -- and this is
  *       the floor under how far apart they may drift.
- *   (e) THE SEAM IS DARK. Every pixel of both runs at or under luma 72. The channel band is 46 to
+ *   (e) THE SEAM IS DARK. Every pixel of every run at or under luma 72. The channel band is 46 to
  *       56 and `LEAF_LINE` is 43, so this says "the edge column is the plant's own near-black". A
  *       lit leaf reaching a tile edge -- the thing `rim()` exists to prevent -- is 107 at its
- *       darkest on this plant and fails by 35.
- *   (f) AND THE ONE THAT CANNOT BE SATISFIED BY ACCIDENT: two `bush` plants laid side by side are
- *       ONE four-connected mass, in all four mirror pairings. This is the merge itself, stated as
- *       the question a player's eye asks, and it is independent of every number above.
+ *       darkest on these plants and fails by 35.
+ *   (f) AND THE ONE THAT CANNOT BE SATISFIED BY ACCIDENT: ANY TWO of the five, laid side by side in
+ *       either order, are ONE four-connected mass in all four mirror pairings. 25 ordered pairs,
+ *       100 joins. This is the merge itself, stated as the question a player's eye asks, and it is
+ *       independent of every number above.
+ *
+ *       EVERY ORDERED PAIR, NOT JUST A TILE AGAINST ITSELF, and that is the one change in this
+ *       guard that is about the eighth pass rather than the seventh. Counted off the map, 50 of the
+ *       world's 178 adjacent undergrowth pairs are between two DIFFERENT plants -- `bush|bush-low`
+ *       alone is 32, second only to `bush|bush` -- and a seam between two different tiles joins
+ *       only if the rows where one reaches its right edge are rows where the other reaches its
+ *       left. Guarding each tile against itself would pass a set of five whose seams had drifted
+ *       into five separate bands, and the bed would still be full of holes.
+ *   (g) AND WHY (f) HOLDS: all ten runs share a band of at least 3 rows. This is the design -- see
+ *       the note above `BUSH_LOW_BLEED` -- and it is checked separately from (f) so that a drift
+ *       gets a message naming the band and the plant that broke it, rather than a flood failure on
+ *       some pair that happens to be measured first. Three rows is the floor; today it is seven.
  */
 
 const SEAM_RUN_ROWS = [4, 14] as const;
-const SEAM_CLEAR_ROWS = 8;
+const SEAM_RUN_SHARE = 0.62;
+const SEAM_CLEAR_ROWS = 6;
+const SEAM_CLEAR_EACH = 2;
 const SEAM_SHARED_ROWS = 4;
 const SEAM_DARK_CAP = 72;
+const SEAM_COMMON_ROWS = 3;
+
+type Run = { from: number; to: number };
+
+/** The rows of one edge column that carry plant, as contiguous runs. */
+const runsOn = (on: Uint8Array, x: number): Run[] => {
+  const out: Run[] = [];
+  let from = -1;
+  for (let y = 0; y <= TILE; y++) {
+    const lit = y < TILE && on[y * TILE + x] === 1;
+    if (lit && from < 0) from = y;
+    if (!lit && from >= 0) {
+      out.push({ from, to: y - 1 });
+      from = -1;
+    }
+  }
+  return out;
+};
+
+/**
+ * Two tiles laid side by side and flooded as one 64 x 32 strip: is the mass that touches the left
+ * tile the same mass that touches the right one?
+ */
+const spansSeam = (left: Uint8Array, right: Uint8Array): number => {
+  const strip = new Uint8Array(TILE * 2 * TILE);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      strip[y * TILE * 2 + x] = left[y * TILE + x]!;
+      strip[y * TILE * 2 + TILE + x] = right[y * TILE + x]!;
+    }
+  return marksOf(strip, false, TILE * 2).filter((m) => m.w > TILE).length;
+};
 
 {
-  const plant = PLANT_GUARDS.find((g) => g.name === 'bush')!.plant;
-  const on = opaqueMask(plant);
+  const edgesOf = new Map<string, Run[]>();
 
-  /*
-   * THE PLANT IS ONE MASS BEFORE IT IS ANYTHING ELSE, and this check is here because the note on
-   * `BUSH_BLEED` claims it and (f) below cannot see it. An edge lobe whose centre drifts outward
-   * until its crescent no longer meets the body is still a perfectly good bleed by every bound
-   * above -- one run on each edge, the right height, dark, overlapping -- and it still merges with
-   * the neighbour, so (f) still finds exactly one mass spanning the seam. What it leaves is a chip
-   * of foliage ringed on its own, floating off the side of every bush in the world.
-   */
-  if (marksOf(on).length !== 1)
-    throw new Error(
-      `bush's plant is ${marksOf(on).length} separate masses, not 1. An edge lobe has drifted far ` +
-        `enough out that its crescent no longer meets the body, so ring() outlines it on its own ` +
-        `and every bush in the world carries a chip of foliage floating beside it. Pull the lobe ` +
-        `inboard until it overlaps the body: see the note above BUSH_BLEED.`,
-    );
+  for (const { name, plant } of BLEEDERS) {
+    const on = opaqueMask(plant);
 
-  /** The rows on one edge column that carry plant, as contiguous runs. */
-  const runsOn = (x: number): { from: number; to: number }[] => {
-    const out: { from: number; to: number }[] = [];
-    let from = -1;
-    for (let y = 0; y <= TILE; y++) {
-      const lit = y < TILE && on[y * TILE + x] === 1;
-      if (lit && from < 0) from = y;
-      if (!lit && from >= 0) {
-        out.push({ from, to: y - 1 });
-        from = -1;
-      }
-    }
-    return out;
-  };
-
-  const edges = [0, TILE - 1].map((x) => ({ x, runs: runsOn(x) }));
-  const say = edges
-    .map((e) => `col ${e.x}: ${e.runs.map((r) => `${r.from}..${r.to}`).join(',') || 'none'}`)
-    .join('; ');
-
-  for (const e of edges) {
-    if (e.runs.length !== 1)
+    /*
+     * (0) THE PLANT IS ONE MASS BEFORE IT IS ANYTHING ELSE, and this check is here because the
+     * bleed notes claim it and (f) below cannot see it. An edge lobe whose centre drifts outward
+     * until its crescent no longer meets the body is still a perfectly good bleed by every bound
+     * below -- one run on each edge, the right height, dark, overlapping -- and it still merges
+     * with the neighbour, so (f) still finds exactly one mass spanning the seam. What it leaves is
+     * a chip of foliage ringed on its own, floating off the side of every bush in the world.
+     */
+    const masses = marksOf(on).length;
+    if (masses !== 1)
       throw new Error(
-        `bush must bleed to each of its side edges as exactly ONE run, not ${e.runs.length} ` +
-          `(${say}). None at all is the market garden coming back -- a bed of bushes separated by ` +
-          `11 px of lawn at the camera's own tile pitch, which is the lattice DESIGN_BOARD section 2 ` +
-          `names in the title and spawn frames. Two is a leaf tip clipped somewhere else on the edge, ` +
-          `which guard 4 cannot see on this tile because this guard owns its side columns. ` +
-          `See the note above BUSH_BLEED.`,
+        `${name}'s plant is ${masses} separate masses, not 1. An edge lobe has drifted far enough ` +
+          `out that its crescent no longer meets the body, so ring() outlines it on its own and ` +
+          `every copy of this tile carries a chip of foliage floating beside it. Pull the lobe ` +
+          `inboard until it overlaps the body, or give it a shoulder clump to stand on: see the ` +
+          `note above SPIRE, which is the plant this happened to.`,
       );
-    const rows = e.runs[0]!.to - e.runs[0]!.from + 1;
-    if (rows < SEAM_RUN_ROWS[0] || rows > SEAM_RUN_ROWS[1])
-      throw new Error(
-        `bush's seam on column ${e.x} is ${rows} rows, outside ${SEAM_RUN_ROWS.join('..')} (${say}). ` +
-          `Under the floor the merge comes apart into a dotted join once the neighbour's own wobble ` +
-          `is counted; over the ceiling, on a plant 23 rows tall, the bleed is a bar and a bed of ` +
-          `them is one rectangle with a scalloped top.`,
-      );
-  }
 
-  let top = TILE;
-  let bottom = -1;
-  for (let y = 0; y < TILE; y++)
-    for (let x = 0; x < TILE; x++)
-      if (on[y * TILE + x]) {
-        if (y < top) top = y;
-        if (y > bottom) bottom = y;
-      }
-  const seamTop = Math.min(...edges.map((e) => e.runs[0]!.from));
-  const seamBottom = Math.max(...edges.map((e) => e.runs[0]!.to));
-  const clear = seamTop - top + (bottom - seamBottom);
-  if (clear < SEAM_CLEAR_ROWS)
-    throw new Error(
-      `bush stands only ${clear} row(s) clear of its own seam (plant ${top}..${bottom}, seam ` +
-        `${seamTop}..${seamBottom}), under ${SEAM_CLEAR_ROWS}. The bleed has to be a WAIST: the plant ` +
-        `bulges above and below it in every tile, so a bed reads as lobe-waist-lobe. A plant no ` +
-        `taller than its own seam passes the run bounds above and still prints a hedge.`,
-    );
+    const edges = [0, TILE - 1].map((x) => ({ x, runs: runsOn(on, x) }));
+    const say = edges
+      .map((e) => `col ${e.x}: ${e.runs.map((r) => `${r.from}..${r.to}`).join(',') || 'none'}`)
+      .join('; ');
 
-  const shared = edges
-    .map((e) => e.runs[0]!)
-    .reduce((a, b) => ({ from: Math.max(a.from, b.from), to: Math.min(a.to, b.to) }));
-  const overlap = Math.max(0, shared.to - shared.from + 1);
-  if (overlap < SEAM_SHARED_ROWS)
-    throw new Error(
-      `bush's two side seams share only ${overlap} row(s), under ${SEAM_SHARED_ROWS} (${say}). ` +
-        `forest-map.ts flips about half its decor, so a seam is one of four pairings and only the ` +
-        `rows BOTH edges carry are the rows that join in all of them.`,
-    );
+    let top = TILE;
+    let bottom = -1;
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++)
+        if (on[y * TILE + x]) {
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+    const height = bottom - top + 1;
 
-  for (const e of edges)
-    for (let y = e.runs[0]!.from; y <= e.runs[0]!.to; y++) {
-      const l = lumaOf(plant.get(e.x, y));
-      if (l > SEAM_DARK_CAP)
+    for (const e of edges) {
+      if (e.runs.length !== 1)
         throw new Error(
-          `bush puts luma ${l.toFixed(0)} on column ${e.x} at row ${y}, over the ${SEAM_DARK_CAP} cap. ` +
-            `The edge column has to be the plant's own near-black, because the SAME column is a fold ` +
-            `between two bushes on 73 of the world's seams and a keyline against bare lawn on every ` +
-            `other bush edge. A lit leaf there is cut off square against the grass tile next door. ` +
-            `rim() is what holds this; check it still runs after leafBlades.`,
+          `${name} must bleed to each of its side edges as exactly ONE run, not ${e.runs.length} ` +
+            `(${say}). None at all is the market garden coming back -- a bed of bushes separated ` +
+            `by 11 px of lawn at the camera's own tile pitch, which is the lattice DESIGN_BOARD ` +
+            `section 2 names in the title and spawn frames. Two is a leaf tip clipped somewhere ` +
+            `else on the edge, which guard 4 cannot see on this tile because this guard owns its ` +
+            `side columns. See the note above BUSH_BLEED.`,
+        );
+      const rows = e.runs[0]!.to - e.runs[0]!.from + 1;
+      // The ceiling is the drawing's own: a bar on a short plant and a bar on a tall one are not
+      // the same number of rows, so the plant's rendered height has a say in its own bound.
+      const ceiling = Math.min(SEAM_RUN_ROWS[1], Math.floor(height * SEAM_RUN_SHARE));
+      if (rows < SEAM_RUN_ROWS[0] || rows > ceiling)
+        throw new Error(
+          `${name}'s seam on column ${e.x} is ${rows} rows, outside ${SEAM_RUN_ROWS[0]}..${ceiling} ` +
+            `on a plant ${height} rows tall (${say}). Under the floor the merge comes apart into a ` +
+            `dotted join once the neighbour's own wobble is counted; over the ceiling the bleed is ` +
+            `a bar and a bed of them is one rectangle with a scalloped top.`,
         );
     }
 
-  /*
-   * (f) The merge itself. Two plants, side by side, in each of the four pairings the map's flip can
-   * produce, flooded as one 64 x 32 strip: the mass that touches the left tile must be the same
-   * mass that touches the right one.
-   */
-  const mirrored = mirrorMask(on);
-  const pairings: [string, Uint8Array, Uint8Array][] = [
-    ['plain|plain', on, on],
-    ['plain|flipped', on, mirrored],
-    ['flipped|plain', mirrored, on],
-    ['flipped|flipped', mirrored, mirrored],
-  ];
-  for (const [label, left, right] of pairings) {
-    const strip = new Uint8Array(TILE * 2 * TILE);
-    for (let y = 0; y < TILE; y++)
-      for (let x = 0; x < TILE; x++) {
-        strip[y * TILE * 2 + x] = left[y * TILE + x]!;
-        strip[y * TILE * 2 + TILE + x] = right[y * TILE + x]!;
-      }
-    const marks = marksOf(strip, false, TILE * 2);
-    const spanning = marks.filter((m) => m.w > TILE).length;
-    if (spanning !== 1)
+    const seamTop = Math.min(...edges.map((e) => e.runs[0]!.from));
+    const seamBottom = Math.max(...edges.map((e) => e.runs[0]!.to));
+    const above = seamTop - top;
+    const below = bottom - seamBottom;
+    if (above < SEAM_CLEAR_EACH || below < SEAM_CLEAR_EACH || above + below < SEAM_CLEAR_ROWS)
       throw new Error(
-        `two bush tiles laid side by side (${label}) are ${marks.length} separate mass(es) and ` +
-          `${spanning} of them span the seam, not 1. This is the whole of the change: a bed of ` +
-          `bushes has to print as one lobed mass, not as discs with lawn between them at the ` +
-          `camera's own tile pitch. See the note above BUSH_BLEED.`,
+        `${name} stands ${above} row(s) clear above its own seam and ${below} below (plant ` +
+          `${top}..${bottom}, seam ${seamTop}..${seamBottom}); it wants at least ` +
+          `${SEAM_CLEAR_EACH} each way and ${SEAM_CLEAR_ROWS} in total. The bleed has to be a ` +
+          `WAIST: the plant bulges above and below it in every tile, so a bed reads as ` +
+          `lobe-waist-lobe. A seam pinned against the top or the bottom of a plant passes a total ` +
+          `and still prints a row of plants hanging off a rail.`,
       );
+
+    const shared = edges
+      .map((e) => e.runs[0]!)
+      .reduce((a, b) => ({ from: Math.max(a.from, b.from), to: Math.min(a.to, b.to) }));
+    const overlap = Math.max(0, shared.to - shared.from + 1);
+    if (overlap < SEAM_SHARED_ROWS)
+      throw new Error(
+        `${name}'s two side seams share only ${overlap} row(s), under ${SEAM_SHARED_ROWS} (${say}). ` +
+          `forest-map.ts flips about half its decor, so a seam is one of four pairings and only the ` +
+          `rows BOTH edges carry are the rows that join in all of them.`,
+      );
+
+    for (const e of edges)
+      for (let y = e.runs[0]!.from; y <= e.runs[0]!.to; y++) {
+        const l = lumaOf(plant.get(e.x, y));
+        if (l > SEAM_DARK_CAP)
+          throw new Error(
+            `${name} puts luma ${l.toFixed(0)} on column ${e.x} at row ${y}, over the ` +
+              `${SEAM_DARK_CAP} cap. The edge column has to be the plant's own near-black, because ` +
+              `the SAME column is a fold between two plants on most of the world's seams and a ` +
+              `keyline against bare lawn on every other edge. A lit leaf there is cut off square ` +
+              `against the grass tile next door. rim() is what holds this; check it still runs ` +
+              `after leafBlades.`,
+          );
+      }
+
+    edgesOf.set(
+      name,
+      edges.map((e) => e.runs[0]!),
+    );
   }
+
+  /*
+   * (g) The common band, which is WHY (f) below can hold across five different plants.
+   */
+  let bandFrom = 0;
+  let bandTo = TILE - 1;
+  for (const runs of edgesOf.values())
+    for (const r of runs) {
+      bandFrom = Math.max(bandFrom, r.from);
+      bandTo = Math.min(bandTo, r.to);
+    }
+  const band = bandTo - bandFrom + 1;
+  if (band < SEAM_COMMON_ROWS)
+    throw new Error(
+      `the five bleeding tiles share only ${Math.max(0, band)} row(s) of seam, under ` +
+        `${SEAM_COMMON_ROWS}: ` +
+        [...edgesOf]
+          .map(([n, rs]) => `${n} ${rs.map((r) => `${r.from}..${r.to}`).join('/')}`)
+          .join('; ') +
+        `. Every one of these tiles has to reach both of its edges on rows the others do too, or a ` +
+        `bed that mixes them has holes in it -- 50 of the world's 178 adjacent undergrowth pairs ` +
+        `are between two different plants. See the note above BUSH_LOW_BLEED.`,
+    );
+
+  /*
+   * (f) The merge itself, over every ordered pair in each of the four pairings the map's flip can
+   * produce. This is the bound that cannot be satisfied by accident.
+   */
+  const masks = new Map([...BLEEDERS].map((p) => [p.name, opaqueMask(p.plant)]));
+  for (const [an, a] of masks)
+    for (const [bn, b] of masks) {
+      const am = mirrorMask(a);
+      const bm = mirrorMask(b);
+      const pairings: [string, Uint8Array, Uint8Array][] = [
+        ['plain|plain', a, b],
+        ['plain|flipped', a, bm],
+        ['flipped|plain', am, b],
+        ['flipped|flipped', am, bm],
+      ];
+      for (const [label, left, right] of pairings) {
+        const spanning = spansSeam(left, right);
+        if (spanning !== 1)
+          throw new Error(
+            `${an} laid beside ${bn} (${label}) has ${spanning} mass(es) spanning the seam, not 1. ` +
+              `This is the whole of the change: a bed of undergrowth has to print as one lobed ` +
+              `mass, not as discs with lawn between them at the camera's own tile pitch. Both ` +
+              `tiles bleed, so the fault is that their runs no longer share rows -- check the ` +
+              `common band above. See the note above BUSH_LOW_BLEED.`,
+          );
+      }
+    }
 }

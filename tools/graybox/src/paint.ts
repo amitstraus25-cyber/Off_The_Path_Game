@@ -304,6 +304,106 @@ export const ember = (t: number): RGBA => pull(tone('gold', t), 0.32, 0.24);
 /** The toadstool cap: a russet, `wood` with half its green and a bit less of its blue taken down. */
 export const rust = (t: number): RGBA => pull(tone('wood', t), 0.55, 0.42);
 
+/* --------------------------------------------- the tuft, promoted here for the same reason as above */
+
+/*
+ * THE CHEVRON TUFT, the one grass mark this project draws twice.
+ *
+ * It is the board's own, measured off `240 650 100 80 9` and recorded in `tiles/w-ground.ts`: "a fan
+ * of four or five short dark strokes springing from one point, about seven of our pixels across and
+ * four tall". Two files draw it. `tiles/w-ground.ts` puts one in every lawn variant, and
+ * `tiles/w-undergrowth.ts` crosses the foot of all eight of its plants with two or three. They were
+ * two copies of one shape and one tone ladder, kept in agreement BY HAND -- `w-undergrowth.ts`'s own
+ * note said so and raised the move as an ask, which is this.
+ *
+ * WHAT MOVED AND WHAT DID NOT. The shape table, the tone ladder and the stepping arithmetic are
+ * here. Where a blade's pixel GOES is not: the lawn wraps its tufts across the tile edge on purpose,
+ * because a grass tile is laid against its own kind and a mark cut by the pitch is harder to find
+ * than one centred in every square, while a scattered decor tile must keep its whole fan inside its
+ * own border or it prints half a plant against whatever lawn sits next door. So `chevron` emits
+ * `(x, y, i)` and the caller decides -- one wraps and writes a luma into its own tone field, the
+ * other clips and writes a colour onto finished pixels.
+ *
+ * THE TABLE IS RELATIVE, which is the one thing that changed in the move. `w-ground.ts` writes its
+ * blade heights absolutely (4, 3, 3) because its tuft is always four rows; `w-undergrowth.ts` needs
+ * three-row fans as well, so a height here is an offset from the centre blade's. At `h` 4 this
+ * table is the lawn's table exactly.
+ *
+ * `w-ground.ts` STILL CARRIES ITS OWN COPY and is another owner's file this round, so this is one
+ * home and not yet the only one. Its copy also predates `away()` below: at `Math.round`, a left
+ * flanker's half-pixel step rounds to -0 where the right one's rounds to 1, so the lawn's fan is a
+ * column wider on one side than the other. Raised as an ask rather than reached for.
+ */
+
+/** The ramp position of a blade's brightest row, and the step down it per row towards the root. */
+export const TUFT_TOP = 0.34;
+export const TUFT_STEP = 0.1;
+
+/**
+ * A blade's colour `i` rows down from its point: lightest where it catches the light, darkest at the
+ * root. Luma 118 falling to 96, which against the four lawn variants' 154 to 192 is a plant standing
+ * in front of the grass rather than a patch of it.
+ */
+export const tuftTone = (i: number): RGBA => tone('grass', Math.max(0, TUFT_TOP - i * TUFT_STEP));
+
+/**
+ * `[base dx, tip dx, height relative to the centre blade]` per blade.
+ *
+ * The centre blade is tallest and vertical; the two flankers spring from beside it and splay out, so
+ * the fan is seven pixels across at the tips and one at the root. Three blades and not five: at five
+ * the fan welds into one dark mass inside seven pixels and the tuft reads as a small mushroom, which
+ * both callers record falling for once.
+ */
+export const CHEVRON: readonly (readonly [number, number, number])[] = [
+  [0, 0, 0],
+  [-1, -2, -1],
+  [1, 2, -1],
+];
+
+/**
+ * Round away from zero, which `Math.round` does not do and which this fan needs.
+ *
+ * `Math.round(0.5)` is 1 and `Math.round(-0.5)` is -0: it rounds half UP, not away from zero, so a
+ * splay curve that is symmetric in the arithmetic comes out asymmetric on the pixels. The first
+ * render of the undergrowth tuft had it exactly -- the right blade stepped 9, 8, 7 across three rows
+ * and the left one stepped 3, 5, 5, which leaves the tip a single pixel two columns clear of the
+ * rest of the mark. Its guard is what found it; it was not visible at zoom 9 and nothing in the six
+ * axes can see a one-pixel hole.
+ */
+const away = (v: number): number => Math.sign(v) * Math.round(Math.abs(v));
+
+/**
+ * One chevron tuft: `bx, by` is the ROOT of the centre blade and `h` its height, not the top.
+ *
+ * `put` receives every blade pixel and `i`, its row down from that blade's own point, which is what
+ * indexes `tuftTone`.
+ *
+ * A BLADE MAY NOT STEP SIDEWAYS FASTER THAN ONE PIXEL A ROW, so the splay is capped by the blade's
+ * own height. Without the cap a short flanker reaches its full splay in a single row and lands two
+ * columns clear of the pixel below it: the stroke comes apart into a dash and a speck. The cap also
+ * gives the two sizes their own silhouettes for free -- the four-row fan is seven across, the
+ * three-row one five -- rather than making the small one a clipped copy of the big one.
+ *
+ * The sideways step is squared in the remaining height, so a blade stands vertical for its lower
+ * half and gives way only near its point. A blade that steps sideways on every row is a 45-degree
+ * dash, and a handful of those is pen hatching.
+ */
+export function chevron(
+  bx: number,
+  by: number,
+  h: number,
+  put: (x: number, y: number, i: number) => void,
+): void {
+  for (const [bdx, tdx, dh] of CHEVRON) {
+    const n = h + dh;
+    const splay = Math.sign(tdx) * Math.min(Math.abs(tdx), n - 1);
+    for (let i = 0; i < n; i++) {
+      const u = n < 2 ? 1 : i / (n - 1);
+      put(bx + bdx + away(splay * (1 - u) ** 2), by - (n - 1) + i, i);
+    }
+  }
+}
+
 export class Img {
   readonly w: number;
   readonly h: number;

@@ -6,15 +6,23 @@
  * this, the only way to see the composed world was to build the game and drive Playwright, which
  * takes minutes, so painters iterated on tiles while nobody iterated on the forest.
  *
- *   node src/world.ts --out /tmp/world.png            # the camera's worth of forest at the spawn
- *   node src/world.ts --out /tmp/w.png --at cottage   # framed on a named landmark
- *   node src/world.ts --out /tmp/w.png --x 10 --y 8 --w 26 --h 15 --zoom 2
- *   node src/world.ts --out /tmp/whole.png --whole    # all 60x42 tiles, for composition and density
+ *   node src/world.ts --out /tmp/world.png              # the camera's worth of forest at the spawn
+ *   node src/world.ts --out /tmp/w.png --frame title    # EXACTLY what the title screen shows
+ *   node src/world.ts --out /tmp/w.png --frame arrive   # EXACTLY what the payoff shot shows
+ *   node src/world.ts --out /tmp/w.png --frame portrait # the phone hero, 375x812
+ *   node src/world.ts --out /tmp/w.png --at cottage     # framed on a named landmark
+ *   node src/world.ts --out /tmp/w.png --x 10 --y 8 --w 20 --h 12 --zoom 2
+ *   node src/world.ts --out /tmp/whole.png --whole      # all 60x42 tiles, for composition/density
+ *
+ * PREFER `--frame`. It derives the rectangle from `cameraFor()` and from the game's own focus rule,
+ * so it is the only way to be sure the thing you are looking at is the thing a visitor sees. `--at`
+ * centres on an object, which is a browsing convenience and is NOT a camera the game ever makes.
  *
  * It paints from the painters directly rather than from the generated PNG, so it shows the code as
  * it is right now, with no `pnpm graybox` in between.
  */
 import { writeFileSync } from 'node:fs';
+import { cameraFor, REFERENCE_VIEWPORTS } from '@otp/core';
 import { Img } from './paint.ts';
 import { TILE, TILE_NAMES, TILE_PAINTERS } from './tiles.ts';
 import { generateForestMap, MAP_H, MAP_W } from './forest-map.ts';
@@ -98,17 +106,87 @@ const data = JSON.parse(map.json) as {
 };
 const objects = data.layers.find((l) => l.type === 'objectgroup')?.objects ?? [];
 
-/* Where to frame. A landmark name centres the camera on it, as the game would. */
+/*
+ * Where to frame. A landmark name centres the camera on it, as the game would.
+ *
+ * THE DEFAULT SIZE IS ASKED FOR, NOT REMEMBERED. It used to read `--w 26 --h 15`, which is the
+ * zoom option that was considered and ABANDONED during the remaster: this renderer -- the one
+ * instrument anybody judges framing with -- reproduced the phantom camera on every flagless run,
+ * for three rounds, while `packages/core/src/camera.ts` said 19.41 x 11.22. A tool that certifies
+ * a picture must frame the picture the player is shown, so the default now comes from the same
+ * function the game sizes its canvas with. Pass --w/--h to look at something else deliberately.
+ */
+const DESKTOP = cameraFor(REFERENCE_VIEWPORTS.desktop);
 let vx = Number(arg('x', '-1'));
 let vy = Number(arg('y', '-1'));
-let vw = Number(arg('w', '26'));
-let vh = Number(arg('h', '15'));
+let vw = Number(arg('w', String(Math.ceil(DESKTOP.tiles.width))));
+let vh = Number(arg('h', String(Math.ceil(DESKTOP.tiles.height))));
+
+/*
+ * The three rectangles the game actually draws, each derived the way the game derives it.
+ *
+ * `forest-scene.ts` puts Red's feet one tile BELOW the `spawn-red` object (`spawn.y + TILE`) and
+ * then frames `position.y + CAMERA_FOCUS_Y`, five eighths of a tile up. Composing against the
+ * object's own row instead -- which is the easy mistake, and the one that was live in
+ * `forest-map.ts` when this was written -- aims every framing decision one whole tile high, so the
+ * crowns planted to close the top edge sit above it and the visitor gets their keylines instead.
+ */
+const FRAME = arg('frame', '');
+const frameRect = (
+  name: string,
+): { x: number; y: number; vp: { width: number; height: number } } => {
+  const obj = (n: string) => {
+    const o = objects.find((q) => q.name === n);
+    if (!o) throw new Error(`--frame ${name}: the map has no "${n}" object`);
+    return o;
+  };
+  if (name === 'title' || name === 'portrait') {
+    const s = obj('spawn-red');
+    // Red's feet, then the camera's lift. Both read off the game, never written down here.
+    const centre = { x: s.x / TILE + 0.5, y: (s.y + TILE) / TILE - 5 / 8 };
+    const vp = name === 'title' ? REFERENCE_VIEWPORTS.desktop : REFERENCE_VIEWPORTS.phone;
+    return { ...centre, vp };
+  }
+  if (name === 'arrive') {
+    // `doorFocus()`: the chimney row above the facade down through the three rows of lane below it.
+    const f = obj('prop-cottage') as { x: number; y: number; width?: number; height?: number };
+    const w = f.width ?? TILE * 6;
+    const h = f.height ?? TILE * 4;
+    const top = f.y - TILE;
+    const bottom = f.y + h + TILE * 3;
+    return {
+      x: (f.x + w / 2) / TILE,
+      y: (top + bottom) / 2 / TILE,
+      vp: REFERENCE_VIEWPORTS.desktop,
+    };
+  }
+  throw new Error(`--frame must be title, portrait or arrive, not "${name}"`);
+};
 
 if (WHOLE) {
   vx = 0;
   vy = 0;
   vw = MAP_W;
   vh = MAP_H;
+} else if (FRAME) {
+  const { x, y, vp } = frameRect(FRAME);
+  const { tiles } = cameraFor(vp);
+  const hold = (v: number, span: number, limit: number): number =>
+    Math.min(Math.max(v - span / 2, 0), Math.max(0, limit - span));
+  const fx = hold(x, tiles.width, MAP_W);
+  const fy = hold(y, tiles.height, MAP_H);
+  // Whole tiles, outwards, so nothing the camera shows a sliver of is cropped out of the render.
+  vx = Math.floor(fx);
+  vy = Math.floor(fy);
+  vw = Math.ceil(fx + tiles.width) - vx;
+  vh = Math.ceil(fy + tiles.height) - vy;
+  console.log(
+    `--frame ${FRAME}: camera tiles (${fx.toFixed(2)}, ${fy.toFixed(2)}) to ` +
+      `(${(fx + tiles.width).toFixed(2)}, ${(fy + tiles.height).toFixed(2)})` +
+      (fy % 1
+        ? `; its top edge cuts ${((fy % 1) * 100).toFixed(0)}% into row ${Math.floor(fy)}`
+        : ''),
+  );
 } else if (vx < 0 || vy < 0) {
   const want = arg('at', 'spawn-red');
   const found =

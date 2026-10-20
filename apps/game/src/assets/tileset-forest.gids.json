@@ -75,5 +75,7 @@
   "fence-corner-w": 74,
   "gable": 75,
   "wall-corner": 76,
-  "wall-window-lit": 77
+  "wall-window-lit": 77,
+  "notice-board": 78,
+  "door-note": 79
 }

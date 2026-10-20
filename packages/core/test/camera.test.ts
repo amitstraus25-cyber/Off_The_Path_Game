@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   availableFor,
+  CAMERA_FOCUS_Y,
+  cameraCentreTiles,
   cameraFor,
   FRAME,
   MARGIN,
@@ -8,10 +10,13 @@ import {
   MAX_ZOOM,
   MIN_VIEW,
   PORTRAIT_WORLD,
+  PORTRAIT_WORLD_BAND,
+  RED_FEET_BELOW_SPAWN,
   REFERENCE_VIEWPORTS,
   stageFit,
   TILE,
   TITLE_CARD_W,
+  topEdgeRows,
   visibleTitleColumns,
 } from '../src/camera.ts';
 
@@ -52,6 +57,53 @@ describe('stageFit', () => {
       { min: { width: 100, height: 100 }, max: { width: 200, height: 200 }, maxZoom: 4 },
     );
     expect(fit).toEqual({ zoom: 4, view: { width: 200, height: 200 } });
+  });
+});
+
+describe('cameraCentreTiles', () => {
+  /*
+   * THE ONE-TILE TERM. The art tooling pointed its frames at `spawn.y - 5/8` while the game points
+   * at `spawn.y + 1 - 5/8`, because Red's feet are one tile BELOW her spawn object and only the
+   * game knew it. A whole round of framing was composed and guarded one row too high, and the cost
+   * showed on the landing screen as crown keylines ruled across open lawn. This test is the term.
+   */
+  it('puts the camera 0.375 tiles BELOW the spawn object, not 0.625 above it', () => {
+    expect(cameraCentreTiles({ x: 5, y: 20 })).toEqual({ x: 5.5, y: 20.375 });
+  });
+
+  it('is the feet offset plus the focus lift, in tiles', () => {
+    const expected = (RED_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y) / TILE;
+    expect(expected).toBeCloseTo(0.375, 10);
+    expect(cameraCentreTiles({ x: 0, y: 0 }).y).toBeCloseTo(expected, 10);
+  });
+});
+
+describe('topEdgeRows', () => {
+  /*
+   * Ceil, not floor. A row the camera's edge cuts 78% into shows only the bottom fifth of what is
+   * in it, which for a crown is its blue-black keyline -- a dark rule across the lawn, worse than
+   * open sky. The planter and the audit both take their rows from here so they cannot drift.
+   */
+  it('starts at the first row that is mostly in frame', () => {
+    expect(topEdgeRows(14.78)).toEqual([15, 16]);
+    expect(topEdgeRows(13.0)).toEqual([13, 14]);
+  });
+
+  it('returns as many rows as asked for', () => {
+    expect(topEdgeRows(14.78, 3)).toEqual([15, 16, 17]);
+    expect(topEdgeRows(14.78, 1)).toEqual([15]);
+  });
+});
+
+describe('PORTRAIT_WORLD_BAND', () => {
+  it('is a share, because no single tile count is right at more than one viewport', () => {
+    // screens.css caps the card against 0.6 * --otp-canvas-h, so this is a contract, not a guess.
+    expect(PORTRAIT_WORLD_BAND).toBe(0.6);
+    const phone = cameraFor(REFERENCE_VIEWPORTS.phone).tiles.height * PORTRAIT_WORLD_BAND;
+    const tablet = cameraFor(REFERENCE_VIEWPORTS.tablet).tiles.height * PORTRAIT_WORLD_BAND;
+    // The band an earlier pass froze as "7.3 tiles, measured on the game" is neither of these.
+    expect(phone).toBeGreaterThan(9);
+    expect(tablet).toBeLessThan(phone);
   });
 });
 

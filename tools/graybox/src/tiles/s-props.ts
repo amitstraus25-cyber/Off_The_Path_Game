@@ -79,7 +79,8 @@
  *   reasoning is at `PALE_HI`, and it needs a brand reviewer's yes or no.
  */
 import { GROUND_TILES } from './w-ground.ts';
-import { Img, keyline, shade, tone } from '../paint.ts';
+import { COTTAGE_TILES } from './s-cottage.ts';
+import { Img, keyline, lumaOf, shade, tone } from '../paint.ts';
 import type { Ramp, RGBA } from '../paint.ts';
 
 const TILE = 32;
@@ -1373,8 +1374,17 @@ function arrowBoard(
   }
 }
 
+/**
+ * Which lawn each free-standing post carries under itself.
+ *
+ * It is a record rather than a literal in each painter so the guards at the foot of this file can
+ * subtract the right ground and be left with the post. A guard that assumed the variant would be
+ * measuring grass as if it were timber the first time a painter changed its mind.
+ */
+const POST_GROUND = { signpost: 2, 'notice-board': 1 } as const;
+
 const signpost: Painter = (img) => {
-  groundUnder(img, 2);
+  groundUnder(img, POST_GROUND.signpost);
   cast(img, 16, 30.5, 7.5, 2.4);
 
   stand(img, (s) => {
@@ -1461,6 +1471,229 @@ const signpost: Painter = (img) => {
       for (let j = 0; j < up; j++) img.px(bx + dx, by - j, shade('grass', j === up - 1 ? 1 : 0));
 };
 
+/* ------------------------------------------- the two things she is scored for reading */
+
+/*
+ * ===========================================================================
+ * PAPER. THE GAME SCORES THE PLAYER FOR READING TWO THINGS AND NEITHER OF THEM WAS DRAWN.
+ * ===========================================================================
+ *
+ * `content/game.json` pays a hundred points for `cottage-door` -- half of one of the two lines that
+ * reach the game's thousand-point ceiling -- and the object that fires it, `notice-cottage-door`,
+ * covered six tiles of lane and flowerbed with NOTHING ON THEM. Every layer was dumped at the gate:
+ * two of the six were a flower bed, four were plain sand, the decor-above layer was empty, and
+ * `TILE_NAMES` had no notice in it at all. The panel fired from walking over a flower bed.
+ *
+ * `docs/GAME_DESIGN.md` 5b says missing that note is deliberate -- "reachable, not unavoidable" --
+ * and that is a defensible design only while the player could have SEEN there was something to
+ * miss. Nothing was drawn, so nothing was missed; the goal was advertised in the HUD all run and
+ * then paid out, or not, for reasons invisible on screen.
+ *
+ * The forest post had the opposite fault. It was drawn, and it was drawn as the SIGNPOST -- the
+ * same tile, pixel for pixel, as the decorative one four tiles from the spawn. The first signpost a
+ * player meets stands in the crook of a fork and says only "the path divides"; it has no writing on
+ * it, because the concept board's has none and because CLAUDE.md rule 4 keeps text off the canvas.
+ * Teaching a player that a post with arms on it means nothing, and then resting the level's one
+ * mandatory zero-click beat on a post with arms on it, is the whole defect.
+ *
+ * So the two jobs get two objects, and the difference between them is the one a player can read at
+ * a glance from a top-down camera: ARROWS POINT, PAPER SPEAKS.
+ *
+ *   signpost       two tapered timber arms on a capped post. Timber from end to end: nothing on it
+ *                  is paper, and the guard at the foot of this file holds it that way.
+ *   notice-board   a sheet NAILED TO A POST, which is what `content/game.json` has always called it
+ *                  ("A notice nailed to a post"). One pale portrait page filling most of the tile,
+ *                  ruled with writing, nailed at its top corners, dog-eared at the foot.
+ *   door-note      the approved `door`, repainted exactly, with a small sheet pinned to its leaf.
+ *
+ * Why the door note is a TILE rather than a decor-above overlay: decor-above draws over Red, so a
+ * note laid there is drawn across her face whenever she stands on the doorstep. One tile that
+ * paints the cottage owner's door and then the note on top of it keeps the layer order honest, and
+ * because `door-note` is appended to `TILE_NAMES` the existing map keeps every gid it had.
+ */
+
+/**
+ * A sheet of paper: a cream face lit from the top left, quantised like every other surface here.
+ *
+ * `wall` is the cottage's own plaster ramp and its top stops are the only true creams in the
+ * palette, which is what lets a page read as paper rather than as a pale board. Four bands over
+ * 0.36..0.96 lands on the ramp's top three stops -- luma 219, 233 and 251 -- so the sheet sits a
+ * clear hundred luma above the door's leaf (83..116, measured by the cottage owner) and about forty
+ * above the plaster it hangs beside. That interval IS the legibility: at a 19-tile camera a note is
+ * a bright rectangle before it is anything else.
+ *
+ * `rim` is for a page painted straight onto opaque art, where `stand()`'s `bank()` cannot run. It
+ * lays the same two steps bank would -- 22 then 58 -- down the right and along the bottom, so a
+ * page pinned to a door is rounded off exactly like one nailed to a post.
+ */
+function paper(s: Img, x: number, y: number, w: number, h: number, rim = false): void {
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const ix = w < 2 ? 0.3 : i / (w - 1);
+      const jy = h < 2 ? 0.3 : j / (h - 1);
+      s.px(x + i, y + j, band('wall', roundT(0.46 * ix + 0.54 * jy, 0.36, 0.96), 4));
+    }
+  if (!rim) return;
+  /*
+   * On a page five columns wide the two-step rim would be two of the five, and the sheet would be
+   * more edge than face -- measured, it left 24 pixels of the note over the paper threshold where
+   * the underside alone leaves 34. A page with room for both steps gets both; a small one gets its
+   * underside and leans on the line round it for the rest.
+   */
+  if (w > 6 && h > 6) {
+    sinkRun(s, x + w - 2, y, 1, h - 1, 22);
+    sinkRun(s, x, y + h - 2, w - 1, 1, 22);
+    sinkRun(s, x + w - 1, y, 1, h, 58);
+  }
+  sinkRun(s, x, y + h - 1, w, 1, 58);
+}
+
+/**
+ * Ruled strokes of writing, ragged right.
+ *
+ * It is the ragged right that does the work. Equal runs are stripes and stripes are a pattern; runs
+ * that stop short by different amounts are text, and the eye decides which of the two it is looking
+ * at well before it can read anything. Nothing here spells a word: the board draws grain rather
+ * than letters, CLAUDE.md rule 4 keeps text off the canvas, and a legible word at this size would
+ * be a smear.
+ *
+ * `sinkRun` darkens the page rather than laying a chosen grey over it, so the strokes stay in the
+ * cream's own hue and no new colour enters the file.
+ */
+function writing(
+  s: Img,
+  x: number,
+  y: number,
+  w: number,
+  shortfalls: readonly number[],
+  drop: number,
+): void {
+  shortfalls.forEach((short, k) => {
+    const run = w - short;
+    if (run >= 2) sinkRun(s, x, y + k * 2, run, 1, drop);
+  });
+}
+
+/** A nail head: the one cool near-black on a warm page, which is what says the sheet is fixed. */
+const nail = (s: Img, x: number, y: number): void => s.px(x, y, LINE.metal);
+
+/*
+ * THE NOTICE NAILED TO A POST, on the gate approach.
+ *
+ * The page is 18 x 19 on a 32 x 32 tile -- a third of the tile's area -- and it is deliberately far
+ * bigger than a sheet of paper would be against a six-pixel post. The alternative is honest scale
+ * and an illegible mark: the brass light on Grandma's door is 8 x 7 and is the smallest thing on
+ * that facade that reads at all, so anything the player is asked to walk to has to be larger than
+ * that by some margin. Portrait, because a document is portrait and the signpost's arms are
+ * landscape, and that is the second thing the silhouette says after "pale".
+ */
+const NOTICE_PAGE = { x: 7, y: 8, w: 18, h: 19 } as const;
+
+const noticeBoard: Painter = (img) => {
+  groundUnder(img, POST_GROUND['notice-board']);
+  cast(img, 16, 30.5, 8.6, 2.6);
+
+  stand(img, (s) => {
+    // The post reaches the tile's last row, as the signpost's does: a post that stops short floats.
+    postV(s, 13, 3, 6, 29);
+    capBlock(s, 12, 1, 8, 3);
+
+    const { x, y, w, h } = NOTICE_PAGE;
+    paper(s, x, y, w, h);
+
+    // The page against the post, top and bottom, where `ring()` cannot see the edge: opaque on
+    // opaque. Then the page's own shadow falling down the post below it.
+    s.rect(13, y, 6, 1, LINE.cloth);
+    s.rect(13, y + h - 1, 6, 1, LINE.cloth);
+    sinkRun(s, 13, y + h, 6, 1, 54);
+    sinkRun(s, 13, y + h + 1, 6, 1, 24);
+
+    nail(s, x + 2, y + 2);
+    nail(s, x + w - 3, y + 2);
+
+    // A heading of two short lines, a rule under it, then the body. The rule is the cheapest mark
+    // that says "this is a notice and not a page of a book".
+    writing(s, x + 3, y + 3, w - 6, [0, 4], 150);
+    sinkRun(s, x + 3, y + 7, w - 6, 1, 70);
+    writing(s, x + 3, y + 9, w - 6, [0, 2, 0, 5], 105);
+
+    /*
+     * The dog ear: the sheet's own back, folded up at the foot, with the fold in near-black.
+     *
+     * It is four pixels and it is the difference between paper and a painted panel. A rectangle
+     * with writing on it is a sign; a rectangle with one corner turned up is a thing somebody
+     * pinned there, which is the whole proposition of this prop.
+     */
+    const EAR = 5;
+    for (let j = 0; j < EAR; j++)
+      for (let i = 0; i + j < EAR; i++) s.px(x + w - 1 - i, y + h - 1 - j, band('wall', 0.08, 4));
+    for (let k = 0; k < EAR; k++) s.px(x + w - EAR + k, y + h - 1 - k, LINE.cloth);
+  });
+
+  /*
+   * The same tuft ring the signpost wears at its foot, in the grass ramp's two darkest stops, so
+   * the post grows out of the lawn rather than standing on it. See the note on the signpost.
+   */
+  for (const [bx, by] of [
+    [9, 29],
+    [12, 30],
+    [18, 30],
+    [21, 29],
+  ] as const)
+    for (const [dx, up] of [
+      [0, 1],
+      [1, 2],
+      [2, 1],
+    ] as const)
+      for (let j = 0; j < up; j++) img.px(bx + dx, by - j, shade('grass', j === up - 1 ? 1 : 0));
+};
+
+/*
+ * THE NOTE PINNED TO GRANDMA'S DOOR.
+ *
+ * WHERE IT FITS, AND WHY IT IS NOT BIGGER. The leaf runs x 5..26 and almost all of it is spoken
+ * for: the brass light and its astragal hold x 12..19 from row 11 down to row 20, and a knob sits
+ * on each leaf at x 8..9 and x 22..23 from row 21. The cottage owner's notes argue both of those
+ * pixel by pixel -- the astragal is what makes the door read as two leaves rather than a cupboard,
+ * the pair of knobs is the other half of it -- and none of it is mine to spend.
+ *
+ * What is left clear is x 6..11 from row 10 to row 20, and the note takes it: a near-black line
+ * round x 5..11 by y 9..20 with five columns of page inside it. The right-hand line matters as much
+ * as the page does, because without it cream would meet the light's lit gold edge with nothing
+ * between them, and two pale materials touching is the one thing this file's keyline exists to
+ * stop.
+ *
+ * Five by ten is small, and it is still half again the area of the brass light beside it, which is
+ * the smallest mark on this building that reads at the real camera. Pinned on the WEST leaf on
+ * purpose: the lane arrives from the west and the note faces the walk.
+ */
+const DOOR_NOTE = { x: 6, y: 10, w: 5, h: 10 } as const;
+
+const doorNote: Painter = (img) => {
+  // The approved door, repainted exactly. The guard below diffs the two tiles, so anything this
+  // painter changes about the building itself shows up as a fault rather than as a surprise.
+  COTTAGE_TILES['door']!(img);
+
+  const { x, y, w, h } = DOOR_NOTE;
+  // The ring first, so the page is laid inside its own line rather than over it.
+  img.frame(x - 1, y - 1, w + 2, h + 2, LINE.cloth);
+  paper(img, x, y, w, h, true);
+
+  // Four strokes at three columns: as much writing as five columns of page can hold before it goes
+  // to mush, and the ragged right is what keeps it from reading as a label.
+  writing(img, x + 1, y + 2, w - 2, [0, 1, 0, 1], 120);
+  nail(img, x + 2, y);
+
+  /*
+   * The dog ear again, at two pixels, and the one row of shadow the note throws onto the leaf below
+   * it. The shadow stops clear of the knob at x 8: a mark laid across the brass would cost more
+   * than it buys.
+   */
+  img.px(x + w - 1, y + h - 1, band('wall', 0.08, 4));
+  img.px(x + w - 2, y + h - 1, LINE.cloth);
+  sinkRun(img, x - 1, y + h + 1, 2, 1, 70);
+};
+
 /** Keys are the contract the map generator and the tileset both look these up by. */
 export const PROP_TILES: Record<string, Painter> = {
   'stall-awning-l': stallAwning(0),
@@ -1471,4 +1704,175 @@ export const PROP_TILES: Record<string, Painter> = {
   fountain,
   well,
   signpost,
+  'notice-board': noticeBoard,
+  'door-note': doorNote,
 };
+
+/* ------------------------------------------------- the guards, at import time */
+
+/*
+ * TWO WAYS THE ROUND'S WORK UNDOES ITSELF, AND NEITHER SAYS ANYTHING AT RUNTIME.
+ *
+ * They live here rather than in a test file for the reason `s-cottage.ts` and `w-trees.ts` give for
+ * theirs: every tool that paints a tile loads this module, so `pnpm graybox`, `pnpm world`,
+ * `pnpm score` and `pnpm preview` all run them, and `tools/graybox/test/art-guards.test.ts` runs
+ * them in CI by importing the tileset. Four 32x32 paints is a cost nobody will notice.
+ *
+ * Both are TWO-SIDED, because both defects they are aimed at would pass a one-sided bound.
+ *
+ *   The note. "Is anything drawn on the door" is satisfied by a smudge. The failure being guarded
+ *   is not absence, it is ILLEGIBILITY: a mark too small or too dark to be seen at a 19-tile camera
+ *   is the same bug as no mark, and it is the bug that shipped, because the goal was paid out for
+ *   a flower bed. So the floors are on AREA, on PALE AREA and on the LIFT over the timber it hangs
+ *   on, and there is a ceiling so the note cannot be made to pass by growing into a poster.
+ *
+ *   The pair. "The notice is paper-faced" is satisfied by making the signpost paper-faced too,
+ *   which is the original defect wearing a different hat -- the whole complaint was that the two
+ *   posts are the same object. So the notice has a floor on its pale share and the signpost has a
+ *   ceiling on its, and the two are checked together.
+ *
+ * The pale threshold is 205 luma, and it is chosen against the PALETTE rather than against
+ * anything here: the `wood` ramp's lightest stop is 188 and `stone`'s is 210, so 205 is above
+ * every timber in the game and below nothing the page is painted in (219, 233, 251). A signpost
+ * cannot drift over it by being lit harder; only paper gets there.
+ */
+
+/** The pale threshold: above every stop of `wood`, below every stop the page is painted in. */
+const PAPER_LUMA = 205;
+
+/** A post's own pixels: everything its painter changed about the lawn it was given to stand on. */
+function postSignature(name: 'signpost' | 'notice-board'): { drawn: number; pale: number } {
+  const img = new Img(TILE, TILE);
+  PROP_TILES[name]!(img);
+  const lawn = new Img(TILE, TILE);
+  groundUnder(lawn, POST_GROUND[name]);
+  let drawn = 0;
+  let pale = 0;
+  for (let p = 0; p < TILE * TILE; p++) {
+    const i = p * 4;
+    if (
+      img.data[i] === lawn.data[i] &&
+      img.data[i + 1] === lawn.data[i + 1] &&
+      img.data[i + 2] === lawn.data[i + 2]
+    )
+      continue;
+    drawn++;
+    if (lumaOf(img.get(p % TILE, Math.floor(p / TILE))) >= PAPER_LUMA) pale++;
+  }
+  return { drawn, pale };
+}
+
+/** What `door-note` adds to the door, and what it adds it on top of. */
+function doorNoteSignature(): {
+  area: number;
+  w: number;
+  h: number;
+  pale: number;
+  lift: number;
+  under: number;
+} {
+  const plain = new Img(TILE, TILE);
+  COTTAGE_TILES['door']!(plain);
+  const noted = new Img(TILE, TILE);
+  doorNote(noted);
+
+  let area = 0;
+  let pale = 0;
+  let paleLuma = 0;
+  let paleWas = 0;
+  let under = 0;
+  let minx = TILE;
+  let maxx = -1;
+  let miny = TILE;
+  let maxy = -1;
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const a = plain.get(x, y);
+      const b = noted.get(x, y);
+      if (a[0] === b[0] && a[1] === b[1] && a[2] === b[2]) continue;
+      area++;
+      under += lumaOf(a);
+      minx = Math.min(minx, x);
+      maxx = Math.max(maxx, x);
+      miny = Math.min(miny, y);
+      maxy = Math.max(maxy, y);
+      if (lumaOf(b) < PAPER_LUMA) continue;
+      pale++;
+      paleLuma += lumaOf(b);
+      paleWas += lumaOf(a);
+    }
+  return {
+    area,
+    w: maxx - minx + 1,
+    h: maxy - miny + 1,
+    pale,
+    lift: pale > 0 ? (paleLuma - paleWas) / pale : 0,
+    under: area > 0 ? under / area : 0,
+  };
+}
+
+/*
+ * Measured on the tiles as drawn: the note is area 86px, bbox 7 x 13, 34px of page over the paper
+ * threshold, lifting 147 luma over the timber it hangs on, which itself reads 91. The posts are
+ * notice-board 0.39 pale against signpost 0.00, out of 556 and 643 drawn pixels.
+ *
+ * Every bound sits between what is drawn and the failure it is aimed at, and nearer the failure.
+ * The failure for the note is the empty door the round began with: area 0, which trips the floor
+ * four times over. The failure for the pair is the forest post as it was shipped -- `signpost` at
+ * both places -- which puts 0.00 on both sides of the pale pair and trips the notice's floor.
+ *
+ * `under` is the one that is easy to miss and the only one aimed at a plausible FUTURE edit rather
+ * than at the past: the free timber on this leaf is a five-column pocket, and the obvious way to
+ * make the note bigger is to slide it over the stone surround (luma 166) or the brass light (about
+ * 200). Either would read as a label stuck on the doorway rather than a note on the door, and
+ * either would quietly cost the cottage owner a piece of work argued pixel by pixel. The leaf runs
+ * 83 to 116, so a ceiling of 135 permits the note's own line and shadow and nothing else.
+ */
+const NOTICE_GUARD = {
+  noteAreaLo: 60, // under the brass light's own 8 x 7 there is nothing to see at a 19-tile camera
+  noteAreaHi: 180, // over this it is a poster, and it is eating the door it is pinned to
+  noteWLo: 5,
+  noteHLo: 8,
+  notePaleLo: 24, // the page itself, not its line: a dark mark is the same bug as no mark
+  noteLiftLo: 70, // paper on timber; below this it is a stain
+  noteUnderHi: 135, // pinned to the leaf, not across the stone surround or the brass
+  postPaleLo: 0.25, // the notice is mostly page
+  postPaleHi: 0.05, // and the signpost is timber from end to end
+} as const;
+
+{
+  const n = doorNoteSignature();
+  const say =
+    `area ${n.area}px, bbox ${n.w}x${n.h}, page ${n.pale}px, ` +
+    `lift ${n.lift.toFixed(0)} luma, on timber reading ${n.under.toFixed(0)}`;
+  if (n.area < NOTICE_GUARD.noteAreaLo || n.area > NOTICE_GUARD.noteAreaHi)
+    throw new Error(
+      `Grandma's door note is out of band (want ${NOTICE_GUARD.noteAreaLo}..${NOTICE_GUARD.noteAreaHi}px): ${say}. Under the floor the game is paying a hundred points for something nobody can see; over the ceiling the note has eaten the door.`,
+    );
+  if (n.w < NOTICE_GUARD.noteWLo || n.h < NOTICE_GUARD.noteHLo)
+    throw new Error(
+      `Grandma's door note is a speck (want at least ${NOTICE_GUARD.noteWLo}x${NOTICE_GUARD.noteHLo}): ${say}. The brass light beside it is 8x7 and is the smallest mark on this facade that reads at the real camera.`,
+    );
+  if (n.pale < NOTICE_GUARD.notePaleLo || n.lift < NOTICE_GUARD.noteLiftLo)
+    throw new Error(
+      `Grandma's door note is not reading as paper (want ${NOTICE_GUARD.notePaleLo}px over ${PAPER_LUMA} luma, lifting ${NOTICE_GUARD.noteLiftLo}): ${say}. A note the colour of the door it is pinned to is the same bug as no note.`,
+    );
+  if (n.under > NOTICE_GUARD.noteUnderHi)
+    throw new Error(
+      `Grandma's door note has slid off the leaf (want the timber under it below ${NOTICE_GUARD.noteUnderHi} luma): ${say}. It is now lying across the stone surround or the brass light, which is a label on a doorway and not a note on a door.`,
+    );
+
+  const notice = postSignature('notice-board');
+  const sign = postSignature('signpost');
+  const share = (s: { drawn: number; pale: number }): number =>
+    s.drawn > 0 ? s.pale / s.drawn : 0;
+  const pair = `notice-board ${share(notice).toFixed(2)}, signpost ${share(sign).toFixed(2)}`;
+  if (share(notice) < NOTICE_GUARD.postPaleLo)
+    throw new Error(
+      `The forest notice is not paper-faced (want at least ${NOTICE_GUARD.postPaleLo} of it over ${PAPER_LUMA} luma): ${pair}. It is the post the whole level's zero-click beat rests on; a player has to see at a glance that it is something to read.`,
+    );
+  if (share(sign) > NOTICE_GUARD.postPaleHi)
+    throw new Error(
+      `The decorative signpost has grown paper (want under ${NOTICE_GUARD.postPaleHi} of it over ${PAPER_LUMA} luma): ${pair}. The two posts reading alike is the defect this pair exists to stop -- arrows point, paper speaks.`,
+    );
+}

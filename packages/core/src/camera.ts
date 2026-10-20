@@ -196,6 +196,73 @@ export const REFERENCE_VIEWPORTS = {
   phoneLandscape: { width: 844, height: 390 },
 } as const satisfies Record<string, Size>;
 
+/*
+ * ===========================================================================
+ * WHERE THE CAMERA IS POINTED, as opposed to how big it is.
+ * ===========================================================================
+ *
+ * The first version of this module published the camera's SIZE and left its ORIGIN alone, and the
+ * very next round of composition was aimed one tile too high because of it: the art tooling put the
+ * camera centre at `spawn.y - 5/8` while the game puts it at `spawn.y + 1 - 5/8`. Exactly one tile,
+ * and it was not bookkeeping -- the camera's top edge lands 78% of the way through a row, so crowns
+ * planted to close the row above it sat off-screen and the landing screen showed their keylines
+ * instead: hard dark rules floating in open lawn on the hero shot of a marketing asset.
+ *
+ * The lesson is the same one as the size, one level up: a rectangle has four numbers and publishing
+ * two of them is not publishing the rectangle. Both the game and the tooling derive the whole thing
+ * from here now.
+ */
+
+/**
+ * Red's feet sit one tile BELOW the `spawn-red` object's own origin.
+ *
+ * The map's objects are addressed from their top-left corner and her sprite's origin is at her
+ * feet, so the scene does `spawn.y + TILE`. This is that `+ TILE`, named, because it is the term
+ * the art tooling left out.
+ */
+export const RED_FEET_BELOW_SPAWN = TILE;
+
+/**
+ * How far above her feet the camera frames Red, in game pixels. Centring on the feet puts her
+ * head in the middle of the shot and wastes the top of the screen on sky.
+ */
+export const CAMERA_FOCUS_Y = -TILE * (5 / 8);
+
+/**
+ * The share of the portrait camera that stays uncovered above the docked title card.
+ *
+ * Not a measurement: screens.css caps the card's height against `0.6 * --otp-canvas-h`, so this is
+ * the contract the stylesheet guarantees. An earlier pass froze "7.3 tiles, measured on the game",
+ * which is true at no viewport at all -- the real band is 12.80 tiles at 375x812, 13.00 at 390x844,
+ * 8.84 at 768x1024 and 6.71 at 320x568. A share is derivable; a tile count is not.
+ */
+export const PORTRAIT_WORLD_BAND = 0.6;
+
+/**
+ * The camera's centre, IN TILES, for a spawn object at the given tile. This is the number the
+ * framing passes point at, and getting it from here is what keeps the tooling's frame and the
+ * game's frame the same rectangle.
+ */
+export function cameraCentreTiles(spawn: { x: number; y: number }): { x: number; y: number } {
+  return {
+    x: spawn.x + 0.5,
+    y: spawn.y + (RED_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y) / TILE,
+  };
+}
+
+/**
+ * The rows along a frame's top edge that a crown can actually CLOSE.
+ *
+ * Not `floor(y0)`. The camera's edge falls partway through a tile row, and a row the edge cuts 78%
+ * of the way into shows only the bottom fifth of whatever is in it -- for a crown, that is its
+ * keyline and nothing else, which is worse than an open sky because it reads as a dark rule ruled
+ * across the lawn. A row has to be mostly in frame to count.
+ */
+export function topEdgeRows(y0: number, count = 2): number[] {
+  const first = Math.ceil(y0);
+  return Array.from({ length: count }, (_, i) => first + i);
+}
+
 /**
  * The tile columns of the title camera a landscape visitor can actually SEE.
  *
