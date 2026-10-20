@@ -54,11 +54,83 @@ describe('minted handles', () => {
     expect(mintHandle(() => -1)).toBe(`${HANDLE_FIRST_WORDS[0]}-${HANDLE_SECOND_WORDS[0]}-10`);
   });
 
-  it('walks both lists as the rng walks', () => {
-    const minted = new Set<string>();
-    for (let i = 0; i < 90; i++) minted.add(mintHandle(() => i / 90));
-    expect(minted.size).toBeGreaterThan(30);
-    for (const handle of minted) expect(isMintedHandle(handle)).toBe(true);
+  it('reaches every word in both lists as the rng walks', () => {
+    /*
+     * This used to mint ninety handles and assert that more than thirty of them differed, which
+     * the two-digit number alone guarantees: re-run with ONE-WORD lists and it still passed. The
+     * claim worth making is that the pick reaches the whole of both lists and nothing outside
+     * them, so that is what is asserted -- one step per index, and the sets must come out equal.
+     */
+    const firsts = new Set<string>();
+    const seconds = new Set<string>();
+    for (let i = 0; i < HANDLE_FIRST_WORDS.length; i++) {
+      const [first, second] = mintHandle(() => (i + 0.5) / HANDLE_FIRST_WORDS.length).split('-');
+      firsts.add(first!);
+      seconds.add(second!);
+    }
+    expect([...firsts]).toEqual([...HANDLE_FIRST_WORDS]);
+    expect([...seconds]).toEqual([...HANDLE_SECOND_WORDS]);
+  });
+
+  it('is drawn from two lists that stay the shape the table and the policy need', () => {
+    for (const [name, list, longest] of [
+      ['first', HANDLE_FIRST_WORDS, 5],
+      ['second', HANDLE_SECOND_WORDS, 7],
+    ] as const) {
+      expect(list, name).toHaveLength(32);
+      expect(new Set(list).size, name).toBe(list.length);
+      // Sorted, so a duplicate or a misfiled word is visible in a diff.
+      expect([...list], name).toEqual([...list].sort());
+      for (const word of list) {
+        expect(word, word).toMatch(/^[a-z]+$/);
+        expect(word.length, word).toBeLessThanOrEqual(longest);
+      }
+    }
+    // The two lists do not overlap, which is why "offensive in either order" cannot arise at all.
+    const shared = HANDLE_FIRST_WORDS.filter((w) =>
+      (HANDLE_SECOND_WORDS as readonly string[]).includes(w),
+    );
+    expect(shared).toEqual([]);
+  });
+
+  it('mints nothing that reads as a person, which its own docstring requires', () => {
+    /*
+     * `amber`, `hazel` and `misty` in front of `robin`, `fern` or `brook` minted a plausible real
+     * name on a public, Cyera-branded board -- about 4% of handles. The words are gone; this is
+     * the guard, because the trap is the next innocuous-looking addition (`rose`, `holly`, `ivy`)
+     * rather than the words that have already been taken out.
+     */
+    const names = [
+      'amber',
+      'basil',
+      'brook',
+      'clover',
+      'daisy',
+      'dawn',
+      'ember',
+      'fern',
+      'hazel',
+      'heather',
+      'holly',
+      'iris',
+      'ivy',
+      'jasmine',
+      'june',
+      'laurel',
+      'may',
+      'meadow',
+      'misty',
+      'olive',
+      'pearl',
+      'robin',
+      'rose',
+      'ruby',
+      'sky',
+      'willow',
+      'wren',
+    ];
+    for (const word of [...HANDLE_FIRST_WORDS, ...HANDLE_SECOND_WORDS])
+      expect(names, word).not.toContain(word);
   });
 
   it('refuses anything it did not mint', () => {

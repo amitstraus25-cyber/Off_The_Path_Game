@@ -5,3 +5,4 @@ export * from './reducer.ts';
 export * from './runlog.ts';
 export * from './scoring.ts';
 export * from './outcomes.ts';
+export * from './leaderboard.ts';

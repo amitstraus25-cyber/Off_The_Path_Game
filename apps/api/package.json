@@ -1,0 +1,17 @@
+{
+  "name": "@otp/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "test": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@otp/core": "workspace:*",
+    "zod": "4.6.5"
+  }
+}

@@ -5,9 +5,16 @@
       "root": "apps/game",
       "framework": "vite",
       "outputDirectory": "dist"
+    },
+    "api": {
+      "root": "apps/api",
+      "framework": null
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": { "service": "game" } }],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "game" } }
+  ],
   "headers": [
     {
       "source": "/(.*)",

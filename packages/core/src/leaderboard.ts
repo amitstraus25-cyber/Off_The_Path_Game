@@ -26,9 +26,15 @@ import { runEventSchema } from './state.ts';
  * The words are dull on purpose. The pair is drawn independently, so the list has to be one that
  * cannot produce an offensive pair in EITHER order with anything in the second list: no bodies, no
  * violence, no slang, nothing that reads as a person. Forest and fairy tale only.
+ *
+ * "Nothing that reads as a person" is the rule a first pass broke: `amber`, `hazel` and `misty` are
+ * ordinary given names, and in front of a surname-shaped second word they minted `hazel-robin-42` --
+ * a real person's name on a public Cyera board, which is the misleading case this game is about.
+ * Adjectives only here, and `test/leaderboard.test.ts` holds both lists against a list of names so
+ * the next tempting addition fails the suite instead of a reviewer.
  */
 export const HANDLE_FIRST_WORDS = [
-  'amber',
+  'alert',
   'bold',
   'brave',
   'calm',
@@ -42,17 +48,17 @@ export const HANDLE_FIRST_WORDS = [
   'green',
   'happy',
   'hardy',
-  'hazel',
   'jolly',
   'keen',
   'kind',
   'light',
   'lucky',
   'merry',
-  'misty',
   'neat',
   'noble',
+  'quick',
   'quiet',
+  'ready',
   'snug',
   'soft',
   'spry',
@@ -68,34 +74,34 @@ export const HANDLE_SECOND_WORDS = [
   'apron',
   'badger',
   'basket',
+  'bellows',
   'birch',
   'biscuit',
   'bonnet',
   'bramble',
-  'brook',
+  'burrow',
   'candle',
   'cinder',
   'cloak',
-  'clover',
   'compass',
   'cottage',
-  'ember',
-  'fern',
   'hearth',
   'heron',
   'kettle',
   'lantern',
-  'meadow',
   'mitten',
   'moss',
   'nettle',
   'otter',
   'pebble',
   'ribbon',
-  'robin',
   'satchel',
   'sparrow',
   'thicket',
+  'thimble',
+  'thistle',
+  'turnip',
+  'walnut',
 ] as const;
 
 /** The table's own check constraint, written down where both ends can assert against it. */
