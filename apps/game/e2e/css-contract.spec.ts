@@ -744,10 +744,8 @@ interface TitleFrame {
   clear: number;
   /** Whole CSS pixels per game pixel, read off the running canvas. */
   zoom: number;
-  /** How far the card's first line sits ABOVE the card. Positive means off the start edge. */
+  /** How far the first line sits ABOVE its scroller. Positive means off the start edge. */
   startEdge: number;
-  /** Whether the call to action can be brought wholly into the card's box by scrolling. */
-  ctaReachable: boolean;
   /** The world left uncovered above the card, in TILES, which is the unit framing is argued in. */
   bandTiles: number;
   cardHeight: number;
@@ -776,22 +774,21 @@ function titleFrame(page: Page, tile: number): Promise<TitleFrame> {
     const card = panel.getBoundingClientRect();
     const zoom = canvas.width / scene.cameras.main.width;
     const feet = canvas.top + (scene.redPosition.y - scene.cameras.main.scrollY) * zoom;
-    const first = panel.firstElementChild!.getBoundingClientRect();
-
-    // Can a player actually get to the button? Scroll the card as far as it goes and look, then
-    // put it back: a card that merely CONTAINS its CTA somewhere below the fold is not the same
-    // claim, and a card whose content is stuck off the start edge cannot be scrolled at all.
-    const was = panel.scrollTop;
-    panel.scrollTop = panel.scrollHeight;
-    const cta = panel.querySelector('.otp-cta')!.getBoundingClientRect();
-    const reachable = cta.top >= card.top - 0.5 && cta.bottom <= card.bottom + 0.5;
-    panel.scrollTop = was;
+    /*
+     * The start edge belongs to whatever actually SCROLLS, which is now the prose box rather than
+     * the card -- ui/Title.tsx moved the copy into `.otp-title__scroll` so the call to action
+     * could stay out of it. Measuring the card's own first child would read the scroll box, whose
+     * top is pinned by the flex column and can never be pushed anywhere: a guard that passes by
+     * construction. The fallback keeps this honest if the wrapper is ever removed.
+     */
+    const scroller = panel.querySelector<HTMLElement>('.otp-title__scroll') ?? panel;
+    const box = scroller.getBoundingClientRect();
+    const first = scroller.firstElementChild!.getBoundingClientRect();
 
     return {
       clear: Math.round(card.top - feet),
       zoom,
-      startEdge: Math.round((card.top - first.top) * 10) / 10,
-      ctaReachable: reachable,
+      startEdge: Math.round((box.top - first.top) * 10) / 10,
       bandTiles: Math.round(((card.top - canvas.top) / (px * zoom)) * 100) / 100,
       cardHeight: Math.round(card.height),
       feet: Math.round(feet),
@@ -866,13 +863,188 @@ test('the title card leaves Red on the path in portrait, as the column does in l
     /*
      * And the price of the cap has to stay payable. A shorter card means the copy scrolls on a
      * short phone, and a landing screen whose one Lime cannot be reached is not a trade worth
-     * making -- so the button has to come wholly into view.
+     * making -- so the button has to be wholly on screen, WITHOUT being scrolled to.
+     *
+     * This used to scroll the card to its end first and ask only whether the button had arrived,
+     * which it always had; that is how 34 of 56 visible rows at 320x568 passed for a round. The
+     * reading is now taken where the screen opens.
      */
+    const cta = await ctaView(page);
+    expect(cta.scrollTop, `the title card is at rest at ${where}`).toBe(0);
     expect(
-      seen.ctaReachable,
-      `"Begin the walk" can be scrolled wholly into the ${seen.cardHeight}px card at ${where}`,
-    ).toBe(true);
+      cta.visible,
+      `"Begin the walk" is ${cta.rect[2]}x${cta.rect[3]} and ${cta.visible[0]}x${cta.visible[1]} ` +
+        `of it is on screen in the ${cta.cardHeight}px card at ${where}`,
+    ).toEqual([cta.rect[2], cta.rect[3]]);
   }
+});
+
+/* ------------------- the way in: "Begin the walk" at the scroll position it opens at */
+
+/**
+ * Every viewport the entrance is measured at: the four the project reviews on, both landscape
+ * phones the suite already visits, and the four short portraits from the --otp-ui scale matrix
+ * above, which are where a capped card has least room to spend.
+ */
+const ENTRANCE_VIEWPORTS: Size[] = [
+  REFERENCE_VIEWPORTS.desktop,
+  REFERENCE_VIEWPORTS.tablet,
+  REFERENCE_VIEWPORTS.phone,
+  REFERENCE_VIEWPORTS.phoneLandscape,
+  { width: 812, height: 375 },
+  { width: 667, height: 375 },
+  { width: 375, height: 667 },
+  { width: 360, height: 640 },
+  { width: 390, height: 600 },
+  { width: 320, height: 568 },
+];
+
+interface CtaView {
+  /** The button's own box as the page lays it out: [x, y, w, h]. */
+  rect: [number, number, number, number];
+  /** How much of it a player can actually SEE: clipped by the card's box and by the viewport. */
+  visible: [number, number];
+  /** Where the card's scroller is resting. The whole point of this reading is that it is 0. */
+  scrollTop: number;
+  /** Whether a tap at the centre of the visible part lands on the button itself. */
+  hit: boolean;
+  cardHeight: number;
+  scrollHeight: number;
+}
+
+/**
+ * What the one way into the game looks like at the scroll position the screen OPENS at.
+ *
+ * `titleFrame`'s `ctaReachable` below scrolls the card to its end before it measures, which is a
+ * different and much weaker claim: a button that exists somewhere under the fold satisfies it. The
+ * title card shows no scrollbar on touch, no fade and no caret, so nothing tells a player there is
+ * anything below the fold to scroll to -- which is how "Begin the walk" shipped with zero visible
+ * pixels at 844x390, the project's own landscape-phone reference viewport, and the suite stayed
+ * green. Nothing is scrolled here, and `scrollTop` is returned so an assertion can prove it.
+ *
+ * The card clips: `.otp-title-panel` is the scroller in landscape and is capped against the camera
+ * in portrait, so the viewport alone does not decide what is on screen. The hit test is the last
+ * word -- a button inside both boxes and under something else is still not a way in.
+ */
+function ctaView(page: Page): Promise<CtaView> {
+  return page.evaluate(() => {
+    const panel = document.querySelector<HTMLElement>('.otp-title-panel')!;
+    // Whatever actually scrolls: the prose box if the card has one, else the card itself.
+    const scroller = panel.querySelector<HTMLElement>('.otp-title__scroll') ?? panel;
+    const card = panel.getBoundingClientRect();
+    const cta = panel.querySelector('.otp-cta')!.getBoundingClientRect();
+    const left = Math.max(cta.left, card.left, 0);
+    const right = Math.min(cta.right, card.right, innerWidth);
+    const top = Math.max(cta.top, card.top, 0);
+    const bottom = Math.min(cta.bottom, card.bottom, innerHeight);
+    const w = Math.max(0, right - left);
+    const h = Math.max(0, bottom - top);
+    const over =
+      w > 0 && h > 0 ? document.elementFromPoint((left + right) / 2, (top + bottom) / 2) : null;
+    const r = (n: number): number => Math.round(n);
+    return {
+      rect: [r(cta.left), r(cta.top), r(cta.width), r(cta.height)],
+      visible: [r(w), r(h)],
+      scrollTop: Math.round(scroller.scrollTop),
+      hit: !!over && !!over.closest('.otp-cta'),
+      cardHeight: r(card.height),
+      scrollHeight: Math.round(scroller.scrollHeight),
+    };
+  });
+}
+
+/**
+ * Asserts the entrance is usable at every viewport in the list, without scrolling anything.
+ *
+ * Three claims, and the third is the one that makes this a player's reading rather than a
+ * geometry exercise: the card is resting where it opened; every row and column of the button is
+ * inside both the card's clip and the window; and a tap at the middle of it reaches the button
+ * itself rather than something painted over it.
+ *
+ * NOTHING HERE IS EXPRESSED IN A CSS NUMBER. The bound is the button's own laid-out box, read
+ * from the same DOM in the same frame, so changing the card width, the padding, the copy, the
+ * --otp-ui step or the portrait cap moves BOTH sides of the comparison and the guard keeps
+ * meaning the same thing. A threshold of "59px tall at 844x390" would have to be rewritten by the
+ * next person to touch the stylesheet, which is how a guard quietly stops biting.
+ */
+async function expectEntranceOnScreen(page: Page, sizes: Size[]): Promise<void> {
+  await page.goto('/');
+  await page.waitForSelector('#game[data-ready="true"]');
+
+  for (const size of sizes) {
+    await resize(page, size.width, size.height);
+    const where = `${size.width}x${size.height}`;
+    const seen = await ctaView(page);
+    const [x, y, w, h] = seen.rect;
+    const told = `"Begin the walk" is ${w}x${h} at (${x}, ${y}) in a ${where} window, ${
+      seen.visible[0]
+    }x${seen.visible[1]} of it visible inside a ${seen.cardHeight}px card`;
+
+    // Nothing was scrolled to get this reading, and nothing may be: the card shows no scrollbar on
+    // touch, no fade and no caret, so a player is never told there is more below the fold.
+    expect(seen.scrollTop, `the title card is at rest at ${where}`).toBe(0);
+    expect(seen.visible[1], `${told} -- rows off screen`).toBe(h);
+    expect(seen.visible[0], `${told} -- columns off screen`).toBe(w);
+    expect(seen.hit, `${told} -- nothing takes a tap at its centre`).toBe(true);
+  }
+}
+
+test('the one way into the game is on screen the moment the screen opens', async ({ page }) => {
+  test.slow();
+  /*
+   * "Begin the walk" is the page's single Lime call to action and the only entrance to the game,
+   * and it had ZERO visible pixels on the project's own landscape-phone reference viewport.
+   * Measured on the built preview at DPR 1, at the resting scroll position, before the fix:
+   *
+   *     844x390  cta=[36,382,181,59]   0 of 59 rows visible   no tap lands on it
+   *     812x375  cta=[36,382,181,59]   0 of 59                no tap lands on it
+   *     667x375  cta=[36,382,181,59]   0 of 59                no tap lands on it
+   *     320x568  cta=[27,527,186,56]  34 of 56
+   *     390x600  cta=[30,545,202,58]  47 of 58
+   *
+   * The card scrolled, so the button existed somewhere below the fold -- but it shows no scrollbar
+   * on touch, no fade and no caret, so nothing told the player there was anywhere to scroll to. On
+   * a marketing asset that is the whole funnel.
+   *
+   * THE CHECK THAT LET THIS SHIP IS IN THIS FILE. `titleFrame` below used to scroll the card to
+   * its end and then ask whether the button had come into view, which it always had; a button
+   * under the fold of a card with no affordance satisfied it. That is why this reads at scrollTop
+   * 0 and asserts the number is 0, rather than trusting that nothing scrolled it.
+   *
+   * ui/Title.tsx now puts the prose in a scroll box of its own with .otp-title__foot outside it,
+   * so the button's row is reserved out of the card before the copy gets any. After:
+   *
+   *     844x390  cta=[36,254,181,59]  59 of 59     812x375  [36,239,181,59]  59 of 59
+   *     667x375  cta=[36,239,181,59]  59 of 59     320x568  [27,443,186,56]  56 of 56
+   *     390x600  cta=[30,488,202,58]  58 of 58
+   *
+   * and every viewport that already fitted is unmoved to the pixel -- 1280x800 still puts it at
+   * y 559, 375x812 at 705, 768x1024 at 893 -- because the fix only ever takes effect where the
+   * card was overflowing.
+   */
+  await expectEntranceOnScreen(page, ENTRANCE_VIEWPORTS);
+});
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  test('the one way into the game is on screen for the phone the hint is written for', async ({
+    page,
+  }) => {
+    test.slow();
+    /*
+     * The same assertion as the test above, on the context the defect belongs to -- and it is not
+     * the same measurement, because the card's foot is taller here. `titleHint` swaps the keyboard
+     * line for the pad line wherever the pad is drawn, and the pad line is the longer string
+     * ("About five minutes. The pad and the A button appear once you start walking.", 77
+     * characters against 54), so it takes an extra line in the column and the copy above it has
+     * that much less room: measured, the card's prose needed 454px rather than 436 at 844x390 and
+     * the button sat 19px lower still. The phone held sideways is both the worst case and the
+     * device most visitors to a research page arrive on, so it is asserted rather than inferred
+     * from the mouse reading.
+     */
+    await expectEntranceOnScreen(page, ENTRANCE_VIEWPORTS);
+  });
 });
 
 test('the title card never pushes its own first line off the top of its scroller', async ({
@@ -974,6 +1146,85 @@ test('the title card is a light ground, and carries the logo that belongs on one
   }
 });
 
+test('the title subtitle is the muted text role, not a foreground accent', async ({ page }) => {
+  /*
+   * `.otp-title-panel`'s own comment says the colours under it "are the brand's own semantic roles
+   * (cyera-theme.css: heading Deep Purple, text Black, muted Ash) rather than a per-element
+   * choice" -- and then set the subtitle in Aubergine, which BRAND_AND_UI section 1 lists as a
+   * foreground ACCENT. "That's Not My Grandma" is the second line of the hero screen; in Aubergine
+   * it competed with the Deep Purple heading above it, and the same element on the full-screen
+   * variant four rules up has been Ash the whole time. One element, two colours, neither explained.
+   *
+   * Both colours are resolved through the page's own tokens rather than written here as hex, so
+   * this agrees with reference/brand/cyera-theme.css by construction instead of by transcription.
+   */
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.waitForSelector('#game[data-ready="true"]');
+
+  const seen = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.display = 'none';
+    document.body.appendChild(probe);
+    const resolve = (token: string): string => {
+      probe.style.color = `var(${token})`;
+      return getComputedStyle(probe).color;
+    };
+    const roles = { ash: resolve('--cyera-ash'), aubergine: resolve('--cyera-aubergine') };
+    probe.remove();
+    const sub = document.querySelector('.otp-title-panel .otp-title__sub');
+    return { ...roles, sub: sub ? getComputedStyle(sub).color : null };
+  });
+
+  expect(seen.sub, 'the title card renders a subtitle').not.toBeNull();
+  expect(seen.sub, 'the subtitle is the muted text role').toBe(seen.ash);
+  expect(seen.sub, 'Aubergine is a foreground accent, not a type role').not.toBe(seen.aubergine);
+});
+
+test('a Season Mix word carries the weight of the heading it sits in', async ({ page }) => {
+  /*
+   * Section 2 allows Season Mix for "a single highlighted word in a heading" and nothing else, so
+   * the one thing the highlight must not do is read as a different voice from its own heading.
+   * `.otp-serif` pinned font-weight: 400, which is what it did everywhere it appears: `Path` at
+   * 400 inside an `.otp-title__mark` set at 600, `Spotters` and `Find out.` at 400 inside the 500
+   * of `.otp-section-label` and `.otp-band__question`. It is `inherit` now.
+   *
+   * Asserted as a relationship between each highlight and its own parent, on both screens that
+   * carry one, rather than against a list of weights: a heading whose weight is retuned later must
+   * take its highlight with it, and a new highlight somewhere else is covered the day it lands.
+   */
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await page.waitForSelector('#game[data-ready="true"]');
+
+  const census = async (screen: string): Promise<string[]> =>
+    page.evaluate((on) => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>('.otp-serif'))) {
+        const mine = getComputedStyle(el);
+        const theirs = getComputedStyle(el.parentElement!);
+        if (mine.fontWeight !== theirs.fontWeight) {
+          out.push(
+            `${on}: "${(el.textContent ?? '').trim()}" is ${mine.fontWeight} inside a ` +
+              `${theirs.fontWeight} ${el.parentElement!.className || el.parentElement!.tagName}`,
+          );
+        }
+        // And the upright cut, which is the claim this rule is really here to hold.
+        if (mine.fontStyle !== 'normal') {
+          out.push(`${on}: "${(el.textContent ?? '').trim()}" is ${mine.fontStyle}`);
+        }
+      }
+      return out;
+    }, screen);
+
+  await expect(page.locator('.otp-title__mark .otp-serif')).toHaveText(/\S/);
+  const title = await census('Title');
+  await openResults(page);
+  await expect(page.locator('.otp-serif')).not.toHaveCount(0);
+  const results = await census('Results');
+  expect([...title, ...results], 'highlights whose weight fights their own heading').toEqual([]);
+});
+
 /* ------------------------------------------------- what the fixes must not break */
 
 interface Indicator {
@@ -1046,6 +1297,30 @@ test('the focus indicator stays two-tone on both grounds', async ({ page }) => {
 
 test.describe('measurements', () => {
   test.skip(!MEASURE, 'set CSS_MEASURE=1 to print the numbers instead of asserting them');
+
+  test('the way into the game, at the scroll position the screen opens at', async ({ browser }) => {
+    test.setTimeout(240_000);
+    for (const touch of [false, true]) {
+      for (const size of ENTRANCE_VIEWPORTS) {
+        const ctx = await browser.newContext({
+          viewport: size,
+          hasTouch: touch,
+          isMobile: touch,
+        });
+        const p = await ctx.newPage();
+        await p.goto('/');
+        await p.waitForSelector('#game[data-ready="true"]');
+        const seen = await ctaView(p);
+        console.log(
+          `${touch ? 'touch ' : 'mouse '}${size.width}x${size.height}  ` +
+            `cta=[${seen.rect.join(',')}]  visible=${seen.visible[0]}x${seen.visible[1]}  ` +
+            `hit=${seen.hit}  scrollTop=${seen.scrollTop}  ` +
+            `card=${seen.cardHeight}  scrollHeight=${seen.scrollHeight}`,
+        );
+        await ctx.close();
+      }
+    }
+  });
 
   test('footer, options, ring, type and overhang', async ({ browser }) => {
     test.setTimeout(240_000);

@@ -464,3 +464,332 @@ test('Season Mix is never set in italic', async ({ page }) => {
     'binding change 1: always upright',
   ).toBe(true);
 });
+
+/* ======================================================= panels: nothing moves, nothing is covered
+
+   Four reference viewports, used by every sweep below. Two portrait phones under the 812 that the
+   existing collision guard in e2e/css-contract.spec.ts starts at, and two landscape phones, which
+   that guard visits for the toast not at all. */
+const REFERENCE: readonly (readonly [number, number])[] = [
+  [320, 568],
+  [375, 667],
+  [568, 320],
+  [812, 375],
+];
+
+async function resize(page: Page, width: number, height: number): Promise<void> {
+  await page.setViewportSize({ width, height });
+  await page.waitForFunction((w) => Math.abs(window.innerWidth - w) < 1, width);
+  // Two frames: one for the resize handler, one for the layout it causes.
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+}
+
+/**
+ * Every distinct position and size the spoken line and its panel take, sampled once per frame for
+ * as long as the caller asks.
+ *
+ * This is the only honest way to see the defect it guards. The sentence is dragged by its own panel
+ * growing a line at a time, and `layout-shift` scores none of the worst of it: half the movement
+ * happens while the typewriter is running, where the entries are real but tiny, and the rest happens
+ * on the frame after a click, where `hadRecentInput` discards them. What a player sees is the line
+ * they are reading changing position, so that is what is measured -- the top edge of the line's own
+ * box, in viewport coordinates, as a set.
+ *
+ * The first frames are dropped because `.otp-layer--modal` plays `otp-panel-in`, a 180ms
+ * `translateY(8px)`. That is the panel arriving, not the panel growing, and a bounding rect cannot
+ * tell the two apart.
+ */
+function samplePanel(
+  page: Page,
+  frames: number,
+): Promise<{ lineTop: number[]; lineHeight: number[]; panelHeight: number[] }> {
+  return page.evaluate((count) => {
+    const lineTop = new Set<number>();
+    const lineHeight = new Set<number>();
+    const panelHeight = new Set<number>();
+    let seen = 0;
+    return new Promise<{ lineTop: number[]; lineHeight: number[]; panelHeight: number[] }>(
+      (done) => {
+        const tick = (): void => {
+          seen += 1;
+          // 24 frames is comfortably past the 180ms slide at 60Hz and at 120Hz.
+          if (seen > 24) {
+            const line = document.querySelector('.otp-dialogue__line');
+            const panel = document.querySelector('.otp-panel');
+            if (line) {
+              const box = line.getBoundingClientRect();
+              lineTop.add(Math.round(box.top * 10) / 10);
+              lineHeight.add(Math.round(box.height * 10) / 10);
+            }
+            if (panel) panelHeight.add(Math.round(panel.getBoundingClientRect().height * 10) / 10);
+          }
+          if (seen < count + 24) requestAnimationFrame(tick);
+          else
+            done({
+              lineTop: [...lineTop],
+              lineHeight: [...lineHeight],
+              panelHeight: [...panelHeight],
+            });
+        };
+        requestAnimationFrame(tick);
+      },
+    );
+  }, frames);
+}
+
+test('the sentence being read never moves, and the panel around it never resizes', async ({
+  browser,
+}) => {
+  test.slow();
+  /*
+   * THE ONE DEFECT ON THIS BOARD A PLAYER CAN LITERALLY SEE.
+   *
+   * `.otp-layer--modal` pins the panel's bottom edge in portrait and its centre on a desktop, so
+   * every line the dialogue paragraph grew by moved the sentence under the reader's eye. Measured on
+   * the build before the fix, meeting the Owl:
+   *
+   *   375x812   line box 16 -> 30 -> 31px, panel 307 -> 322, the line's top edge 560 -> 545
+   *   1280x800  line box 22 -> 23 -> 44px, panel 332 -> 333 -> 355, top edge 316 -> 305
+   *
+   * -- 15px on a phone and 11px on a desktop, twice per encounter and six times a run, each step
+   * scoring a layout shift of 0.1082-0.1092 against a "good" bound of 0.1.
+   *
+   * Three separate mechanisms did it and this one assertion covers all three, because it watches the
+   * sentence rather than any of their causes: the reply being longer than the greeting, the line
+   * wrapping as it types, and the caret's own 1em box -- which in flow also carried a 0.5em advance,
+   * enough to push the last word of the Owl's greeting onto a second line at 1280 and pull it back
+   * when the caret went.
+   *
+   * No bound, no pixel count: the set of positions the line takes has to have ONE member. Anything
+   * that moves it by any amount fails, which is the only bound worth writing for "it does not move".
+   */
+  for (const size of [
+    { width: 1280, height: 800 },
+    ...REFERENCE.map(([w, h]) => ({ width: w, height: h })),
+  ]) {
+    const context = await browser.newContext({ viewport: size });
+    const page = await context.newPage();
+    const where = `${size.width}x${size.height}`;
+    await page.goto('/');
+    await startGame(page);
+
+    // The Owl's greeting is the longest in the cast and its replies are shorter, so this covers
+    // both directions: the paragraph must not grow as it types, and must not shrink on the reply.
+    await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'owl' }));
+    await expect(page.locator('.otp-dialogue__line')).toBeVisible();
+
+    // Through the whole of the greeting's typewriter run.
+    const typing = await samplePanel(page, 200);
+    expect(typing.lineTop, `${where}: the line moved while it was being typed`).toHaveLength(1);
+    expect(typing.lineHeight, `${where}: the line's box resized while it was typed`).toHaveLength(
+      1,
+    );
+    expect(typing.panelHeight, `${where}: the panel resized while the line was typed`).toHaveLength(
+      1,
+    );
+
+    // And across the reply, which is a different length and used to be what moved it.
+    await page.getByRole('option').first().click();
+    const replying = await samplePanel(page, 200);
+    expect(replying.lineTop, `${where}: the line moved when the reply arrived`).toEqual(
+      typing.lineTop,
+    );
+    expect(replying.panelHeight, `${where}: the panel resized when the reply arrived`).toEqual(
+      typing.panelHeight,
+    );
+
+    await context.close();
+  }
+});
+
+test.describe('on a touch screen, at the sizes the collision guard never visited', () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  /** Overlap in px between one element and each match of a selector, as width x height. */
+  function overlaps(page: Page, one: string, many: string): Promise<string[]> {
+    return page.evaluate(
+      ([a, b]) => {
+        const first = document.querySelector(a!);
+        if (!first) return [`${a} is absent`];
+        const ra = first.getBoundingClientRect();
+        const out: string[] = [];
+        for (const el of Array.from(document.querySelectorAll(b!))) {
+          const rb = el.getBoundingClientRect();
+          const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+          const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+          if (w > 0.5 && h > 0.5) {
+            out.push(
+              `${a} covers ${Math.round(w)}x${Math.round(h)} of ${b} ` +
+                `"${(el.textContent ?? '').trim().slice(0, 28)}"`,
+            );
+          }
+        }
+        return out;
+      },
+      [one, many],
+    );
+  }
+
+  test('the touch pad never covers an errand goal', async ({ page }) => {
+    test.slow();
+    /*
+     * The errand goals dock in the strip under the world in portrait, on the argument that the strip
+     * is empty. On a phone the pad takes the bottom 128px of it, and what is left is not enough.
+     * Measured between the frame's bottom border and the pad's top edge, against the goals box's own
+     * 93px: 32px of room at 320x568, 52 at 360x640, 59 at 375x667, 80 at 360x740 and 375x740, 91 at
+     * 375x780. The first height where it fits at all is 800, and 812 -- the project's primary phone
+     * -- clears it by one and a half pixels, which the stylesheet's own note concedes.
+     *
+     * So the pad was drawn straight over the goals the whole run is scored on: at 320x568 the stick
+     * covered all three outright (95x2, 95x19, 95x19) and the A button two (71x12, 71x19), and at
+     * 375x667 the stick covered the third (95x18).
+     *
+     * The existing guard in e2e/css-contract.spec.ts visits 375x812 and 390x844 and stops, which is
+     * why five common phone sizes shipped with it.
+     */
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto('/');
+    await startGame(page);
+    expect(
+      await page.evaluate(() => matchMedia('(hover: none)').matches),
+      'this sweep is only meaningful where the pad is actually drawn',
+    ).toBe(true);
+
+    for (const [w, h] of REFERENCE) {
+      await resize(page, w, h);
+      await expect(page.locator('.otp-a-button')).toBeVisible();
+      await expect(page.locator('.otp-hud-goal')).not.toHaveCount(0);
+
+      for (const control of ['.otp-a-button', '.otp-stick']) {
+        for (const part of ['.otp-hud-goal', '.otp-hud-goals__label']) {
+          expect(await overlaps(page, control, part), `${control} at ${w}x${h}`).toEqual([]);
+        }
+      }
+
+      /*
+       * And they are still on screen, which is the other half of the same requirement: a box can be
+       * moved clear of the pad by being pushed out of the window, and this layer is `position:
+       * fixed`, so nothing would scroll it back. The goals used to be positioned from the canvas box,
+       * which below 358px is WIDER than the viewport -- the trap .otp-world-frame's note records.
+       */
+      const onScreen = await page.evaluate(() => {
+        const rows = [
+          ...document.querySelectorAll('.otp-hud-goal, .otp-hud-goals__label'),
+        ] as HTMLElement[];
+        return rows
+          .filter((el) => {
+            const b = el.getBoundingClientRect();
+            return (
+              b.left < -0.5 ||
+              b.top < -0.5 ||
+              b.right > window.innerWidth + 0.5 ||
+              b.bottom > window.innerHeight + 0.5
+            );
+          })
+          .map((el) => (el.textContent ?? '').trim().slice(0, 28));
+      });
+      expect(onScreen, `errand goals outside the viewport at ${w}x${h}`).toEqual([]);
+    }
+  });
+
+  test('the verdict line never covers an errand goal, in either orientation', async ({ page }) => {
+    test.slow();
+    /*
+     * Portrait moves the transient lines inside the world because docked to the viewport they landed
+     * on the goals. Landscape was left on the viewport dock with the toast's 140px lift, and 140px up
+     * from the bottom of a 320px-tall window is the top of the world, which is where landscape puts
+     * the goals: measured at 568x320, "Allowed: Night Light" covered 88x19 of "Find the cottage
+     * before dark" and 88x8 of "Leave word at the post, unopened".
+     *
+     * One verdict per viewport and the viewport set before the verdict, because main.ts clears the
+     * line after HINT_MS: a sweep that resizes and then measures is measuring an empty toast, which
+     * is a guard that proves nothing. That trap is e2e/css-contract.spec.ts's note, and it applies
+     * here for the same reason.
+     */
+    const offers: [string, string][] = [
+      ['rabbit', 'cottage-finder'],
+      ['owl', 'word-weaver'],
+      ['lantern-keeper', 'night-light'],
+      ['rabbit', 'cottage-finder'],
+    ];
+
+    for (const [i, [w, h]] of REFERENCE.entries()) {
+      const [c, s] = offers[i]!;
+      await page.setViewportSize({ width: w, height: h });
+      await page.goto('/');
+      await startGame(page);
+      await page.evaluate(
+        ([character, skill]) => {
+          const { store } = window.__otp!;
+          store.dispatch({ type: 'MEET', c: character });
+          store.dispatch({ type: 'INSPECT', s: skill });
+          store.dispatch({ type: 'VERDICT', s: skill, v: 'allow' });
+        },
+        [c, s],
+      );
+      await expect(page.locator('.otp-toast')).toContainText(/\S/);
+      await expect(page.locator('.otp-hud-goal')).not.toHaveCount(0);
+
+      for (const part of ['.otp-hud-goal', '.otp-hud-goals__label']) {
+        expect(await overlaps(page, '.otp-toast', part), `the toast at ${w}x${h}`).toEqual([]);
+      }
+      // And it must still clear the two corners it was moved between.
+      expect(await overlaps(page, '.otp-toast', '.otp-hud-slot'), `at ${w}x${h}`).toEqual([]);
+      expect(await overlaps(page, '.otp-toast', '.otp-a-button'), `at ${w}x${h}`).toEqual([]);
+      expect(await overlaps(page, '.otp-toast', '.otp-stick'), `at ${w}x${h}`).toEqual([]);
+    }
+  });
+});
+
+test('Explore can be walked without a pointer, from the keyboard alone', async ({ page }) => {
+  /*
+   * `ui/tokens.css` used to take the whole pad out of the document on a fine pointer, and the pad is
+   * where the five named walk buttons live -- the ones that exist because a joystick answers a
+   * screen reader's single activation with a (0, 0) vector and moves Red exactly 0px. Enumerating
+   * the focusable controls on Explore at 1280x800 therefore returned exactly ONE, the music toggle:
+   * no way to walk, no way to stop, no way to reach anybody. The arrow keys are the better input
+   * here and they still work, but they are in no accessible tree and the run could not be finished
+   * without sight.
+   *
+   * Written as what a player can DO rather than as a count: every control in the walk group takes
+   * focus, and the group shows itself when it has focus -- because five controls with no focus ring
+   * is the other half of the same finding, and that is what a sighted keyboard player sees.
+   */
+  await page.goto('/');
+  await startGame(page);
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: fine) and (hover: hover)').matches),
+    'this test is about the pointer that has no pad',
+  ).toBe(true);
+
+  const walk = page.locator('.otp-touch [role="group"] button');
+  const count = await walk.count();
+  expect(count, 'the walk group is not in the document at all').toBeGreaterThan(0);
+
+  for (let i = 0; i < count; i++) {
+    const button = walk.nth(i);
+    const name = (await button.textContent())!.trim();
+    expect(name, 'every walk control is named from content.strings').not.toBe('');
+    await button.focus();
+    await expect(button, `"${name}" cannot take focus`).toBeFocused();
+    // Focused, it is on screen rather than clipped to a 1px box out of sight.
+    const box = (await button.boundingBox())!;
+    expect(
+      Math.round(Math.min(box.width, box.height)),
+      `"${name}" is focusable but invisible`,
+    ).toBeGreaterThanOrEqual(44);
+  }
+
+  // And pressing one actually walks her, which is the point of their existing.
+  const before = (await probe(page)).position;
+  await walk.first().click();
+  await page.waitForTimeout(500);
+  const after = (await probe(page)).position;
+  expect(
+    Math.hypot(after.x - before.x, after.y - before.y),
+    'a walk button that cannot move Red is not a control',
+  ).toBeGreaterThan(1);
+});

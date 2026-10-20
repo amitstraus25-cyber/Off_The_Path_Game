@@ -1,5 +1,5 @@
 import type { JSX } from 'preact';
-import { BASKET_SLOTS } from '@otp/core';
+import { BASKET_SLOTS, CAPABILITIES } from '@otp/core';
 import type { Content, Skill, Verdict } from '@otp/core';
 import { NotationChip, Panel, useFocusTrap } from './components';
 import { assetUrl } from '../world/assets';
@@ -83,6 +83,57 @@ const BackGlyph = () => (
   </svg>
 );
 
+/**
+ * The rulebook that rides on every card: the three verbs, then the three things a skill can be
+ * given, in the words the HUD discs are marked with.
+ *
+ * TWO THINGS WERE DEFINED NOWHERE A DECIDING PLAYER COULD READ THEM.
+ *
+ *  - The verbs were defined on the first card opened and no other, so verdicts two and three were
+ *    given with no definition of Allow, Restrict or Reject on screen at all. Night Light is third
+ *    in content order and the only skill with no fine print whose best answer is still Restrict,
+ *    so the rulebook was missing exactly where it decides the answer.
+ *  - `content.capabilities[*].detail` -- the three sentences that say what "reaches into your
+ *    basket" actually means -- rendered in one place, `.otp-leg__detail`, which only the expanded
+ *    Trifecta draws. Every mount of that component passes `compact`, so those three sentences
+ *    reached nobody at all.
+ *
+ * IT TAKES THE CONTENT AND NOTHING ELSE. No skill, no position in the run: the one thing this copy
+ * must not do is differ between cards, and a signature that cannot see which card it is on cannot
+ * be re-gated by accident. The legs are listed in `CAPABILITIES` order, which is the order the
+ * discs sit in, and they are built from the same three records the discs read -- so adding a fourth
+ * capability to the content file puts it on the card with no change here (CLAUDE.md rule 3).
+ *
+ * WHAT IT DELIBERATELY DOES NOT SAY is which of the three THIS skill would leave running, or what
+ * each verdict would leave behind. That forecast was deleted on purpose and e2e/trifecta.spec.ts
+ * guards its return: translating "it needs something written to shine on" into "it reads what
+ * strangers wrote" is the whole cognitive task of this game. The player gets the vocabulary; the
+ * translation stays theirs.
+ *
+ * One paragraph, not two. `.otp-card__primer` is the card's only quiet-small-print class and
+ * panels.css has another owner this round, so a second block would either reuse a class that means
+ * something else or carry layout inline. The ask to split and style it is in the handback.
+ */
+export function cardRulebook(content: Content): string {
+  const legs = CAPABILITIES.flatMap((id) => {
+    const leg = content.capabilities[id];
+    return leg ? [`${leg.label} (${leg.mark}). ${leg.detail}`] : [];
+  });
+  return [content.strings['verdictPrimer'] ?? '', content.strings['cardLegs'] ?? '', ...legs]
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .join(' ');
+}
+
+/**
+ * The "What it asks for" row, which is a sentence on every card -- including the honest one, whose
+ * sentence is that there is nothing to find. Exported because test/content-copy.test.ts asks
+ * whether the Keeper's only testable claim, written into an ask no code path can reach, actually
+ * reaches a player anywhere.
+ */
+export const cardAsksFor = (content: Content, skill: Skill): string =>
+  skill.finePrint?.detail ?? content.strings['noFinePrint'] ?? '';
+
 /* Three identical pills; the glyph is what distinguishes them, never a fill (UI_FOUNDATIONS §2). */
 const VERDICTS: { id: Verdict; label: string; Glyph: () => JSX.Element }[] = [
   { id: 'allow', label: 'Allow', Glyph: AllowGlyph },
@@ -102,11 +153,14 @@ export interface SkillCardProps {
   /** Leaves the card without recording a verdict, back to the conversation. */
   onBack(): void;
   /**
-   * True on the first card this run actually opens, which is where the verb primer goes. Not the
-   * same as `index === 1`: that is the skill's position in the content file, so meeting the Owl
-   * first opened "Skill 2 of 3" and the primer never rendered at all.
+   * DEAD, and optional so that removing the prop from App.tsx needs no change here.
+   *
+   * It used to gate the verb primer to the first card a run opened. The primer is now part of
+   * `cardRulebook`, which every card carries, so nothing on this card depends on which card it is
+   * -- see that function for why. App.tsx still computes and passes it; that file has another
+   * owner this round, and dropping the property from this interface would fail its typecheck.
    */
-  firstOpened: boolean;
+  firstOpened?: boolean;
 }
 
 /*
@@ -122,7 +176,6 @@ export function SkillCard({
   total,
   onVerdict,
   onBack,
-  firstOpened,
 }: SkillCardProps) {
   const trapRef = useFocusTrap();
 
@@ -192,9 +245,7 @@ export function SkillCard({
                 </span>
                 <div>
                   <p class="otp-row__eyebrow">What it asks for</p>
-                  <p class="otp-row__heading">
-                    {skill.finePrint?.detail ?? content.strings['noFinePrint'] ?? ''}
-                  </p>
+                  <p class="otp-row__heading">{cardAsksFor(content, skill)}</p>
                 </div>
               </div>
             </div>
@@ -224,13 +275,13 @@ export function SkillCard({
           <p class="otp-card__final">{content.strings['cardBackHint'] ?? ''}</p>
 
           {/*
-            The three verbs are defined once, on the first card the player opens. Cutting the
-            per-verdict "leaves B" microcopy removes the answer key, but nothing else in the game
-            ever says what Restrict does, and GAME_DESIGN section 4 requires the right answer to be
-            discoverable. This is a rulebook: it defines the verbs without naming what any
-            particular skill asks for.
+            The rulebook, on EVERY card: the three verbs, and the three things a skill can be
+            given. Cutting the per-verdict "leaves B" microcopy removes the answer key, but nothing
+            else in the game ever says what Restrict does, and GAME_DESIGN section 4 requires the
+            right answer to be discoverable. It defines the vocabulary without naming what any
+            particular skill asks for -- see `cardRulebook`, which is why it cannot vary by card.
           */}
-          {firstOpened && <p class="otp-card__primer">{content.strings['verdictPrimer'] ?? ''}</p>}
+          <p class="otp-card__primer">{cardRulebook(content)}</p>
         </div>
       </Panel>
     </div>

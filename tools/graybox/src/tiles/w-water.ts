@@ -89,7 +89,7 @@
  * for the bank rock and its outline, `grass` and `shadow` for the land behind it. No raw hex, no
  * partial alpha, and no brand colour, because the forest stays a forest.
  */
-import { clamp01, Img, keyline, mix, shade, TILE, tone } from '../paint.ts';
+import { clamp01, Img, keyline, lumaOf, mix, shade, TILE, tone } from '../paint.ts';
 import type { RGBA, Side } from '../paint.ts';
 
 /**
@@ -755,11 +755,39 @@ function landTone(into: number, x: number, y: number): RGBA {
  * Every step here is between two and nine luma, so the whole gradient is below the edge threshold
  * and adds eleven distinct blues without adding one boundary. All of this tile's contrast stays
  * where the board puts it: the single hard step from foam at 243 to dark water at 100.
+ *
+ * THAT PARAGRAPH WAS AN INTENTION AND NOT A MEASUREMENT, and for three passes the apron did not
+ * draw any of it. `CHANNEL` was being snapped through the OPEN BODY's band -- `snap(SURF_LO=0.34,
+ * SURF_HI=0.62, ...)` -- and `snap` clamps `(t - lo) / (hi - lo)` into 0..1, so every ring below
+ * 0.34 resolved to the identical `tone('water', 0.34)`. Six of the eleven rings are below it
+ * (0.02, 0.05, 0.11, 0.19, 0.27, 0.33), which is the whole near half of the cross-section, the
+ * half that carries the depth. Measured on the painted tile: eleven rings drew FOUR distinct
+ * blues, the apron spanned 16.2 luma against the 51.8 these numbers ask for, and no pixel of water
+ * anywhere in a shore tile went below luma 135.6 where the board's channel reaches 105. A quarter
+ * of every shore tile came out one flat colour in runs of up to 22 pixels, which is why the river
+ * read as a sticker cut out of the lawn rather than as a channel with a near bank.
+ *
+ * So the apron gets its OWN band, and the one thing to understand about it is that `CHANNEL` is
+ * already in ramp units: 0.02 is `tone('water', 0.02)` and means it. The band therefore has to
+ * start at the bottom of the ramp, not at the bottom of the open body's swing.
+ *
+ *   APRON_LO 0.0 .. APRON_HI 0.52 over APRON_STEPS 20 is a step of 0.027 `t`, which near the foot
+ *   of the `water` ramp is about 3 luma -- the same sub-threshold step the body's own band uses,
+ *   so the cross-section still grades rather than banding, and the eleven rings now draw eleven
+ *   tones instead of collapsing to one.
+ *
+ * `APRON_HI` sits a little above `CHANNEL`'s outermost ring (0.48, the body's own mean) so the
+ * hand-over from the apron to the open water lands within a luma of the body value and the two
+ * meet without a step. The body's band is untouched: `SURF_LO`, `SURF_HI` and `SURF_STEPS` still
+ * belong to `bandAt` alone, and `water`'s mean stays at 155.9.
  */
 const FOAM_PHASES: Phases = [3.6, 1.2, 2.9, 0.5];
 const CHANNEL: readonly number[] = [
   0.02, 0.05, 0.11, 0.19, 0.27, 0.33, 0.38, 0.42, 0.45, 0.47, 0.48,
 ];
+const APRON_LO = 0.0;
+const APRON_HI = 0.52;
+const APRON_STEPS = 20;
 
 function shore(side: Side): (img: Img) => void {
   return (img) => {
@@ -799,6 +827,35 @@ function shore(side: Side): (img: Img) => void {
       for (let x = 0; x < S; x++)
         solid[y * S + x] = isLand(side, x, y) || pile.get(x, y)[3] > 0 ? 1 : 0;
 
+    /*
+     * One step of the shoreline distance field: WRAPPED ALONG THE BANK, OPEN ACROSS IT.
+     *
+     * This used to wrap both axes, and that single `wrap` on the across-bank axis drew the worst
+     * mark in the file. The map lays `shore-w` down the left bank, so its land is a column at low
+     * `x` -- and a wrapped step from `x = 0` lands on `x = 31`, which the flood then recorded as
+     * being ONE pixel from the bank. `d === 1` is the foam rim, so every shore tile painted a flat
+     * white rule 32 pixels long down its outer edge: `shore-w` column 31 came back 226,249,252
+     * thirty-two times, one colour and zero contour, and identically on `shore-e` column 0,
+     * `shore-n` row 31 and `shore-s` row 0. The map places these 51 times, 44 of them on a vertical
+     * boundary, at luma 243 against abutting open water at 53-88 -- so the river was outlined in
+     * white along the tile grid, with nothing continuing past the line on the far side.
+     *
+     * The two axes are genuinely different and `isLand` above already says so: along the bank the
+     * tile repeats, so `t` wraps and a feature that leaves one end re-enters the other; across the
+     * bank the neighbour is open ground on one side and the open river on the other, which is
+     * nobody's business of this tile. `toTile` puts depth on `x` for the east and west banks and on
+     * `y` for the north and south ones, so that is the axis left open: a step off that edge is
+     * refused, the far side of the tile keeps the band `river()` already painted there, and the
+     * water runs to the edge and straight into the `water` tile beyond it.
+     */
+    const acrossX = side === 'e' || side === 'w';
+    const step = (x: number, y: number, dx: number, dy: number): [number, number] | null => {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (acrossX) return nx < 0 || nx >= S ? null : [nx, wrap(ny)];
+      return ny < 0 || ny >= S ? null : [wrap(nx), ny];
+    };
+
     const dist = new Int8Array(S * S).fill(-1);
     let front: [number, number][] = [];
     for (let y = 0; y < S; y++)
@@ -812,8 +869,9 @@ function shore(side: Side): (img: Img) => void {
           [0, 1],
           [0, -1],
         ] as const) {
-          const nx = wrap(x + dx);
-          const ny = wrap(y + dy);
+          const to = step(x, y, dx, dy);
+          if (to === null) continue;
+          const [nx, ny] = to;
           const i = ny * S + nx;
           if (solid[i] === 1 || dist[i] !== -1) continue;
           dist[i] = d;
@@ -874,7 +932,7 @@ function shore(side: Side): (img: Img) => void {
         img.px(
           x,
           y,
-          snap(SURF_LO, SURF_HI, SURF_STEPS, CHANNEL[k]! + 0.05 * field(x, y, FOAM_PHASES)),
+          snap(APRON_LO, APRON_HI, APRON_STEPS, CHANNEL[k]! + 0.05 * field(x, y, FOAM_PHASES)),
         );
       }
   };
@@ -1058,3 +1116,123 @@ export const WATER_TILES: Record<string, (img: Img) => void> = {
   'shore-w': shore('w'),
   waterfall,
 };
+
+/* --- the guard -------------------------------------------------------------- */
+
+/*
+ * THE TWO THINGS A PLAYER COULD SEE WRONG WITH A SHORE TILE, checked on the rendered pixels at
+ * import time, which is how the rest of this tool's art guards work (`tiles/w-trees.ts`,
+ * `tiles/w-undergrowth.ts`, `tiles/s-outdoor.ts`, `sprites/cast.ts`). `tiles.ts` imports this
+ * module and `test/art-guards.test.ts` imports `tiles.ts`, so loading is what arms these and
+ * `pnpm test` is where they fire.
+ *
+ * Both bounds below watch a SYMPTOM and not a constant. Neither is restated from `CHANNEL`,
+ * `APRON_LO`, `APRON_HI` or `SURF_LO`: a guard written in terms of the number it is guarding
+ * passes by construction the moment someone edits that number, which is exactly how the apron
+ * shipped flat for three passes with a docstring describing a gradient it was not drawing.
+ */
+
+/**
+ * A pixel drawn from the `water` ramp: blue over green over red.
+ *
+ * This is a property of the palette rather than a probe tuned to today's tones, which is why the
+ * guard can tell water from everything else sharing the tile without being told where the water
+ * is. Every `water` stop satisfies it; `grass` and `shadow` have green over blue, and all four
+ * `stone` stops -- so every value of `rockTone`, `keyline('stone', ...)` and any `mix` of them --
+ * have red equal to green. So the set this picks out is exactly the river, the apron and the foam,
+ * and never the lawn, the bank line, a boulder or its outline.
+ */
+const isWaterPixel = (c: RGBA): boolean => c[2] > c[1] && c[1] > c[0];
+
+/**
+ * The darkest water a shore tile is allowed to stop at.
+ *
+ * `shore()` paints an eleven-ring cross-section from `CHANNEL`, which runs from `t` 0.02 -- near
+ * the bottom of the `water` ramp, luma 101 -- out to the open body. For three passes it was snapped
+ * through the OPEN BODY's band, whose floor clamped the first six rings to one tone, and the
+ * measured result was that no pixel of water anywhere in a shore tile went below luma 135.6: the
+ * channel had no dark end, and a river with no dark end is a sticker lying on the lawn. The drawing
+ * now bottoms out at 98.7. 115 sits between the two with room on both sides, and it is the number a
+ * viewer would actually be reporting -- "the water never gets dark" -- rather than any constant
+ * this file sets.
+ */
+const SHORE_DARK_FLOOR = 115;
+
+/**
+ * The longest run of one identical colour allowed down a shore tile's OUTER line.
+ *
+ * The outer line is the tile BOUNDARY, not a bank: the map lays `shore-w` down the left bank of the
+ * river and open `water` to the right of it, so whatever is on column 31 abuts open river. The
+ * shoreline distance field used to wrap on that axis, which put the foam rim one pixel from "land"
+ * there and printed 226,249,252 thirty-two times -- a flat white rule at luma 243 against abutting
+ * water at 53-88, drawn 51 times across the map, 44 of them on a vertical boundary, with nothing
+ * continuing past it on the far side. One colour for the full height of the tile is the whole
+ * signature of that fault, and no legitimate drawing has it: the open `water` tile's own longest
+ * single-colour run is 10 along one axis and 11 along the other, and these four now run 3 to 5.
+ * 12 is above anything the field itself produces and a long way under 32.
+ */
+const EDGE_FLAT_RUN_CAP = 12;
+
+/** Index the outer line of a shore tile: the edge AWAY from its land, which is the river's side. */
+const OUTER_LINE: Record<Side, (i: number) => [number, number]> = {
+  w: (i) => [S - 1, i],
+  e: (i) => [0, i],
+  n: (i) => [i, S - 1],
+  s: (i) => [i, 0],
+};
+
+for (const side of ['n', 's', 'e', 'w'] as const) {
+  const name = `shore-${side}`;
+  const img = new Img(S, S);
+  WATER_TILES[name]!(img);
+
+  let darkest = Infinity;
+  let at = '';
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const c = img.get(x, y);
+      if (!isWaterPixel(c)) continue;
+      const l = lumaOf(c);
+      if (l < darkest) {
+        darkest = l;
+        at = `${x},${y}`;
+      }
+    }
+  if (!(darkest < SHORE_DARK_FLOOR))
+    throw new Error(
+      `${name}'s darkest water pixel is luma ${darkest.toFixed(1)} at ${at}, not under ` +
+        `${SHORE_DARK_FLOOR}. The shoreline cross-section has lost its dark end, so the channel ` +
+        `reads as a flat cut-out against the lawn instead of as water with a near bank. The way ` +
+        `this happened before was snapping CHANNEL through a band whose floor is above most of ` +
+        `it: snap() clamps, so every ring under the floor collapses to one tone. Check that the ` +
+        `apron is still snapped through APRON_LO/APRON_HI and not through the open body's band.`,
+    );
+
+  const line: RGBA[] = [];
+  for (let i = 0; i < S; i++) {
+    const [x, y] = OUTER_LINE[side](i);
+    line.push(img.get(x, y));
+  }
+  let run = 1;
+  let longest = 1;
+  let colour = line[0]!;
+  for (let i = 1; i < S; i++) {
+    const a = line[i - 1]!;
+    const b = line[i]!;
+    run = a[0] === b[0] && a[1] === b[1] && a[2] === b[2] ? run + 1 : 1;
+    if (run > longest) {
+      longest = run;
+      colour = b;
+    }
+  }
+  if (longest > EDGE_FLAT_RUN_CAP)
+    throw new Error(
+      `${name} paints ${longest} identical pixels (${colour[0]},${colour[1]},${colour[2]}, luma ` +
+        `${lumaOf(colour).toFixed(0)}) in a row down its outer edge, over the ` +
+        `${EDGE_FLAT_RUN_CAP} cap. That edge is the TILE BOUNDARY and not a bank -- open water ` +
+        `abuts it -- so a flat line there is the map's grid drawn on the river. The way this ` +
+        `happened before was the shoreline distance field wrapping on the across-bank axis, which ` +
+        `made the far side of the tile read as one pixel from land and gave it the foam rim. ` +
+        `Check the step() in shore(): it wraps along the bank only.`,
+    );
+}

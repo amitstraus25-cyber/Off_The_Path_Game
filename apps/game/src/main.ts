@@ -260,6 +260,23 @@ async function start(): Promise<void> {
      * and builds it only when the player asks for sound.
      */
     audio: { noAudio: true },
+    /*
+     * The same argument as `noAudio`, and it is the larger half of the boot bill.
+     *
+     * Phaser's PipelineManager compiles the whole built-in FX set on boot unless told not to --
+     * blur, bloom, glow, shadow, displacement, the lot -- and this game applies none of them: no
+     * `preFX`, no `postFX`, no `setPipeline` anywhere in the tree. Every one of those shaders was
+     * being compiled on every page load, in an iframe on someone else's page, to be used by
+     * nothing. A pixel-art game that draws tiles and sprites at integer scale wants the plain
+     * multi pipeline and nothing else.
+     *
+     * Measured end to end, cold, with the scene drawing exactly the same pixels either way; the
+     * numbers and the identical render are in the task report. If a later round wants a built-in
+     * effect on a game object, these two lines are what it has to take out, and the cost of taking
+     * them out is the boot time back.
+     */
+    disablePreFX: true,
+    disablePostFX: true,
     scene: [new BootScene(manifest), new ForestScene(store, bus, input, worldHasInput)],
   });
 

@@ -8,15 +8,122 @@
  * The brand theme's --cyera-font-sans / --cyera-font-serif already name these families first,
  * so defining them here is what makes every screen render in them.
  */
+
+/*
+ * WHAT THESE TWO FILES COST, measured on the built game over Lighthouse Slow-4G (1638.4 kbps,
+ * 150ms RTT) with a 4x CPU throttle at 390x844. Before, with both faces preloaded:
+ *
+ *   /fonts/HafferUprightsVF.ttf      459,792 B   159ms -> 5,590ms
+ *   /fonts/SeasonMixUprightsVF.ttf   245,888 B   160ms -> 3,880ms
+ *   /assets/index-*.js               390,978 B   160ms -> 5,261ms   <- the only thing that can
+ *                                                                      start the game
+ *   FCP 5,852ms   ready 7,089ms
+ *
+ * After, with the preloads gone and this swap in place -- same machine, same load, five runs each
+ * taken back to back against five before, because an unpaired comparison here measures the machine:
+ *
+ *   /assets/index-*.js               391,881 B   165ms -> 2,236ms
+ *   /fonts/HafferUprightsVF.ttf      459,792 B  2,805ms -> 6,969ms  (after first render, unraced)
+ *   FCP 2,820ms   ready 4,696ms      -- FCP -3,032ms (-51.8%), ready -2,393ms (-33.8%)
+ *
+ * 705,680 bytes of raw TTF were preloaded at highest priority and spent five and a half seconds
+ * taking the pipe away from the module script, and the script is what paints the first screen.
+ * That is the whole of the "laggy" report: boot cost, not frame pacing. Neither file is compressed
+ * in transit either -- `font/ttf` arrives at its full 459,792 bytes.
+ *
+ * Both preloads are therefore gone from index.html, and the swap below is what makes that safe:
+ * with no preload the face is not requested until the first text node needs it, which is after
+ * Preact's first render, so `block` would hide the hero all over again at the far end -- later,
+ * in fact, because the request now starts after the script instead of before it.
+ *
+ * WHAT THE SWAP COSTS, measured rather than argued, because the note it replaces argued it. The
+ * same build was rendered twice, once with /fonts/** aborted so every string is in the brand
+ * stack's own fallback and once normally, and the boxes were diffed at 390x844:
+ *
+ *   title screen    every block element dy 0px, dh 0px; the one box that moves at all is the CTA
+ *                   pill, which is shrink-to-fit, at dw -7.14px on a 181px pill
+ *   dialogue modal  .otp-dialogue dy 0px dh 0px, .otp-dialogue__line dy 0px dh 0px
+ *
+ * It costs nothing because this UI's boxes are sized by CSS and not by the text in them. Boot CLS
+ * measures 0.0004 with the swap against 0.0000 without it, at a "good" bound of 0.1.
+ *
+ * A METRIC-MATCHED FALLBACK WAS TRIED HERE AND MADE IT WORSE -- do not re-add one without
+ * re-running that diff. Two `@font-face` faces of local('Arial') / local('Georgia') carrying
+ * Haffer's and Season Mix's own metrics (size-adjust 94.43% / 92.88%, from avg advances of
+ * 0.506699em and 0.508137em against Arial's 0.536594em and Georgia's 0.547062em over 73
+ * characters) were named into --cyera-font-sans / --cyera-font-serif in second place. The
+ * size-adjust makes the stand-in NARROWER than the real face, which moves wrap points: the
+ * rabbit's first line then fitted on one line in the fallback and two in Haffer, and the swap grew
+ * the dialogue panel by 16.85px and dragged the sentence being read up by 16.84px. Unadjusted
+ * Arial wraps where Haffer wraps and moves nothing. The brand stack was already the better
+ * fallback, so it is left exactly as the brand theme writes it.
+ *
+ * SUBSETTING IS NOT WIRED UP, AND NOT BECAUSE IT DOES NOT WORK. GPOS is 67.3% of Haffer's bytes
+ * and 63.4% of Season Mix's, almost none of it reachable from the glyphs this product sets. A
+ * Latin-1 + ten-symbol woff2 subset measures 39,032 B and 42,804 B -- 81,836 B against 705,680,
+ * an 88.4% cut -- and it changes no glyph and no measurement:
+ *
+ *   - all 201 requested codepoints retained, none added, none lost
+ *   - 2,412 glyph comparisons over twelve weight instances: zero decomposed-outline differences,
+ *     zero advance-width differences
+ *   - 402 glyphs' gvar delta sets compared at full precision: identical
+ *   - head.unitsPerEm, hhea asc/desc/gap, OS/2 typo+win+xHeight+capHeight+usWeightClass+
+ *     fsSelection, fvar and avar: identical. Only usFirstCharIndex/usLastCharIndex and numGlyphs
+ *     move, and neither is read at layout time.
+ *   - all 281 strings this product sets, shaped through HarfBuzz: identical glyph sequences,
+ *     advances and offsets, so kerning and wrap points do not move
+ *
+ * WHERE IT IS NOT IDENTICAL, stated plainly because the finding this task inherited claimed it was.
+ * Rendered in Chromium the two are NOT pixel-identical: on the title, dialogue and card screens at
+ * 1280x800 DPR 1, 28,529 of 3,072,000 pixels differ, 3,534 of them by more than 8 levels, and on a
+ * bare specimen page with no app around it 8,413 of 500,000 differ at a worst channel delta of 108.
+ * The same build against itself is byte-identical, so that is a real difference and not run noise.
+ * It is confined to antialiasing along glyph edges: every text box measures the same to three
+ * decimal places, the subset-as-TTF differs by the same amount as the subset-as-woff2 (so it is
+ * not the woff2 transform), and at 4x magnification the two renders are indistinguishable. With
+ * outlines, deltas, advances, shaping and metrics all proven identical, what is left is Skia's own
+ * rasterisation, which cannot be reached from here -- so this is reported as unexplained rather
+ * than as parity.
+ *
+ * The blocker is a licence question, not an engineering one: Brand has not yet confirmed in
+ * writing that the Haffer and Season Mix licences permit redistributing a SUBSET, and `public/` is
+ * copied verbatim into `dist/`, so committing the woff2 files here would ship them. They are built
+ * and verified OUT of the repo until that answer arrives.
+ *
+ * To turn it on, when Brand says yes -- four edits, in this order:
+ *   1. pyftsubset HafferUprightsVF.ttf --flavor=woff2 \
+ *        --unicodes='U+0020-007E,U+00A0-00FF,U+2013,U+2014,U+2018,U+2019,U+201C,U+201D,U+2022,\
+ *                    U+2026,U+2122,U+2192' \
+ *        --output-file=HafferUprightsVF.subset.woff2            (same for SeasonMixUprightsVF)
+ *      Latin-1, and NOT the glyphs this build happens to set: the handle field takes free text.
+ *      Leave pyftsubset's default --layout-features alone; it keeps kern/liga/calt, which is what
+ *      holds the metrics. Note what Latin-1 gives up -- Haffer's cmap carries 789 codepoints today
+ *      and the subset carries 201, so Latin Extended-A goes and a Polish or Czech handle that
+ *      renders in Haffer today would fall back to Arial. Adding U+0100-017F back costs +25,872 B
+ *      across the two faces (measured), which is still a 84.7% cut; Brand's call, not ours.
+ *   2. Put the .subset.woff2 files in public/fonts/ beside the TTFs -- beside, not instead of.
+ *   3. In each src below, put the woff2 line first:
+ *        src:
+ *          url('/fonts/HafferUprightsVF.subset.woff2') format('woff2-variations'),
+ *          url('/fonts/HafferUprightsVF.ttf') format('truetype-variations');
+ *   4. Put the Haffer preload back in index.html as type="font/woff2" (39KB of pipe is free), and
+ *      raise FONT_BUDGET_BYTES in test/fonts.test.ts to match. Season Mix stays unpreloaded
+ *      whatever happens: it sets three words in the whole product and none of them on first paint.
+ */
 @font-face {
   font-family: 'Haffer';
   src: url('/fonts/HafferUprightsVF.ttf') format('truetype-variations');
   font-weight: 100 900;
   font-style: normal;
-  /* `block`, not `swap`: the Title screen paints a panel of text as its first frame, and with no
-     metric-matched fallback declared a swap makes it reflow from Helvetica. Revisit once the
-     fallback metrics are measured from the real file. */
-  font-display: block;
+  /*
+   * `swap`, not `block`. The note that stood here said block was right because a swap "makes it
+   * reflow from Helvetica" with no metric-matched fallback declared, and asked for the fallback
+   * metrics to be measured from the real file. They are measured now, and so is the reflow itself
+   * (see above): the reflow is 0px, and the metric-matched fallback the note asked for is what
+   * creates one. What block was costing meanwhile: the face is 459,792 bytes, and until it lands
+   * every character set in it is painted as nothing.
+   */
+  font-display: swap;
 }
 
 @font-face {
@@ -24,7 +131,7 @@
   src: url('/fonts/SeasonMixUprightsVF.ttf') format('truetype-variations');
   font-weight: 100 900;
   font-style: normal;
-  font-display: block;
+  font-display: swap;
 }
 
 /*
@@ -74,6 +181,27 @@
      the previous row on screen for exactly as long as the departure takes to play. */
   --otp-leave-ms: 340ms;
   --otp-arrive-ms: 300ms;
+
+  /*
+   * THE TOUCH PAD'S GEOMETRY, DECLARED RATHER THAN MEASURED.
+   *
+   * Same treatment --otp-hud-basket-h already gets in ui/panels.css, and for the same reason: two
+   * other things are placed against this pad -- the basket, which lifts clear of the A button in
+   * landscape, and the transient toast layer, which is capped to the channel the two thumb controls
+   * leave between them -- and both of them used to carry their own copy of the numbers. panels.css
+   * had a bare `72px` in the basket's landscape lift that no rule connected to the button it was
+   * describing.
+   *
+   * Each number is applied back to the box it describes, further down this file, so the token and
+   * the box cannot drift apart. A thumb is the same size at every breakpoint, so none of them scales
+   * with --otp-ui. There is deliberately no --otp-pad-height among them: nothing reserves room for
+   * the pad any more, because the one thing that tried to -- the errand goals, docked in the strip
+   * under the world in portrait -- is back inside the world instead, for the reason panels.css
+   * records. A token no rule consumes reads as a contract the UI honours, and this one would not be.
+   */
+  --otp-pad-stick: 96px;
+  --otp-pad-button: 72px;
+  --otp-pad-gutter: 16px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -156,8 +284,9 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px calc(16px + env(safe-area-inset-left)) calc(16px + env(safe-area-inset-bottom))
-    calc(16px + env(safe-area-inset-right));
+  padding: var(--otp-pad-gutter) calc(var(--otp-pad-gutter) + env(safe-area-inset-left))
+    calc(var(--otp-pad-gutter) + env(safe-area-inset-bottom))
+    calc(var(--otp-pad-gutter) + env(safe-area-inset-right));
   pointer-events: none;
   touch-action: none;
 }
@@ -176,8 +305,8 @@ body {
 
 .otp-stick {
   position: relative;
-  width: 96px;
-  height: 96px;
+  width: var(--otp-pad-stick);
+  height: var(--otp-pad-stick);
   border-radius: 50%;
   background: var(--cyera-deep-purple);
   border: 3px solid var(--cyera-lilac);
@@ -217,8 +346,8 @@ body {
 }
 
 .otp-a-button {
-  width: 72px;
-  height: 72px;
+  width: var(--otp-pad-button);
+  height: var(--otp-pad-button);
   min-width: var(--otp-touch-min);
   min-height: var(--otp-touch-min);
   border-radius: 50%;
@@ -277,10 +406,87 @@ body {
   text-transform: uppercase;
 }
 
+/*
+ * THE PAD ON A DESKTOP POINTER, AND THE FIVE CONTROLS THAT MUST SURVIVE IT.
+ *
+ * This block used to set the pad itself to display-none, which took the whole pad out of the
+ * document -- and the pad is where `ui/touch-controls.ts` puts the five named walk buttons that
+ * stand behind the joystick, because a joystick answers an activation with a (0, 0) vector and moves
+ * Red exactly 0px. (Written in prose rather than as a selector and a declaration: `test/title.test.ts`
+ * greps this file for that pair, and a comment that spells it out is a guard matching a sentence --
+ * which is how that test came to report the reduced-motion block as the rule that hides the pad.)
+ * Enumerating the focusable controls on Explore at 1280x800 therefore returned exactly ONE:
+ * the music toggle. A keyboard or screen-reader player on a desktop had no way to walk, no way to
+ * stop, and no way to interact -- half of why the run cannot be finished without sight -- and the
+ * arrow keys that are the answer for a sighted keyboard player are not discoverable by, or reachable
+ * from, anything in the accessible tree.
+ *
+ * So the pad's two THUMB controls go and its five BUTTONS stay. The pad's own box collapses to
+ * nothing -- its padding goes and both of its drawn children are gone, and the group is out of flow
+ * -- and that group keeps `.otp-visually-hidden`'s treatment until it is focused, at which point it
+ * becomes a real row of pills: the skip-link pattern. That answers the other half of the finding
+ * touch-controls.ts records: a sighted player tabbing through used to find five controls with no
+ * focus ring, because the remedy was "a dozen lines in ui/tokens.css" that nobody had written.
+ *
+ * The arrow keys still work and are still the better input here. These are the fallback, and on
+ * Explore they are the only controls a player who cannot see the forest has.
+ */
 @media (pointer: fine) and (hover: hover) {
   .otp-touch {
+    /* Nothing of the pad itself is drawn, but the element stays in the document. `space-between`
+       has nothing left to space out here; `center` is what puts the focused walk row in the middle
+       of the bottom edge, where a skip link belongs. */
+    padding: 0;
+    justify-content: center;
+  }
+
+  .otp-touch .otp-stick,
+  .otp-touch .otp-a-button {
     display: none;
   }
+}
+
+/*
+ * The walk group, wherever it is: hidden until a keyboard reaches it, then a row of pills above the
+ * bottom edge. `:focus-within` is the whole mechanism -- no script, and nothing to keep in step.
+ */
+.otp-touch > [role='group']:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: calc(8px + env(safe-area-inset-bottom)) 8px;
+  overflow: visible;
+  clip-path: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: auto;
+  background: var(--cyera-black);
+  border: var(--otp-panel-border) solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+}
+
+.otp-touch > [role='group'] > button {
+  /* The pad itself takes no pointer events, so each control has to claim its own -- the same line
+     .otp-stick and .otp-a-button carry. Without it an assistive technology's synthesised click can
+     be swallowed before it reaches the button. */
+  pointer-events: auto;
+  min-width: var(--otp-touch-min);
+  min-height: var(--otp-touch-min);
+  padding: 0 14px;
+  border-radius: var(--otp-r-pill);
+  border: 2px solid var(--cyera-lilac);
+  background: var(--cyera-deep-purple);
+  color: var(--cyera-offwhite);
+  font: 500 15px/1 var(--cyera-font-sans);
+  cursor: pointer;
+}
+
+.otp-touch > [role='group'] > button:hover {
+  background: var(--cyera-lilac);
+  color: var(--cyera-black);
 }
 
 /* Visible to screen readers only; used for announcing a finished dialogue line once. */

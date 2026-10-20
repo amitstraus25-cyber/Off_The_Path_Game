@@ -1,6 +1,21 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
-import { probe, ready } from './helpers';
+import type { CDPSession, Page } from '@playwright/test';
+import { probe, ready, talkingDistance, walkTo } from './helpers';
+
+/*
+ * The shipped words, read rather than imported: Playwright runs these as plain Node ESM, where a
+ * JSON import needs an import attribute the rest of the workspace does not use. Every string this
+ * file asserts comes from here, so rewording the game cannot redden it (CLAUDE.md rule 3).
+ */
+const CONTENT = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
+) as {
+  strings: Record<string, string>;
+  endings: { id: string; title: string; lines: string[] }[];
+  bystanders: { id: string; name: string; spawn: string; lines: string[] }[];
+};
 
 type Verdict = 'allow' | 'restrict' | 'reject';
 const SKILL_OF: Record<string, string> = {
@@ -120,13 +135,25 @@ test("allowing everything ends in the wolf's house", async ({ page }) => {
   expect(flags).toEqual(['keyStolen', 'messagesLeaked']);
 });
 
-test('the key line plays when the wolf took the key', async ({ page }) => {
+/*
+ * One leak draws the close card, and the close card says its own words.
+ *
+ * This used to assert the literal "why do you need my key", which is the mistake the note above
+ * warns about in the other direction: `endings.close` fires on a COUNT of flags and never on which
+ * one, so a key-specific sentence there was wrong for any other single leak -- and the sentence has
+ * since been rewritten flag-neutral in `content/game.json`, which reddened this test exactly as
+ * CLAUDE.md rule 3 says content changes must not. What only a browser can see is which card plays
+ * and that its line reaches the screen; which line that is belongs to the content file.
+ */
+test('a single leak draws the close card, in its own words', async ({ page }) => {
   await page.getByRole('button', { name: /Begin the walk/ }).click();
   await playRun(page, { rabbit: 'allow', owl: 'reject', 'lantern-keeper': 'allow' });
 
   await advanceBeats(page);
-  await expect(page.locator('.otp-ending__title')).toHaveText('A close call');
-  await expect(page.locator('.otp-arrive__text')).toContainText('why do you need my key');
+  const close = CONTENT.endings.find((e) => e.id === 'close')!;
+  expect(await page.evaluate(() => window.__otp!.store.getState().flags)).toHaveLength(1);
+  await expect(page.locator('.otp-ending__title')).toHaveText(close.title);
+  await expect(page.locator('.otp-arrive__text')).toContainText(close.lines[0]!);
 });
 
 test('the handle field validates before anything is posted', async ({ page }) => {
@@ -174,12 +201,36 @@ test('Results shows exactly one Lime, on Read the Research', async ({ page }) =>
         ? `#${[1, 2, 3].map((i) => Number(m[i]).toString(16).padStart(2, '0')).join('')}`
         : rgb;
     };
-    return [...document.querySelectorAll('*')]
-      .filter((el) => toHex(getComputedStyle(el).backgroundColor) === lime)
-      .map((el) => el.className);
+    /*
+     * Background AND text AND fill. This used to count `backgroundColor` alone, which is half the
+     * rule: BRAND_AND_UI section 2 ends "Lime is a background fill only, NEVER TEXT", and section 4
+     * "Never two Limes on one screen". A guard that only looks at backgrounds cannot see the way
+     * the rule is most easily broken, and it did not -- `.otp-cta__disc` shipped a Lime arrow as
+     * `color` on its Black ground, on both Title and Results, and this test stayed green through
+     * every round. Counting the property the rule names is the point.
+     */
+    const out: string[] = [];
+    for (const el of document.querySelectorAll('*')) {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (s.visibility === 'hidden' || s.opacity === '0') continue;
+      const ways: string[] = [];
+      if (toHex(s.backgroundColor) === lime) ways.push('background');
+      // Text only counts where there is text of its own to paint.
+      if (toHex(s.color) === lime && (el.textContent ?? '').trim() !== '') ways.push('color');
+      if (toHex(s.fill) === lime) ways.push('fill');
+      if (ways.length) out.push(`${String(el.className)} [${ways.join('+')}]`);
+    }
+    return out;
   });
-  expect(limes).toHaveLength(1);
+  expect(limes, `Lime is painted in ${limes.length} place(s): ${limes.join(' | ')}`).toHaveLength(
+    1,
+  );
   expect(String(limes[0])).toContain('otp-cta');
+  expect(String(limes[0]), 'the one Lime must be a background fill, not text').toContain(
+    'background',
+  );
 });
 
 test('replay starts a fresh run with a new id', async ({ page }) => {
@@ -272,4 +323,108 @@ test('results explain where the points came from', async ({ page }) => {
   await expect(breakdown).toContainText('from your 3 verdicts');
   await expect(breakdown).toContainText('for asking before you decided');
   await expect(breakdown).toContainText('for never running all three at once');
+});
+
+/* ------------------------------------------------ the A button, on the device most people use */
+
+/*
+ * One tap of A used to be two interacts.
+ *
+ * `ui/touch-controls.ts` answers both `pointerdown` (low latency, and the only path that survives a
+ * second finger) and `click` (all a screen reader can send). A tap is a hold, so those land about
+ * 120ms apart -- different frames -- and the scene's `read()` consumed them as two separate
+ * presses. The cost is not a wasted frame: a bystander's line advances per greeting and each
+ * greeting overwrites the last before a frame is drawn, so the line the player gets to read is
+ * every SECOND one. Measured on the build before the fix, three 120ms taps beside the Toadstool:
+ * 2, 4 and 6 `greetBystander` events, and the lines he showed long enough to read were his 2nd,
+ * 1st and 3rd -- his opening line, the first thing anybody says to you in this forest, flashed and
+ * was gone. A part with an even number of lines fares worse than scrambled: stepping two at a time
+ * through four never lands on the 1st or the 3rd at all, so half of the Snail was unreachable on a
+ * phone. That last figure is arithmetic off the measured step of two, not a second measurement.
+ *
+ * So this is written the way a player meets it -- tap, read, tap, read -- and not as a count of
+ * listeners on a button, which is the thing that happens to be wrong today rather than the thing
+ * that is wrong for the player. The lines come from the content file, so rewriting the Toadstool
+ * cannot redden it (CLAUDE.md rule 3).
+ */
+const TOADSTOOL = CONTENT.bystanders.find((b) => b.id === 'toadstool')!;
+
+/**
+ * A real tap: down, a hold, up.
+ *
+ * `touchscreen.tap()` sends touch-down and touch-up back to back, inside one animation frame, and
+ * the two presses then collapse into one before the scene ever reads them -- so it passes on the
+ * broken build. A thumb is slower than a frame, and this is the gesture the bug lives in.
+ */
+async function tapA(page: Page, cdp: CDPSession, holdMs = 120): Promise<void> {
+  const box = (await page.locator('.otp-a-button').boundingBox())!;
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  await page.waitForTimeout(holdMs);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
+/** Long enough that a second press which is going to land has landed: a dozen frames. */
+const SETTLED_MS = 250;
+
+/** Counts what the scene actually emitted, so a duplicate shows even when nothing drew it. */
+const countGreetings = (page: Page): Promise<void> =>
+  page.evaluate(() => {
+    const w = window as unknown as { __greets?: string[] };
+    w.__greets = [];
+    (
+      window.__otp!.bus as unknown as {
+        on(e: string, h: (p: { bystanderId: string }) => void): () => void;
+      }
+    ).on('greetBystander', ({ bystanderId }) => void w.__greets!.push(bystanderId));
+  });
+
+const greetings = (page: Page): Promise<string[]> =>
+  page.evaluate(() => (window as unknown as { __greets: string[] }).__greets);
+
+test.describe('the A button on a phone', () => {
+  // The only place the pad is on screen: on a fine pointer the whole thing is display: none.
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('one tap is one greeting, and a bystander can be read line by line', async ({
+    page,
+    context,
+  }) => {
+    await page.getByRole('button', { name: /Begin the walk/ }).click();
+    await walkTo(page, await talkingDistance(page, TOADSTOOL.spawn));
+    await expect(page.locator('.otp-a-button')).toBeVisible();
+    await countGreetings(page);
+
+    const cdp = await context.newCDPSession(page);
+    for (const [i, line] of TOADSTOOL.lines.entries()) {
+      await tapA(page, cdp);
+      await page.waitForTimeout(SETTLED_MS);
+
+      // What he said on this tap is the line that comes next, and the player had a frame to read
+      // the one before it: his first word is his first line, not his second.
+      await expect(page.locator('.otp-say'), `tap ${i + 1} says line ${i + 1}`).toContainText(line);
+      expect(await greetings(page), `tap ${i + 1} is one greeting`).toHaveLength(i + 1);
+    }
+  });
+
+  test('an activation with no pointer behind it still talks, exactly once', async ({ page }) => {
+    await page.getByRole('button', { name: /Begin the walk/ }).click();
+    await walkTo(page, await talkingDistance(page, TOADSTOOL.spawn));
+    await countGreetings(page);
+
+    /*
+     * What a screen reader does to a control: one activation, no pointer, no hold -- which arrives
+     * as an untrusted click carrying detail 0. It is the only notice this button gets from assistive
+     * technology, so the fix above must not reach for "ignore every click": the A button is the
+     * only way to talk to anybody on a touch device, and it was inert to a screen reader once
+     * already (e2e/world-reach.spec.ts).
+     */
+    await page
+      .getByRole('button', { name: CONTENT.strings['touchInteract']!, exact: true })
+      .evaluate((el) => (el as HTMLElement).click());
+    await page.waitForTimeout(SETTLED_MS);
+
+    await expect(page.locator('.otp-say')).toContainText(TOADSTOOL.lines[0]!);
+    expect(await greetings(page)).toHaveLength(1);
+  });
 });

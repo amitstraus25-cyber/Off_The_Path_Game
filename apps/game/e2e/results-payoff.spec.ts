@@ -42,6 +42,13 @@ const strings = (
 ).strings;
 const TRADED = strings['errandTraded'] || 'Traded for the boundary';
 
+/**
+ * The sentence an errand row prints when the capability really was never in hand. It is the one
+ * claim on this screen that can be false, and it was false on three rows out of three for any run
+ * that allowed everything, so it is read from content the same way `TRADED` is.
+ */
+const NEEDED = strings['errandNeeded'] || 'Needed a skill that';
+
 type Verdict = 'allow' | 'restrict' | 'reject';
 
 const SKILL_OF: Record<string, string> = {
@@ -149,11 +156,18 @@ test('the keyboard reaches the one Lime call to action, and reaches it first', a
 /** Whether a row says, in whatever words the content configures, that the goal was traded. */
 const saysTraded = (text: string): boolean => text.toLowerCase().includes(TRADED.toLowerCase());
 
-/** Every errand row, in order: its glyph, whether it is on the Haze "missed" ground, its words. */
+/**
+ * Every errand row, in order: its mark, whether it is on the Haze "missed" ground, its words.
+ *
+ * `badge` is `data-glyph`, not text. The check mark and the circled minus are drawn as SVG -- Haffer
+ * carries neither U+2713 nor U+2296, so both used to render out of whatever family came next in the
+ * stack -- and `data-glyph` names the mark in every state, including the typed "!", so nothing here
+ * has to know which of the three the brand font happens to own.
+ */
 async function errandRows(page: Page): Promise<{ badge: string; missed: boolean; text: string }[]> {
   return page.$$eval('.otp-recap__row--errand', (rows) =>
     rows.map((row) => ({
-      badge: row.querySelector('.otp-recap__badge')?.textContent?.trim() ?? '',
+      badge: row.querySelector('.otp-recap__badge')?.getAttribute('data-glyph') ?? '',
       missed: row.classList.contains('otp-recap__row--missed'),
       text: row.textContent?.replace(/\s+/g, ' ').trim() ?? '',
     })),
@@ -181,18 +195,33 @@ test('a perfect run is never marked with the failure glyph', async ({ page }) =>
   // mistake -- and the row has to say which of the three states it is in, in words.
   expect(rows).toHaveLength(3);
   expect(rows.filter((r) => r.missed)).toHaveLength(0);
-  expect(rows.filter((r) => r.badge === '!')).toHaveLength(0);
+  expect(rows.filter((r) => r.badge === 'missed')).toHaveLength(0);
   // Both halves of the treatment: the Restrict glyph that means "withheld on purpose", and the
   // words. The glyph assertion is what trifecta.spec.ts leans on, so it is asserted here too.
-  expect(rows.filter((r) => r.badge === '⊖')).toHaveLength(2);
+  expect(rows.filter((r) => r.badge === 'traded')).toHaveLength(2);
   expect(rows.filter((r) => saysTraded(r.text))).toHaveLength(2);
 
   // Nothing anywhere on a flawless run wears the "!" disc.
   const badges = await page.$$eval('.otp-recap__badge', (els) =>
-    els.map((e) => e.textContent?.trim() ?? ''),
+    els.map((e) => e.getAttribute('data-glyph') ?? ''),
   );
   console.log('finding 15 (perfect) badges:', JSON.stringify(badges));
-  expect(badges.filter((b) => b === '!')).toHaveLength(0);
+  expect(badges.filter((b) => b === 'missed')).toHaveLength(0);
+  // The self-check: `data-glyph` has to be there at all, or every assertion above reads '' and
+  // passes on a screen with no marks on it.
+  expect(badges.length, 'the badges carry data-glyph').toBeGreaterThan(3);
+  expect(badges.filter((b) => b === '')).toHaveLength(0);
+
+  // And the two drawn marks are drawn: a check mark and a circled minus from the font would be
+  // text nodes, and this column renders two of its three marks out of a font that has neither.
+  const drawn = await page.$$eval('.otp-recap__badge', (els) =>
+    els.map((e) => ({
+      glyph: e.getAttribute('data-glyph'),
+      svg: e.querySelectorAll('svg').length,
+    })),
+  );
+  for (const { glyph, svg } of drawn)
+    if (glyph === 'check' || glyph === 'traded') expect(svg, `${glyph} is drawn`).toBe(1);
 });
 
 test('an errand thrown away by getting a skill wrong is still a miss', async ({ page }) => {
@@ -207,7 +236,7 @@ test('an errand thrown away by getting a skill wrong is still a miss', async ({ 
 
   const route = rows.find((r) => /Find the cottage before dark/.test(r.text))!;
   expect(route.missed).toBe(true);
-  expect(route.badge).toBe('!');
+  expect(route.badge).toBe('missed');
   expect(saysTraded(route.text)).toBe(false);
   expect(rows.filter((r) => saysTraded(r.text))).toHaveLength(2);
 });
@@ -224,8 +253,110 @@ test('an errand whose skill handed the capability over is a miss, not a trade', 
   console.log('finding 15 (held and unused):', JSON.stringify(rows));
 
   const word = rows.find((r) => /Leave word at the post/.test(r.text))!;
-  expect(word.badge).toBe('!');
+  expect(word.badge).toBe('missed');
   expect(word.missed).toBe(true);
+
+  // ...and having been carried, it must not be described as having been absent. Word Weaver on
+  // Restrict puts the translator in the basket, so "Needed a skill that sends word ahead" is a
+  // claim the same screen contradicts eight lines down.
+  expect(word.text, `"${word.text}"`).not.toContain(NEEDED);
+});
+
+/* ------------------------------------- the rows against the basket under them */
+
+/*
+ * THE ROW AND THE BASKET ON ONE SCREEN, which is the whole of this defect and the reason it reads as
+ * a lie rather than as a wording problem: an allow/allow/allow run had all three errand rows say
+ * "Needed a skill that <capability>" while the Basket eight lines below showed the route, the
+ * translator and the lantern that those verdicts put there. The player can see both at once.
+ *
+ * Asserted as "no row claims a capability was missing on a run that granted all three", against the
+ * copy the content file is configured with rather than a sentence spelled here, so a rewording
+ * cannot satisfy it and a content edit cannot redden it.
+ */
+test('no errand row claims a capability the basket shows the player holding', async ({ page }) => {
+  await playToResults(page, { rabbit: 'allow', owl: 'allow', 'lantern-keeper': 'allow' });
+
+  // What the player can see in the basket: one icon per filled slot, each named by its alt text.
+  const basket = await page.$$eval('.otp-basket .otp-slot img', (imgs) =>
+    imgs.map((img) => img.getAttribute('alt') ?? ''),
+  );
+  const rows = await errandRows(page);
+  console.log('errand rows vs basket:', JSON.stringify({ rows, basket }));
+
+  // The premise: this run really did go wrong on every errand, so the rows below are all misses.
+  expect(rows).toHaveLength(3);
+  expect(rows.filter((r) => r.badge === 'missed')).toHaveLength(3);
+
+  // The premise's other half: the basket really is holding what those verdicts granted. Without
+  // this the assertion underneath would pass on an empty basket, where "needed" was true all along.
+  expect(basket, 'the route, the translator and the lantern are on screen').toEqual(
+    expect.arrayContaining(['route', 'translator', 'lantern']),
+  );
+
+  // The claim itself, on every row.
+  const lying = rows.filter((r) => r.text.includes(NEEDED));
+  expect(
+    lying.map((r) => r.text),
+    'the run granted all three capabilities, so no row may say one was missing',
+  ).toEqual([]);
+});
+
+/* ------------------------------------------------ the one conversion action */
+
+/*
+ * THE ONE CONVERSION ACTION, which did nothing in any build this repo could produce.
+ *
+ * "Read the Research" was a <button> whose handler is `() => emit('otp:cta', {})`, and `emit`
+ * returned early whenever the embed origin was unset -- which was every build, because
+ * `VITE_EMBED_ORIGIN` had exactly one occurrence repo-wide and it was the line that read it. So the
+ * press was a no-op, and nothing in this suite noticed, because nothing in this suite asserted that
+ * the press produced any effect at all. Three specs measured where the button was and none asked
+ * what it did.
+ *
+ * This asserts the destination rather than the click: a real absolute https href, present with no
+ * .env file anywhere, which is also what makes it survive a missing variable and what makes it
+ * middle-clickable. The click itself stays unexercised on purpose -- following it would navigate
+ * away from the harness, and the handler beside the href is the parent page's channel, not the
+ * player's route.
+ */
+test('the call to action has somewhere to go', async ({ page }) => {
+  await playToResults(page, PERFECT);
+
+  const cta = await page.evaluate(() => {
+    const el = document.querySelector('.otp-cta');
+    return {
+      tag: el?.tagName ?? '',
+      href: el?.getAttribute('href') ?? '',
+      target: el?.getAttribute('target') ?? '',
+      rel: el?.getAttribute('rel') ?? '',
+      text: el?.textContent?.trim() ?? '',
+      resolved: (el as HTMLAnchorElement | null)?.href ?? '',
+    };
+  });
+  console.log('cta:', JSON.stringify(cta));
+
+  // The premise: it is still the call to action and still says so.
+  expect(cta.text.length, 'the button still has its label').toBeGreaterThan(0);
+
+  // A destination the browser can follow, not a handler. A <button> has no href and `window.open`
+  // from a handler is exactly what a popup blocker eats.
+  expect(cta.tag).toBe('A');
+  expect(cta.href, 'an absolute https destination').toMatch(/^https:\/\/\S+$/);
+  // Resolved by the browser too, so a relative or malformed href cannot pass the regex above.
+  expect(cta.resolved).toBe(cta.href);
+  expect(new URL(cta.resolved).origin, 'not this origin').not.toBe(new URL(page.url()).origin);
+
+  // Embedded, a same-tab navigation would take the game off the research page with it; and nothing
+  // here wants a handle on the opener.
+  expect(cta.target).toBe('_blank');
+  expect(cta.rel).toContain('noopener');
+
+  // The brand half: the screen carries one Cyera mark, not the two it used to -- the header aside
+  // and the footer both had one.
+  const marks = await page.locator('.otp-screen .otp-mark').count();
+  console.log('cyera marks on Results:', marks);
+  expect(marks, 'one mark on the payoff screen').toBe(1);
 });
 
 /*

@@ -8,6 +8,7 @@ import {
   CAMERA_FOCUS_Y,
   RED_FEET_BELOW_SPAWN,
   INTERACT_RADIUS,
+  MIN_VIEW,
   PX_PER_WALK_FRAME,
   blocked,
   TILE,
@@ -20,20 +21,100 @@ import {
   nearest,
   overlaps,
 } from './logic';
-import type { Facing, Interactable, Vec } from './logic';
+import type { Facing, Interactable, Rect, Vec } from './logic';
 import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
 
-/**
- * One character frame, in world pixels: a tile wide and a tile and a half tall.
- *
- * In TILE terms, like everything else in `logic.ts`, so the move from 16px to 32px art moved this
- * with it. It was a hardcoded 16x24, which after the remaster stood every NPC half a sprite too
- * high in its tile and put the interact prompt through the middle of their heads.
- */
-const NPC_SPRITE = { width: TILE, height: TILE * 1.5 };
 /** The gap between the top of a character's head and the bottom of the prompt bubble. */
 const PROMPT_GAP = TILE * (3 / 8);
+
+/**
+ * The speech bubble's bob, as a registered animation rather than a frame counter.
+ *
+ * Two frames at two a second, which is the cadence the two painted frames were drawn for. It used
+ * to be `setFrame(Math.floor(n / 30) % 2)` off a counter incremented once per `update`, so the bob
+ * ran at (frame rate / 60) Hz: right at 60Hz, twice as fast on a 120Hz display, and slower than
+ * drawn on anything dropping frames. Phaser's animation clock is wall time, so the bob is the same
+ * speed on every display -- the same reason the walk cycle reads its frameRate from WALK_SPEED.
+ */
+const PROMPT_BOB = { key: 'fx-prompt-bob', frameRate: 2 } as const;
+
+/**
+ * The breath in the forest: two frames, a long open eye and a blink.
+ *
+ * Every character sheet ships an open-eyed frame and a blink -- eight painted frames across the
+ * cast, `CAST_FRAMES` and `BYSTANDER_FRAMES` in tools/graybox name them `-0` and `-1` -- and
+ * nothing in this scene has ever called `play` or `setFrame` on an NPC. They were added at frame 0
+ * and stayed there, so the forest held perfectly still while Red walked through it and half the
+ * painted cast was bytes nobody would ever see.
+ *
+ * `holdMs` plus a per-character step is what keeps them out of step. Eight figures blinking on the
+ * same beat reads as a glitch rather than as life, and a shared period would drift into step and
+ * out again forever; different periods never come back together for long, and `startStepMs` keeps
+ * them apart in the first few seconds as well, before the periods have had time to separate them.
+ *
+ * Phaser takes the cadence from the FRAMES, not from a frame rate: `AnimationState.updateFrame`
+ * reads `currentFrame.duration || msPerFrame`, so a per-frame duration replaces the animation's own
+ * pacing as long as nothing overrides `frameRate` on the `play` call. That is what lets one
+ * animation hold a frame for four seconds and the next for a tenth of one.
+ */
+const IDLE = {
+  /** The shortest open-eyed hold, in ms. The cast is spread upwards from here. */
+  holdMs: 3000,
+  /** Added per character, wrapped by `spreadMs`, so no two share a period. */
+  stepMs: 250,
+  /** How far the hold is allowed to be spread, so the slowest blink still lands inside 3-5s. */
+  spreadMs: 2000,
+  /** A blink, not a doze. */
+  blinkMs: 120,
+  /** How far apart the cast start, so they are not in step before their periods separate them. */
+  startStepMs: 430,
+} as const;
+
+/**
+ * The pool of shade a figure stands in.
+ *
+ * NOBODY IN THE CAST TOUCHED THE GROUND. Measured as green pixels at least 25 luma below the lawn
+ * around them: bush 518, rock 104, Red 24, and the rabbit, the owl and the Lantern Keeper 0 each.
+ * Everything painted into the tileset plants on the lawn and everything painted into a character
+ * sheet floats over it, which on the plank bridge left Red's contact line at dL -14.5 against a
+ * board that seats every figure.
+ *
+ * IT BELONGS IN THE SCENE AND NOT IN THE SPRITE, and that is not a convenience. Both painters
+ * REMOVED a baked shadow for a good reason: a shadow drawn into a 32x48 frame carries one ground's
+ * colour with it, so a figure painted standing on grass walked onto sand with a green smear under
+ * her. Only the scene knows what a figure is standing on, so only the scene can tint the pool from
+ * it -- `tileInks` below reads the mean colour of every cell in the tileset the game actually
+ * loaded, and `groundInkAt` looks up the one under the feet.
+ *
+ * `tone` darkens that colour and `alpha` lets the ground's own mottle read through it, so the net
+ * effect is a MULTIPLY: the lawn keeps its texture and simply loses a quarter of its light. On the
+ * shipped tileset that is a fall of 43 luma on grass, 49 on the sand path and 23 on the bridge
+ * planks, which are already dark. A flat opaque blob at any colour would read as a hole.
+ */
+const SHADOW = {
+  /** The pool is a quarter-tile wider than the feet that cast it. */
+  spread: TILE / 4,
+  /** And a third as deep as it is wide: this camera looks down at the path, not along it. */
+  flatten: 1 / 3,
+  /** The narrowest pool worth drawing, for a figure whose art reaches the floor in a thin line. */
+  minDepth: 3,
+  /** How dark the pool's own colour is against the ground it was sampled from. */
+  tone: 0.5,
+  /** How much of the ground it covers; the rest is the ground's own mottle. */
+  alpha: 0.5,
+  /** Half a pixel under the figure's own depth, so she stands ON it rather than behind it. */
+  behind: -0.5,
+} as const;
+
+/**
+ * How many rows of a figure's art count as the part that touches the ground.
+ *
+ * Four, because the pool is the width of the FEET and not of the figure: the owl is 22px across
+ * his wings and 21 across his claws, the magpie 28 across the tail and 9 where he stands. A pool
+ * the width of the silhouette would put the magpie in a puddle twice his own footprint.
+ */
+const CONTACT_ROWS = 4;
 
 /**
  * The phases that happen at the cottage. From the first arrival beat to the end of the run the
@@ -88,7 +169,155 @@ interface Npc extends Interactable {
   kind: 'character' | 'bystander';
   sprite: Phaser.GameObjects.Sprite;
   prompt: Phaser.GameObjects.Sprite;
+  /** The pool of shade under their feet, tinted from the tile they are standing on. */
+  shadow: Phaser.GameObjects.Ellipse;
 }
+
+/**
+ * How far above a character's feet the top of their ART is, measured off the frame the game loaded.
+ *
+ * The prompt bubble used to hang off the FRAME -- `sprite.y - 48 - PROMPT_GAP` -- and every
+ * character's frame is 32 x 48 whatever is drawn in it. So the one mark that means "talk to me"
+ * floated 16px over the Lantern Keeper, who fills 44 of his 48 rows, and 46px over the snail, who
+ * fills 14: the shortest character in the cast got the mark furthest from their head, which is the
+ * opposite of a pointer. The gap is now measured from the drawing.
+ *
+ * Measured rather than tabled. `CAST_PLAN` and `BYSTANDER_PLAN` in tools/graybox carry these eight
+ * heights, and a copy of them over here is the same mistake as the camera literal that has cost
+ * this project three rounds: graybox is a build tool the game must not import, so a table here
+ * would be a second set of numbers nothing keeps honest. One `drawImage` and one `getImageData`
+ * per character at boot reads the real thing, and an NPC redrawn two pixels taller moves its own
+ * bubble without anybody remembering to.
+ *
+ * Every character sheet is bottom-aligned in its frame -- the lowest ink row IS the last row, which
+ * is what puts their feet on their own origin -- so the top opaque row is all this has to find.
+ *
+ * It degrades to the frame's own height, which is exactly the old behaviour, if the readback is
+ * unavailable for any reason. A bubble a little high is a cosmetic fault; a scene that throws
+ * during `create` is a blank canvas.
+ */
+function headroomOf(frame: Phaser.Textures.Frame | null): number {
+  if (!frame) return 0;
+  const { cutX, cutY, cutWidth: w, cutHeight: h } = frame;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return h;
+    ctx.drawImage(frame.source.image as CanvasImageSource, cutX, cutY, w, h, 0, 0, w, h);
+    const { data } = ctx.getImageData(0, 0, w, h);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3]! > 0) return h - y;
+    return h;
+  } catch {
+    return h;
+  }
+}
+
+/**
+ * How wide the part of a figure that touches the ground is, in pixels, off the same frame.
+ *
+ * Measured for the same reason the headroom above is: a table of eight numbers over here is a
+ * second set of figures nothing keeps honest, and the sheets are regenerated by a tool the game
+ * must not import. On the shipped art this reads 15 for Red, 20 for the rabbit, 21 for the owl,
+ * 23 for the Keeper, 9 for the magpie and 25 for the snail -- the spread that makes a pool look
+ * like it belongs to the figure standing in it.
+ *
+ * It relies on the same fact `headroomOf` does, and `assertBodyPlans()` in tools/graybox enforces:
+ * every character sheet is bottom-aligned in its frame, so the lowest ink row IS the last row.
+ * Degrades to 0 -- a pool of nothing but `SHADOW.spread` -- rather than throwing, because a
+ * cosmetic pool that is a little small is not worth a blank canvas.
+ */
+function footprintOf(frame: Phaser.Textures.Frame | null): number {
+  if (!frame) return 0;
+  const { cutX, cutY, cutWidth: w, cutHeight: h } = frame;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return 0;
+    ctx.drawImage(frame.source.image as CanvasImageSource, cutX, cutY, w, h, 0, 0, w, h);
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let left = w;
+    let right = -1;
+    for (let y = Math.max(0, h - CONTACT_ROWS); y < h; y++)
+      for (let x = 0; x < w; x++)
+        if (data[(y * w + x) * 4 + 3]! > 0) {
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+    return right < left ? 0 : right - left + 1;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * The mean colour of every cell in a tileset, as 0xRRGGBB, keyed by tile index.
+ *
+ * This is where a character's shadow gets its colour, so that a figure on sand is not wearing a
+ * green one. One `drawImage` and one `getImageData` for the WHOLE sheet and then an arithmetic
+ * pass per cell -- 79 cells of 1,024 pixels on the shipped tileset -- rather than a readback each,
+ * because a readback carries a fixed cost and eighty of them at boot is a measurable one.
+ *
+ * Fully transparent cells are left out of the map, and so is everything if the readback fails;
+ * `groundInkAt` reads a missing answer as "do not draw a pool", which is the state the game has
+ * shipped in until now and therefore a safe thing to degrade to.
+ */
+function tileInks(tileset: Phaser.Tilemaps.Tileset): Map<number, number> {
+  const inks = new Map<number, number>();
+  const image = tileset.image?.getSourceImage();
+  if (!image) return inks;
+  const tw = tileset.tileWidth;
+  const th = tileset.tileHeight;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return inks;
+    ctx.drawImage(image as CanvasImageSource, 0, 0);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < tileset.total; i++) {
+      const index = tileset.firstgid + i;
+      const at = tileset.getTileTextureCoordinates(index) as { x: number; y: number } | null;
+      if (!at) continue;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let n = 0;
+      for (let y = at.y; y < at.y + th; y++)
+        for (let x = at.x; x < at.x + tw; x++) {
+          const p = (y * canvas.width + x) * 4;
+          if (data[p + 3]! === 0) continue;
+          r += data[p]!;
+          g += data[p + 1]!;
+          b += data[p + 2]!;
+          n++;
+        }
+      if (n === 0) continue;
+      inks.set(index, (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n));
+    }
+  } catch {
+    return inks;
+  }
+  return inks;
+}
+
+/**
+ * The same colour with the light taken out of it, which is what a pool of shade is.
+ *
+ * NO COLOUR IS WRITTEN DOWN HERE. The only hex in the expression is `0xff`, which is the mask that
+ * picks one byte out of a packed 0xRRGGBB, and the value it is picking out came from the tileset
+ * the game loaded. That is the whole point of the pass: the shade a figure casts is the ground
+ * they are standing on, so there is no colour to choose and nothing to keep in step with a ramp.
+ */
+const shaded = (ink: number): number =>
+  (Math.round(((ink >> 16) & 0xff) * SHADOW.tone) << 16) |
+  (Math.round(((ink >> 8) & 0xff) * SHADOW.tone) << 8) |
+  Math.round((ink & 0xff) * SHADOW.tone);
 
 export class ForestScene extends Phaser.Scene {
   private readonly store: Store;
@@ -99,6 +328,12 @@ export class ForestScene extends Phaser.Scene {
 
   private map!: ForestMap;
   private red!: Phaser.GameObjects.Sprite;
+  /** Red's own pool of shade. Moves and re-tints with her, because she is the one who walks. */
+  private redShadow!: Phaser.GameObjects.Ellipse;
+  /** The tile layer the figures stand on, which is what their shadows take their colour from. */
+  private ground: Phaser.Tilemaps.TilemapLayer | null = null;
+  /** Mean colour per tile index, read off the loaded tileset once at boot. */
+  private inks: Map<number, number> = new Map();
   private position: Vec = { x: 0, y: 0 };
   private facing: Facing = 'down';
   private walking = false;
@@ -113,7 +348,23 @@ export class ForestScene extends Phaser.Scene {
   private notices: MapObject[] = [];
   /** Who was last announced as within reach, so the announcement is made once per arrival. */
   private withinReach: string | null = null;
-  private promptBob = 0;
+  /**
+   * Which triggers Red is standing on, against the run they last fired for.
+   *
+   * `checkCottage` and `checkNotices` tested `overlaps` and emitted, every frame, for as long as
+   * she stood there: 181 emissions in 181 frames on the doorstep. `main.ts` suppresses a second
+   * toast while one is up, so the visible result was the locked-cottage line BLINKING -- 2.6
+   * seconds on, one frame off, 2.6 seconds on -- for as long as the player stood at the door
+   * wondering what to do, which is precisely when they are reading it.
+   *
+   * So a trigger fires on the false-to-true edge. The value stored is the run it fired for, not
+   * `true`, because the door's answer depends on the run and not only on the ground: stand on the
+   * step with two verdicts, earn the third, and the step has a different thing to say. Identity of
+   * the state object is what the store changes on a dispatch and nothing else, so standing still
+   * through a hundred and eighty frames is one emission and a verdict landing under her feet is a
+   * second.
+   */
+  private readonly triggered = new Map<string, unknown>();
   private reducedMotion = false;
   /** The camera's own centre, which lags Red rather than being pinned to her. */
   private camera: Vec = { x: 0, y: 0 };
@@ -144,10 +395,12 @@ export class ForestScene extends Phaser.Scene {
     const phaserMap = this.make.tilemap({ key: 'map-forest' });
     const tiles = phaserMap.addTilesetImage('tileset-forest', 'tileset-forest');
     if (!tiles) throw new Error('Tileset "tileset-forest" is missing from the map');
-    phaserMap.createLayer('ground', tiles)?.setDepth(0);
+    this.ground = phaserMap.createLayer('ground', tiles)?.setDepth(0) ?? null;
     phaserMap.createLayer('decor-below', tiles)?.setDepth(1);
     // The canopy layer always draws over Red, so she walks behind tree tops.
     phaserMap.createLayer('decor-above', tiles)?.setDepth(10_000);
+    // Read before anybody is placed: every figure asks for the colour of their own tile on arrival.
+    this.inks = tileInks(tiles);
 
     this.createNpcs();
 
@@ -157,7 +410,21 @@ export class ForestScene extends Phaser.Scene {
     this.red = this.add
       .sprite(this.position.x, this.position.y, 'red', 'red-idle-down-0')
       .setOrigin(0.5, 1);
+    /*
+     * Her depth comes with her, not with her first step.
+     *
+     * Everywhere else that moves Red sets `depth = y` -- `resetToSpawn`, `stageArrival`, `move`
+     * -- and creation did not, so she was born at depth 0 and stayed there until the player
+     * pressed a key. At depth 0 she sorts under `decor-below` (depth 1), under the wolf's prints
+     * (2) and under every character in the cast, whose depth is their own fixed y and therefore
+     * always wins. A player who looks at the forest before walking is looking at the one frame
+     * where the heroine is behind the scenery, and that frame is the opening shot.
+     */
+    // Her pool before her first placing, because `placeRed` seats the two of them together.
+    this.redShadow = this.addShadow(footprintOf(this.textures.getFrame('red', 'red-idle-down-0')));
+    this.placeRed();
     this.createAnimations();
+    this.startIdles();
     this.createDust();
 
     const cottage = findObject(this.map, 'trigger-cottage');
@@ -187,6 +454,59 @@ export class ForestScene extends Phaser.Scene {
     this.bus.emit('worldReady', undefined);
   }
 
+  /**
+   * Red on screen where `this.position` says she is, sorted by her own feet.
+   *
+   * The pair was written out four times and omitted once, which is how she shipped at depth 0.
+   */
+  private placeRed(): void {
+    this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
+    this.red.setDepth(this.red.y);
+    this.seatShadow(this.redShadow, this.position.x, this.position.y);
+  }
+
+  /**
+   * An unplaced, uncoloured pool for one figure, sized from the feet that will stand in it.
+   *
+   * Hidden until `seatShadow` has a tile to tint it from, so a figure standing somewhere the
+   * ground cannot answer for -- off the ground layer, or with the tileset readback unavailable --
+   * simply has no pool rather than a grey one.
+   */
+  private addShadow(footprint: number): Phaser.GameObjects.Ellipse {
+    const width = footprint + SHADOW.spread;
+    const depth = Math.max(SHADOW.minDepth, Math.round(width * SHADOW.flatten));
+    return this.add.ellipse(0, 0, width, depth).setVisible(false);
+  }
+
+  /**
+   * Puts a pool under one pair of feet and tints it from the tile they are standing on.
+   *
+   * A pixel above the feet, so the figure's own last row of ink stands in the middle of it rather
+   * than on its far edge, and half a pixel behind her in the depth sort, so she draws over it. The
+   * dust pool already sits a whole pixel behind for the same reason; half is used here because a
+   * character standing one pixel uphill of Red must still draw over her shadow, and at a whole
+   * pixel they would not.
+   */
+  private seatShadow(shadow: Phaser.GameObjects.Ellipse, x: number, y: number): void {
+    const ink = this.groundInkAt(x, y);
+    if (ink === null) {
+      shadow.setVisible(false);
+      return;
+    }
+    shadow
+      .setPosition(Math.round(x), Math.round(y) - 1)
+      .setFillStyle(shaded(ink), SHADOW.alpha)
+      .setDepth(Math.round(y) + SHADOW.behind)
+      .setVisible(true);
+  }
+
+  /** The mean colour of the ground tile at a world point, or null if there is nothing to read. */
+  private groundInkAt(x: number, y: number): number | null {
+    const tile = this.ground?.getTileAt(Math.floor(x / TILE), Math.floor(y / TILE));
+    if (!tile) return null;
+    return this.inks.get(tile.index) ?? null;
+  }
+
   /** Puts Red back where she started, facing down, with every prompt cleared. */
   private resetToSpawn(): void {
     const spawn = findObject(this.map, 'spawn-red');
@@ -194,10 +514,11 @@ export class ForestScene extends Phaser.Scene {
     this.position = { x: spawn.x + TILE / 2, y: spawn.y + RED_FEET_BELOW_SPAWN };
     this.facing = 'down';
     this.stopWalking();
-    this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
-    this.red.setDepth(this.red.y);
-    for (const npc of this.npcs) npc.prompt.setVisible(false);
+    this.placeRed();
+    for (const npc of this.npcs) this.hidePrompt(npc);
     this.announceWithinReach(null);
+    // A replay starts outside every trigger, whatever Red was standing on when the run ended.
+    this.triggered.clear();
     // The last run's trail is the last run's. A replay that kept it would promise an ending the
     // new run has not earned, in the one place the game puts a fact on the ground.
     this.arrived = false;
@@ -225,38 +546,39 @@ export class ForestScene extends Phaser.Scene {
   }
 
   private createNpcs(): void {
-    for (const spawn of npcSpawns(this.map)) {
-      const key = spawn.spawnName;
-      if (!this.textures.exists(key)) throw new Error(`Missing NPC sprite "${key}"`);
-      const sprite = this.add
-        .sprite(spawn.x, spawn.y + NPC_SPRITE.height / 2, key, 0)
-        .setOrigin(0.5, 1);
-      sprite.setDepth(sprite.y);
-      const prompt = this.add
-        .sprite(spawn.x, sprite.y - NPC_SPRITE.height - PROMPT_GAP, 'fx-interact-prompt', 0)
-        .setOrigin(0.5, 1)
-        .setDepth(9000)
-        .setVisible(false);
-      this.npcs.push({ kind: 'character', id: spawn.id, x: spawn.x, y: sprite.y, sprite, prompt });
-    }
-    this.createBystanders();
+    for (const spawn of npcSpawns(this.map))
+      this.npcs.push(this.createCharacter('character', spawn));
+    for (const spawn of bystanderSpawns(this.map))
+      this.npcs.push(this.createCharacter('bystander', spawn));
   }
 
-  private createBystanders(): void {
-    for (const spawn of bystanderSpawns(this.map)) {
-      const key = spawn.spawnName;
-      if (!this.textures.exists(key)) throw new Error(`Missing bystander sprite "${key}"`);
-      const sprite = this.add
-        .sprite(spawn.x, spawn.y + NPC_SPRITE.height / 2, key, 0)
-        .setOrigin(0.5, 1);
-      sprite.setDepth(sprite.y);
-      const prompt = this.add
-        .sprite(spawn.x, sprite.y - NPC_SPRITE.height - PROMPT_GAP, 'fx-interact-prompt', 0)
-        .setOrigin(0.5, 1)
-        .setDepth(9000)
-        .setVisible(false);
-      this.npcs.push({ kind: 'bystander', id: spawn.id, x: spawn.x, y: sprite.y, sprite, prompt });
-    }
+  /**
+   * One character on their tile, with their bubble over their head.
+   *
+   * `npcSpawns`/`bystanderSpawns` hand back the CENTRE of the spawn tile, and the sprite's origin
+   * is its feet, so the feet belong half a tile lower -- on the tile's bottom edge, which is where
+   * a character standing on a tile stands. This used to add half the FRAME height (24), so every
+   * one of the eight stood 8px into the tile below their own: past the verge of the path they are
+   * meant to be on, and 10px below Red's own contact line on the same row of ground.
+   */
+  private createCharacter(
+    kind: Npc['kind'],
+    spawn: { id: string; spawnName: string; x: number; y: number },
+  ): Npc {
+    const key = spawn.spawnName;
+    if (!this.textures.exists(key)) throw new Error(`Missing sprite "${key}"`);
+    const sprite = this.add.sprite(spawn.x, spawn.y + TILE / 2, key, 0).setOrigin(0.5, 1);
+    sprite.setDepth(sprite.y);
+    const headroom = headroomOf(this.textures.getFrame(key, 0));
+    const prompt = this.add
+      .sprite(spawn.x, sprite.y - headroom - PROMPT_GAP, 'fx-interact-prompt', 0)
+      .setOrigin(0.5, 1)
+      .setDepth(9000)
+      .setVisible(false);
+    // Seated once: nobody in the cast ever moves off the tile they were placed on.
+    const shadow = this.addShadow(footprintOf(this.textures.getFrame(key, 0)));
+    this.seatShadow(shadow, sprite.x, sprite.y);
+    return { kind, id: spawn.id, x: spawn.x, y: sprite.y, sprite, prompt, shadow };
   }
 
   private createAnimations(): void {
@@ -272,6 +594,46 @@ export class ForestScene extends Phaser.Scene {
           frameRate: WALK_SPEED / PX_PER_WALK_FRAME,
           repeat: -1,
         });
+
+    if (!this.anims.exists(PROMPT_BOB.key))
+      this.anims.create({
+        key: PROMPT_BOB.key,
+        frames: [0, 1].map((frame) => ({ key: 'fx-interact-prompt', frame })),
+        frameRate: PROMPT_BOB.frameRate,
+        repeat: -1,
+      });
+
+    // One idle per character, each with a hold of its own. See IDLE.
+    this.npcs.forEach((npc, i) => {
+      const key = npc.sprite.texture.key;
+      if (this.anims.exists(this.idleKey(npc))) return;
+      this.anims.create({
+        key: this.idleKey(npc),
+        frames: [
+          { key, frame: 0, duration: IDLE.holdMs + ((i * IDLE.stepMs) % IDLE.spreadMs) },
+          { key, frame: 1, duration: IDLE.blinkMs },
+        ],
+        repeat: -1,
+      });
+    });
+  }
+
+  /** The idle animation belonging to one character, named after the sheet it plays from. */
+  private idleKey(npc: Npc): string {
+    return `${npc.sprite.texture.key}-idle`;
+  }
+
+  /**
+   * Sets the cast breathing, staggered so they are not in step on the first blink either.
+   *
+   * Silent under prefers-reduced-motion, exactly as Red's dust is: the sprites stay on the
+   * open-eyed frame they were created with, which is the forest as it has shipped until now.
+   */
+  private startIdles(): void {
+    if (this.reducedMotion) return;
+    this.npcs.forEach((npc, i) =>
+      npc.sprite.play({ key: this.idleKey(npc), delay: i * IDLE.startStepMs }),
+    );
   }
 
   /**
@@ -321,8 +683,8 @@ export class ForestScene extends Phaser.Scene {
       const target = this.updatePrompts();
       this.announceWithinReach(target);
       if (input.interactPressed) this.interact(target);
-      this.checkNotices();
-      this.checkCottage();
+      this.checkNotices(state);
+      this.checkCottage(state);
     } else if (this.walking) {
       this.stopWalking();
     }
@@ -353,9 +715,8 @@ export class ForestScene extends Phaser.Scene {
     this.facing = 'up';
     this.red.stop();
     this.red.setFrame(`red-idle-${this.facing}-0`);
-    this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
-    this.red.setDepth(this.red.y);
-    for (const npc of this.npcs) npc.prompt.setVisible(false);
+    this.placeRed();
+    for (const npc of this.npcs) this.hidePrompt(npc);
     // Nobody is within reach on the doorstep, whoever she was standing next to a frame ago.
     this.announceWithinReach(null);
 
@@ -391,8 +752,7 @@ export class ForestScene extends Phaser.Scene {
     } else if (this.red.anims.currentAnim?.key !== `red-walk-${this.facing}`) {
       this.red.play(`red-walk-${this.facing}`, true);
     }
-    this.red.setPosition(Math.round(this.position.x), Math.round(this.position.y));
-    this.red.setDepth(this.red.y);
+    this.placeRed();
 
     // One puff per stride, measured in ground covered rather than in frames, so the dust lands
     // with the foot at any frame rate.
@@ -428,13 +788,34 @@ export class ForestScene extends Phaser.Scene {
   /** Puts the bubble over whoever is in range, and hands that person back to the caller. */
   private updatePrompts(): Npc | null {
     const target = nearest(this.position, this.available(), INTERACT_RADIUS);
-    this.promptBob += 1;
     for (const npc of this.npcs) {
-      const active = npc === target;
-      npc.prompt.setVisible(active);
-      if (active) npc.prompt.setFrame(this.reducedMotion ? 0 : Math.floor(this.promptBob / 30) % 2);
+      if (npc === target) this.showPrompt(npc);
+      else this.hidePrompt(npc);
     }
     return target;
+  }
+
+  /**
+   * Raises the bubble and starts it bobbing. Still, not absent, under prefers-reduced-motion.
+   *
+   * Both of these are edge-triggered on the bubble's own visibility, and that is not a
+   * micro-optimisation: `updatePrompts` runs on every frame for every character, and both Phaser
+   * calls underneath have side effects. `play` restarted from frame 0 would mean a bob that never
+   * reaches frame 1, and `stop` on seven already-hidden bubbles emits seven ANIMATION_STOP events
+   * a frame -- four hundred a second -- for nothing at all. The bob the animation registers has
+   * `repeat: -1`, so once it is playing it does not need re-arming.
+   */
+  private showPrompt(npc: Npc): void {
+    if (npc.prompt.visible) return;
+    npc.prompt.setVisible(true);
+    if (this.reducedMotion) npc.prompt.setFrame(0);
+    else npc.prompt.play(PROMPT_BOB.key, true);
+  }
+
+  private hidePrompt(npc: Npc): void {
+    if (!npc.prompt.visible) return;
+    npc.prompt.stop();
+    npc.prompt.setVisible(false);
   }
 
   /**
@@ -461,27 +842,97 @@ export class ForestScene extends Phaser.Scene {
     else this.bus.emit('interact', { characterId: target.id });
   }
 
-  private checkNotices(): void {
-    for (const notice of this.notices)
-      if (overlaps(this.position, notice))
-        this.bus.emit('reachedNotice', { noticeId: notice.name.slice('notice-'.length) });
+  /**
+   * Fires `emit` when Red steps onto `rect`, and again only if the run has moved on under her feet.
+   *
+   * See the note on `triggered`. `run` is the store's state object; the store replaces it on a
+   * dispatch that changes anything and leaves it alone otherwise, so identity is the cheapest
+   * honest answer to "is this the same run it was last frame".
+   */
+  private onEnter(id: string, rect: Rect, run: unknown, emit: () => void): void {
+    if (!overlaps(this.position, rect)) {
+      this.triggered.delete(id);
+      return;
+    }
+    if (this.triggered.get(id) === run) return;
+    this.triggered.set(id, run);
+    emit();
   }
 
-  private checkCottage(): void {
-    if (!overlaps(this.position, this.cottage)) return;
-    this.bus.emit('enteredCottage', undefined);
+  private checkNotices(run: unknown): void {
+    for (const notice of this.notices) {
+      const id = notice.name.slice('notice-'.length);
+      this.onEnter(notice.name, notice, run, () =>
+        this.bus.emit('reachedNotice', { noticeId: id }),
+      );
+    }
+  }
+
+  private checkCottage(run: unknown): void {
+    this.onEnter('trigger-cottage', this.cottage, run, () =>
+      this.bus.emit('enteredCottage', undefined),
+    );
   }
 
   private syncCamera(deltaMs = 0): void {
     // The centre eases after Red and holds still while she is inside the deadzone; cameraTopLeft
     // still rounds, so the scroll stays on whole pixels and the tiles never shimmer.
     this.camera = cameraFollow(this.camera, this.focus(), deltaMs);
-    // Read the live camera size: ui/stage.ts resizes it whenever the window changes.
-    const { x, y } = cameraTopLeft(this.camera, this.scale.gameSize, {
-      width: this.map.widthInPixels,
-      height: this.map.heightInPixels,
-    });
-    this.cameras.main.setScroll(x, y);
+    const world = { width: this.map.widthInPixels, height: this.map.heightInPixels };
+    const view = this.viewFor(this.camera, world);
+    const main = this.cameras.main;
+    /*
+     * The view, centred on the canvas, which is the whole of the letterbox: everything the camera
+     * does not cover is left showing the game's own background -- Cyera Black, the colour of the
+     * frame's header strip directly above it -- so the surplus reads as frame and not as void.
+     *
+     * Written on CHANGE, not every frame, and the comparison is what makes that safe. The Scale
+     * Manager only resizes a camera that is still at 0x0 and still the previous game size
+     * (CameraManager.onResize), so once a letterbox is up Phaser stops maintaining the camera and
+     * this is the only thing that will: it recomputes from the live `gameSize` each frame and
+     * therefore heals a resize taken while standing at the door.
+     */
+    const vx = Math.round((this.scale.gameSize.width - view.width) / 2);
+    const vy = Math.round((this.scale.gameSize.height - view.height) / 2);
+    if (main.x !== vx || main.y !== vy || main.width !== view.width || main.height !== view.height)
+      main.setViewport(vx, vy, view.width, view.height);
+    const { x, y } = cameraTopLeft(this.camera, view, world);
+    main.setScroll(x, y);
+  }
+
+  /**
+   * How much of the canvas the world is drawn into: all of it on the walk, the framed shot at the
+   * door.
+   *
+   * THE PAYOFF FRAME ONLY COMPOSED NEAR 1280. `doorFocus` asks for the facade's own centre and the
+   * map cannot give it: the cottage stands 1,536-1,696px into a 1,920px world, with only 224px of
+   * forest east of it, so `cameraTopLeft` clamped the shot against the map's right edge and the
+   * building slid right as the camera widened -- the facade's centre at 51% of the frame at 1280,
+   * 68% at 1920 and 76% at 2560, which is the difference between a composed shot and a cottage
+   * falling off the side of the last frame of a marketing asset.
+   *
+   * So the shot is framed on the facade and the surplus is letterboxed. The width is the widest
+   * rectangle that can be CENTRED on the camera's own target inside the world -- twice the nearer
+   * edge -- capped at the canvas, which puts the facade's centre on the canvas's centre at every
+   * viewport. Both axes, so the rule is the rule rather than a special case; the vertical never
+   * binds on this map, because the door has the whole forest below it.
+   *
+   * MIN_VIEW is the floor for the same reason it is the floor in `stageFit`: a cottage placed hard
+   * against the edge of some future map would otherwise reduce the payoff to a sliver. If that
+   * floor ever binds, the shot is off-centre again -- and the guard in e2e/scene-second-pass.spec.ts
+   * fails, which is the right answer, because the fix then belongs to the map and not to here.
+   */
+  private viewFor(
+    centre: Vec,
+    world: { width: number; height: number },
+  ): { width: number; height: number } {
+    const canvas = this.scale.gameSize;
+    if (!this.arrived) return { width: canvas.width, height: canvas.height };
+    const centred = (c: number, extent: number): number => Math.floor(2 * Math.min(c, extent - c));
+    return {
+      width: Math.min(canvas.width, Math.max(MIN_VIEW.width, centred(centre.x, world.width))),
+      height: Math.min(canvas.height, Math.max(MIN_VIEW.height, centred(centre.y, world.height))),
+    };
   }
 
   /** Where the camera wants to be: Red on the walk, the door once she has reached it. */

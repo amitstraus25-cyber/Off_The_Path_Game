@@ -166,30 +166,64 @@ export function Title({ content, onPlay }: TitleProps) {
       <div class="otp-title-dock">
         <div class="otp-title-panel">
           {/*
-            The mark, where the deck puts it: above the wordmark, at the card's right edge. It is
-            drawn only on the widths where the frame header has dropped its own copy, so the screen
-            carries exactly one (see frameMarkIsHidden above).
+            THE PROSE SCROLLS; THE WAY IN DOES NOT.
 
-            `.otp-mark` is `display: block; margin-left: auto; flex: none`, and .otp-title-panel is
-            a flex column, so it lands top-right with no new rule -- which matters this round,
-            because the stylesheets have another owner.
+            This wrapper is the fix .otp-title__foot's note in screens.css asks for by name. The
+            card used to be the scroller itself, with the button as its last child, and the first
+            thing to go under the fold of a scrolling card is its last child. Measured on the built
+            preview at DPR 1, at the resting scroll position -- what a player sees when the screen
+            opens, before touching anything:
 
-            THE GROUND IT SITS ON. The panel has now taken the light ground that DESIGN_BOARD.md
-            section 2 asked for (Shell, not 88% Black), so the mark is black-on-light, per
-            reference/brand/logos/README.md -- a white wordmark on Shell is an invisible one.
+              844x390  (REFERENCE_VIEWPORTS.phoneLandscape)   "Begin the walk" 181x0 visible
+              812x375                                          181x0 visible
+              667x375                                          181x0 visible
+              320x568                                          186x34 of 186x56
+              390x600                                          202x47 of 202x58
+
+            Zero visible pixels, on the project's own landscape-phone reference viewport, for the
+            page's single Lime call to action and the only entrance to the game. The card does
+            scroll, but it shows no scrollbar on touch, no fade and no caret, so nothing tells the
+            player there is anything below the fold to scroll to. On a marketing asset that is the
+            whole funnel.
+
+            So the copy gets a scroll box of its own and the foot stays OUTSIDE it, pinned by the
+            flex column. The button is then on screen at scrollTop 0 at every reference viewport by
+            construction rather than by having enough room, which is what
+            e2e/css-contract.spec.ts's entrance guard asserts -- at scrollTop 0, deliberately,
+            because the check that shipped this green scrolled the card to its end first.
+
+            The wrapper is scenery, not structure: it carries no role and no label, because a
+            scroll container that announces itself is a second landmark on a screen whose content
+            is one short column. Chromium makes a scrollable region keyboard-focusable on its own,
+            so the prose stays reachable without this file adding a tab stop in front of the CTA.
           */}
-          {markHidden && <CyeraMark on="light" />}
-          <h1 class="otp-title__mark">
-            <Highlighted text={s('title')} word={s('titleHighlight')} />
-          </h1>
-          <p class="otp-title__sub">{s('subtitle')}</p>
+          <div class="otp-title__scroll">
+            {/*
+              The mark, where the deck puts it: above the wordmark, at the card's right edge. It is
+              drawn only on the widths where the frame header has dropped its own copy, so the
+              screen carries exactly one (see frameMarkIsHidden above).
 
-          <blockquote class="otp-note">
-            {s('introNote')}
-            <span class="otp-note__from">Pinned to the basket</span>
-          </blockquote>
+              `.otp-mark` is `display: block; margin-left: auto; flex: none`, and the scroll box is
+              itself a flex column (screens.css says why), so it lands top-right with no new rule
+              and with the same box model it had as a child of the card.
 
-          <p class="otp-body-text">{s('introBody')}</p>
+              THE GROUND IT SITS ON. The panel has now taken the light ground that DESIGN_BOARD.md
+              section 2 asked for (Shell, not 88% Black), so the mark is black-on-light, per
+              reference/brand/logos/README.md -- a white wordmark on Shell is an invisible one.
+            */}
+            {markHidden && <CyeraMark on="light" />}
+            <h1 class="otp-title__mark">
+              <Highlighted text={s('title')} word={s('titleHighlight')} />
+            </h1>
+            <p class="otp-title__sub">{s('subtitle')}</p>
+
+            <blockquote class="otp-note">
+              {s('introNote')}
+              <span class="otp-note__from">Pinned to the basket</span>
+            </blockquote>
+
+            <p class="otp-body-text">{s('introBody')}</p>
+          </div>
 
           <div class="otp-title__foot">
             <button type="button" class="otp-cta" onClick={onPlay}>

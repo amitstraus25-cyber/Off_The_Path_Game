@@ -518,7 +518,51 @@ export function generateForestMap(): GeneratedMap {
     return Math.max(wood - cut, 0);
   };
 
-  const grassTiles = [gid('grass-0'), gid('grass-1'), gid('grass-2'), gid('grass-3')];
+  /*
+   * ===========================================================================
+   * THE GRASS RAMP IS MEASURED OFF THE PAINTED TILES. IT USED TO BE THEIR ORDER IN `TILE_NAMES`.
+   * ===========================================================================
+   *
+   * Three passes in this file -- the cast shadow, the road keyline and the penumbra sweep -- treat
+   * the four grass variants as a BRIGHTNESS RAMP and only ever walk a tile DOWN it. Every one of
+   * them asked `grassStep` which rung a tile was on, and `grassStep` answered with the variant's
+   * INDEX: `grass-0` is rung 0, `grass-1` is rung 1, and so on. That is a contract between this
+   * file and `tiles/w-ground.ts`, and nothing anywhere checked it.
+   *
+   * It has not been true for at least a round. Measured off the tiles the game actually loads, the
+   * four variants are 161.4 / 156.8 / 162.1 / 162.3 mean luma, so `grass-1` is the DARKEST of the
+   * four and `grass-0` -- the rung every pass here drives its deepest shade to -- is 4.6 luma
+   * BRIGHTER than it. A cast shadow laid on a `grass-1` tile therefore made the ground lighter, and
+   * it did so under every trunk on the map that happened to stand on that variant, which is 1,268
+   * of the 2,151 grass tiles. The twenty-five lines of comment on the cast-shadow pass below quote
+   * "123, 148, 164, 170" for the same four tiles; no such tile exists in the sheet and no test
+   * could see that, because the ramp was an assumption about an array's order.
+   *
+   * So the order is MEASURED. Each grass painter is run once into a 32x32 raster and the four gids
+   * are sorted by mean luma, darkest first. A painter may now reorder, rename or re-tune its
+   * variants and the shade passes follow it; what they can no longer do is disagree silently.
+   *
+   * WHAT THIS DOES NOT FIX, said plainly because the number is the headline of this whole area: the
+   * ramp is 5.4 luma wide end to end (156.8 to 162.3). Sorting it stops a shadow BRIGHTENING the
+   * ground; it cannot make one visible, because the darkest tile in the set is five luma below the
+   * lightest. Nine hundred trees and the cottage still cast a shadow no player can see. Widening
+   * the ramp is `tiles/w-ground.ts`'s -- `BANDS` is where a variant's tone is decided -- and
+   * `RAMP_SPAN_FLOOR` below is the ratchet that stops it narrowing further in the meantime.
+   */
+  const GRASS_VARIANTS = ['grass-0', 'grass-1', 'grass-2', 'grass-3'] as const;
+  /** The mean luma of a painted tile, which is what a tile swap moves the ground by. */
+  const tileLuma = (name: string): number => {
+    const img = new Img(TILE, TILE);
+    TILE_PAINTERS[name]!(img);
+    let sum = 0;
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) sum += lumaOf(img.get(x, y));
+    return sum / (TILE * TILE);
+  };
+  const grassRamp = GRASS_VARIANTS.map((name) => ({ name, gid: gid(name), luma: tileLuma(name) }))
+    .slice()
+    .sort((a, b) => a.luma - b.luma);
+  /** The four grass gids, DARKEST FIRST. Rung 0 is the deepest shade this file can lay. */
+  const grassTiles = grassRamp.map((r) => r.gid);
   /** Where a gid sits on the grass ramp, so the shade pass can walk a tile down it. */
   const grassStep = new Map<number, number>(grassTiles.map((g, i) => [g, i]));
   const sun = valueNoise2D(20261017);
@@ -673,7 +717,8 @@ export function generateForestMap(): GeneratedMap {
    *
    * Cutting one field into four bands is what tied the map in a knot for three rounds. A broad
    * field gives huge regions with the lattice showing as rectangles; a fine one gives a quilt of
-   * 32px squares, because the variants are 25, 16 and 6 luma apart (123, 148, 164, 170) and a
+   * 32px squares, because the variants WERE 25, 16 and 6 luma apart -- they are 4.6, 0.7 and 0.2
+   * apart as the sheet ships today, see the ramp note above -- and a
    * 25-luma step on a hard tile edge is a drawn line whatever decides where it goes. Every setting
    * in between trades one fault for the other -- measured over a sweep, fragmenting the field from
    * 11 regions to 94 took the share of tiles differing from BOTH their neighbours from 0.2% to
@@ -704,15 +749,17 @@ export function generateForestMap(): GeneratedMap {
    * the middle of a glade.
    *
    * Starting a notch lighter gives those passes something to take. It is also free on the axis that
-   * matters most: the darkest grass is 104 mean luma and the deep-shade threshold is 81, so no rung
-   * of grass counts as deep shade whatever share it has, and the measured deep shade comes from the
-   * canopy and the keylines. What it buys is luma SPREAD -- the gap between a shaded wood floor and
-   * a sunlit clearing -- which is the axis sitting at 0.79 of the board's.
+   * matters most: the darkest grass is nowhere near the deep-shade threshold of 81 whatever rung it
+   * is on, so no rung of grass counts as deep shade whatever share it has, and the measured deep
+   * shade comes from the canopy and the keylines. What it buys is luma SPREAD -- the gap between a
+   * shaded wood floor and a sunlit clearing -- which is the axis sitting at 0.79 of the board's.
    *
-   * It also reduces the one boundary this file has to be careful about. Measured off the painters
-   * the rungs are 104, 143, 163 and 174, so the 0|1 seam is a 39-luma step across a hard tile edge
-   * and the 2|3 seam is 11. Moving share off rung 0 makes the big step rarer and the invisible one
-   * commoner, which is the right direction for both faults at once.
+   * THE SECOND HALF OF THIS NOTE QUOTED RUNGS OF 104, 143, 163 AND 174 and argued that moving share
+   * off rung 0 made a 39-luma seam rarer. There is no 39-luma seam and there has not been one for
+   * at least a round: the four rungs are measured at the top of this block and span 5.4 luma in
+   * total. The argument for the cut still stands -- the later passes only ever darken, so the field
+   * has to start with something for them to take -- but it buys spread only to the extent that the
+   * ramp has any, and today it has almost none. See `RAMP_SPAN_FLOOR`.
    */
   /*
    * ...AND THEY CAME DOWN AGAIN, by a notch, and the honest note is that a notch is all they are
@@ -1636,32 +1683,105 @@ export function generateForestMap(): GeneratedMap {
   }
   // Soft edges where the track meets grass.
   const isPath = (x: number, y: number): boolean => pathTiles.has(y * MAP_W + x) && inside(x, y);
+  /*
+   * ===========================================================================
+   * WHICH VERGE A TRACK TILE DRAWS IS A FOUR-BIT NEIGHBOUR MASK, asked of what is DRAWN.
+   * ===========================================================================
+   *
+   * This was an if-chain -- `n && e`, then `n && w`, then `s && e`, then `s && w`, then each side
+   * alone -- and an if-chain cannot say "both". Two faults came out of that and they are different
+   * faults, so they are separated here.
+   *
+   * ONE: THE TILE SET CANNOT DRAW A CORRIDOR, which is `tiles/w-ground.ts`'s finding and is NOT
+   * fixed by this change. There is no tile carrying grass on two OPPOSITE sides and none carrying
+   * it on three, so a one-tile-wide run of track has no tile that fits and the far side gets no
+   * verge, no lip and no teeth: sand running flush into lawn down a dead-straight tile boundary.
+   * The painter has the six entries written out ready -- `path-ns`, `path-ew` and the four
+   * three-sided cases -- and they are six table entries in `GROUND_TILES` plus six names appended
+   * to `TILE_NAMES` in `tiles.ts`, which throws at import for any painter it does not list. Neither
+   * of those two files is this task's to edit, so the six gids are NOT in this regeneration.
+   *
+   * What the mask does instead is make the gap EXPLICIT and COUNTED. `VERGE` maps all sixteen
+   * neighbourhoods; the ten the tileset can draw resolve exactly, and the six it cannot resolve to
+   * the closest tile that exists and declare, in `undrawn`, which side they had to leave bare.
+   * Audit 8 at the foot of this file counts those sides and names the worst straight run of them,
+   * so the defect is a number on every run instead of a paragraph in a painter's docstring. When
+   * the six gids land, the six `undrawn` entries become `''` and the audit falls to zero.
+   *
+   * TWO: IT ASKED THE WRONG QUESTION, and this change does fix that. `isPath` answers from
+   * `pathTiles`, the set of cells the track PLANNER claimed, and the bridge deck is not in it --
+   * the planner does not lay sand over water. So the two sand tiles abutting the deck drew a grass
+   * verge against a plank: `(29,20)` came out `path-nw` and `(29,21)` `path-sw`, each with a lawn
+   * lip down the edge it shares with `bridge-r`. The mask asks the GROUND LAYER what is drawn, and
+   * the verge sweep now runs AFTER the deck is laid rather than before it, so a tile cannot be
+   * edged against a neighbour that is about to change under it.
+   */
+  const TRACK_GIDS = new Set(
+    [
+      'path',
+      'path-n',
+      'path-s',
+      'path-e',
+      'path-w',
+      'path-ne',
+      'path-nw',
+      'path-se',
+      'path-sw',
+      'bridge-l',
+      'bridge-m',
+      'bridge-r',
+    ].map(gid),
+  );
+  /** Is the cell DRAWN as something a walker stays on -- sand or deck? Not "was it planned as one". */
+  const carriesTrack = (x: number, y: number): boolean =>
+    inside(x, y) && TRACK_GIDS.has(at(ground, x, y) & BASE_GID);
+  const N_SIDE = 1;
+  const S_SIDE = 2;
+  const E_SIDE = 4;
+  const W_SIDE = 8;
+  /**
+   * Mask -> the tile to draw, and the sides that tile cannot draw a verge on.
+   *
+   * `undrawn` is the whole of the corridor defect, written down. A bound is NOT derived from it:
+   * audit 8 counts bare sides off the finished ground layer.
+   */
+  const VERGE: ReadonlyArray<{ readonly tile: string; readonly undrawn: string }> = [
+    /*  0            */ { tile: 'path', undrawn: '' },
+    /*  1 n          */ { tile: 'path-n', undrawn: '' },
+    /*  2 s          */ { tile: 'path-s', undrawn: '' },
+    /*  3 n s        */ { tile: 'path-n', undrawn: 's' },
+    /*  4 e          */ { tile: 'path-e', undrawn: '' },
+    /*  5 n e        */ { tile: 'path-ne', undrawn: '' },
+    /*  6 s e        */ { tile: 'path-se', undrawn: '' },
+    /*  7 n s e      */ { tile: 'path-ne', undrawn: 's' },
+    /*  8 w          */ { tile: 'path-w', undrawn: '' },
+    /*  9 n w        */ { tile: 'path-nw', undrawn: '' },
+    /* 10 s w        */ { tile: 'path-sw', undrawn: '' },
+    /* 11 n s w      */ { tile: 'path-nw', undrawn: 's' },
+    /* 12 e w        */ { tile: 'path-e', undrawn: 'w' },
+    /* 13 n e w      */ { tile: 'path-ne', undrawn: 'w' },
+    /* 14 s e w      */ { tile: 'path-se', undrawn: 'w' },
+    /* 15 n s e w    */ { tile: 'path-ne', undrawn: 'sw' },
+  ];
+  /*
+   * THE DECK IS TRACK AND IS NOT SAND, and moving this sweep below the bridge block is exactly how
+   * that stops being obvious. `pathTiles` contains the two cells where the planned track reaches
+   * the near bank, and the deck is laid from `bridgeCentre - 2`, which is one of them -- so the
+   * first run of the moved sweep put `path-n` and `path-s` back over `bridge-l` and took the left
+   * end off the crossing in both rows. Caught by diffing the generated map cell by cell against the
+   * committed one, not by any test: the bridge was still five tiles wide, three of them planks.
+   * Audit 8 asserts the deck is whole now, so it cannot be silent a second time.
+   */
+  const DECK_GIDS = new Set(['bridge-l', 'bridge-m', 'bridge-r'].map(gid));
   const pathEdge = (x: number, y: number): void => {
-    const n = !isPath(x, y - 1);
-    const s = !isPath(x, y + 1);
-    const e = !isPath(x + 1, y);
-    const w = !isPath(x - 1, y);
-    const name =
-      n && e
-        ? 'path-ne'
-        : n && w
-          ? 'path-nw'
-          : s && e
-            ? 'path-se'
-            : s && w
-              ? 'path-sw'
-              : n
-                ? 'path-n'
-                : s
-                  ? 'path-s'
-                  : e
-                    ? 'path-e'
-                    : w
-                      ? 'path-w'
-                      : 'path';
-    set(ground, x, y, gid(name));
+    if (DECK_GIDS.has(at(ground, x, y) & BASE_GID)) return;
+    const mask =
+      (carriesTrack(x, y - 1) ? 0 : N_SIDE) |
+      (carriesTrack(x, y + 1) ? 0 : S_SIDE) |
+      (carriesTrack(x + 1, y) ? 0 : E_SIDE) |
+      (carriesTrack(x - 1, y) ? 0 : W_SIDE);
+    set(ground, x, y, gid(VERGE[mask]!.tile));
   };
-  for (const index of pathTiles) pathEdge(index % MAP_W, Math.floor(index / MAP_W));
 
   /*
    * The bridge, where the main track meets the river.
@@ -1684,6 +1804,16 @@ export function generateForestMap(): GeneratedMap {
       set(ground, x, y, gid(kind));
       clear(x, y);
     }
+
+  /*
+   * ...AND THE VERGES GO ON NOW, with the deck already down.
+   *
+   * This loop used to stand above the bridge block. It ran against `pathTiles`, which does not
+   * contain the deck, so the two sand tiles either side of the crossing drew a lawn lip against a
+   * plank. See the mask's note: the sweep reads what is DRAWN, so it has to run after everything
+   * that draws track.
+   */
+  for (const index of pathTiles) pathEdge(index % MAP_W, Math.floor(index / MAP_W));
 
   // --- boulders crowding the banks ---------------------------------------------
   /*
@@ -3960,10 +4090,19 @@ export function generateForestMap(): GeneratedMap {
    * the world, which is why this shot is NOT symmetrical about the cottage and why the facade sits
    * right of centre in it -- a fact that has to be composed around rather than wished away.
    */
-  const ARRIVE = frameAt(REFERENCE_VIEWPORTS.desktop, {
+  const ARRIVE_AT = {
     x: cx + FACADE_W / 2,
     y: roofTop + (FACADE_H + LANE_ROWS - 1) / 2,
-  });
+  };
+  const ARRIVE = frameAt(REFERENCE_VIEWPORTS.desktop, ARRIVE_AT);
+  /*
+   * THE SAME SHOT ON A PHONE, WHICH IS THE TALLER OF THE TWO. Asked for, not assumed: `cameraFor`
+   * answers 11.22 tiles of height for the desktop reference viewport and 16.69 for the phone, so
+   * the arrival frame a phone shows reaches about three rows further north and three further south
+   * than the desktop one. Anything composed to sit just OUTSIDE the desktop frame therefore sits
+   * comfortably INSIDE the phone's.
+   */
+  const ARRIVE_PHONE = frameAt(REFERENCE_VIEWPORTS.phone, ARRIVE_AT);
 
   /*
    * Garden fence with a single gate on the main path. The garden has to be ENCLOSED: a fence that
@@ -4011,8 +4150,69 @@ export function generateForestMap(): GeneratedMap {
    *
    * Both rows come off `ARRIVE` rather than off the cottage, so they follow the camera.
    */
+  /*
+   * ===========================================================================
+   * ...AND "OUT OF THE SHOT" MEANS OUT OF BOTH SHOTS. It meant out of the desktop one.
+   * ===========================================================================
+   *
+   * Both rails were derived from `ARRIVE`, the DESKTOP arrival rectangle, and placed one row
+   * outside it. That is exactly one row of clearance on one viewport and none at all on the other:
+   * the phone's arrival frame is 16.69 tiles tall against the desktop's 11.22, so it reaches about
+   * three rows further out on each side, and rows 11 and 25 sat well INSIDE it. The payoff frame
+   * the previous round moved a fence rail out of still had a fence rail across the top of it and a
+   * second across the bottom -- the pen, photographed -- on the device most visitors to a research
+   * page arrive on. The guard at the foot of this file measured `ARRIVE` and reported a rail run of
+   * zero while this was true, which is the familiar shape of the mistake: a bound aimed at one
+   * viewport reporting green for all of them.
+   *
+   * So the enclosure is derived from the TALLER rectangle and the rails leave both frames. Nothing
+   * about the barrier changes: the two rows are solid from the fence out to the edge of the world
+   * either way, the gate is still the two rows the track arrives on, and `map.test.ts` still finds
+   * the notice unwalkable-around. What changes is which rows carry the picture.
+   *
+   * THE FRAMING DOES NOT FOLLOW THE FENCE, which is the half that had to be separated out. Three
+   * things were written as `gardenTop + n` and only one of them is about the enclosure:
+   *   - the treeline strip behind the house, whose whole job is to be what cuts the TOP EDGE of the
+   *     arrival camera;
+   *   - the short east run, whose whole job is to be seen in the payoff frame;
+   *   - the garden beds, which really do fill the enclosure and really do follow it.
+   * The first two now come off `stripTop`, the desktop frame's own first row, so moving the fence
+   * leaves the wood and the payoff frame exactly where they were. Checked: `stripTop + 1` and
+   * `stripTop + 2` are rows 13 and 14, which is what `gardenTop + 2` and `gardenTop + 3` were, and
+   * the separation is byte-neutral on today's map -- proved by making it on its own and diffing the
+   * generated map against the previous one, which came back identical.
+   *
+   * ===========================================================================
+   * AND THE MOVE ITSELF IS NOT MADE HERE. MEASURED, COSTED, AND HANDED BACK. 2026-10-20.
+   * ===========================================================================
+   *
+   * `ARRIVE_PHONE` is computed and the two lines below are a one-word change away from using it.
+   * They are not using it because the move was tried, measured and reverted, and the next owner
+   * should have the measurement rather than the attempt:
+   *
+   *   - Derived from the phone's rectangle the rails go to rows 9 and 27 and leave both frames,
+   *     which is the fix and it works. Barrier and reachability hold: 1488/1488 walkable tiles
+   *     reachable, the gate still unreachable with the notice refused.
+   *   - It costs an ELDER at the garden's east margin. The wood at rows 6-8 of columns 57-58 gains
+   *     a tree, the thinning pass answers by felling one (10 -> 11), and the one it takes is the
+   *     elder whose trunk stood at row 20 of columns 57-59 and whose crown was the only thing
+   *     covering the border band at column 59 for rows 17, 18 and 19. `sealBorder` backfills the
+   *     cells with scrub and the result is a FOUR-TILE FILE of hedge down column 59, rows 17-20,
+   *     inside the arrival camera.
+   *   - That is composition guard 7g, whose bound is 3 and whose own note says "lower it as the
+   *     planting improves; never raise it". The hem-stone pass cannot reach it either: its run
+   *     limit is 4 and the file is exactly 4, so it is legal there and illegal in the frame.
+   *
+   * Which leaves three ways through, none of them this task's: lower `HEM_RUN`, which moves the
+   * border band over the whole map; teach the hem stones about the cameras, which is the shared
+   * threshold this section's preamble warns against; or plant the east margin so the flood stops
+   * felling it, which is `w-trees.ts` and the crown merge. The fault is real and the remedy is two
+   * lines. It is held here by a bound nobody should move on a cosmetic argument.
+   */
   const gardenTop = Math.floor(ARRIVE.y0) - 1;
   const gardenBottom = Math.ceil(ARRIVE.y1);
+  /** The payoff frame's own top row. What is composed FOR the shot is measured from here. */
+  const stripTop = Math.floor(ARRIVE.y0);
   const gateRows = [20, 21] as const;
   /*
    * Every panel clears its own cell first. The fence runs through ground the wood was planted on,
@@ -4072,15 +4272,30 @@ export function generateForestMap(): GeneratedMap {
      * the length to leave: a post every second tile reads as a chain of short links, which is a
      * second rhythm rather than no rhythm.
      */
+    /*
+     * ...AND THE WALK STOPS ONE ROW SHORT OF THE CORNER, which it did not.
+     *
+     * Counted off the shipped map, column 46 read: row 11 `fence-corner-e`, row 12 `fence-corner`,
+     * then three plain posts. Two wide flat-capped posts stacked one on top of the other is not a
+     * run broken by a post -- it is a doubled post, and it is the first thing in the column the
+     * payoff frame's top edge cuts. The cause is arithmetic: the walk counted down to
+     * `gardenTop + 1` and the pitch came due on exactly that row, so the post landed against the
+     * corner that was already there. Bounding the walk at `gardenTop + 1` instead leaves at least
+     * one plain post between any wide post and a corner, which is what "a run broken by a post"
+     * means. The south walk never reached its corner, so it is unchanged and is left alone.
+     *
+     * Nothing about the rhythm moves: the two runs are still 3 and 3 tiles of receding cap, which
+     * is what composition guard 7h bounds, and audit 10 now refuses a doubled post outright.
+     */
     let run = 0;
-    for (let y = gateRows[0] - 2; y > gardenTop; y--) {
+    for (let y = gateRows[0] - 2; y > gardenTop + 1; y--) {
       run++;
       if (run < (grainAt(fenceX, y) > 0.5 ? 4 : 3)) continue;
       panel(fenceX, y, 'fence-corner');
       run = 0;
     }
     run = 0;
-    for (let y = gateRows[1] + 2; y < gardenBottom; y++) {
+    for (let y = gateRows[1] + 2; y < gardenBottom - 1; y++) {
       run++;
       if (run < (grainAt(fenceX, y) > 0.5 ? 4 : 3)) continue;
       panel(fenceX, y, 'fence-corner');
@@ -4134,8 +4349,14 @@ export function generateForestMap(): GeneratedMap {
    * audit exists to catch. The strip east of them is inside the enclosure either way.
    */
   const EAST_FENCE_ROWS = 3;
-  for (let y = gardenTop + 1; y <= gardenTop + EAST_FENCE_ROWS; y++)
-    panel(gardenEast, y, y === gardenTop + EAST_FENCE_ROWS ? 'fence-corner' : 'fence-post');
+  /*
+   * ANCHORED TO THE PAYOFF FRAME, NOT TO THE FENCE. This ran from `gardenTop + 1`, so the moment
+   * the enclosure's north rail moved out of the phone's frame as well this short run would have
+   * marched three rows north with it and left the east side of the last frame of the game showing
+   * no fence at all. Its job is to be SEEN, so it is measured from the frame.
+   */
+  for (let y = stripTop; y < stripTop + EAST_FENCE_ROWS; y++)
+    panel(gardenEast, y, y === stripTop + EAST_FENCE_ROWS - 1 ? 'fence-corner' : 'fence-post');
   /*
    * THE FENCE STAYS SOLID AND STOPS BEING WALLPAPER, which are not the same request.
    *
@@ -4255,11 +4476,11 @@ export function generateForestMap(): GeneratedMap {
   let behind = 0;
   for (let x = fenceX + 1; x < gardenEast;) {
     const tries: ReadonlyArray<readonly [string, number]> = [
-      ...(standsOnTheRoof(x, gardenTop + 3)
+      ...(standsOnTheRoof(x, stripTop + 2)
         ? []
-        : [['mid', gardenTop + 3] as const, ['sapling', gardenTop + 3] as const]),
-      ['mid', gardenTop + 2],
-      ['sapling', gardenTop + 2],
+        : [['mid', stripTop + 2] as const, ['sapling', stripTop + 2] as const]),
+      ['mid', stripTop + 1],
+      ['sapling', stripTop + 1],
     ];
     const took = tries.find(([kind, row]) => plantKind(kind, x, row));
     if (!took) {
@@ -4271,7 +4492,7 @@ export function generateForestMap(): GeneratedMap {
     behind++;
     // A gap of one or two columns, read off the same grain the rest of the wood is shaped by, so
     // the line breaks irregularly instead of at a fixed pitch.
-    x += planted.k.trunk.length + (grainAt(x, gardenTop) > 0.5 ? 2 : 1);
+    x += planted.k.trunk.length + (grainAt(x, stripTop - 1) > 0.5 ? 2 : 1);
   }
   /*
    * A DEDICATED EAST-MARGIN PLANTING PASS STOOD HERE AND IS DELETED, 2026-10-20.
@@ -4358,8 +4579,23 @@ export function generateForestMap(): GeneratedMap {
    * so it can only land on the lawn between them. Nothing here is solid: the walk to the door
    * must stay clear whichever row Red is on.
    */
-  for (let y = gardenTop + 1; y < gardenBottom; y++)
+  /*
+   * BEDS GO WHERE THE BEDS ARE SEEN, which is the payoff frame and not the whole enclosure.
+   *
+   * This walked `gardenTop + 1` to `gardenBottom - 1`, and while the enclosure was derived from the
+   * desktop frame those two were the same thing. They stopped being the same thing the moment the
+   * rails moved out to the phone's frame: the enclosure gained two rows at each end, the beds
+   * followed it into them, and four extra rows of planting round the edge of the garden moved the
+   * thinning pass by one tree and put a four-tile file of scrub down column 59 inside the arrival
+   * camera -- composition guard 7g, whose own note says to lower that bound and never raise it.
+   *
+   * A bed is dressing. Its rows come off the frame, intersected with the enclosure so a bed can
+   * never land on or outside a rail. Checked: `rowsOf(ARRIVE)` is rows 12 to 24, which is exactly
+   * what `gardenTop + 1 .. gardenBottom - 1` enumerated before the fence moved.
+   */
+  for (const y of rowsOf(ARRIVE))
     for (let x = fenceX + 1; x < gardenEast; x++) {
+      if (y <= gardenTop || y >= gardenBottom) continue;
       if (!inside(x, y) || at(below, x, y) !== 0 || at(above, x, y) !== 0) continue;
       if (at(ground, x, y) === gid('path')) continue;
       /*
@@ -4697,7 +4933,8 @@ export function generateForestMap(): GeneratedMap {
    * ten-tile vertical file of scrub down the right of the payoff frame is the same fault as the
    * fence rope it was banked against.
    */
-  bank(gardenEast - 1, gardenTop + 2, 0, 1, EAST_FENCE_ROWS, [-1, 0]);
+  // Follows the short east run, which is anchored to the payoff frame rather than to the enclosure.
+  bank(gardenEast - 1, stripTop + 1, 0, 1, EAST_FENCE_ROWS, [-1, 0]);
   bank(fenceX + 1, gardenBottom - 1, 1, 0, gardenEast - fenceX - 1, [0, -1]);
 
   /*
@@ -5430,9 +5667,12 @@ export function generateForestMap(): GeneratedMap {
    * crop out of it; ours had crowns and trunks pasted onto flat, evenly lit grass, which is the
    * difference between a layered wood and a tile demo.
    *
-   * This is PLACEMENT, not painting: the four grass variants are already four brightness steps
-   * (123, 148, 164, 170 mean luma), so a shadow is a tile that has been walked a step or two down
-   * that ramp. Which means it also does something the painters cannot. Both halves of a trunk tile
+   * This is PLACEMENT, not painting: the four grass variants are four brightness steps, so a shadow
+   * is a tile that has been walked a step or two down that ramp. WHICH STEP IS WHICH IS MEASURED
+   * off the painters at the head of this function, not read off their order in `TILE_NAMES` -- this
+   * note used to quote "123, 148, 164, 170", and on the sheet that ships `grass-1` is the darkest
+   * of the four, so for at least a round a shadow laid on it made the ground BRIGHTER.
+   * Which means it also does something the painters cannot. Both halves of a trunk tile
    * and all four quarters of a canopy are substantially transparent -- `trunk-l` is opaque over
    * barely half its area -- so the ground under a tree is SEEN, and until now it was the same tile
    * under every tree on the map. Varying it multiplies the number of distinct composites a 32px
@@ -5447,11 +5687,16 @@ export function generateForestMap(): GeneratedMap {
    *
    * A shadow is laid as a LEVEL, not as a number of steps down from whatever was there. The first
    * attempt stepped down, and it printed a quilt of hard dark squares across the open ground east
-   * of the bridge: the four variants are 6, 16 and 25 luma apart, so one step is nearly invisible
-   * at the light end of the ramp and a wall at the dark end, and two overlapping trees compounded
-   * to the floor. A real shadow is about as bright as the other shadows near it whatever it falls
-   * on, which is what clamping to a level gives -- and it is idempotent, so a tile deep in the
-   * wood is shaded once however many crowns reach over it.
+   * of the bridge: the four variants were 6, 16 and 25 luma apart then, so one step was nearly
+   * invisible at the light end of the ramp and a wall at the dark end, and two overlapping trees
+   * compounded to the floor. A real shadow is about as bright as the other shadows near it whatever
+   * it falls on, which is what clamping to a level gives -- and it is idempotent, so a tile deep in
+   * the wood is shaded once however many crowns reach over it.
+   *
+   * THE RAMP IS NOW 5.4 LUMA WIDE END TO END, which is the uncomfortable half of this pass and the
+   * reason the trees still float. Clamping to a level is still the right mechanism; there is simply
+   * almost nothing left to clamp to. The run prints the ramp on its own line and `RAMP_SPAN_FLOOR`
+   * stops it narrowing further, but the fix is in `tiles/w-ground.ts`'s `BANDS`, not here.
    */
   const shade = (x: number, y: number, level: number): void => {
     const step = grassStep.get(at(ground, x, y));
@@ -6340,6 +6585,69 @@ export function generateForestMap(): GeneratedMap {
       `${wedged} left wedged against something`,
   );
 
+  // --- nothing grows in the river or on the road -------------------------------------------------
+  /*
+   * ===========================================================================
+   * THE LAST PASS THAT WRITES A TILE: OPAQUE DECOR COMES OFF THE WATER AND OFF THE SAND.
+   * ===========================================================================
+   *
+   * Counted off the shipped map, twenty-four cells stood a bush, a boulder or a flower bed on
+   * water, a waterfall, a shoreline or the track. The three on sand are the ones a player meets at
+   * reading distance: `flower-pink` at (52,20) and (52,21) is a flower bed growing out of the lane
+   * TWO TILES FROM GRANDMA'S DOOR, in the frame the whole game walks towards, and `flower-white` at
+   * (34,24) is another in the middle of the south fork.
+   *
+   * THREE PASSES PUT THEM THERE AND NONE OF THEM IS WRONG ON ITS OWN, which is why this is a sweep
+   * and not three edits:
+   *   - `sealBorder` plants the band on rows 0, 1 and 41 wherever `below` is empty. It already
+   *     steps over the waterfall, and it did not step over the water, so the reach where the river
+   *     leaves the map carried five bushes and boulders STANDING ON OPEN WATER along the bottom of
+   *     the frame and three more along the top, which is the title camera's own top edge.
+   *   - the bank scree runs before the seal, so where it has already dropped a boulder the seal
+   *     finds `below` occupied and leaves it -- which is how `rock` came to stand on the waterfall
+   *     at (32,0) and (32,1) despite the seal's exception for it.
+   *   - the undergrowth and the lane dressing between them put a flower bed on three tiles of sand.
+   *
+   * WHAT THIS DOES NOT TOUCH: a shoreline. `shore-*` has its own pass five hundred lines up, with
+   * its own reasoning -- a step or a corner is uncovered because nothing else can carry its
+   * waterline, the middle of a long bank column is LEFT covered because the boulder reads as
+   * standing in the gorge the board draws, and the border is left alone because a shoreline the
+   * player can see and cannot walk onto is worse than one under a bush. Eleven of the twenty-four
+   * are shore tiles held by those three rules and they stay; audit 9 permits them by name and
+   * counts them, so the number is on the run rather than in a comment.
+   *
+   * It is the LAST writer on purpose. Every earlier position for it loses: `sealBorder` runs twice
+   * and the second call is below the connectivity flood, the hem-stone swap is below that, and the
+   * lone-bush pass above plants a companion beside whatever it finds. A clearing pass that anything
+   * can replant behind is a clearing pass that reports a number nobody can trust.
+   */
+  {
+    const WET_GROUND = new Set(['water', 'water-2', 'waterfall'].map(gid));
+    const dredged: [number, number][] = [];
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        const standing = nameAt(below, x, y);
+        if (!OPAQUE_FLOOR.has(standing)) continue;
+        const floor = at(ground, x, y) & BASE_GID;
+        const onWater = WET_GROUND.has(floor);
+        const onSand = (TILE_NAMES[floor - 1] ?? '').startsWith('path');
+        if (!onWater && !onSand) continue;
+        set(below, x, y, 0);
+        /*
+         * The collision goes with the tile. `rock` is in `MUST_STOP_HER`, so leaving the cell solid
+         * with nothing drawn on it is the invisible wall this file fails the build for -- except on
+         * water, which is impassable in its own right and which the solid-and-undrawn audit already
+         * exempts, so the river keeps its barrier and the sand gets its lane back.
+         */
+        if (!onWater) clear(x, y);
+        dredged.push([x, y]);
+      }
+    console.log(
+      `  dredged: ${dredged.length} opaque tile(s) lifted off water, waterfall or sand` +
+        (dredged.length ? ` -- ${dredged.map(([x, y]) => `(${x},${y})`).join(' ')}` : ''),
+    );
+  }
+
   // --- THE AUDIT. Nothing below writes a tile ----------------------------------------------------
   /*
    * ===========================================================================
@@ -6365,6 +6673,15 @@ export function generateForestMap(): GeneratedMap {
    */
   const walkableAt = (x: number, y: number): boolean => inside(x, y) && at(collision, x, y) === 0;
   const faults: string[] = [];
+  /*
+   * Numbers an audit MEASURED and did not fail on, printed whether or not anything fired.
+   *
+   * Three of the audits below are ratchets pinned to a figure the map currently produces, and the
+   * whole value of a ratchet is that the next owner can see the figure MOVE. A guard that only
+   * speaks when it fails tells you nothing on the run where the number drifted one tile closer to
+   * its bound, which is the run where it was cheap to look.
+   */
+  const verdictLines: string[] = [];
   const fault = (what: string, where: [number, number][]): void => {
     if (where.length === 0) return;
     const shown = where
@@ -6693,6 +7010,287 @@ export function generateForestMap(): GeneratedMap {
 
   /*
    * ===========================================================================
+   * 8. THE TRACK'S EDGES. The deck is whole, and the bare verges are COUNTED.
+   * ===========================================================================
+   *
+   * Two things, both about what a walker sees at the edge of the sand, and both measured off the
+   * finished ground layer rather than off the pass that wrote it.
+   *
+   * FIRST, THE CROSSING IS FIVE PLANKS WIDE. Moving the verge sweep below the bridge block -- which
+   * it had to be, so a verge is drawn against what is really there -- immediately put `path-n` and
+   * `path-s` back over `bridge-l` in both of the deck's rows, because `pathTiles` contains the cell
+   * the deck starts on. The bridge was still five tiles wide, three of them planks, and nothing
+   * failed: `map.test.ts` crosses the river on the collision layer and the collision was right. A
+   * hole in the one crossing in the game is worth a plain assertion.
+   *
+   * SECOND, A BARE VERGE IS A NUMBER. The tileset has no tile carrying grass on two OPPOSITE sides
+   * and none carrying it on three, so the mask resolves those six neighbourhoods to the nearest
+   * tile that exists and records, in `VERGE[...].undrawn`, the side it could not draw. This counts
+   * the result on the shipped map: how many sides are bare, and the longest straight run of them,
+   * which is what a player actually sees -- an unbroken edge where sand meets lawn with no verge,
+   * no lip and no teeth on it, against a spec of no straight run over 4px.
+   *
+   * THE BOUND IS A RATCHET AND IT IS NOT DERIVED FROM `VERGE`. It is 23 bare sides and a worst run
+   * of 6 tiles, which is exactly what the map produces today, so it has no margin: adding the six
+   * missing gids drops it and the bound comes down with them in the same commit. It is written as a
+   * count rather than as "the mask has gaps", because a bound written in terms of the table it
+   * watches moves when the table does. The worst run today is (12..17, 12) -- 192px of dead-straight
+   * seam in the spawn frame -- with (12..13, 22) and (35..37, 22) behind it.
+   */
+  {
+    const holes: [number, number][] = [];
+    for (const y of bridgeRows)
+      for (let x = bridgeCentre - 2; x <= bridgeCentre + 2; x++)
+        if (!DECK_GIDS.has(at(ground, x, y) & BASE_GID)) holes.push([x, y]);
+    fault('tile(s) of the river crossing with no deck drawn on them', holes);
+
+    const bareSides: Array<{ x: number; y: number; side: string }> = [];
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        const here = nameAt(ground, x, y);
+        if (!here.startsWith('path')) continue;
+        const mask =
+          (carriesTrack(x, y - 1) ? 0 : N_SIDE) |
+          (carriesTrack(x, y + 1) ? 0 : S_SIDE) |
+          (carriesTrack(x + 1, y) ? 0 : E_SIDE) |
+          (carriesTrack(x - 1, y) ? 0 : W_SIDE);
+        for (const side of VERGE[mask]!.undrawn) bareSides.push({ x, y, side });
+      }
+    /** The longest straight line of cells that leave the SAME side bare. */
+    let worstRun = 0;
+    let worstAt = 'nowhere';
+    for (const side of ['n', 's', 'e', 'w']) {
+      const bare = new Set(bareSides.filter((b) => b.side === side).map((b) => b.y * MAP_W + b.x));
+      // A bare north or south side runs along a ROW; a bare east or west side runs down a COLUMN.
+      const alongRow = side === 'n' || side === 's';
+      for (let a = 0; a < (alongRow ? MAP_H : MAP_W); a++) {
+        let run = 0;
+        for (let b = 0; b < (alongRow ? MAP_W : MAP_H); b++) {
+          const x = alongRow ? b : a;
+          const y = alongRow ? a : b;
+          run = bare.has(y * MAP_W + x) ? run + 1 : 0;
+          if (run > worstRun) {
+            worstRun = run;
+            worstAt = alongRow
+              ? `row ${y}, columns ${x - run + 1}-${x}, ${side} side`
+              : `column ${x}, rows ${y - run + 1}-${y}, ${side} side`;
+          }
+        }
+      }
+    }
+    const VERGE_GAP = { sides: 23, run: 6 } as const;
+    if (bareSides.length > VERGE_GAP.sides || worstRun > VERGE_GAP.run)
+      faults.push(
+        `${bareSides.length} track side(s) have no verge drawn on them (want at most ` +
+          `${VERGE_GAP.sides}), worst straight run ${worstRun} tile(s) at ${worstAt} (want at most ` +
+          `${VERGE_GAP.run}). The tileset has no opposite-pair or three-sided path tile; see the ` +
+          'note on `VERGE`. If this went UP, something widened the track into a corridor. If it ' +
+          'went DOWN, the six missing gids landed -- bring this bound down with them.',
+      );
+    verdictLines.push(
+      `verges bare on ${bareSides.length} side(s), worst run ${worstRun} at ${worstAt}`,
+    );
+  }
+
+  /*
+   * ===========================================================================
+   * 9. NOTHING OPAQUE STANDS ON WATER, ON THE FALL OR ON THE SAND.
+   * ===========================================================================
+   *
+   * The dredge pass above is the fix; this is what stops it coming back. Three separate passes --
+   * the border seal, the bank scree and the undergrowth -- are each able to put a bush, a boulder
+   * or a flower bed on the river or on the track, and each of them is right about its own job, so
+   * the only place the rule can live is here, after all three have run.
+   *
+   * ZERO, AND IT IS NOT A RATCHET. A flower bed growing out of the lane two tiles from Grandma's
+   * door has no acceptable count. The one exception is written out by name: a SHORELINE may carry
+   * cover, for the three reasons set out at the uncover pass five hundred lines above -- the middle
+   * of a long bank column reads as the gorge the board draws, and the border band's seal beats a
+   * shoreline the player can see and cannot walk onto. Those are counted and reported rather than
+   * waved through, so if the number moves somebody has to say why.
+   */
+  {
+    const WET = new Set(['water', 'water-2', 'waterfall'].map(gid));
+    const aground: [number, number][] = [];
+    let onBanks = 0;
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        if (!OPAQUE_FLOOR.has(nameAt(below, x, y))) continue;
+        const floor = at(ground, x, y) & BASE_GID;
+        const here = TILE_NAMES[floor - 1] ?? '';
+        if (here.startsWith('shore')) {
+          onBanks++;
+          continue;
+        }
+        if (WET.has(floor) || here.startsWith('path')) aground.push([x, y]);
+      }
+    fault('opaque tile(s) standing on water, on the waterfall or on the track', aground);
+    verdictLines.push(`${onBanks} shoreline tile(s) left under cover by the uncover pass's rules`);
+  }
+
+  /*
+   * ===========================================================================
+   * 10. NO DOUBLED FENCE POST, which is what a wide post next to a wide post is.
+   * ===========================================================================
+   *
+   * The run is deliberately broken by a wide flat-capped post every three or four tiles -- that is
+   * composition guard 7h's whole subject, and 7h bounds the RECEDING run between them. What it
+   * cannot see is the opposite failure: two wide posts stacked against each other, which is not a
+   * run broken by a post but a doubled post, and which is what column 46 shipped at rows 11 and 12,
+   * at the top of the payoff frame. Measured as adjacency on the finished layer, so moving the
+   * pitch arithmetic back fails here rather than moving the bound with it.
+   */
+  {
+    const WIDE = new Set(['fence-corner', 'fence-corner-e', 'fence-corner-w']);
+    const doubled: [number, number][] = [];
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        if (!WIDE.has(nameAt(below, x, y))) continue;
+        // One direction each, so a pair is reported once and at its upper-left member.
+        if (WIDE.has(nameAt(below, x, y + 1)) || WIDE.has(nameAt(below, x + 1, y)))
+          doubled.push([x, y]);
+      }
+    fault('wide fence post(s) standing against another wide post', doubled);
+
+    /*
+     * ...AND WHERE THE TWO RAILS SIT RELATIVE TO BOTH PAYOFF FRAMES, reported every run.
+     *
+     * Composition guard 7h asserts that no picket rail lies across the DESKTOP arrival camera, and
+     * it passes. It says nothing about the phone's, which is five and a half tiles taller and which
+     * both rails sit inside. The fix and what it costs are written out at `gardenTop`; this is the
+     * number, on every run, so the fault cannot go quiet the way it did behind a rail run of zero.
+     */
+    const span = (r: Rect): string => `${Math.floor(r.y0)}-${Math.ceil(r.y1) - 1}`;
+    const insidePhone = [gardenTop, gardenBottom].filter(
+      (y) => y >= Math.floor(ARRIVE_PHONE.y0) && y < Math.ceil(ARRIVE_PHONE.y1),
+    );
+    verdictLines.push(
+      `enclosure rails on rows ${gardenTop}/${gardenBottom}: desktop arrival frame is rows ` +
+        `${span(ARRIVE)}, the phone's is rows ${span(ARRIVE_PHONE)}, ` +
+        `${insidePhone.length} rail(s) inside the phone's payoff frame`,
+    );
+  }
+
+  /*
+   * ===========================================================================
+   * 11. THE GRASS RAMP STILL GOES DOWNHILL, AND IT IS STILL WIDE ENOUGH TO BE A SHADOW.
+   * ===========================================================================
+   *
+   * `grassStep` is measured off the painted tiles now, so the ORDER cannot be wrong any more; what
+   * can still be wrong is the ramp itself. Two things are asserted and they fail for opposite
+   * reasons.
+   *
+   *   - Two variants painted to the same luma make a rung that is not a rung: `shade()` would move
+   *     a tile from one to the other and change nothing a player can see, which is the fault the
+   *     index-order bug produced and the one hardest to notice once the order is right.
+   *   - The SPAN is what a shadow is worth. Walking a tile from the lightest rung to the darkest is
+   *     the deepest shadow this file is able to lay anywhere on the map.
+   *
+   * WHERE IT SITS TODAY, AND WHY THE FLOOR IS WHERE IT IS. The span is 5.4 luma. That is not a
+   * shadow; nine hundred trees and the cottage stand on ground that is, to the eye, exactly as
+   * bright as the ground beside them. For comparison the lawn's own join guard in
+   * `tiles/w-ground.ts` treats 14 luma as the level at which a person sees a line across a field,
+   * and the board's own pools are tens of luma deep. So 5.0 is a FLOOR UNDER A KNOWN-BAD NUMBER,
+   * not a specification: it stops the ramp being flattened further while the real fix -- widening
+   * `BANDS` in the ground painter -- is somebody else's commit. Raise it as the painter improves.
+   * It is a plain luma figure and is deliberately not derived from anything in `BANDS`.
+   */
+  {
+    const RAMP_SPAN_FLOOR = 5;
+    const flat = grassRamp
+      .slice(1)
+      .map((r, i) => ({ r, below: grassRamp[i]! }))
+      .filter(({ r, below }) => r.luma - below.luma < 0.05);
+    for (const { r, below } of flat)
+      faults.push(
+        `the grass ramp has two rungs at the same brightness: ${below.name} at ` +
+          `${below.luma.toFixed(1)} and ${r.name} at ${r.luma.toFixed(1)}. A shade pass that ` +
+          'walks a tile between them changes nothing a player can see.',
+      );
+    const span = grassRamp[grassRamp.length - 1]!.luma - grassRamp[0]!.luma;
+    if (span < RAMP_SPAN_FLOOR)
+      faults.push(
+        `the grass ramp spans ${span.toFixed(1)} luma end to end (want at least ` +
+          `${RAMP_SPAN_FLOOR}): ${grassRamp.map((r) => `${r.name} ${r.luma.toFixed(1)}`).join(', ')}. ` +
+          'Every cast shadow, road keyline and penumbra on this map is a walk down that ramp, so ' +
+          'this is the deepest shadow the world can have. Widen `BANDS` in `tiles/w-ground.ts`.',
+      );
+    verdictLines.push(
+      `grass ramp ${grassRamp.map((r) => `${r.name.slice(-1)}:${r.luma.toFixed(1)}`).join(' ')} ` +
+        `(span ${span.toFixed(1)} luma, darkest first)`,
+    );
+  }
+
+  /*
+   * ===========================================================================
+   * 12. WHERE THE PLAYER CAN STAND, THE PLAYER CAN BE SEEN.
+   * ===========================================================================
+   *
+   * `decor-above` is drawn OVER Red. A tile on it that is opaque across all 1,024 of its pixels
+   * therefore hides her outright: she walks onto the cell and disappears, with no shadow, no outline
+   * and nothing to say where she went. Every other crown quarter in the set is drawn with daylight
+   * in it -- `canopy-tl` is 51% opaque, `canopy-bl` 85%, `elder-tc` 28% -- so the ones that do this
+   * are outliers rather than the rule.
+   *
+   * ASKED OF THE ALPHA, NOT OF A LIST OF NAMES. The finding this came from named four tiles:
+   * `elder-mc`, `elder-bc`, `canopy-bl` and `canopy-br`. Rendered and counted, only the first two
+   * are actually opaque everywhere; `canopy-bl` and `canopy-br` leave 152 and 111 pixels of daylight,
+   * so Red is dimmed under them and not erased. A guard written from the list would have been wrong
+   * about half of it in both directions, and -- the expensive half -- it would keep passing after a
+   * painter opened those two quarters up and closed a different one. So each `decor-above` painter is
+   * rendered once and asked whether any pixel of it is not opaque.
+   *
+   * 109 IS A RATCHET OVER A KNOWN-BAD NUMBER, exactly like the grass ramp's floor, and for the same
+   * reason: the remedy is a painter's. `elder-mc` and `elder-bc` are the middle and bottom centre of
+   * an elder's 3x3 crown and they are solid green squares; opening a few pixels of sky into them
+   * costs nothing and fixes all 109 cells at once, and `tiles/w-trees.ts` is where that is done. The
+   * map's own alternatives are both worse than the fault -- making 109 cells solid turns a drawing
+   * problem into a collision problem and hands the connectivity flood 109 new pockets to open by
+   * felling the wood, and refusing to plant an elder whose crown reaches walkable ground would
+   * remove most of the elders. So this holds the line and reports the number. Lower it as the
+   * crowns open up; never raise it.
+   */
+  {
+    const OPEN_ENOUGH = 109;
+    const seeThrough = new Map<string, boolean>();
+    const hidesHer = (name: string): boolean => {
+      const known = seeThrough.get(name);
+      if (known !== undefined) return known;
+      const img = new Img(TILE, TILE);
+      TILE_PAINTERS[name]!(img);
+      let solidPx = 0;
+      for (let y = 0; y < TILE; y++)
+        for (let x = 0; x < TILE; x++) if (img.get(x, y)[3] === 255) solidPx++;
+      const blind = solidPx === TILE * TILE;
+      seeThrough.set(name, blind);
+      return blind;
+    };
+    const blindCells: [number, number][] = [];
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        const over = nameAt(above, x, y);
+        if (over === '' || !walkableAt(x, y)) continue;
+        if (hidesHer(over)) blindCells.push([x, y]);
+      }
+    if (blindCells.length > OPEN_ENOUGH)
+      fault(
+        `walkable tile(s) under a crown quarter that is opaque in all ${TILE * TILE} of its ` +
+          `pixels, so Red vanishes when she stands on one (want at most ${OPEN_ENOUGH}; open the ` +
+          'quarter up in `tiles/w-trees.ts` rather than making the ground solid)',
+        blindCells,
+      );
+    const blindTiles = [...seeThrough.entries()]
+      .filter(([, blind]) => blind)
+      .map(([name]) => name)
+      .sort();
+    verdictLines.push(
+      `${blindCells.length} walkable tile(s) hidden under a fully opaque crown` +
+        (blindTiles.length ? ` (${blindTiles.join(', ')})` : ''),
+    );
+  }
+
+  /*
+   * ===========================================================================
    * 7. COMPOSITION. The four things `docs/DESIGN_BOARD.md` priority 1 asks this file for.
    * ===========================================================================
    *
@@ -6743,8 +7341,24 @@ export function generateForestMap(): GeneratedMap {
    * Four more carry one tile: 7a's straightest ruled edge (5 of 6) and bitten columns (9 of 8), 7e's
    * tallest scree (3 of 4) and 7c's tallest stack (9 of 10). Only the rest are genuinely roomy --
    * 7a's hero sand at 18.9% of 24% and 31 readable columns of 20, 7b-portrait's 29 tiles of 10 and
-   * 2 landmarks of 1, 7h's rail at 0 of 3, 7i's plaster at 1462px inside 480..2600 with its widest
-   * featureless patch 70px of 240, and 7d's ground shares of 34/47/16/3 against a 2.5..60 band.
+   * 2 landmarks of 1, 7h's rail at 0 of 3, 7i's plaster at 1454px inside 480..2600 with its widest
+   * featureless patch 70px of 240, and 7d's ground shares of 47/34/16/3 against a 2.5..60 band.
+   *
+   * TWO OF THOSE FIGURES MOVED ON 2026-10-20 and neither is a composition change. 7i's plaster was
+   * 1462px: the dredge pass lifted a flower bed off the lane at (52,20) and (52,21), inside this
+   * frame, and eight of its pixels were being counted as plaster. 7d's first two shares swapped
+   * because the grass ramp is now ordered by MEASURED luma rather than by the variants' order in
+   * `TILE_NAMES`, so what used to be reported as `grass-0`'s share is `grass-1`'s -- the same tiles
+   * in the same places under their right names. Every other figure above is unchanged, which is the
+   * check that neither of those two touched the picture.
+   *
+   * AND THREE MORE RATCHETS NOW SIT OUTSIDE THIS SECTION, in audits 8, 11 and 12, because they are
+   * about what a tile IS rather than about where the camera is pointed: 23 bare track verges with a
+   * worst run of 6, a grass ramp spanning 5.4 luma against a floor of 5, and 109 walkable tiles
+   * under a fully opaque crown quarter. All three are pinned at exactly what the map produces, all
+   * three say in their own note which file fixes them, and all three print their figure on every run
+   * whether or not they fire. Two of them are floors under a number that is already bad; the right
+   * move on those is to tighten them, never to loosen them.
    *
    * WHAT THAT MEANS FOR A CHANGE, which is the part worth carrying away. Anything that moves one
    * tile of the generated map is odds-on to fail here, and a failure here is NOT by itself evidence
@@ -7626,6 +8240,7 @@ export function generateForestMap(): GeneratedMap {
       .sort()
       .join(' ')}; 0 grass tiles left against the water`,
   );
+  for (const line of verdictLines) console.log(`  ${line}`);
   if (faults.length > 0)
     throw new Error(
       `the generated map breaks ${faults.length} invariant(s):\n  - ${faults.join('\n  - ')}`,

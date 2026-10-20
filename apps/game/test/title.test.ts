@@ -31,8 +31,18 @@ function padHidingQueries(): string[] {
     .slice(1)
     .flatMap((chunk) => {
       const condition = chunk.slice(0, chunk.indexOf('{')).trim().replace(/\s+/g, ' ');
-      // The pad's own rule inside this block, however the formatter has broken the lines.
-      const hides = /\.otp-touch\s*\{[^}]*display:\s*none/.test(chunk);
+      /*
+       * The pad's own rule inside this block, however the formatter has broken the lines.
+       *
+       * This used to look for `.otp-touch { ... display: none }` -- the whole pad hidden at once.
+       * It no longer is, and deliberately: the five named walk buttons now STAY in the tree on a
+       * fine pointer so a keyboard player has more than one focusable control on Explore, and only
+       * the two thumb controls are hidden. So the question this asks is unchanged -- "under which
+       * query does the stylesheet stop drawing the pad?" -- but the answer is written on the
+       * children now. Matching either keeps the guard honest if the rule moves back to the parent.
+       */
+      const hides =
+        /\.otp-touch(?:\s+\.otp-(?:stick|a-button)|\s*,|\s*)*\s*\{[^}]*display:\s*none/.test(chunk);
       return hides ? [condition] : [];
     });
 }

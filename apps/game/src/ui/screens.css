@@ -42,7 +42,19 @@
 .otp-serif {
   font-family: var(--cyera-font-serif);
   font-style: normal;
-  font-weight: 400;
+  /*
+   * INHERIT, not 400. Season Mix sets "exactly one word per heading" (BRAND_AND_UI section 2), and
+   * a hard 400 here made that word the only light thing in whatever heading it landed in: `Path`
+   * rendered at 400 inside an `.otp-title__mark` set at 600, and `Spotters` and `Find out.` at 400
+   * inside the 500 of `.otp-section-label` and `.otp-band__question`. A highlight that drops two
+   * weights below its own heading reads as a different voice rather than an emphasis, which is the
+   * opposite of what one upright serif word is for.
+   *
+   * The upright cut is what this rule is actually here to hold, and that is `font-style`, directly
+   * above: the brand book states Season Mix is never set in italic, and the approved mocks set it
+   * in italic throughout and are superseded. Weight was never part of that claim.
+   */
+  font-weight: inherit;
 }
 
 .otp-section-label {
@@ -117,7 +129,17 @@
 
 .otp-cta__disc {
   background: var(--cyera-black);
-  color: var(--cyera-lime);
+  /*
+   * Offwhite, not Lime. BRAND_AND_UI section 2 ends "Lime is a background fill only, never text",
+   * and section 4 "Never two Limes on one screen" -- a Lime arrow on this Black disc was the
+   * second one, inside the Lime pill that is the screen's one permitted mark. Section 3 specifies
+   * the control as a "Lime pill with a Black arrow disc", so the disc keeps its Black ground and
+   * only the glyph moves. Measured before: the census found Lime painting two elements on BOTH
+   * Title and Results (`.otp-cta` background and `.otp-cta__disc` text); after, one on each.
+   * Task 7 raised this in `asks` as a one-line change it could not make, because screens.css
+   * belonged to Task 2 that round.
+   */
+  color: var(--cyera-offwhite);
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -527,8 +549,12 @@ h2.otp-section-label {
      which is the camera's call and not this file's. docs/UX_REVIEW.md finding 11, still open. */
   width: min(calc(306px * var(--otp-ui)), 62%);
   height: 100%;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  /* The card CLIPS; .otp-title__scroll below is what scrolls. When the card was the scroller its
+     last child -- "Begin the walk", the page's one Lime and the only entrance -- was the first
+     thing under the fold: 181x0 visible pixels at 844x390, 812x375 and 667x375, 34 of 56 rows at
+     320x568. `hidden` rather than `clip` because this box still has a scroll container's job of
+     cutting the copy off at the card's edge, and `clip` with no scrollport is not that. */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   /* Centred as one block rather than pinned top-and-bottom: the column is as tall as the world,
@@ -542,7 +568,14 @@ h2.otp-section-label {
      column reported a scrollHeight of 372 rather than 436: the overflow off the start edge is not
      counted, which is the same blind spot in a number.) `safe` falls back to start alignment
      exactly when the content overflows and changes nothing when it does not, so every size that
-     fits is pixel-identical -- 375x812 renders byte for byte as it did before. */
+     fits is pixel-identical -- 375x812 renders byte for byte as it did before.
+
+     `safe` IS NOW BELT AND BRACES, and it stays for that reason. The two items on this line are a
+     shrinkable scroll box and a `flex: none` foot, so the line cannot overflow -- the scroll box
+     gives up its height first and takes the overflow inside itself, where a scrollbar and a wheel
+     both reach it. Centring then only ever distributes FREE space, which is the desktop case this
+     rule exists for. Drop the `flex: 0 1 auto` below and the old failure is back, so the keyword
+     is left where it is rather than relying on another rule to stay correct. */
   justify-content: safe center;
   padding: calc(22px * var(--otp-ui)) calc(24px * var(--otp-ui));
   /* A LIGHT CARD, as every other panel in the game already is: Shell body, Deep Purple frame
@@ -568,7 +601,12 @@ h2.otp-section-label {
 }
 .otp-title-panel .otp-title__sub {
   font-size: calc(18px * var(--otp-ui));
-  color: var(--cyera-aubergine);
+  /* Ash, the muted-text role the comment above already names, not Aubergine. Aubergine is a
+     foreground ACCENT (BRAND_AND_UI section 1 table), and spending it on the subtitle made the
+     second line of the hero screen compete with the Deep Purple heading above it -- while the
+     unscaled `.otp-title__sub` four rules up, the same element on the Results-style screens, has
+     been Ash all along. One element, two colours, and neither file said why. */
+  color: var(--cyera-ash);
   margin: calc(6px * var(--otp-ui)) 0 calc(16px * var(--otp-ui));
 }
 /* On the dark column the beige card would be a second panel inside a panel; the note keeps its
@@ -595,14 +633,58 @@ h2.otp-section-label {
 .otp-title-panel .otp-hint {
   color: var(--cyera-ash);
 }
+/*
+ * THE PROSE SCROLLS AND THE WAY IN DOES NOT. The copy's own scroll box, the wrapper the foot's
+ * note below asked for; ui/Title.tsx renders it around everything from the wordmark to the intro
+ * paragraph, with .otp-title__foot its sibling rather than its last child.
+ *
+ * `0 1 auto` with `min-height: 0`: it asks for its content's height and gives height up, down to
+ * nothing, before the foot gives up any -- `min-height: 0` because a flex item's automatic minimum
+ * size is its content, which is exactly what stops a scroll box from shrinking at all. So the
+ * button's row is reserved out of the card first and the copy lives in what is left.
+ *
+ * Measured at the RESTING scroll position, which is what a player sees when the screen opens --
+ * "Begin the walk", 181px wide, rows visible, before and after:
+ *
+ *     844x390   0 -> 59      812x375   0 -> 59      667x375   0 -> 59
+ *     320x568  34 -> 56      390x600  47 -> 58
+ *
+ * The card did scroll before this, but it shows no scrollbar on touch, no fade and no caret, so
+ * nothing told the player there was anything under the fold. e2e/css-contract.spec.ts measures the
+ * button at scrollTop 0 and hit-tests it; the check that let this ship scrolled the card to its
+ * end first, which a player has no reason to do.
+ */
+.otp-title__scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /*
+   * A FLEX COLUMN, so that what is inside the box is laid out exactly as it was when these five
+   * elements were children of the card itself. A plain block container is not neutral here: `.
+   * otp-note` is a <blockquote> taking the UA's `margin: 1em 40px` -- the indent the rule's own
+   * note calls the thing that says it is a quote -- and adjacent margins COLLAPSE in a block
+   * container while flex items' do not. Measured: the card came out 32px shorter at 768x1024 and
+   * 23px at 375x812, the note sitting tighter against the subtitle above it and the body copy
+   * below. That is a redesign of the hero screen's rhythm arriving as a side effect of a scroll
+   * box, which is not what this change is for.
+   */
+  display: flex;
+  flex-direction: column;
+}
+
 .otp-title__foot {
+  /* Reserved out of the card before the copy gets any, so it cannot be squeezed or scrolled off.
+     This is the half of the fix the stylesheet owns; the wrapper above is the other half. */
+  flex: none;
   padding-top: calc(16px * var(--otp-ui));
   /*
-   * NOT STICKY, AND THE REASON IS WORTH KEEPING. Capping the card against the camera (the portrait
-   * block below) buys Red her feet back by letting the copy scroll on a short phone, and the first
-   * thing to scroll out of a card is its last child -- here, the primary call to action. Measured
-   * with the cap in: "Begin the walk" sits below the card's own fold at 568 and 600px tall, and in
-   * landscape at 844x390, where the copy needs 436px of a 308px column.
+   * NOT STICKY, AND THE REASON IS WORTH KEEPING -- it is why the fix is a wrapper and not a pin.
+   * Capping the card against the camera (the portrait block below) buys Red her feet back by
+   * letting the copy scroll on a short phone, and the first thing to scroll out of a card is its
+   * last child -- here, the primary call to action. Measured with the cap in and the foot still
+   * inside the scroller: "Begin the walk" had 34 of its 56 rows visible at 320x568, 47 of 58 at
+   * 390x600, and none at all of its 59 at 844x390, 812x375 and 667x375.
    *
    * `position: sticky` pins it, and every ground it can be given is wrong. The card is 94% Shell
    * so that a little forest moves behind it, and a sticky strip paints ITS ground over the card's:
@@ -612,9 +694,9 @@ h2.otp-section-label {
    *   - flat Shell, or the mix plus `backdrop-filter`, which is the same stack by another route:
    *     the ghost goes and on the 1280 hero the strip becomes a visibly lighter rectangle around
    *     the button, because the card's six per cent is a blurred forest and the strip's is not.
-   * The two ends of one dial, and the hero screen is the wrong place to pay. Pinning it properly
-   * wants the prose in a scroll box of its own with the foot outside it, which is a wrapper in
-   * ui/Title.tsx -- not this file. Raised in the handback.
+   * The two ends of one dial, and the hero screen is the wrong place to pay. Taking the foot out
+   * of the scroller instead costs nothing on either ground: the strip is not a layer over the
+   * copy, it is a row beside it, so there is no second ground to get wrong.
    */
 }
 

@@ -243,9 +243,20 @@ test('the careful reader keeps the boundary and gives up two errands on purpose'
   await expect(errand).toHaveCount(3);
   await expect(errand.first()).not.toHaveClass(/--missed/);
   await expect(page.locator('.otp-recap__row--errand.otp-recap__row--missed')).toHaveCount(0);
-  const badges = await errand.locator('.otp-recap__badge').allTextContents();
-  expect(
-    badges.map((b) => b.trim()),
-    'one done, two withheld on purpose, none failed',
-  ).toEqual(['✓', '⊖', '⊖']);
+  /*
+   * Read off `data-glyph`, not off the text. The check mark and the circled minus are drawn as SVG
+   * now, because Haffer's 789 codepoints carry neither U+2713 nor U+2296 and both were falling
+   * through to whatever family came next in the stack -- two of the three marks in this column
+   * rendering at a different weight and baseline from the third. `data-glyph` is on the badge in
+   * every state, including the typed "!", so this assertion no longer depends on which of the three
+   * happens to be a glyph the brand font owns.
+   */
+  const badges = await errand
+    .locator('.otp-recap__badge')
+    .evaluateAll((els) => els.map((el) => el.getAttribute('data-glyph')));
+  expect(badges, 'one done, two withheld on purpose, none failed').toEqual([
+    'check',
+    'traded',
+    'traded',
+  ]);
 });

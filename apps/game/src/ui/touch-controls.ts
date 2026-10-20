@@ -222,20 +222,51 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
     e.preventDefault();
   };
 
+  /**
+   * The same press, arriving a second time.
+   *
+   * `pointerdown` above answers a thumb; this answers an activation with no pointer behind it,
+   * which is all a screen reader can send and the only notice this button gets from one.
+   *
+   * BOTH have to stay, and that is measured, not assumed: with one finger already down on the
+   * stick, a second finger's tap on A raises `pointerdown` and `pointerup` on the button and NO
+   * `click` whatever -- Chromium synthesises no compatibility mouse event once a gesture is
+   * multi-touch. Dropping `pointerdown` would therefore make A dead in exactly the two-handed grip
+   * this pad is laid out for, which is why the obvious one-line fix is the wrong one.
+   *
+   * What they must not do is both answer the SAME press. A tap is a hold: `pointerdown` lands at
+   * touch-down, `click` at touch-up, and at 120ms apart those are different frames, so the scene's
+   * `read()` consumes two separate presses and the player gets two interacts from one tap. Measured
+   * on this build with a 120ms tap on the A button beside the Toadstool: three taps, six
+   * `greetBystander` events, and because each greeting overwrites the last before a frame is drawn,
+   * the lines the player could actually read were his 2nd, 1st and 3rd -- the first thing anyone is
+   * told by anyone in this forest was never readable. The same counter, two steps per tap, puts a
+   * four-line part permanently on its 2nd and 4th: the Snail's 1st and 3rd lines were unreachable
+   * on a phone. That one is arithmetic off the measured step of two, not a second measurement.
+   *
+   * `detail` is what separates them, and it is the one thing on the event that says which kind of
+   * press this is rather than which device sent it: it is the click COUNT, so a click synthesised
+   * from a pointer gesture carries 1 (measured: `detail` 1, `pointerType` "touch") and an
+   * activation with no pointer position to count carries 0 (measured: `detail` 0, `pointerType`
+   * ""). Keyboard Enter and Space never reach here at all -- `world/input.ts` takes them on the
+   * window and calls `preventDefault`, so the button is never activated -- which is why this cannot
+   * be narrowed to "trusted events only": the untrusted, detail-0 click is exactly the one that
+   * must press.
+   *
+   * `e2e/game.spec.ts` holds the guard, as a player sees it: one tap, one line, three taps, the
+   * three lines in the order they were written.
+   */
+  const onButtonClick = (e: MouseEvent): void => {
+    if (e.detail !== 0) return;
+    input.pressInteract();
+  };
+
   stick.addEventListener('pointerdown', onStickDown);
   stick.addEventListener('pointermove', onStickMove);
   stick.addEventListener('pointerup', onStickUp);
   stick.addEventListener('pointercancel', onStickUp);
   button.addEventListener('pointerdown', onButton);
-  /*
-   * And on click, which is all an assistive activation reduces to: `pointerdown` alone left the A
-   * button -- the only way to talk to anybody on a touch device -- inert to a screen reader.
-   *
-   * Both fire on a real tap, which costs nothing: `pressInteract` raises a flag that the scene's
-   * `read()` consumes on the very next frame, whether or not it was acted on, so two presses in
-   * the same breath are one press and a stray one cannot be left lying about for later.
-   */
-  button.addEventListener('click', () => input.pressInteract());
+  button.addEventListener('click', onButtonClick);
 
   return {
     root,

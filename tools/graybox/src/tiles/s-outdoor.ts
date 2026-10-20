@@ -122,6 +122,32 @@ const timber = (t: number): RGBA => (t < 0.5 ? tone('trunk', t * 2) : tone('wood
 const turf = (t: number): RGBA => tone('shadow', t);
 
 /*
+ * THE CONTACT VALUE, and this constant is the whole of what this file contributes to task P13.
+ *
+ * What the ground reads in the pixel where an object MEETS it, as opposed to the pool of shade it
+ * throws beside itself. Every family in the world had independently arrived at the same answer and
+ * none of them had written it down: the bush, the rock and the tree roots bottom out at luma 43, 52
+ * and 42 in the rows under them, and the three fence tiles -- `fenceRail`'s picket shadow and
+ * `fenceCorner`'s -- bottom out at 35, which is this value, opaque.
+ *
+ * It had no home, which is why `tiles/s-props.ts` re-derived it five times and missed by between 22
+ * and 95 luma on every one of them: the six placed props were the only objects in the world whose
+ * ground did not darken at all under them, and the fountain's darkest pixel WAS the open lawn. That
+ * file now imports this, so there is one declaration of "touching the ground" and the props cannot
+ * drift off it again without the fence drifting with them.
+ *
+ * It is `turf(0.08)` and not a new number: the fence is the family that already had it right, and
+ * naming a value is not an excuse to move it. The two call sites below are the ones it was extracted
+ * from and both render byte-identically.
+ *
+ * OPAQUE, not an alpha. `turf()` is a tone of `shadow`, which paint.ts describes as grass in shade,
+ * so a contact pixel is a colour computed between two greens and written solid -- the pixel standard's
+ * "no partial alpha" rule. A prop composing down TO this value through alpha over its own opaque lawn
+ * is the other legal half of the same rule, and is what `cast()` in `s-props.ts` does.
+ */
+export const CONTACT: RGBA = turf(0.08);
+
+/*
  * A row or column is either a point on the timber ramp or one of the four dark values. Writing the
  * dark ones inline rather than as `null` is what lets a single table say "lit edge, dark body,
  * black gap" in the order the board draws it, which is how every band in this file is now spelled.
@@ -353,7 +379,7 @@ const fenceRail: Painter = (img) => {
   for (const x of [0, PICKET_PITCH]) {
     // Contact shadow first, under the picket: section 4, a flattened ellipse in the ground's own
     // dark, offset down and right. Opaque, never translucent black.
-    img.ellipse(x + 5, PICKET_BASE + 4, 6, 1.6, turf(0.08));
+    img.ellipse(x + 5, PICKET_BASE + 4, 6, 1.6, CONTACT);
   }
   for (const x of [0, PICKET_PITCH]) picket(img, x);
 
@@ -623,7 +649,7 @@ const CORNER_BASE = 28; // last row of wood; the 2px ground keyline follows it
 
 const fenceCorner: Painter = (img) => {
   // Contact shadow first, in the ground's own dark, offset down and right.
-  img.ellipse(CORNER_X + 8, CORNER_BASE + 4, 9, 1.8, turf(0.08));
+  img.ellipse(CORNER_X + 8, CORNER_BASE + 4, 9, 1.8, CONTACT);
 
   for (let y = CORNER_TOP; y <= CORNER_BASE; y++) {
     const d = y - CORNER_TOP;

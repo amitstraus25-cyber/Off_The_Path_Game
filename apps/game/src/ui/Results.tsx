@@ -1,33 +1,61 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { VERDICTS, exposedNotices, recap, score } from '@otp/core';
 import type { Content, GameState, GoalResult, SkillId, Verdict } from '@otp/core';
+import { RESEARCH_URL } from '../embed/postMessage';
 import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
 
 /*
- * THE RECAP BADGES ARE TYPED, AND TWO OF THE THREE ARE NOT IN THE FONT. Measured, not asserted:
+ * THE RECAP BADGES WERE TYPED, AND TWO OF THE THREE WERE NOT IN THE FONT. Measured, not asserted:
  * `public/fonts/HafferUprightsVF.ttf` carries 789 codepoints, and U+2713 CHECK MARK and U+2296
  * CIRCLED MINUS are both outside them, while "!" is inside. So this column -- whose whole job is to
- * read as one vocabulary down the page -- renders two of its three marks from whatever the next
+ * read as one vocabulary down the page -- rendered two of its three marks from whatever the next
  * family in the stack is, at that family's weight and on its baseline, beside one real Haffer
  * glyph. It is precisely the defect SkillCard.tsx describes over its verdict glyphs, which is why
- * those are drawn; and the "⊖" here is a LOOKALIKE of the Restrict pill's mark, not the same path,
- * although the comment on the errand row below says it takes "the Restrict glyph from the verdict
- * pills".
+ * those are drawn.
  *
- * I drew both and reverted it, which is why this note is here instead of the fix. Two end-to-end
- * specs read these badges as text and pin the characters --
- * `e2e/trifecta.spec.ts:247` expects `['✓', '⊖', '⊖']` and `e2e/results-payoff.spec.ts:179` counts
- * `r.badge === '⊖'` -- so drawing the marks turns every badge's textContent into "" and takes the
- * suite red. Neither spec is this round's file, and the glyph assertion in the second one is
- * load-bearing for finding 15, so it wants its owner rather than a drive-by edit. Results carries
- * no board frame, so this was craft work beyond the brief and not worth a red build.
+ * Both are now drawn, on the handover the previous round left here: the two marks as SVG, and the
+ * specs that used to read them asserting on `data-glyph` instead of `textContent`
+ * (`e2e/trifecta.spec.ts`, `e2e/results-payoff.spec.ts`). `data-glyph` is on the badge for every
+ * state including "!", so a spec never has to know which of the three is drawn and which is typed.
  *
- * The handover, so nobody has to re-derive it: draw the two marks, and change the specs to assert
- * on a `data-glyph` attribute (or on the drawn path) instead of textContent. "!" stays as text --
- * it is Haffer's own and it is what both UI_FOUNDATIONS section 5 and the board's Inspect disc
- * show.
+ * "!" stays as text -- it is Haffer's own, and it is what both UI_FOUNDATIONS section 5 and the
+ * board's Inspect disc show.
+ *
+ * The paths are copied from SkillCard.tsx rather than imported, deliberately and with a cost: the
+ * errand row's comment below claims its mark is "the Restrict glyph from the verdict pills", and
+ * before this it was a lookalike character on a different baseline. Now it is the same two shapes,
+ * to the coordinate. SkillCard.tsx belongs to another owner this round, so exporting them from
+ * there is the next person's one-line tidy, not a cross-task edit today.
  */
+const CheckGlyph = () => (
+  <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
+    <path
+      d="M4 10.5l4 4 8-9"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+);
+
+const TradedGlyph = () => (
+  <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
+    <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+    <path d="M6.5 10h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+  </svg>
+);
+
+/** The badge, named by what it means. `data-glyph` is what the specs read; the mark is what a player sees. */
+function Badge({ glyph }: { glyph: 'check' | 'traded' | 'missed' }) {
+  return (
+    <span class="otp-recap__badge" data-glyph={glyph} aria-hidden="true">
+      {glyph === 'check' ? <CheckGlyph /> : glyph === 'traded' ? <TradedGlyph /> : '!'}
+    </span>
+  );
+}
 
 /** Matches the server rule in ARCHITECTURE section 8, so a handle never fails only on the server. */
 const HANDLE = /^[A-Za-z0-9][A-Za-z0-9_.-]{1,14}[A-Za-z0-9]$/;
@@ -67,20 +95,28 @@ const VERDICT_WORD: Record<Verdict, string> = {
  */
 export type ErrandState = 'met' | 'traded' | 'missed';
 
-export function errandState(
+/** Every verdict actually given on a skill that could have granted what this errand needed. */
+function playedFor(
   goal: GoalResult,
   verdicts: Readonly<Record<SkillId, Verdict>>,
   content: Content,
-): ErrandState {
-  if (goal.met) return 'met';
-  // Every verdict actually given on a skill that could have granted what this errand needed.
-  const chosen = content.skills.flatMap((skill) => {
+): { outcome: Content['skills'][number]['outcomes'][Verdict]; best: boolean }[] {
+  return content.skills.flatMap((skill) => {
     if (!VERDICTS.some((v) => skill.outcomes[v].grants.includes(goal.needs))) return [];
     const given = verdicts[skill.id];
     return given === undefined
       ? []
       : [{ outcome: skill.outcomes[given], best: given === skill.bestVerdict }];
   });
+}
+
+export function errandState(
+  goal: GoalResult,
+  verdicts: Readonly<Record<SkillId, Verdict>>,
+  content: Content,
+): ErrandState {
+  if (goal.met) return 'met';
+  const chosen = playedFor(goal, verdicts, content);
   /*
    * The capability was handed over cleanly and the errand still went undone, so what was missing
    * was the walk, not the verdict: holding the Word Weaver on Restrict and never going to the post
@@ -93,6 +129,53 @@ export function errandState(
   // right. Refusing Cottage Finder outright loses the same errand for nothing, and stays a miss.
   return chosen.length > 0 && chosen.every((c) => c.best) ? 'traded' : 'missed';
 }
+
+/**
+ * WHY A MISS NEEDS THREE SENTENCES AND HAD ONE.
+ *
+ * `errandState` already knows the difference between a trade and a miss, and the screen renders
+ * both. What it did not do is say WHICH KIND of miss, so all three printed `errandNeeded` --
+ * "Needed a skill that reaches into your basket" -- including the two where the player was holding
+ * exactly that skill. On an allow/allow/allow run all three errand rows made that claim with the
+ * route, the translator and the lantern sitting in the basket eight lines below them, on the one
+ * screen whose argument is "read what the thing actually does". A screen that misreports the
+ * player's own run is the same defect as findings 1, 13 and 15, and this is its fourth instance.
+ *
+ *  - `refused`: no verdict the player gave grants it. The capability is genuinely not in hand, and
+ *    "needed a skill that..." is true. This is the only case the old copy was right about.
+ *  - `unused`: granted, cleanly, and the errand was never run. Night Light allowed grants the
+ *    listening with no flag; not walking to the notice is the player's omission on the walk.
+ *  - `flagged`: granted, and something came with it. Cottage Finder allowed hands over the basket
+ *    and takes the key, so the errand did not go undone for want of a capability -- it ran, and it
+ *    ran for the wolf.
+ *
+ * Split out from `errandState` rather than folded into it so the badge, the Haze ground and the
+ * three unit cases that pin them keep their three states: this is which sentence to print, not
+ * which mark to draw. Nothing here touches a number the server recomputes.
+ */
+export type ErrandMiss = 'refused' | 'unused' | 'flagged';
+
+export function errandMiss(
+  goal: GoalResult,
+  verdicts: Readonly<Record<SkillId, Verdict>>,
+  content: Content,
+): ErrandMiss {
+  const granted = playedFor(goal, verdicts, content).filter((c) =>
+    c.outcome.grants.includes(goal.needs),
+  );
+  if (granted.length === 0) return 'refused';
+  return granted.some((c) => c.outcome.flagsSet.length === 0) ? 'unused' : 'flagged';
+}
+
+/*
+ * Each of the four lines reads "<prefix> <the capability's own label>.", which is the shape
+ * `errandTradedDetail` already uses, so the capability is named in every state and only the claim
+ * about it changes.
+ *
+ * `errandUnusedDetail` and `errandFlaggedDetail` are the two strings this needed from the content
+ * file, and they landed in content/game.json while this was being written, so there is no code-side
+ * literal behind either -- which is what `test/strings.test.ts` wants, and why PENDING stays empty.
+ */
 
 export interface ResultsProps {
   content: Content;
@@ -156,6 +239,19 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
     body.current?.focus({ preventScroll: true });
   }, []);
 
+  /** The one sentence under an errand row, chosen by what actually happened to the capability. */
+  const errandDetail = (errand: ErrandState, goal: GoalResult): string => {
+    if (errand === 'traded') return s('errandTradedDetail');
+    switch (errandMiss(goal, state.verdicts, content)) {
+      case 'unused':
+        return s('errandUnusedDetail');
+      case 'flagged':
+        return s('errandFlaggedDetail');
+      default:
+        return s('errandNeeded');
+    }
+  };
+
   const [handle, setHandle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -175,7 +271,14 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
   return (
     <div class="otp-screen">
       <div class="otp-screen__inner">
-        <Panel number="05" title={s('resultsTitle')} aside={<CyeraMark />}>
+        {/*
+          NO HEADER ASIDE. The mark used to sit here AND in the footer thirty lines down, so the
+          payoff screen carried the Cyera wordmark twice -- two marks on the one screen whose job is
+          to carry a single mark and a single Lime (UI_FOUNDATIONS section 8, which puts the mark in
+          the footer under the sentence that names the research). The footer one is the one that
+          means something, because it is attached to "The Off the Path research, by".
+        */}
+        <Panel number="05" title={s('resultsTitle')}>
           <div class="otp-screen__body" ref={body} tabIndex={-1} data-autofocus>
             <div class="otp-hero">
               <div>
@@ -199,9 +302,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
             <div
               class={`otp-recap__row otp-recap__row--boundary${result.boundaryHeld ? '' : ' otp-recap__row--missed'}`}
             >
-              <span class="otp-recap__badge" aria-hidden="true">
-                {result.boundaryHeld ? '✓' : '!'}
-              </span>
+              <Badge glyph={result.boundaryHeld ? 'check' : 'missed'} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 {/*
                   Three states, not two. `boundaryHeld` is `!trifectaLive` and says nothing about
@@ -237,9 +338,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                   key={row.skillId}
                   class={`otp-recap__row otp-recap__row--skill${row.success ? '' : ' otp-recap__row--missed'}`}
                 >
-                  <span class="otp-recap__badge" aria-hidden="true">
-                    {row.success ? '✓' : '!'}
-                  </span>
+                  <Badge glyph={row.success ? 'check' : 'missed'} />
                   <div>
                     <p class="otp-recap__heading">
                       {row.skillName}{' '}
@@ -291,9 +390,9 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                     purpose" -- on the Natural ground, not Haze. The "!" disc stays for a goal
                     genuinely dropped.
                   */}
-                  <span class="otp-recap__badge" aria-hidden="true">
-                    {errand === 'met' ? '✓' : errand === 'traded' ? '⊖' : '!'}
-                  </span>
+                  <Badge
+                    glyph={errand === 'met' ? 'check' : errand === 'traded' ? 'traded' : 'missed'}
+                  />
                   <div>
                     <p class="otp-recap__heading">
                       {goal.label}{' '}
@@ -312,7 +411,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
                     */}
                     {errand !== 'met' && (
                       <p class="otp-recap__detail">
-                        {errand === 'traded' ? s('errandTradedDetail') : s('errandNeeded')}{' '}
+                        {errandDetail(errand, goal)}{' '}
                         {content.capabilities[goal.needs]?.label.toLowerCase() ?? goal.needs}.
                       </p>
                     )}
@@ -336,12 +435,46 @@ export function Results({ content, state, onReplay, onReadResearch, onPost }: Re
               <p class="otp-band__question">
                 <Highlighted text={s('ctaPrompt')} word="agent" />
               </p>
-              <button type="button" class="otp-cta" onClick={onReadResearch}>
+              {/*
+                AN <a> WITH AN href, NOT A <button> WITH A HANDLER. This is the asset's single
+                conversion action and it did nothing in any build this repo could produce: the
+                handler behind it is `() => emit('otp:cta', {})`, and `emit` returned early whenever
+                the embed origin was unset -- which was every build, because `VITE_EMBED_ORIGIN` had
+                exactly one occurrence repo-wide and that occurrence was the line that read it.
+
+                So the destination is the element's own href now, resolved once in
+                `src/embed/postMessage.ts` from `VITE_RESEARCH_URL` with a default written down
+                beside it. That makes the press work standalone, work with no .env file at all, and
+                work for a middle-click or a "copy link address" -- none of which a click handler
+                can do. `onReadResearch` stays exactly as it was, as the side channel: the parent
+                page still gets `otp:cta` when it is listening, and the navigation no longer depends
+                on it.
+
+                `target="_blank"` because embedded this would otherwise navigate the iframe and take
+                the game off the page with it; `rel="noopener noreferrer"` because nothing here needs
+                a handle on the opener, and the project ships no analytics that wants the referrer.
+              */}
+              {/*
+                The one property that has to be here rather than in the stylesheet: `.otp-cta` was
+                written for a <button>, so it sets no `text-decoration`, and the user-agent default
+                underlines an <a> whatever its specificity. An underlined Lime pill is a brand break
+                a screenshot review would catch, and `screens.css` has another owner this round, so
+                this is the smallest correct place for it today. It is one line to lift into
+                `.otp-cta` and delete from here.
+              */}
+              <a
+                class="otp-cta"
+                style={{ textDecoration: 'none' }}
+                href={RESEARCH_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onReadResearch}
+              >
                 {s('cta')}
                 <span class="otp-cta__disc" aria-hidden="true">
                   →
                 </span>
-              </button>
+              </a>
             </div>
 
             <p class="otp-section-label">{s('postHeading')}</p>

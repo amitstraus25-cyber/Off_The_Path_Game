@@ -224,8 +224,26 @@ export const RED_FRAME_W = 32;
 export const RED_FRAME_H = 48;
 
 const CX = 16;
-/** Bottom row of the boots. The 2 px keyline lands under it and the contact shadow under that. */
-const FOOT = 43;
+/**
+ * Bottom row of the boot's sole. `seatOutline` lays its two rows of keyline under it, so the
+ * figure's lowest INK row is `FOOT + 2` and that row is what a player sees her standing on.
+ *
+ * 45, not 43, and this is a seating fix rather than a redraw. Her origin is the bottom edge of the
+ * 48-row frame, so at 43 her contact line sat two rows SHORT of it and she hovered 2px over
+ * whatever she was standing on. Every character in `cast.ts` and `bystanders.ts` draws to the last
+ * row of their frame -- measured off the shipped sheets, all eight have their lowest ink at row 47
+ * -- which is why the cast plant on the ground and she did not. With the NPCs re-seated onto the
+ * bottom edge of their tile (`forest-scene.ts`, half a TILE rather than half a FRAME), the two
+ * halves of that 10px disagreement close to nothing only if both land together; on its own, either
+ * one leaves her high by the other's share.
+ *
+ * The shin follows it. `paintLegs` runs the denim from under the hem down to the boot's top row
+ * rather than for a fixed three rows, so moving the boot lengthens the shin instead of opening a
+ * two-row hole above the ankle. Her silhouette therefore grows from 46 rows to 48; she is the
+ * tallest figure in the cast either way (the Lantern Keeper is 44) and nothing in the body-plan
+ * guard covers her.
+ */
+const FOOT = 45;
 /** Bottom row of cloth. Fixed: the body bobs into the hem, which is what makes a walk. */
 const HEM = 36;
 
@@ -824,6 +842,13 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, swa
  *
  * The proportion moved with the colour: three rows of denim and four of boot, where it used to be
  * four and three. The dark half of her lower leg is now the bigger half.
+ *
+ * AMENDED 2026-10-20 with the seating fix. `FOOT` moved 43 -> 45 so her contact line reaches the
+ * bottom row of the frame, as every NPC's does, and the shin stretched with it rather than the
+ * whole figure moving: the count is now five rows of denim over four of boot. By ROW it is no
+ * longer the dark half that is bigger; by VALUE it still is, because four of the denim's five
+ * columns sit at 45 and 72 against cloth at 87 and only the lit column reaches 101. The sentence
+ * above is kept because the colour argument it makes is the one that matters and is untouched.
  */
 const DENIM_LIT = tone('water', 0.02);
 const DENIM = keyline('water', 26);
@@ -842,8 +867,10 @@ function paintLegs(img: Img, facing: Facing, stride: -1 | 0 | 1, dir: number): v
       const t = u - back;
       return t > 0.8 ? DENIM_LIT : t > 0.3 ? DENIM : DENIM_DARK;
     };
-    for (let i = 0; i < 5; i++) img.rect(x + i, top, 1, 3, denim(1 - i / 4));
     const by = FOOT - 3 - lift;
+    // The shin runs from under the hem to the boot's own top row. It used to be a fixed 3, which
+    // only met the boot at FOOT = 43: at any other sole row the leg came apart above the ankle.
+    for (let i = 0; i < 5; i++) img.rect(x + i, top, 1, by - top, denim(1 - i / 4));
     const sideOn = dir !== 0;
     const bx = sideOn ? x - (dir < 0 ? 2 : 0) : x - 1;
     const bw = sideOn ? 7 : 6;
@@ -1057,6 +1084,50 @@ export const RED_FRAMES: Record<string, (img: Img) => void> = Object.fromEntries
     ]),
   ),
 );
+
+/**
+ * SHE STANDS ON THE GROUND. Checked at import, on every one of the sixteen frames.
+ *
+ * What a player sees is a contact line: the lowest row of ink in the frame, which is where she
+ * meets whatever she is standing on, because `forest-scene.ts` gives her an origin of (0.5, 1) and
+ * puts that origin on the ground. Her art stopped two rows short of the frame's bottom edge, so she
+ * hovered 2px over the lawn, the sand, the bridge and the doorstep -- a gap too small to name and
+ * big enough to see once something is beside her, and it was half of a 10px disagreement with a
+ * cast that all plants on row 47.
+ *
+ * The bound is the FRAME, deliberately, and not `FOOT`. Writing `FOOT + 2` here would be a guard
+ * that agrees with whatever the file says today and therefore watches nothing: the whole fault was
+ * that `FOOT` was free to sit anywhere in the frame. `RED_FRAME_H - 1` is the row her origin sits
+ * on, which is the thing a player is looking at.
+ *
+ * The walk is covered too, which is the half that is easy to lose: a stride lifts ONE leg, so the
+ * other must still be down. A frame that lifted both would read as a jump.
+ */
+function assertContactLine(): void {
+  const faults: string[] = [];
+  for (const [name, paint] of Object.entries(RED_FRAMES)) {
+    const img = new Img(RED_FRAME_W, RED_FRAME_H);
+    paint(img);
+    let lowest = -1;
+    for (let y = RED_FRAME_H - 1; y >= 0; y--) {
+      for (let x = 0; x < RED_FRAME_W; x++)
+        if (img.data[(y * RED_FRAME_W + x) * 4 + 3]! > 0) {
+          lowest = y;
+          break;
+        }
+      if (lowest >= 0) break;
+    }
+    if (lowest !== RED_FRAME_H - 1)
+      faults.push(
+        `${name}: her lowest ink is row ${lowest} of a ${RED_FRAME_H}-row frame, so she is drawn ` +
+          `${RED_FRAME_H - 1 - lowest}px clear of the ground her origin stands on`,
+      );
+  }
+  if (faults.length)
+    throw new Error(`Red is not standing on the ground:\n  ` + faults.join('\n  '));
+}
+
+assertContactLine();
 
 /*
  * ONE RETRACTION, AND TWO THINGS THE NEXT PASS HAS TO PICK UP THAT CANNOT BE DONE FROM THIS FILE.

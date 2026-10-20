@@ -15,7 +15,8 @@ import { describe, expect, it } from 'vitest';
 import raw from '../../../content/game.json';
 import { createState, errandGoals, loadContent, reduce, score } from '@otp/core';
 import type { Content, GameState, SkillId, Verdict } from '@otp/core';
-import { breakdown, errandState } from '../src/ui/Results';
+import { breakdown, errandMiss, errandState } from '../src/ui/Results';
+import type { ErrandMiss } from '../src/ui/Results';
 
 /** The shipped content, through the same schema the game validates at startup. */
 const content: Content = loadContent(raw);
@@ -111,6 +112,83 @@ describe('an errand given up to keep the boundary is not a miss', () => {
     // Results only renders after all three verdicts, but a row must never read as a deliberate
     // trade on the strength of a decision nobody made.
     expect(rows({})['word']).toBe('missed');
+  });
+});
+
+/*
+ * THE FOURTH INSTANCE OF "THE SCREEN IS WRONG ABOUT THE PLAYER'S OWN RUN", and the one the client
+ * can read: an unmet errand printed `errandNeeded` -- "Needed a skill that reaches into your
+ * basket" -- in all three of the ways an errand can go unmet, including the two where the player was
+ * carrying exactly that skill. On allow/allow/allow all three rows made that claim with the route,
+ * the translator and the lantern sitting in the basket eight lines below them.
+ *
+ * `errandState` is unchanged and still has three states, because the badge and the Haze ground were
+ * already right; `errandMiss` says which SENTENCE a miss prints. The rule this pins is the one the
+ * copy got wrong, stated so it cannot be satisfied by wording: a row may claim the capability was
+ * missing only on a run that never granted it. Enumerated over all 64 verdict combinations rather
+ * than the four interesting ones, so a later content change cannot open a case nobody thought of.
+ */
+describe('a row never says a capability was missing when the run granted it', () => {
+  const EVERY: (Verdict | undefined)[] = ['allow', 'restrict', 'reject', undefined];
+
+  /** Every verdict combination a player can arrive at Results with, including partial runs. */
+  function combinations(): Record<SkillId, Verdict>[] {
+    let out: Record<SkillId, Verdict>[] = [{}];
+    for (const skill of content.skills)
+      out = out.flatMap((base) =>
+        EVERY.map((v) => (v === undefined ? base : { ...base, [skill.id]: v })),
+      );
+    return out;
+  }
+
+  /** How one errand reads under one set of verdicts, with nothing read on the walk. */
+  function miss(id: string, verdicts: Record<SkillId, Verdict>): ErrandMiss {
+    const goal = errandGoals({ verdicts, read: [] }, content).find((g) => g.id === id)!;
+    return errandMiss(goal, verdicts, content);
+  }
+
+  it('enumerates the runs it thinks it does', () => {
+    // A guard that silently stops matching is worse than no guard: this project has shipped one.
+    const all = combinations();
+    expect(all, 'four states per skill: allowed, restricted, rejected, undecided').toHaveLength(
+      4 ** content.skills.length,
+    );
+    expect(all.some((c) => Object.keys(c).length === content.skills.length)).toBe(true);
+    expect(all.some((c) => Object.keys(c).length === 0)).toBe(true);
+  });
+
+  it('calls a miss "refused" only when nothing the player gave granted it', () => {
+    const wrong: string[] = [];
+    for (const verdicts of combinations())
+      for (const goal of errandGoals({ verdicts, read: [] }, content)) {
+        if (errandState(goal, verdicts, content) !== 'missed') continue;
+        const granted = content.skills.some((skill) => {
+          const given = verdicts[skill.id];
+          return given !== undefined && skill.outcomes[given].grants.includes(goal.needs);
+        });
+        const said = errandMiss(goal, verdicts, content);
+        if ((said === 'refused') === granted)
+          wrong.push(`${goal.id} ${JSON.stringify(verdicts)} -> ${said}, granted=${granted}`);
+      }
+    expect(wrong, 'the row claims a capability the basket shows the player holding').toEqual([]);
+  });
+
+  it('separates the two kinds of grant: handed over cleanly, and handed over with a flag', () => {
+    // Night Light allowed grants the listening with no flag, so not reading the notice is the
+    // player's own omission on the walk.
+    expect(miss('sign', { ...PERFECT, 'night-light': 'allow' })).toBe('unused');
+    // Cottage Finder allowed hands the basket over and takes the key: that errand ran for the wolf.
+    expect(miss('route', { ...PERFECT, 'cottage-finder': 'allow' })).toBe('flagged');
+    // Refusing outright is the one case the old single string was right about.
+    expect(miss('route', { ...PERFECT, 'cottage-finder': 'reject' })).toBe('refused');
+    // And the run the client read: every row a miss, and not one of them for want of a capability.
+    const allowed: Record<SkillId, Verdict> = {
+      'cottage-finder': 'allow',
+      'word-weaver': 'allow',
+      'night-light': 'allow',
+    };
+    expect(Object.values(rows(allowed))).toEqual(['missed', 'missed', 'missed']);
+    expect(['route', 'word', 'sign'].map((id) => miss(id, allowed))).not.toContain('refused');
   });
 });
 

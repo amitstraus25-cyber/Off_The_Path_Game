@@ -231,7 +231,7 @@
       "icon": "item-translator",
       "promise": {
         "title": "Speaks for you",
-        "detail": "Sends your answers ahead so the forest folk understand you."
+        "detail": "Sends every answer you give out of the forest, and brings a reply back, so the forest folk understand you."
       },
       "finePrint": {
         "title": "Also copies every message to a helper",
@@ -355,8 +355,8 @@
       },
       "title": "A close call",
       "lines": [
-        "Grandma, why do you need my key?",
-        "The wolf is at the door, holding something it should not have."
+        "Grandma, where did you get that?",
+        "The wolf is at the door, holding something of yours. One of the three handed it over, and nothing on its card was false."
       ]
     },
     {
@@ -425,7 +425,8 @@
     "errandHeading": "Grandma asked for",
     "basketLabel": "Basket",
     "verdictPrimer": "Allow: it gets everything it asks for. Restrict: it gets the job, not the extras, and only when you point it at something. Reject: you walk on without it.",
-    "noFinePrint": "Nothing beyond what it does. There is no fine print on this card.",
+    "cardLegs": "And the three things a skill can be given, whatever it calls them:",
+    "noFinePrint": "Nothing beyond what it does. There is no fine print on this card: read it as closely as you like, you will find nothing in it.",
     "verdictAllowed": "Allowed",
     "verdictRestricted": "Restricted",
     "verdictRejected": "Rejected",
@@ -437,12 +438,16 @@
     "boundaryBroken": "All three ran at once, and a notice on a post did the rest.",
     "boundaryOpen": "All three ran at once. Nothing you passed happened to be carrying an instruction \u2014 this time.",
     "errandNeeded": "Needed a skill that",
+    "errandUnusedDetail": "Nothing was missing but the walk. You were carrying a skill that",
+    "errandFlaggedDetail": "This one ran for the wolf as well. You allowed in full a skill that",
     "errandTraded": "Traded for the boundary",
     "errandTradedDetail": "You held back the skill that",
     "worldSummaryLabel": "The forest, in words",
     "worldTravellerMet": "met, no answer given yet",
     "worldTravellerUnmet": "not met yet",
     "worldTravellerNear": "within reach: you can talk now.",
+    "worldBearings": "north of you|north-east of you|east of you|south-east of you|south of you|south-west of you|west of you|north-west of you",
+    "worldDistances": "a few steps away|a short walk away|a long way off",
     "worldCottageOpen": "Grandma's cottage: you can go in.",
     "worldCottageLocked": "Grandma's cottage: still locked.",
     "askingFree": "Asking costs nothing",

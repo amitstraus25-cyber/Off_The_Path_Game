@@ -51,6 +51,15 @@
    * back to .otp-hud-basket as a min-height so the number here and the box cannot drift apart.
    */
   --otp-hud-basket-h: calc(40px * var(--otp-ui));
+  /*
+   * And how far its bottom edge sits above the world's, for the same reason: the transient toast
+   * layer is retargeted to stop just above the basket in BOTH orientations, and in landscape the
+   * basket itself lifts clear of the A button. Those were three separate arithmetics over the same
+   * corner, one of them carrying a bare `72px` copy of the A button's diameter, and the only way
+   * they stayed in step was that somebody checked. Now the layer reads the same token the basket is
+   * positioned by, so the landscape override below moves both at once.
+   */
+  --otp-hud-basket-bottom: calc(14px * var(--otp-ui));
   font-family: var(--cyera-font-sans);
 }
 
@@ -194,7 +203,13 @@
   .otp-layer:not(.otp-layer--modal):not(.otp-layer--arrive) {
     top: var(--otp-canvas-y, 0px);
     bottom: auto;
-    height: calc(var(--otp-canvas-h, 0px) - var(--otp-hud-basket-h) - 24px * var(--otp-ui));
+    /* The basket's own inset plus its own height, read from the tokens the basket is placed by,
+       then a gap. This was `- basket-h - 24px * ui`, which is the same number by coincidence of
+       14 + 10 and said nothing about which corner it was clearing. */
+    height: calc(
+      var(--otp-canvas-h, 0px) - var(--otp-hud-basket-bottom) - var(--otp-hud-basket-h) - 10px *
+        var(--otp-ui)
+    );
     /* The viewport's safe area is irrelevant now the box ends inside the world. */
     padding-bottom: calc(14px * var(--otp-ui));
   }
@@ -461,7 +476,7 @@
 .otp-hud-basket {
   position: absolute;
   right: calc(14px * var(--otp-ui));
-  bottom: calc(14px * var(--otp-ui));
+  bottom: var(--otp-hud-basket-bottom);
   /* Declared, not inferred: see --otp-hud-basket-h. This is the height the box already had. */
   min-height: var(--otp-hud-basket-h);
   display: flex;
@@ -628,8 +643,99 @@
 /* Regular, not Medium: the table sets the spoken line at the body weight and lets the panel
    around it do the emphasising. */
 .otp-dialogue__line {
-  margin: 0 0 calc(3px * var(--otp-ui));
+  /*
+   * Zero, with the spacing moved to `.otp-dialogue__linebox` below. The paragraph is one item in a
+   * one-cell grid now, and a margin on one item of that cell and not on the others would make the
+   * cell 3px taller exactly when the longest line is the one being spoken -- which is the shift the
+   * cell exists to remove.
+   */
+  margin: 0;
   font-weight: 400;
+}
+
+.otp-dialogue__linebox {
+  margin: 0 0 calc(3px * var(--otp-ui));
+  /*
+   * THE SENTENCE THAT MOVES, AND THE ONE DECLARATION THAT STOPS IT.
+   *
+   * This paragraph held exactly one line of text at a time -- the greeting, then whichever reply
+   * replaced it -- so its box was as tall as whatever was in it, and in portrait `.otp-layer--modal`
+   * is `align-content: safe end`, which pins the panel's BOTTOM edge. Every line the paragraph grew
+   * by pushed the panel's top edge, and everything in it, upwards under the reader's eye. Measured
+   * on the built game at 375x812, meeting the Owl: the line box went 16px -> 30px -> 31px and the
+   * panel 307 -> 322 while the greeting was still typing, and the sentence's own top edge moved from
+   * 560 to 545. At 1280x800 the same encounter moved it 316 -> 305, which is the ~11px the client
+   * reported. Each step scored a layout shift of 0.1082-0.1092 against a "good" bound of 0.1, so
+   * play-time CLS was 0.1093 on a startup figure that now measures 0.0000.
+   *
+   * A grid with every child in cell 1/1 is the fix, and it is the whole of it. `Dialogue.tsx` puts
+   * one hidden copy of EVERY line this character can say in this box beside the paragraph -- the
+   * greeting and each question's reply -- so the cell is sized by the tallest of them. The cell is
+   * then the same height whatever is being said and whatever is still being typed, because `shown`
+   * is a prefix of one of the copies and a prefix never wraps to more lines than the whole.
+   *
+   * It is a grid rather than a measured min-height because the height that has to be reserved is
+   * the TALLEST reply at the CURRENT width in the CURRENT font, and the browser is the only thing
+   * that knows all three. A JavaScript measurement of the same quantity needs a resize listener, a
+   * `document.fonts.ready` listener and a forced reflow on each, and would still be a frame behind.
+   *
+   * The copies are SIBLINGS of the paragraph rather than children of it, which is not a detail:
+   * `.otp-dialogue__line`'s text content is what four assertions across two spec files wait on to
+   * know the typewriter has finished, and a paragraph that contains every line from the first frame
+   * would satisfy all four instantly and let them click an option mid-type -- where an activation
+   * means "show me the rest", not "ask this".
+   */
+  display: grid;
+}
+
+.otp-dialogue__linebox > * {
+  grid-area: 1 / 1;
+}
+
+/*
+ * The reserved copies. `visibility: hidden` rather than `opacity: 0` or a colour: it keeps the box
+ * -- which is the entire point -- while taking the text out of the accessibility tree, out of the
+ * selection and out of the paint. The spoken copy is painted over the top of them.
+ */
+.otp-dialogue__ghost {
+  visibility: hidden;
+}
+
+/*
+ * THE CARET, OUT OF THE LINE'S FLOW.
+ *
+ * It is an inline SVG at the end of a line that grows one character per frame. The cost is not the
+ * layout count -- that was measured three ways and the growing text node owns all of it: over a
+ * 98-character line, 98 layouts in-flow, 98 with no caret at all, and 99 absolutely positioned and
+ * moved with a transform, with the durations inside each other's run-to-run noise. The transform
+ * version is the slowest of the three, because moving the caret needs the text's own client rect
+ * read back in the same frame it was written.
+ *
+ * What the caret in flow does cost is ONE PIXEL of line box, every line, in both directions: it is
+ * a 1em replaced box sitting on the baseline where the text's own ascent is shorter, so the
+ * paragraph is 1px taller while typing than when it finishes. Measured 18/35/52 against 17/34/51 on
+ * a three-line specimen, and 15/16 and 22/23 on the rabbit's greeting in the game. That lands
+ * straight on the defect above -- it is the panel growing and shrinking around the sentence being
+ * read, once per line, at the moment the typewriter stops.
+ *
+ * So the caret keeps its SVG and loses its box: a zero-by-zero inline anchor, which an empty
+ * inline-block baseline-aligns bottom-onto-the-baseline and which therefore contributes nothing
+ * above or below it, and the glyph absolutely positioned out of it. `bottom: 0` against a zero-high
+ * containing block puts the SVG's bottom edge exactly on the baseline, which is where the in-flow
+ * version sat, so nothing moves on screen.
+ */
+.otp-dialogue__caret {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}
+
+.otp-dialogue__caret svg {
+  position: absolute;
+  left: 0;
+  bottom: 0;
 }
 
 /*
@@ -1441,6 +1547,56 @@
   }
 }
 
+/*
+ * PORTRAIT ON A TOUCH SCREEN: THE STRIP IS NOT THERE.
+ *
+ * The rule above docks the goals under the frame on the argument that "~350px under the frame sat
+ * empty". On a phone it is not empty: the pad takes the bottom 128px of it, and the strip that is
+ * left is not big enough for the goals box. Measured on the built game, strip height between the
+ * frame's bottom border and the pad's top edge against the goals box's own height:
+ *
+ *   320x568   32px of room, 93px box      375x740   80px, 93px
+ *   360x640   52px, 93px                  375x780   91px, 93px
+ *   375x667   59px, 93px                  375x800   96px, 93px   <- the first one that fits
+ *   360x740   80px, 93px                  375x812  100px, 93px
+ *
+ * So on every phone shorter than 800 the pad is drawn straight over the goals: at 320x568 the stick
+ * covered all three outright (95x2, 95x19, 95x19) and the A button two of them (71x12, 71x19), and
+ * at 375x667 the stick covered the third (95x18). The goals are what the 200-point errand is scored
+ * on and what the verdict toast reports against, and on a phone the player could not see them.
+ *
+ * The three sizes where it does fit clear the pad by 3, 13 and 36 pixels, and the note on the rule
+ * above already concedes the first of those -- "which leaves a 1px gap". A layout tuned to one
+ * phone by one pixel is not a layout, so this does not pick a height at which to switch: wherever
+ * the pad is on screen at all, the goals go back inside the world, at the top, which is exactly
+ * where the landscape rule below has always put them for the same reason. The strip dock stays for
+ * a narrow desktop window, where there is no pad and the strip really is empty.
+ *
+ * `hover: none` rather than `pointer: coarse`, because it is the test `.otp-world-hint` already
+ * uses for "this player has no keyboard line to read", and the pad is on screen under exactly the
+ * same condition -- its own hide rule in ui/tokens.css is the complement, `(pointer: fine) and
+ * (hover: hover)`.
+ *
+ * `position: absolute` puts the box back in `.otp-world-anchor`'s coordinates, whose origin is the
+ * canvas's top-left -- one header BELOW `.otp-world-frame`'s, which is what the trifecta warning is
+ * positioned from. So `--otp-world-header + a gap` here is not a copy of the frame's header inset:
+ * it is the clearance that puts this box under the warning, which ends 31px into the canvas. The
+ * basket and the toast are both at the bottom of the world, so nothing else is in the way.
+ */
+@media (hover: none) and (orientation: portrait) {
+  .otp-hud-goals {
+    position: absolute;
+    left: calc(14px * var(--otp-ui));
+    right: calc(14px * var(--otp-ui));
+    top: calc(var(--otp-world-header) + 10px * var(--otp-ui));
+    bottom: auto;
+    /* The world is only ~352px wide in portrait, so 52% of it wraps every label and doubles the
+       box's height. Full width minus the gutters: the basket is in the corner diagonally opposite
+       and there is nothing else on this row. */
+    max-width: none;
+  }
+}
+
 /* Landscape on a touch device: the joystick and the A button own the bottom corners, which is
    where the goals and the basket live. The controls hint is dead weight there -- it names Arrows
    and WASD to someone holding a phone -- so it goes, and the goals take the top-left instead. */
@@ -1460,12 +1616,65 @@
    * TWO basket slots outright -- a 24x20 slot with a 24x20 overlap at 812x375, 844x390 and 740x360
    * -- so the run's own record of what it is carrying was behind the button the player presses to
    * add to it. The basket therefore lifts to sit above the button rather than under it: the
-   * button's own height plus a gap, measured from the corner the basket already uses. The numbers
-   * are tokens.css's, so e2e/css-contract.spec.ts asserts the overlap is zero rather than trusting
-   * them to stay put.
+   * button's own height plus a gap, measured from the corner the basket already uses.
+   *
+   * The 72 is `--otp-pad-button` now rather than a copy of it, and the lift is applied to the TOKEN
+   * rather than to the basket, so the transient toast layer -- which is placed against the basket's
+   * top edge in both orientations -- lifts with it instead of having to be told separately.
+   * e2e/css-contract.spec.ts and e2e/ui.spec.ts both assert the overlap is zero rather than
+   * trusting any of these numbers to stay put.
    */
-  .otp-hud-basket {
-    bottom: calc(14px * var(--otp-ui) + 72px + 14px);
+  .otp-ui {
+    --otp-hud-basket-bottom: calc(14px * var(--otp-ui) + var(--otp-pad-button) + 14px);
+  }
+}
+
+/*
+ * AND THE TRANSIENT LINES, WHICH LANDSCAPE NEVER GOT.
+ *
+ * Portrait moves the verdict toast and whatever a bystander just said INSIDE the world, eleven
+ * hundred lines up, because docked to the viewport they landed on the errand goals. Landscape was
+ * left on the viewport dock with `.otp-toast`'s 140px lift, and it has exactly the same collision
+ * for the mirror-image reason: the goals are at the TOP of the world here, and 140px up from the
+ * bottom of a 320px-tall viewport is the top of the world. Measured at 568x320: "Allowed: Night
+ * Light" covered 88x19 of "Find the cottage before dark" and 88x8 of "Leave word at the post,
+ * unopened" -- the first two of the three goals, which is the same two the portrait finding names.
+ *
+ * So landscape gets the retarget portrait has -- but NOT portrait's height, and that is the whole
+ * difference between the two orientations. Portrait stops the box above the basket pill because in
+ * portrait the basket is BELOW the toast. In landscape it is BESIDE it: measured at 568x320, the
+ * goals box is x29..293 y116..206 and the basket x350..539 y179..207, two boxes sharing one band at
+ * opposite ends of the world. Stopping above the basket there would put the toast at y114..162,
+ * which is the first goal. The free space in a landscape world is its bottom MIDDLE -- y207..303
+ * between the stick's x16..112 and the A button's x480..552 -- so the box takes the world's full
+ * height and `align-content: end` plus `justify-items: center` lands the line exactly in it. The
+ * toast then measures y245..293 at 568x320, clear of all four.
+ */
+@media (hover: none) and (orientation: landscape) {
+  .otp-layer:not(.otp-layer--modal):not(.otp-layer--arrive) {
+    top: var(--otp-canvas-y, 0px);
+    bottom: auto;
+    height: var(--otp-canvas-h, 0px);
+    padding-bottom: calc(10px * var(--otp-ui));
+  }
+
+  /* The 140px that lifted the toast over the joystick is the viewport's problem, not the world's:
+     left in, it floats the line in the middle of the forest. Same line portrait carries. */
+  .otp-layer:not(.otp-layer--modal):not(.otp-layer--arrive) .otp-toast {
+    margin-bottom: 0;
+  }
+
+  /*
+   * And both lines are capped to the channel the thumbs leave, rather than to 90vw: a long cottage
+   * hint at 90vw is 511px of a 568px window, which reaches under the stick at one end and the A
+   * button at the other. The channel is the window less both discs and the gutters either side of
+   * them, so it is the pad's own numbers rather than a width that happens to work today.
+   */
+  .otp-layer:not(.otp-layer--modal):not(.otp-layer--arrive) .otp-toast,
+  .otp-layer:not(.otp-layer--modal):not(.otp-layer--arrive) .otp-say {
+    max-width: calc(
+      100vw - var(--otp-pad-stick) - var(--otp-pad-button) - var(--otp-pad-gutter) * 4
+    );
   }
 }
 
@@ -1487,8 +1696,15 @@
   color: var(--cyera-offwhite);
   pointer-events: none;
 }
-@media (pointer: coarse) and (orientation: landscape) {
-  /* The hint is hidden there, so the warning takes its place at the top. */
+/*
+ * The hint is hidden wherever there is no keyboard to name, so the warning takes its place at the
+ * top. That condition is `hover: none` -- the hint's own hide rule four hundred lines up -- not
+ * landscape: the hint is gone on a portrait phone too, and the 52px inset above was still holding a
+ * place for it. It matters now because the portrait goals have moved back into the world under this
+ * warning, and at 52px the warning's bottom edge (31px into the canvas) and a goals box starting at
+ * 7px would have overlapped by ten pixels.
+ */
+@media (hover: none) {
   .otp-world-warning {
     top: calc(var(--otp-world-header) + 10px * var(--otp-ui));
   }

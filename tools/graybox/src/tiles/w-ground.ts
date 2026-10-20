@@ -39,14 +39,23 @@
  *    measured 92.8, 125.2, 155.0 and 164.6 mean luma: steps of 32, 30 and 10 landing on a dead
  *    straight line every 32 pixels, which is the quilt the director found and which no amount of
  *    overlapping the bands had removed. A tile cannot see its neighbours, so the fix is to stop
- *    carrying a variant's identity at its border at all -- see the note on `BANDS`. The four rings
- *    now measure 173.3, 172.6, 172.7 and 171.4.
+ *    carrying a variant's identity at its border at all -- see the note on `BANDS`.
+ *
+ *    THIS FILE THEN STATED FOUR RINGS OF 173.3, 172.6, 172.7 AND 171.4 FOR A YEAR AND NEVER DREW
+ *    THEM. Re-measured off the painters on 2026-10-20, before this round's change: 153.2, 153.3,
+ *    155.2 and 153.9, against interiors of 167.0, 165.7, 171.0 and 174.9. The rings were right
+ *    about the thing they were asserting -- all four within two luma of each other, so there is
+ *    no step BETWEEN tiles -- and silent about the thing that matters as much: every one of them
+ *    sat twelve to twenty-one luma under its own tile's middle, so composed grass printed a dark
+ *    line every 32 pixels in both axes. See `BANDS` for the fix and `assertNoSeamBand` for the
+ *    guard that now watches it. The rings themselves barely move; the interiors come down to meet
+ *    them.
  *
  *    STATED PRECISELY, because the loose version of this claim is wrong and someone will check it.
  *    The FIELD cannot step: at a boundary both tiles evaluate the same shared rim at the same phase
  *    with a mass of zero, so they are the same colour, in all sixteen pairings. The MARKS can, where
  *    a tuft happens to be cut by the tile edge. Re-measured over all 1024 grass-to-grass boundary
- *    pixels after the chevron went in: median step 0.0, mean 5.5, 8.40% of them above the 24 luma
+ *    pixels after the chevron went in: median step 0.0, mean 5.6, 8.40% of them above the 24 luma
  *    the score calls an edge, against 5.76% before. Split by pairing, same variant on both sides
  *    gives 7.42% and different variants 8.72%. Every one of those is a blade edge two or three
  *    pixels long -- a chevron's point row is wider than the row under it, so its own silhouette
@@ -54,24 +63,28 @@
  *    still zero: the quilt was a continuous straight edge running the whole length of every tile,
  *    and there is not one of those anywhere.
  *
- *     variant   share   core band    rim    role
- *     grass-0   53.7%   164 .. 182   ~173   open lawn, and over half the grass
- *     grass-1   38.3%   154 .. 182   ~173   the lawn's shaded side
- *     grass-2    6.5%   168 .. 188   ~173   open lawn -- the board's own 179
- *     grass-3    1.5%   176 .. 192   ~171   full sun
+ *     variant   share   core band    centre   rim    role
+ *     grass-0   30.6%   159 .. 177    168     164    open lawn
+ *     grass-1   58.9%   144 .. 172    158     164    the lawn's shaded side, and most of the grass
+ *     grass-2    8.6%   160 .. 180    170     164    open lawn -- the board's own 179
+ *     grass-3    1.9%   164 .. 180    172     164    full sun
  *
  * THOSE SHARES ARE OF THE GRASS CELLS, not of the whole ground layer, and the distinction matters
  * because the figures this table replaced (44.9 / 33.3 / 6.0 / 1.2) were of the ground. Counted
- * both ways off the same map: grass-0 is 45.8% of the 2520 ground cells and 53.7% of the 2149 that
- * are grass. It did not grow; the denominator changed. Nothing below rests on which is used, but a
- * reader comparing 44.9 with 53.7 would conclude the map had been edited, and it has not been.
+ * off the generator on 2026-10-20: 658 / 1268 / 185 / 40 of 2151 grass cells, in a ground layer of
+ * 2520 of which 116 are path family.
  *
- * THOSE SHARES WERE MEASURED, NOT ASSUMED, and they overturn what this file used to say. It
- * documented 20 / 36 / 32 / 12, which is where the idea that grass-3 was a common surface came
- * from; counted off the real map, grass-3 is thirty-two tiles in the whole world and grass-0 is
- * over half the grass. So all four variants now sit within a few luma of the rim they share and
- * carry the board's own lawn tone. The ladder no longer spends its range on a tile-shaped shadow:
- * see the note on `BANDS` for the lattice that cost, and what it measured.
+ * AND THE SHARES WERE THE WRONG WAY ROUND IN THIS FILE UNTIL NOW, which matters because every
+ * decision below was argued from them. It said grass-0 was 53.7% and grass-1 38.3%, and reasoned
+ * from that which variant "has to be quiet" and which join "is the join the player sees". Counted
+ * off the same generator the game ships, grass-1 is 58.9% and grass-0 30.6% -- the two are
+ * swapped. So the variant the map actually lays over most of the lawn is `grass-1`, and it is
+ * `grass-1` that is now pitched BELOW the shared rim while the other three sit above it, which is
+ * what makes the four vignettes cancel rather than add. See `BANDS`.
+ *
+ * THE RIM IS 164, NOT 173. The four rows above said `~173` for a rim that `EDGE_L` has set to 164
+ * since 2026-10-19, and that single stale number is the whole of this round's lawn defect: the
+ * bands were left centred on a rim that had moved nine to twenty luma out from under them.
  *
  * 3. THE SHADE TILE IS GONE AND THE LATTICE WENT WITH IT (2026-10-19, blocker 4 of the design
  *    review). A seam-free border is not a seam-free frame: `rim + (core - rim) * mass` with a mass
@@ -79,11 +92,55 @@
  *    `rim - core`, and change 2 above spent that freedom on an 80-luma one, on the tile the map
  *    lays over half the grass. Dappling it and cutting its coverage was this file's answer to the
  *    chequerboard, and it could not work, because the fault was the vignette's DEPTH and not its
- *    shape. grass-0's band is now centred on the shared rim. Folded over the tile pitch, the ground
- *    layer's peak-to-peak drops from 40.1 / 43.0 luma to 9.1 / 12.6 and its mean luma rises from
- *    147.3 to 170.1, against the board's own open lawn at 177.6. The argument, the instrument and
- *    the per-variant figures are in the note on `BANDS`. It costs the deep-shade and keyline axes,
- *    which were mostly this one tile; a cast shadow belongs to the object that casts it.
+ *    shape. grass-0's band was centred on the shared rim -- on the rim as it then was.
+ *
+ *    THE 9.1 / 12.6 IT CLAIMED FOR THE FOLD IS NOT A NUMBER THIS FILE HAS EVER PRODUCED EITHER,
+ *    and it was measured before `EDGE_L` moved. Run on 2026-10-20 over the same 2151 grass cells:
+ *    x 22.0, y 13.1, mean luma 163.0. Change 4 below brings it to x 16.9, y 10.1 at 158.8.
+ *
+ * 4. THE BANDS ARE CENTRED ON THE RIM THE FILE ACTUALLY HAS (2026-10-20). Change 3 centred
+ *    grass-0's band on a rim of 176 and the round that followed took `EDGE_L` to 164 without
+ *    moving a band, so all four core bands ended up nine, four, fourteen and twenty luma ABOVE the
+ *    tone their own borders hold. `rim + (core - rim) * mass` with `mass` zero at the border turns
+ *    any such offset into a vignette of exactly that depth, in the same direction, on every tile --
+ *    which is a dark grid at the tile pitch, and is what change 3 set out to remove.
+ *
+ *    The four offsets are now +4 / -6 / +6 / +8 and they are deliberately MIXED IN SIGN, weighted
+ *    by the shares above so that the map-wide mean offset is -1.6 luma: where one variant's middle
+ *    is a shade lighter than its border, its commonest neighbour's is a shade darker, and the two
+ *    cancel in the fold instead of stacking. Measured, per variant, outer ring against interior:
+ *
+ *                       before            after
+ *     grass-0     153.2 / 167.0  13.8    153.1 / 162.0   8.9
+ *     grass-1     153.3 / 165.7  12.4    153.3 / 156.1   2.9
+ *     grass-2     155.2 / 171.0  15.8    155.2 / 163.7   8.5
+ *     grass-3     153.9 / 174.9  21.0    153.9 / 165.0  11.1
+ *
+ *    And composed, which is the only form a player ever sees: the four columns straddling a join,
+ *    against the rest of a two-tile strip, worst of all sixteen pairings -- 17.3 -> 11.7 luma on
+ *    the column axis and 13.1 -> 9.0 on the row axis. The column axis is reported first because
+ *    the camera is a letterbox and it was the worse of the two. `assertNoSeamBand` holds it.
+ *
+ *    THE SHARED-RIM RESULT IS UNTOUCHED, which was the condition on this change: over all 1024
+ *    grass-to-grass boundary pixels the median step is still 0.0, the maximum still 64.3 and the
+ *    share above 24 luma still 8.40%, because the border pixel is evaluated at `mass` 0, where the
+ *    band drops out of the expression entirely. Only the vignette depth moved.
+ *
+ *    IT COSTS SIX LUMA OF LAWN, honestly and on purpose: the grass cells' mean falls 163.0 -> 158.8
+ *    against the board's own open lawn at 177.6, and the spawn camera's board distance rises 0.239
+ *    -> 0.247 on spread (51.44 -> 50.47) and texture (31.20 -> 30.62), with deep shade and keyline
+ *    unmoved at 18.45 and 12.76. Both of the axes that moved were counting the vignette as range.
+ *    The six axes cannot see repetition, which is the whole of what this change fixes. What it buys
+ *    back on the same instrument is the ladder the map's cast shadow rides on: grass-1 to grass-0,
+ *    the two variants that cover 89.5% of the lawn, were 2.1 luma apart and are now 4.6.
+ *
+ *    THE EIGHTEEN CELLS THIS MOVES, decoded out of the sheet and diffed against the gid manifest
+ *    rather than assumed: `grass-0..3`, every one of the eight undergrowth tiles, and the six props
+ *    that bed on a lawn variant. Those fourteen call `GROUND_TILES` for their floor on purpose --
+ *    "the floor gets one opinion" -- so they inherit this and should. Nothing else in the 79 moves:
+ *    all nine path-family cells are byte-identical, which is the check that `PATH_BAND` was left
+ *    alone, and so are the trees, the water, the fence, the cottage, the three stall awnings and
+ *    `door-note`, none of which draws grass.
  *
  * MEASURED, changes 1 and 2 against this file's then-committed state with every sibling file held
  * at the same moment: five play cameras 0.220 / 0.216 / 0.221 / 0.183 / 0.260 -> 0.148 / 0.127 /
@@ -350,37 +407,55 @@ interface Band {
  * a peak-to-peak of 40.1 luma in x and 43.0 in y on the ground layer folded over the tile pitch.
  *
  * THE MEASUREMENT THAT SETTLES IT, because three rounds of this file have argued about the lattice
- * from tile crops that cannot show it. Take the whole ground layer -- all 2149 grass cells the map
+ * from tile crops that cannot show it. Take the whole ground layer -- all 2151 grass cells the map
  * actually lays -- and average each tile's luma by its position WITHIN the tile. If every tile
  * carries the same vignette the fold comes back as a bow, and its peak-to-peak is the lattice in
  * luma. A ground with no tile-pitch structure folds flat. That instrument is reproducible by anyone
  * and it does not care what any single tile looks like in isolation, which is the trap every
  * previous pass fell into.
  *
- *     ground layer, 2149 grass cells, folded over the tile pitch
- *     before   x 40.12   y 42.96   mean luma 147.3
- *     after    x  9.12   y 12.55   mean luma 170.1      board's own open lawn: 177.6
+ *     ground layer, 2151 grass cells, folded over the tile pitch
+ *     2026-10-19, before the lattice fix    x 40.12   y 42.96   mean luma 147.3
+ *     2026-10-20, as that fix shipped       x 22.0    y 13.1    mean luma 163.0
+ *     2026-10-20, bands re-centred          x 16.9    y 10.1    mean luma 158.8
  *
- * WHAT CHANGED. One number: grass-0's band. It is now centred ON the shared rim instead of 80 luma
- * under it, which takes the vignette term to about zero -- where the core field sits above the rim
- * the tile's middle is a shade lighter, where below, a shade darker, and the sign is chosen by a
- * wrapping noise field rather than by the distance to the tile edge. The periodicity does not get
- * smaller; it stops having a preferred direction. Per variant, measured on the tile:
+ *                                        board's own open lawn: 177.6
  *
- *     variant   core band   rim    rim->core   own fold x/y    role
- *     grass-0   164 .. 182  ~173      7.9       9.5 / 10.3     open lawn, and over half the grass
- *     grass-1   154 .. 182  ~173      8.3      13.5 / 17.6     the lawn's shaded side
- *     grass-2   168 .. 188  ~173      0.9      10.8 / 10.3     open lawn -- the board's own 177.6
- *     grass-3   176 .. 192  ~171     -3.5      13.7 /  8.1     full sun
+ * THE MIDDLE ROW IS THE ONE WORTH READING. The lattice fix reported 9.12 / 12.55 and never produced
+ * it, because the figure was taken before `EDGE_L` came down from 176 to 164 and the bands were
+ * left where they were. A claim and a measurement is the same sentence in this file, so the row it
+ * actually drew is printed beside the row it claimed.
  *
- * grass-0 is now the QUIETEST of the four by its own fold, where it was five times the worst. All
- * four sit inside section 6.2's 20-luma cap.
+ * WHAT CHANGED THIS ROUND. Four numbers: the centre of each band, moved onto the rim the file has
+ * rather than the rim it used to have, and MIXED IN SIGN so the four vignettes cancel. Where a
+ * variant's core sits above the rim its middle is a shade lighter than its border; where below, a
+ * shade darker; and because `grass-1` -- 58.9% of the grass -- is the one pitched below, the map
+ * lays the two signs side by side in the proportion that flattens the fold. Per variant, on the
+ * tile:
  *
- * WHY grass-0 AND NOT ANOTHER VARIANT TAKES THE OPEN-LAWN ROLE. ART_DIRECTION section 6.3 assigns
- * grass-0 the shade and grass-2 "the quiet one that lets the map breathe", and that assignment
- * assumed shares this file has since measured and found inverted: the map lays grass-0 on 53.7% of
- * its grass cells and grass-2 on 6.5%. The variant that covers half the grass is the one that has
- * to be quiet, whatever it is called. Re-dealing the roles would mean editing the shares in
+ *     variant   core band   centre  rim   offset   ring -> interior   own fold x/y   role
+ *     grass-0   159 .. 177   168    164     +4       153.1 -> 162.0   14.4 / 15.3    open lawn
+ *     grass-1   144 .. 172   158    164     -6       153.3 -> 156.1   19.1 / 14.1    the shaded side
+ *     grass-2   160 .. 180   170    164     +6       155.2 -> 163.7   18.1 / 14.2    board's own 177.6
+ *     grass-3   164 .. 180   172    164     +8       153.9 -> 165.0   24.1 / 11.5    full sun
+ *
+ * The widths are untouched -- 18, 28, 20 and 16 -- so `levelsFor` still cuts every band into three
+ * and the mottle's step inside a tile is the same step it was. Only the centres moved.
+ *
+ * THE OWN-FOLD COLUMN IS NOT YET WHERE IT SHOULD BE. Three of the four are inside section 6.2's
+ * 20-luma in-tile cap and grass-3 is over it at 24.1, on 40 tiles in the whole world. The reason is
+ * NOT the bands -- centring them took every one of those four figures down, from 17.6 / 25.1 / 23.3
+ * / 28.9 -- it is the shared rim field, which is measured in the note on `EDGE_OCTAVES` carrying a
+ * seven-luma dark bias on its own border ring. That is the largest single term left in the fold and
+ * it is flagged there with its numbers rather than fixed here, because moving the rim moves the 1024
+ * boundary pixels this change was required to leave alone.
+ *
+ * WHICH VARIANT TAKES THE OPEN-LAWN ROLE. ART_DIRECTION section 6.3 assigns grass-0 the shade and
+ * grass-2 "the quiet one that lets the map breathe", and that assignment assumed shares this file
+ * has twice now measured and found wrong -- most recently its OWN figures, which had grass-0 and
+ * grass-1 swapped. Counted off the generator: grass-1 58.9%, grass-0 30.6%, grass-2 8.6%,
+ * grass-3 1.9%. The variant that covers most of the grass is the one that has to be quiet,
+ * whatever it is called, and it is grass-1. Re-dealing the roles would mean editing the shares in
  * forest-map.ts, which this change may not touch -- and that file's own note already asks for
  * exactly this remedy: "the real fix is for the ground painter to narrow the steps between the
  * variants and carry the variation inside each tile instead. Flagged."
@@ -398,29 +473,32 @@ interface Band {
  * +70 -- so shaded ground comes out cool and sunlit ground yellow with no second hue invented.
  */
 const BANDS: readonly Band[] = [
-  { lo: 164, hi: 182 },
-  { lo: 154, hi: 182 },
-  { lo: 168, hi: 188 },
-  { lo: 176, hi: 192 },
+  { lo: 159, hi: 177 },
+  { lo: 144, hi: 172 },
+  { lo: 160, hi: 180 },
+  { lo: 164, hi: 180 },
 ];
 
 /**
  * The one tone every grass tile holds at its border, and how far the shared rim field moves it.
  *
- * Pitched just under the board's own open lawn (mean 177.6, median 178) rather than on it, because
- * the rim is the tile's lightest common ground and the tufts and the core field both pull downward
- * from here.
+ * It was once pitched just under the board's own open lawn (mean 177.6, median 178) on the argument
+ * that the rim is the tile's lightest common ground; the 2026-10-19 sweep below took it to 164 to
+ * win back the mid-range, which leaves it thirteen luma UNDER the board's lawn and makes it the
+ * tone the four core bands have to be centred on rather than the ceiling they hang from. That is
+ * the reading the per-variant table in `BANDS` now uses.
  *
  * The swing has to stay well under the 24 luma the score counts as an edge, or the rim field would
- * print steps of its own along the border ring. Nine gives the rim visible life -- it is not a
- * painted stripe of one colour running round every tile, which would be the grid coming back as an
- * absence of variation -- while no two adjacent rim blocks can differ enough to register.
+ * print steps of its own along the border ring. It also has to stay small for a reason the sweep
+ * below does not mention and the note on `EDGE_OCTAVES` measures: this field is periodic over ONE
+ * TILE, so whatever it says, it says in every tile of the world at the same phase, border ring
+ * included.
  */
 /*
  * Reopened 2026-10-19, after the lattice fix above cost the ground its shade.
  *
- * Killing the vignette moved grass-0 from a dark 62..116 to a bright 164..182 on 53.7 per cent of
- * the ground, which removed the tile grid and, with it, every dark green in the world. Measured
+ * Killing the vignette moved grass-0 from a dark 62..116 to a bright 164..182 on 30.6 per cent of
+ * the grass, which removed the tile grid and, with it, every dark green in the world. Measured
  * against the board: 42 per cent of every green pixel on screen landed in ONE luma bucket against
  * the board's 24, and the mid-range (luma 96-160) was 28 per cent against 42. That reads as dark
  * objects sitting on a flat bright field rather than as a wood, and it is what a viewer called
@@ -432,6 +510,15 @@ const BANDS: readonly Band[] = [
  * ART_DIRECTION 6.2 is about the first; this constant is the second, and widening it does not bring
  * the grid back -- the tile-lag autocorrelation stays negative at every setting swept, -0.157 at 9
  * and -0.160 at 34.
+ *
+ * READ THAT PARAGRAPH AGAINST THE CODE, 2026-10-20, BECAUSE IT PUTS THIS CONSTANT ON THE WRONG
+ * AXIS. `SHARED.rim` is one `field()` of CELLS x CELLS blocks built once and sampled by every tile
+ * at the same phase, so it is not a field that "spans many tiles" at all -- it is the first kind of
+ * variation, the kind that is inside a tile and identical in all of them. Its swing therefore buys
+ * cross-tile shade only through the four core bands, which do differ per variant; what it buys
+ * directly is a fixed pattern stamped every 32 pixels. Measured in the note on `EDGE_OCTAVES`. The
+ * sweep's own choice is left standing -- the mid-range it was bought for is real and re-opening it
+ * moves the protected boundary figures -- but the reasoning above does not support it.
  *
  * Swept 176/9 (26% middle, 44% peak), 170/22 (29/50), 164/34 (42/40), 158/46 (52/31), 152/58
  * (54/28) against the board's 42/24. 164/34 matches the board's mid-range exactly.
@@ -621,6 +708,41 @@ const SHADE_MIX = 0.28;
  * texture. ART_DIRECTION section 6.2 asks for blobs 12 to 30 px across; three cells is 10.7, which
  * is the closest of the octaves and still short. Flagged rather than fixed: widening it is a change
  * to all four variants and the review scoped this one to grass-0.
+ */
+/*
+ * THE RIM'S DOMINANT OCTAVE HAS FOUR CELLS, AND FOUR DIVIDES SIXTEEN. FLAGGED, MEASURED, NOT FIXED
+ * (2026-10-20).
+ *
+ * `wrapNoise`'s own note, forty lines up, says it plainly: "a lattice of 5 or 9 cells gives a
+ * pattern with no axis that lines up with the tile grid, where 4 or 8 quietly reintroduce the thing
+ * this file exists to remove". `EDGE_OCTAVES` carries 4 cells at weight 0.5 -- half the rim field --
+ * and CELLS is 16, so the lattice line at index 0 falls exactly on the tile's border in both axes
+ * and the whole border ring reads one random lattice value rather than an average of many.
+ *
+ * It is not a theoretical worry; it has a sign and a size. Rebuilding the field exactly as `SHARED`
+ * does -- `field(6101, EDGE_OCTAVES)`, equalised, quantised to `EDGE_LEVELS` -- and splitting it
+ * into its 60 border blocks and its 196 interior blocks:
+ *
+ *     as shipped, [4, 7, 13]     border 0.273   interior 0.569   whole 0.500
+ *     with 5 for the 4           border 0.460   interior 0.512   whole 0.500
+ *     with 3 for the 4           border 0.483   interior 0.505   whole 0.500
+ *     BLOB_OCTAVES [3, 5, 9]     border 0.433   interior 0.520   whole 0.500
+ *
+ * `equalise` gets the WHOLE field to 0.500 exactly, which is what it is for; nothing asks the
+ * border subset to be unbiased, and with a 4-cell octave it is not. At `EDGE_SWING` 34 a border
+ * mean of 0.273 is 7.7 luma of darkening on the outer ring of every grass tile and every path
+ * verge in the world, in the same direction, by accident of one seed. It is the largest single term
+ * left in the ground's fold over the tile pitch, larger than the vignette `BANDS` has just taken
+ * out, and `assertNoSeamBand` measures its effect rather than this number.
+ *
+ * WHY IT IS NOT FIXED HERE. Swapping the 4 for a 5 takes the ground's folded peak-to-peak from
+ * x 22.0 / y 13.1 to x 12.1 / y 16.0 -- it halves the column axis and makes the row axis worse,
+ * because the next seed's border bias is a different accident in a different axis -- and it moves
+ * the 1024 grass-to-grass boundary pixels the design board protects: the share above 24 luma goes
+ * 8.40% -> 11.62% and the maximum step 64.3 -> 69.3. Choosing a seed whose border happens to be
+ * unbiased is luck, not a fix; the fix is a rim field whose border distribution matches its
+ * interior BY CONSTRUCTION, and that is a round that owns the boundary figures and can re-ratchet
+ * them. This round was scoped to the vignette depth and leaves them untouched.
  */
 const EDGE_OCTAVES: readonly Octave[] = [
   [4, 0.5],
@@ -1060,13 +1182,24 @@ const CHEVRON: readonly (readonly [number, number, number])[] = [
  * field in this file is periodic over one tile, so two tiles of the SAME variant laid side by side
  * draw the same chevron at the same phase: a tuft placed at y 1 puts its point on rows 30 and 31
  * and its root on rows 0 and 1, and the tile above it does likewise, so across that join the eye
- * sees one whole tuft straddling the boundary. `grass-0` is 53.7% of the grass and `grass-1` 38.3%,
+ * sees one whole tuft straddling the boundary. `grass-1` is 58.9% of the grass and `grass-0` 30.6%,
  * so their joins are the common case and their tufts are the two that wrap.
  *
  * A tuft that sits wholly inside its tile is a silhouette repeated at the tile pitch, which is the
  * most findable thing a tilemap can show -- the reason this file cut its marks to mottle in the
  * first place. A tuft cut by the pitch is not: half of its instances read as a tuft on a join and
  * the rest as a tuft in a field, and there is no 32-pixel rhythm to find.
+ *
+ * WHICH AXIS EACH WRAP LANDS ON WAS CHOSEN FROM THE SWAPPED SHARES, AND IT SHOWS (2026-10-20,
+ * flagged, not changed). `VARIANTS` wraps grass-0 over the TOP edge and grass-1 over the RIGHT, on
+ * the belief that grass-0 was the commoner of the two. It is not: grass-1 is, by two to one, so the
+ * wrap the map lays most often is the one on the vertical boundary, and 58.9% of all grass tiles
+ * carry a dark chevron on columns 30, 31, 0 and 1. That is most of why the composed fold is worse on
+ * the column axis than the row axis -- 16.9 against 10.1 after this round's band work -- and the
+ * camera is a letterbox, so the column axis is the one to spend on. Swapping the two tuft positions
+ * measures at x 14.8 / y 11.9: it buys 2.1 on the worse axis for 1.8 on the better one and balances
+ * the two. Left for the round that owns the chevron, because this one was scoped to the vignette
+ * depth and a tuft is a mark rather than a band.
  */
 function chevron(mark: Float64Array, bx: number, by: number): void {
   for (const [bdx, tdx, h] of CHEVRON)
@@ -1296,9 +1429,10 @@ interface Variant {
 }
 
 const VARIANTS: readonly Variant[] = [
-  // Over the top edge, and `grass-0` is 53.7% of the grass, so this is the join the player sees.
+  // Over the top edge. `grass-0` is 30.6% of the grass.
   { tuft: [12, 1], clover: null },
-  // Over the right edge, and `grass-1` is 38.3%: the other common join.
+  // Over the right edge -- and `grass-1` is 58.9%, so this, not the one above, is the join the
+  // player sees most. See the last paragraph of `chevron` for what that costs on the column axis.
   { tuft: [31, 20], clover: null },
   { tuft: [8, 25], clover: null },
   { tuft: [22, 13], clover: [12, 10] },
@@ -1619,6 +1753,47 @@ const cornerTile =
     pebble(img, rnd, 2, (x, y) => placeOf(sides, x, y).zone === 3);
   };
 
+/*
+ * THE TILE SET CANNOT DRAW A CORRIDOR. MEASURED AND FLAGGED, NOT FIXED FROM THIS FILE (2026-10-20).
+ *
+ * There is no tile that carries grass on two OPPOSITE sides, and none that carries it on three. A
+ * one-tile-wide run of track therefore has no tile that fits, and `forest-map.ts`'s `pathEdge` --
+ * an if-chain that tests `n && e`, then `n && w`, then `s && e`, then `s && w`, then each side alone
+ * -- resolves it to a single-sided tile and leaves the far side with no verge, no lip and no teeth:
+ * sand running flush into lawn in a dead straight line down the tile boundary.
+ *
+ * Counted off the generated map, 2026-10-20: 25 of its 116 path-family tiles have at least one
+ * grass side the tile they were given does not draw. By case --
+ *
+ *     14x  path-n  needs n and s, draws n       -> wants `path-ns`
+ *      7x  path-e  needs e and w, draws e       -> wants `path-ew`
+ *      1x  path-ne needs n, s and e             -> wants `path-nse`
+ *      1x  path-se needs s, e and w             -> wants `path-sew`
+ *      1x  path-n  needs n and e, draws n       -> `pathEdge` ran before its neighbour changed
+ *      1x  path-s  needs s and e, draws s       -> likewise
+ *
+ * The worst of them is a run of six at (12..17, 12): 192 unbroken pixels of straight seam, in the
+ * spawn frame, against a spec of no straight run over 4px. The other long ones are (12..13, 22) and
+ * (35..37, 22).
+ *
+ * `pathTile()` ALREADY TAKES A SIDES ARRAY and `placeOf` already takes the minimum zone across
+ * however many sides it is given, so the six missing tiles are six table entries here and no new
+ * painter:
+ *
+ *     'path-ns': pathTile(['n', 's'], ...),   'path-nse': pathTile(['n', 's', 'e'], ...),
+ *     'path-ew': pathTile(['e', 'w'], ...),   'path-nsw': pathTile(['n', 's', 'w'], ...),
+ *                                             'path-new': pathTile(['n', 'e', 'w'], ...),
+ *                                             'path-sew': pathTile(['s', 'e', 'w'], ...),
+ *
+ * WHAT STOPS THEM BEING WRITTEN HERE TODAY is that a painter is only half a tile. `tiles.ts` throws
+ * at import for any painter not in `TILE_NAMES` -- verified, it reports "Painters not in
+ * TILE_NAMES: path-ns" and takes the whole graybox suite down with it -- so the six names have to
+ * be APPENDED to that list in the same change, and `test/art-guards.test.ts` pins the list's length
+ * at 79. Neither file belongs to this task. They are gids 80 to 85, appending renumbers nothing,
+ * and the map owner is the one who widens `pathEdge` to a four-bit neighbour mask and regenerates
+ * the sheet against them -- so the six entries and the gids belong in that one commit, not split
+ * across two owners.
+ */
 export const GROUND_TILES: Record<string, Painter> = {
   'grass-0': grass(0),
   'grass-1': grass(1),
@@ -1634,3 +1809,92 @@ export const GROUND_TILES: Record<string, Painter> = {
   'path-se': cornerTile(['s', 'e'], 2963),
   'path-sw': cornerTile(['s', 'w'], 3079),
 };
+
+/* ----------------------------------------------------------------- guard -- */
+
+/*
+ * A JOIN MUST NOT PRINT A BAND.
+ *
+ * This file already proves that two grass tiles meet with no STEP -- the border pixel is evaluated
+ * at `mass` 0, where the variant drops out of the expression -- and it proved that for three rounds
+ * while every tile quietly darkened its own outer ring by twelve to twenty-one luma. No step and a
+ * dark band are not the same property: the step is about two pixels either side of one boundary,
+ * and the band is about what a player sees when forty tiles are laid out in front of them, which is
+ * a dark line every 32 pixels.
+ *
+ * So this guard measures the composed thing. It lays each ordered pair of grass variants as a
+ * two-tile strip, reduces each tile to its column means and its row means, and asks how far the
+ * four stripes straddling the join sit BELOW the rest of the strip. That is the quantity a person
+ * looking at a lawn sees as a grid, it is defined on the pixels the game ships rather than on any
+ * constant in this file, and it is symmetric: a join that printed a LIGHT band would be the same
+ * fault with the sign flipped, so both orders of every pair are measured and a bright band shows up
+ * as the dark band of the reversed pair.
+ *
+ * The bound is a plain luma figure and deliberately not derived from `BANDS`, `EDGE_L` or
+ * `EDGE_SWING`. A bound written in terms of the thing it watches moves when that thing moves, which
+ * is the one way a guard can be green while the fault is back.
+ *
+ * Where it sits today: worst pairing 11.7 luma on the column axis (grass-3 | grass-2) and 9.0 on
+ * the row axis (grass-0 over grass-0). Before the bands were re-centred it was 17.3 and 13.1. The
+ * column axis is evaluated and reported first because the camera is a letterbox and it is the worse
+ * of the two.
+ *
+ * It does NOT cover the path verge. A path tile's column mean mixes sand and grass, so the same
+ * arithmetic on `path-n` measures the track rather than the join; the verge is held instead by the
+ * seam proof plus `PATH_BAND` sitting within a few luma of the rim.
+ */
+const JOIN_STRIPES = 2;
+const JOIN_BAND_DROP = 14;
+
+const GRASS_NAMES: readonly string[] = ['grass-0', 'grass-1', 'grass-2', 'grass-3'];
+
+/** One painted tile reduced to the mean luma of each column and of each row. */
+function stripeMeans(img: Img): { readonly cols: number[]; readonly rows: number[] } {
+  const cols = new Array<number>(TILE).fill(0);
+  const rows = new Array<number>(TILE).fill(0);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const l = lumaOf(img.get(x, y)) / TILE;
+      cols[x]! += l;
+      rows[y]! += l;
+    }
+  return { cols, rows };
+}
+
+/** How far the stripes straddling the join sit below the rest of an `a | b` strip. */
+function joinDrop(a: readonly number[], b: readonly number[]): number {
+  const strip = [...a, ...b];
+  let band = 0;
+  let rest = 0;
+  for (let i = 0; i < strip.length; i++)
+    if (i >= TILE - JOIN_STRIPES && i < TILE + JOIN_STRIPES) band += strip[i]! / (JOIN_STRIPES * 2);
+    else rest += strip[i]! / (strip.length - JOIN_STRIPES * 2);
+  return rest - band;
+}
+
+function assertNoSeamBand(): void {
+  const stripes = GRASS_NAMES.map((name) => {
+    const img = new Img(TILE, TILE);
+    GROUND_TILES[name]!(img);
+    return stripeMeans(img);
+  });
+  let worst = -Infinity;
+  let where = '';
+  for (const axis of ['cols', 'rows'] as const)
+    for (let a = 0; a < stripes.length; a++)
+      for (let b = 0; b < stripes.length; b++) {
+        const drop = joinDrop(stripes[a]![axis], stripes[b]![axis]);
+        if (drop <= worst) continue;
+        worst = drop;
+        where = `${axis === 'cols' ? 'column' : 'row'} axis, ${GRASS_NAMES[a]} ${axis === 'cols' ? '|' : 'over'} ${GRASS_NAMES[b]}`;
+      }
+  if (worst > JOIN_BAND_DROP)
+    throw new Error(
+      `w-ground: a grass join prints a ${worst.toFixed(1)} luma band (${where}), over the ` +
+        `${JOIN_BAND_DROP} the lawn is allowed. Composed grass is drawing a line every ${TILE} ` +
+        'pixels. Every grass tile is darkening its own outer ring -- check that each core band in ' +
+        '`BANDS` is centred near `EDGE_L` and that the four offsets still differ in sign.',
+    );
+}
+
+assertNoSeamBand();

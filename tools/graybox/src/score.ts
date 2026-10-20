@@ -197,7 +197,37 @@ if (profileArg) {
   console.log(`\ntarget written to ${TARGET_FILE}:\n${JSON.stringify(target, null, 2)}`);
 } else if (worldArg) {
   const stored = readStored();
-  const target = stored.target as Profile;
+  /*
+   * THE TARGET IS ASSERTED, NOT CAST.
+   *
+   * This read `stored.target as Profile` and went straight on to divide by `target[k]`. A cast is
+   * not a check: with `board-profile.json` missing, truncated, or rebuilt by a `--board` run that
+   * fell over part way, `target` is `undefined` and the next line fails with "Cannot read
+   * properties of undefined (reading 'deep')" -- which reads like a bug in this tool rather than a
+   * missing file, and which is the one failure mode that matters, because the whole point of
+   * storing the profile is that scoring needs no crops to hand.
+   *
+   * It is also not an all-or-nothing question. The `--board` branch above writes the file by
+   * spreading the PRIOR document and replacing three keys, so a half-written or hand-edited file
+   * can carry some axes and not others, and a missing axis silently scores as a ratio of 1.00 --
+   * a perfect match on an axis nobody measured, averaged into the distance with the five real ones.
+   * So every axis is named and checked, and the message says which ones are missing and what to run.
+   */
+  const target = stored.target;
+  if (!target || typeof target !== 'object') {
+    throw new Error(
+      `${TARGET_FILE} has no stored target profile, so there is nothing to score against. ` +
+        'Rebuild it from the board crops with `--board <dir>`.',
+    );
+  }
+  const absent = AXES.filter((k) => typeof target[k] !== 'number');
+  if (absent.length > 0) {
+    throw new Error(
+      `${TARGET_FILE} is missing a target for ${absent.join(', ')}. A missing axis scores as a ` +
+        'ratio of 1.00 and is averaged in as a perfect match, which quietly flatters every render. ' +
+        'Rebuild it with `--board <dir>`.',
+    );
+  }
   const pinned = stored.pinned ?? {};
   const mine = profile(load(worldArg));
   const keys = AXES;

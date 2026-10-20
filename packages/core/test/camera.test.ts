@@ -9,6 +9,7 @@ import {
   MAX_VIEW,
   MAX_ZOOM,
   MIN_VIEW,
+  pixelSnap,
   PORTRAIT_WORLD,
   PORTRAIT_WORLD_BAND,
   RED_FEET_BELOW_SPAWN,
@@ -57,6 +58,36 @@ describe('stageFit', () => {
       { min: { width: 100, height: 100 }, max: { width: 200, height: 200 }, maxZoom: 4 },
     );
     expect(fit).toEqual({ zoom: 4, view: { width: 200, height: 200 } });
+  });
+});
+
+describe('pixelSnap', () => {
+  /*
+   * The companion to stageFit: that one fixes how big a game pixel is, this one fixes where the
+   * first one starts. The project has now been bitten three times by guarding a rectangle's size
+   * and not its position -- a camera size quoted in a comment, a camera origin left hand-rolled
+   * beside a derived size, and a canvas scale guarded while its offset was not.
+   */
+  it('is the half pixel the stage centring left behind', () => {
+    // The measured defect: 718px of canvas plus 47px of margin centred in 800 lands at y 64.5.
+    expect(pixelSnap(64.5)).toBe(0.5);
+    // And the inline axis at an odd viewport width: 1242 centred in 1281 lands at x 19.5.
+    expect(pixelSnap(19.5)).toBe(0.5);
+    // A tie goes down and to the right, away from the header strip the canvas sits under.
+    expect(pixelSnap(0.5)).toBe(0.5);
+  });
+
+  it('asks for nothing when the coordinate is already on the grid', () => {
+    expect(pixelSnap(65)).toBe(0);
+    expect(pixelSnap(0)).toBe(0);
+    expect(pixelSnap(-19)).toBe(0);
+  });
+
+  it('lands the coordinate exactly on a whole pixel, whatever the fraction', () => {
+    for (const v of [0.125, 3.25, 17.515625, 64.5, 782.9375, -0.75, -64.5]) {
+      expect(Number.isInteger(v + pixelSnap(v)), `${v}`).toBe(true);
+      expect(Math.abs(pixelSnap(v)), `${v}`).toBeLessThanOrEqual(0.5);
+    }
   });
 });
 

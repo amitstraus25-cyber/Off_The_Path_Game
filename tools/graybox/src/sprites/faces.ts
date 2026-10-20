@@ -38,14 +38,19 @@
  * a `night` 2 field at 33 levels of luma and the same hue, which is mud. Against `night` 1 it is 40
  * levels and the dome's edge does the separating.
  *
- * Items and the interact prompt are transparent-backed and finish with an outline in THEIR OWN
- * DARK -- `gold` 0 round the compass and the key, `stone` 0 round the silver horn, `wood` 0 round
- * the lantern's bronze, `wall` 0 round the letter and the speech bubble. All six used to finish
- * with outline(ink 0), which is the treatment docs/PIXEL_STANDARD.md section 4 reserves for the
- * wolf; shared with half the art it told you nothing about him. On the near-black panels these
- * items sit on (`--cyera-black`) the old black ring was invisible anyway, so nothing is lost.
- * Portraits never call `outline`, because the backdrop is opaque and there is nothing for it to
- * bite on.
+ * The five ITEMS are transparent-backed and finish with an outline in THEIR OWN DARK -- `gold` 0
+ * round the compass and the key, `stone` 0 round the silver horn, `wood` 0 round the lantern's
+ * bronze, `wall` 0 round the letter. All of them used to finish with outline(ink 0), which is the
+ * treatment docs/PIXEL_STANDARD.md section 4 reserves for the wolf; shared with half the art it
+ * told you nothing about him. On the near-black panels these items sit on (`--cyera-black`) the
+ * old black ring was invisible anyway, so nothing is lost. Portraits never call `outline`, because
+ * the backdrop is opaque and there is nothing for it to bite on.
+ *
+ * THE SPEECH BUBBLE IS THE EXCEPTION and it is the only frame in here that is read against the
+ * WORLD rather than against a panel. `wall` 0 is luma 175 and the lawn it floats over measures
+ * 162..168, so that sweep left the game's one "this character will talk to you" mark as a cream
+ * shape on cream ground. It keeps `ink` 0; the argument is at the call site in
+ * `paintInteractPromptFrame`.
  */
 import { Img, shade } from '../paint.ts';
 import type { Painter, RGBA } from '../paint.ts';
@@ -1057,7 +1062,25 @@ export function paintInteractPromptFrame(img: Img, frame: 0 | 1): void {
     img.ellipse(17 + dx, 14 + y, 2.2, 2.2, shade('wall', 0));
     img.ellipse(17 + dx, 13.6 + y, 1.9, 1.9, shade('night', 2));
   }
-  img.outline(shade('wall', 0)); // the bubble's own dark
+  /*
+   * The bubble is the one mark in this file that is read AGAINST THE WORLD, and that is why its
+   * outline is the exception to the paragraph at the top of the file.
+   *
+   * Everything else here -- the portraits, the five items -- sits on a `--cyera-black` DOM panel,
+   * where `ink` 0 is invisible and a ring in the object's own dark is the only one that shows.
+   * That reasoning is right for those eleven frames and it was applied to this one by the same
+   * sweep without being re-measured. This frame is drawn in the forest, over the lawn, and
+   * `wall` 0 is luma 175 against lawn at 161..168: SEVEN luma. The one mark in the game that means
+   * "this one will talk to you" was a cream shape on cream ground with no silhouette at all, and a
+   * speech bubble with no edge is a smudge.
+   *
+   * `ink` 0 is a near-black carrying a trace of violet. docs/PIXEL_STANDARD.md section 4 reserves
+   * CYERA BLACK for the wolf so that he alone reads as a silhouette, and that is still true -- the
+   * wolf's ramp is his own; `ink` is the palette's shared dark and the rabbit's eye already takes
+   * it. Against the lawn this ring is about 150 luma down, so the bubble has an edge wherever in
+   * the forest it is raised: on grass, on the sand path, on the plank bridge and on the doorstep.
+   */
+  img.outline(shade('ink', 0));
 }
 
 /**

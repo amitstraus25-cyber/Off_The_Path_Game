@@ -18,6 +18,7 @@ export {
   MAX_ZOOM,
   stageFit,
   availableFor,
+  pixelSnap,
 } from '@otp/core';
 import { TILE } from '@otp/core';
 

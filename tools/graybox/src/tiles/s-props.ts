@@ -80,6 +80,7 @@
  */
 import { GROUND_TILES } from './w-ground.ts';
 import { COTTAGE_TILES } from './s-cottage.ts';
+import { CONTACT } from './s-outdoor.ts';
 import { clamp01, Img, keyline, lumaOf, shade, TILE, tone } from '../paint.ts';
 import type { Painter, Ramp, RGBA } from '../paint.ts';
 
@@ -248,23 +249,65 @@ function groundUnder(img: Img, variant: 0 | 1 | 2 | 3): void {
 }
 
 /*
- * The ground shadow, as five composited steps rather than one flat ellipse.
- *
- * The alphas are not round numbers: each is solved so that, laid over the one before it, the result
- * lands about 16 luma darker. Over the lawn that reads 180, 164, 148, 132, 116, 100 -- six values,
- * every step under the edge threshold, no hard rim anywhere. A single ellipse at alpha 120, which
- * is what this file used to draw, is one value and one 40-luma step all the way round it.
+ * Shade on a surface that is not the ground: the stall's interior under its own awning, and what a
+ * basket of wares throws onto the counter top it stands on. Both are ambient -- a thing in another
+ * thing's shade -- and neither is a point of contact, which is the distinction this file used to
+ * collapse and the whole of what task P13 is about.
  */
 const SHADE: RGBA = tone('shadow', 0.22);
-const CAST: readonly (readonly [number, number])[] = [
-  [1, 29],
-  [0.86, 33],
-  [0.7, 38],
-  [0.52, 45],
-  [0.3, 54],
-];
+
+/*
+ * THE CONTACT POOL, as five composited steps that actually REACH THE GROUND.
+ *
+ * READ THE NOTE ON `CONTACT` IN `s-outdoor.ts` BEFORE CHANGING A NUMBER HERE. The value a prop's
+ * ground falls TO is not this file's to pick: it is one exported constant, the fence's, and the
+ * organic tiles landed on the same thing independently.
+ *
+ * WHAT WAS WRONG. The five steps were right and the two numbers that decide whether they do anything
+ * were not. The alphas ran 29, 33, 38, 45, 54 and the note above them claimed "180, 164, 148, 132,
+ * 116, 100 -- six values, every step under the edge threshold, no hard rim anywhere". The ladder was
+ * real, the arithmetic was right, and the conclusion it was tuned for was the wrong one: a pool whose
+ * deepest pixel is luma 100 over a lawn reading 180 is not a shadow, it is a tint. Measured on the
+ * tiles as they shipped, the darkest lawn-green pixel under each prop came out stall-counter 74,
+ * signpost 93, notice-board 93, well 97, lantern-post 124, fountain 131 -- against bush 43, roots 42,
+ * fence 35, rock 52 everywhere else in the world. The lawn's own mottle floor is about 131, so the
+ * fountain's darkest pixel WAS the open lawn and all six objects floated.
+ *
+ * THE STEPS ARE 29 LUMA NOW AND NOT 16, AND THAT IS A CORRECTION RATHER THAN A COST. Sixteen was
+ * chosen to keep every step under the score's 24-luma edge threshold, back when this file was being
+ * optimised against the broken ruler the header describes; the rebuilt profile has the stall region
+ * a third SHORT of the board's edge density and a quarter short of its deep shade, and a pool that
+ * falls 144 luma under a prop is the honest place to find both. The organic family's own rings step
+ * 21, 39 and 63, and the fence's contact is a single opaque ellipse with no feather at all -- so a
+ * readable step at the foot of a thing is the world's convention and not a departure from it.
+ *
+ * THE RINGS GREW OUTWARD, which is the other half of it and the part a value alone could not fix.
+ * `k` used to run 1.0 down to 0.3, so the pool's outer edge was the footprint the caller passed and
+ * its dark core was a third of that -- directly under the prop, where a top-down camera cannot see
+ * it. Every one of these props stands on a post or a drum that reaches the tile's last row, so there
+ * is no ground below its foot at all and the contact has to read BESIDE it. `k` now runs 1.46 down to
+ * 1.0: the caller's radius is the OPAQUE CORE, the footprint, and the feather is the 46 per cent
+ * outside it. That is the organic family's proportion (its widest ring is 1.22 of the object's base,
+ * its near-opaque one 0.78) and the fence's (an opaque ellipse 12 across under a 9-pixel picket).
+ */
+
+/**
+ * The alphas a contact pool falls down, outermost ring first, each laid over the one before it.
+ *
+ * Solved, not chosen: over a lawn at 180 they land 151, 122, 94, 65, 36, which is five steps of
+ * about 29 luma apiece ending exactly on `CONTACT`. The last is 255 because the innermost ring is
+ * the point of contact and a point of contact is opaque -- that is the fence's drawing and the
+ * pixel standard's rule both; see `CONTACT`.
+ */
+const CONTACT_FALL: readonly number[] = [51, 64, 85, 128, 255];
+
+/** Each ring's radius as a multiple of the footprint the caller passes. The last one IS it. */
+const CAST_RINGS: readonly number[] = [1.46, 1.34, 1.22, 1.11, 1];
+
 function cast(img: Img, cx: number, cy: number, rx: number, ry: number): void {
-  for (const [k, a] of CAST) img.ellipse(cx, cy, rx * k, ry * k, [SHADE[0], SHADE[1], SHADE[2], a]);
+  CAST_RINGS.forEach((k, i) =>
+    img.ellipse(cx, cy, rx * k, ry * k, [CONTACT[0], CONTACT[1], CONTACT[2], CONTACT_FALL[i]!]),
+  );
 }
 
 /* --------------------------------------------------------------- round shading */
@@ -843,16 +886,40 @@ const stallCounter: Painter = (img) => {
     const a = Math.round(170 - clamp01(y / 10) * 120);
     img.rect(0, y, TILE, 1, [SHADE[0], SHADE[1], SHADE[2], a]);
   }
-  // The stall's own shade on the grass, before anything stands in it. A band rather than an ellipse
-  // so it meets its neighbour: four of these tiles abut, and four ellipses make a scalloped shadow.
-  for (const [dy, a] of [
-    [26, 60],
-    [27, 78],
-    [28, 100],
-    [29, 128],
-    [30, 160],
-  ] as const)
-    img.rect(0, dy, TILE, 1, [SHADE[0], SHADE[1], SHADE[2], a]);
+  /*
+   * Where the counter MEETS the grass, which is the sixth of task P13's six floating props and the
+   * only one that is not a `cast()` call. A band rather than an ellipse so it meets its neighbour:
+   * four of these tiles abut, and four ellipses make a scalloped shadow under a counter that runs
+   * unbroken across all four.
+   *
+   * It is `CONTACT_FALL`, one row a step, landing opaque on the row the legs and the front's own
+   * keyline stand on. It ran 60, 78, 100, 128, 160 and stopped at row 30, which took the deepest
+   * pixel only to luma 74 -- half the fall the fence and the bush make -- and left the tile's last
+   * row as open lawn directly under the one surface in the stall that touches the ground.
+   *
+   * AND THEN BACK OUT AGAIN BELOW THE FOOT, which is the one thing a band has to do that an ellipse
+   * gets for free. Run straight down to the tile's edge the pool ends on a full-width opaque row, and
+   * because four of these tiles abut that is a dead-straight 128-pixel bar with a 95-luma step under
+   * it in the market frame -- the fence run's own defect, in a shadow. Easing back out over the last
+   * two rows puts the deepest pixel at the point of contact and lets the pool fade away from the
+   * object, which is the direction a shadow falls.
+   */
+  const FOOT = TILE - 3;
+  CONTACT_FALL.forEach((a, i) =>
+    img.rect(0, FOOT - CONTACT_FALL.length + 1 + i, TILE, 1, [
+      CONTACT[0],
+      CONTACT[1],
+      CONTACT[2],
+      a,
+    ]),
+  );
+  for (let i = 1; i < TILE - FOOT; i++)
+    img.rect(0, FOOT + i, TILE, 1, [
+      CONTACT[0],
+      CONTACT[1],
+      CONTACT[2],
+      CONTACT_FALL[CONTACT_FALL.length - 1 - i]!,
+    ]);
 
   stand(img, (s) => {
     // Legs, then the board that laps over them.
@@ -1023,7 +1090,19 @@ const lanternPost: Painter = (img) => {
     img.ellipse(10, 26.4, 13 * k, 6 * k, [c[0], c[1], c[2], a]);
   }
 
-  cast(img, 17.5, 29.5, 5.2, 1.8);
+  /*
+   * The footprint is the PLINTH's, which is what the lamp actually stands on, and it was the one of
+   * the five `cast()` calls whose numbers were wrong as well as whose ladder was. At 5.2 by 1.8 the
+   * pool was narrower than the stonework over it -- the lower course runs x 12..22 and the ring puts
+   * a keyline either side of that -- so every pixel of it, feather and core alike, was painted
+   * underneath the prop and the lawn beside the plinth never darkened at all. It is the one prop
+   * here standing in its own light, so it is also the one where a floating foot showed worst: a lit
+   * pool on the grass with nothing holding the post down in it.
+   *
+   * Wider than the stone and centred on the tile's last row, which is the fence's own drawing -- its
+   * picket is 9 across and its contact ellipse 12, centred four rows below the wood's base.
+   */
+  cast(img, 17.5, 29.8, 8.4, 2.6);
 
   stand(
     img,
@@ -1868,5 +1947,123 @@ const NOTICE_GUARD = {
   if (share(sign) > NOTICE_GUARD.postPaleHi)
     throw new Error(
       `The decorative signpost has grown paper (want under ${NOTICE_GUARD.postPaleHi} of it over ${PAPER_LUMA} luma): ${pair}. The two posts reading alike is the defect this pair exists to stop -- arrows point, paper speaks.`,
+    );
+}
+
+/*
+ * ===========================================================================
+ * AND THE SIX PLACED PROPS HAVE TO TOUCH THE GROUND.
+ * ===========================================================================
+ *
+ * The defect this is aimed at is the one every reviewer saw and nobody could name a number for: the
+ * props were the only objects in the world that did not plant on the lawn. Measured on the tiles as
+ * they shipped -- the darkest LAWN-GREEN pixel each finished tile still shows -- stall-counter 74,
+ * signpost 93, notice-board 93, well 97, lantern-post 124, fountain 131, against bush 43, roots 42,
+ * rock 52 and all three fence tiles 35. The fountain's darkest pixel was the open lawn.
+ *
+ * WHY IT TOOK A GUARD AND NOT A NOTE. Nothing could see it. `pnpm score` is whole-frame statistics
+ * and one prop is a thousandth of a camera. The art guards in this file watch the note and the pair
+ * of posts. The composition audit in `forest-map.ts` watches where props are placed, not what they
+ * look like when they get there. And the value itself had no home, which is why five `cast()` calls
+ * and one band of rects each arrived at a different wrong answer -- they were five derivations of one
+ * number, and a number with five derivations has none.
+ *
+ * IT MEASURES THE FINISHED TILE AND ONLY THE PIXELS A PLAYER CAN STILL SEE. The pool is painted
+ * before the prop is blitted over it, so a pool drawn entirely UNDERNEATH a post counts for nothing
+ * here, which is correct and is most of what was wrong with the lantern: its pool was narrower than
+ * its own plinth, so every pixel of it was hidden and a bound on the pool as drawn would have passed.
+ * Only lawn-green pixels count -- `g` over both `r` and `b` -- so the prop's own near-black keyline,
+ * its timber and the lantern's gold light are not mistaken for ground.
+ *
+ * THREE BOUNDS, because the floor alone can be satisfied by cheating in two directions.
+ *
+ *   deepest   one pixel in the organic family's own band. This is the bound the shipped art fails,
+ *             all six of it, by between 10 and 67 luma.
+ *   band      how many pixels are in that band, so a single dark speck is not a contact shadow. A
+ *             mark too small to see at a 19-tile camera is the same bug as no mark, which is the
+ *             argument the note's guard above makes in the other direction.
+ *   top       how far up the tile the shade reaches, so the floor cannot be met by darkening the
+ *             whole tile instead of its foot. That is a live risk and not a theoretical one: the
+ *             stall interior band at the TOP of `stall-counter` is deep shade at luma 85, four luma
+ *             outside this band, and deepening it is exactly the edit that would pass the floor
+ *             while leaving the counter floating.
+ */
+
+/**
+ * Above this luma the ground is lawn, at or under it the ground is in something's shade.
+ *
+ * Chosen against the four lawn painters rather than against anything here, the way `PAPER_LUMA` is
+ * chosen against `wood` and `stone`: the darkest pixel any of `grass-0..3` draws anywhere in its
+ * lower half is 96, and none of them puts a single pixel at or under 64. So a prop cannot drift over
+ * this line by standing on a dark patch of grass, and nothing but shade gets under it. Between the
+ * 36 the props now reach and the 74 the best of the six shipped at, and deliberately nearer the 74:
+ * the bound exists to catch the floating prop, not to pin the drawing.
+ */
+const CONTACT_LUMA = 64;
+
+/**
+ * The props that stand on lawn, which is not all of them.
+ *
+ * The three awning tiles hang in the air -- their own ground is the stall's interior shade, which
+ * the counter below them carries -- and `door-note` is painted on a door. Listing the six by hand is
+ * the point: a seventh prop placed on grass is invisible to this guard until someone adds it here,
+ * and that is a smaller failure than a guard that silently measures a hanging sign's keyline.
+ */
+const GROUND_PROPS = [
+  'stall-counter',
+  'signpost',
+  'notice-board',
+  'well',
+  'lantern-post',
+  'fountain',
+] as const;
+
+/** What the LAWN still visible in a finished prop tile reads. */
+function groundSignature(name: string): { deepest: number; band: number; top: number } {
+  const img = new Img(TILE, TILE);
+  PROP_TILES[name]!(img);
+  let deepest = 255;
+  let band = 0;
+  let top = TILE;
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const c = img.get(x, y);
+      if (c[3] < 40) continue;
+      // Lawn only. Timber, stone, the keyline and the lantern's gold light are not the ground.
+      if (!(c[1] > c[0] && c[1] > c[2])) continue;
+      const l = lumaOf(c);
+      if (l < deepest) deepest = l;
+      if (l > CONTACT_LUMA) continue;
+      band++;
+      if (y < top) top = y;
+    }
+  return { deepest, band, top };
+}
+
+/*
+ * Measured on the tiles as drawn: every one of the six bottoms out at 36, which is `CONTACT`, with
+ * 13 to 22 pixels of pool (lantern-post thinnest, stall-counter and notice-board widest) and none of
+ * that pool higher than row 28. The organic family for comparison carries 9 pixels at its thinnest
+ * (`trunk-l`) and 141 at its widest (`bush-low`).
+ */
+const CONTACT_GUARD = {
+  deepestHi: CONTACT_LUMA, // the organic family's own band; the shipped six sat 10 to 67 luma over it
+  bandLo: 8, // a pool, not a speck -- under the thinnest the world draws anywhere
+  topLo: 24, // at the foot, in the bottom quarter; higher than this is a tinted tile, not contact
+} as const;
+
+for (const name of GROUND_PROPS) {
+  const g = groundSignature(name);
+  const say =
+    `darkest lawn pixel ${g.deepest.toFixed(0)} luma, ` +
+    `${g.band}px of it at or under ${CONTACT_LUMA}` +
+    (g.band ? `, topmost on row ${g.top}` : '');
+  if (g.deepest > CONTACT_GUARD.deepestHi || g.band < CONTACT_GUARD.bandLo)
+    throw new Error(
+      `"${name}" is floating again (want its ground down to ${CONTACT_GUARD.deepestHi} luma over at least ${CONTACT_GUARD.bandLo}px): ${say}. The bush reaches 43, the tree roots 42 and all three fence tiles 35; a prop whose darkest ground pixel is the open lawn is pasted onto the world rather than standing in it. The value is \`CONTACT\` in s-outdoor.ts -- do not re-derive it here.`,
+    );
+  if (g.top < CONTACT_GUARD.topLo)
+    throw new Error(
+      `"${name}" has shade up the tile rather than under its foot (want nothing in the contact band above row ${CONTACT_GUARD.topLo}): ${say}. Darkening the whole tile passes the floor and still leaves the prop floating, because what seats an object is the step between its foot and the ground beside it.`,
     );
 }

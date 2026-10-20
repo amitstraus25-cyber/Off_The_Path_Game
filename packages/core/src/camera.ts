@@ -292,3 +292,27 @@ export function visibleTitleColumns(): { from: number; to: number } {
   const cam = cameraFor(REFERENCE_VIEWPORTS.desktop);
   return { from: TITLE_CARD_W / (TILE * cam.zoom), to: cam.tiles.width };
 }
+
+/**
+ * The nudge that puts a screen coordinate back ON the pixel grid, in CSS pixels.
+ *
+ * `stageFit` above settles how BIG one game pixel is -- a whole number of CSS pixels, never 1.5,
+ * for the reasons MAX_ZOOM spends a paragraph on. It says nothing about where the first one
+ * starts, and a scale is only half of a sampling grid: a canvas scaled by a whole 2 but laid out
+ * at y 64.5 has `image-rendering: pixelated` resolve every game-pixel ROW across a half-pixel
+ * boundary, so the whole world is resampled and the top edge shows it as a band of garbled rows.
+ * That band is what a client photographed and called "laggy lines on the top", and the guard that
+ * was supposed to catch it only ever checked the scale.
+ *
+ * Whole CSS pixels rather than whole device pixels: at a whole devicePixelRatio -- 1, 2, 3 -- a
+ * whole CSS pixel is a whole device pixel too, so this is the stricter of the two and needs no
+ * DOM to know which. (At a FRACTIONAL ratio neither this nor `stageFit` can give an exact grid,
+ * because 1.5 device pixels per CSS pixel makes the scale itself fractional in device terms; that
+ * is a separate problem and not one a position can fix.)
+ *
+ * Returns what to ADD to `position`, so a coordinate already on the grid returns 0 and callers can
+ * accumulate it against an offset they have already applied.
+ */
+export function pixelSnap(position: number): number {
+  return Math.round(position) - position;
+}

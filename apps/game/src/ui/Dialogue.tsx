@@ -133,15 +133,38 @@ export function Dialogue({
     return reply ?? character.greet;
   }, [character, lastAsked]);
 
+  // "show" is an action, not a question: the options list is the real questions only.
+  const questions = character.asks.filter((a) => a.id !== 'show');
+  const questionsLeft = questions.filter((q) => !asked.includes(q.id)).length;
+
+  /*
+   * Every line this character can put in that paragraph, so the paragraph can be as tall as the
+   * tallest of them from the first frame.
+   *
+   * `.otp-dialogue__linebox` stacks these in one grid cell with the paragraph and hides them, which
+   * is what stops the panel growing when a reply replaces the greeting and dragging the sentence
+   * being read up by 11px on a desktop and 15px on a phone. The note on that rule in ui/panels.css
+   * has the measurements and why this is not a min-height.
+   *
+   * The greeting and the replies to the REAL questions only -- `show` is filtered out here exactly
+   * as it is from the options list, because it is an action whose reply the reducer has no case for
+   * and which therefore never reaches this paragraph. Reserving height for a line that cannot be
+   * said would make the panel taller than the game ever needs it to be.
+   */
+  const candidates = useMemo(
+    () =>
+      [
+        { id: 'greet', text: character.greet },
+        ...character.asks.filter((a) => a.id !== 'show').map((a) => ({ id: a.id, text: a.reply })),
+      ].filter((c) => Boolean(c.text)),
+    [character],
+  );
+
   const { shown, done, skip } = useTypedText(line);
   // `cursor` only ever follows focus; the keyboard handler moves focus and focus updates cursor.
   // Keeping one source of truth avoids a stale index when two keys arrive in the same frame.
   const [cursor, setCursor] = useState(0);
   const trapRef = useFocusTrap();
-
-  // "show" is an action, not a question: the options list is the real questions only.
-  const questions = character.asks.filter((a) => a.id !== 'show');
-  const questionsLeft = questions.filter((q) => !asked.includes(q.id)).length;
 
   const choose = (index: number): void => {
     // While the line is still typing, any activation means "show me the rest", never "ask this".
@@ -215,14 +238,38 @@ export function Dialogue({
           <div class="otp-dialogue__text" tabIndex={-1} data-autofocus>
             {/* Speaker-name eyebrow, as in the deck. */}
             <p class="otp-dialogue__speaker">{character.name}</p>
-            <p class="otp-dialogue__line">
-              <span aria-hidden="true">{shown}</span>
-              {!done && <TypingCursor />}
-              {/* Screen readers get the whole line once, not a character at a time. */}
-              <span class="otp-visually-hidden" aria-live="polite">
-                {done ? line : ''}
-              </span>
-            </p>
+            <div class="otp-dialogue__linebox">
+              {/*
+                One hidden copy of every line this character can say, stacked with the paragraph in
+                a single grid cell, so the cell is as tall as the tallest and nothing in the panel
+                moves when a reply arrives or while one is typing. `visibility: hidden` keeps them
+                out of the accessibility tree and out of the paint while keeping their boxes, which
+                is the whole point; the `aria-hidden` is belt and braces.
+
+                They sit BESIDE the paragraph, not inside it: `.otp-dialogue__line`'s text is what
+                the e2e specs read to know the typewriter has finished.
+              */}
+              {candidates.map((candidate) => (
+                <span key={candidate.id} class="otp-dialogue__ghost" aria-hidden="true">
+                  {candidate.text}
+                </span>
+              ))}
+              <p class="otp-dialogue__line">
+                <span aria-hidden="true">
+                  {shown}
+                  {/* The caret, in an anchor with no box of its own: see .otp-dialogue__caret. */}
+                  {!done && (
+                    <span class="otp-dialogue__caret">
+                      <TypingCursor />
+                    </span>
+                  )}
+                </span>
+                {/* Screen readers get the whole line once, not a character at a time. */}
+                <span class="otp-visually-hidden" aria-live="polite">
+                  {done ? line : ''}
+                </span>
+              </p>
+            </div>
             <div class="otp-options" role="listbox" aria-label={`Ask ${character.name}`}>
               {questions.map((option, index) => {
                 const used = asked.includes(option.id);
