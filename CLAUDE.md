@@ -69,7 +69,11 @@ long as nobody looks past CI. This paragraph has been wrong in both directions n
 deployment before you trust it.
 The Phase 0 renderer spike has been removed now that its result is recorded in
 `docs/ARCHITECTURE.md` section 2a.
-Pinned: TypeScript 6.0.3, Vite 7.3.6, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29.8, zod 4.6.5, Playwright 1.63.0.
+Pinned: TypeScript 6.0.3, Vite 7.3.7, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29.8, zod 4.6.5, Playwright 1.63.0.
+Vite moved 7.3.6 → 7.3.7 on 2026-10-21 for GHSA-587h-7wmj-h5pm (`launch-editor`, a Windows path-check
+bypass reached through the dev server's error overlay). Dev-only and never in the shipped bundle, but
+`pnpm audit --audit-level=high` gates CI and that gate is the point. 7.3.7 was published 2026-10-06,
+fifteen days before — clear of the fourteen-day rule below, which is why it was taken and not waived.
 
 ## Golden rules
 

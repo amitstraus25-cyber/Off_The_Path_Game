@@ -37,7 +37,7 @@ importers:
         version: 8.70.1(eslint@10.11.0)(typescript@6.0.3)
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.19.0)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.19.0))
+        version: 4.1.11(@types/node@24.19.0)(@vitest/coverage-v8@4.1.11)(vite@7.3.7(@types/node@24.19.0))
 
   apps/api:
     dependencies:
@@ -64,8 +64,8 @@ importers:
         version: 10.29.8
     devDependencies:
       vite:
-        specifier: 7.3.6
-        version: 7.3.6(@types/node@24.19.0)
+        specifier: 7.3.7
+        version: 7.3.7(@types/node@24.19.0)
 
   packages/core:
     dependencies:
@@ -1029,8 +1029,8 @@ packages:
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
-  vite@7.3.6:
-    resolution: {integrity: sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg==}
+  vite@7.3.7:
+    resolution: {integrity: sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -1509,7 +1509,7 @@ snapshots:
       obug: 2.2.1
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 4.1.11(@types/node@24.19.0)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.19.0))
+      vitest: 4.1.11(@types/node@24.19.0)(@vitest/coverage-v8@4.1.11)(vite@7.3.7(@types/node@24.19.0))
 
   '@vitest/expect@4.1.11':
     dependencies:
@@ -1520,13 +1520,13 @@ snapshots:
       chai: 6.3.0
       tinyrainbow: 3.2.0
 
-  '@vitest/mocker@4.1.11(vite@7.3.6(@types/node@24.19.0))':
+  '@vitest/mocker@4.1.11(vite@7.3.7(@types/node@24.19.0))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.6(@types/node@24.19.0)
+      vite: 7.3.7(@types/node@24.19.0)
 
   '@vitest/pretty-format@4.1.11':
     dependencies:
@@ -1973,7 +1973,7 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  vite@7.3.6(@types/node@24.19.0):
+  vite@7.3.7(@types/node@24.19.0):
     dependencies:
       esbuild: 0.28.2
       fdir: 6.5.0(picomatch@4.0.7)
@@ -1985,10 +1985,10 @@ snapshots:
       '@types/node': 24.19.0
       fsevents: 2.3.3
 
-  vitest@4.1.11(@types/node@24.19.0)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@24.19.0)):
+  vitest@4.1.11(@types/node@24.19.0)(@vitest/coverage-v8@4.1.11)(vite@7.3.7(@types/node@24.19.0)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@7.3.6(@types/node@24.19.0))
+      '@vitest/mocker': 4.1.11(vite@7.3.7(@types/node@24.19.0))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
@@ -2005,7 +2005,7 @@ snapshots:
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
       tinyrainbow: 3.2.0
-      vite: 7.3.6(@types/node@24.19.0)
+      vite: 7.3.7(@types/node@24.19.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.19.0
