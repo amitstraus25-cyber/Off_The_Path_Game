@@ -1,5 +1,6 @@
 // Lays out the forest: a winding river with a waterfall, curving paths, tree clusters with 2x2
 // canopies, and the landmarks the story needs. Objects keep the names apps/game reads.
+import { visibleTitleColumns } from '@otp/core';
 import { Img, noise, valueNoise2D } from './paint.ts';
 import { COLUMNS, TILE, TILE_NAMES, TILE_PAINTERS, gid } from './tiles.ts';
 
@@ -105,7 +106,9 @@ export function generateForestMap(): GeneratedMap {
    * the thing to check the render against when one of them is moved.
    *
    * y is compressed by 1.2 in the distance below, so a blob is about a fifth wider than it is
-   * tall, which suits a 26x15 letterbox camera: a wood that reads as a mass across a frame reads
+   * tall, which suits a letterbox camera (19.41 x 11.22 tiles; the ASPECT this reasoning depends
+   * on is right, it was the tile COUNT that was a third too big): a wood that reads as a mass
+   * across a frame reads
    * as a column down a portrait one.
    */
   const WOODS: ReadonlyArray<{ cx: number; cy: number; r: number; strength: number; why: string }> =
@@ -1338,7 +1341,8 @@ export function generateForestMap(): GeneratedMap {
    * This was a 7x7 square in which nothing may be planted, centred on a spawn pad that is 2x2 --
    * and because every later pass tests it too, nothing at all was planted there: no tree, no scrub,
    * no verge tuft, no flower. Forty-nine tiles of flat lit grass, in the exact middle of the one
-   * frame a visitor looks at first, which is 12% of a 26x15 camera and the single largest
+   * frame a visitor looks at first, which is 22% of the real 19.41 x 11.22 camera -- not the 12%
+   * of a 26x15 one this line used to claim -- and the single largest
    * contiguous void on the map. The product manager traced the word "creepy" partly to this: a
    * bright field evenly dotted with dark holes reads as watched, and the board never shows open
    * lawn larger than 3x3.
@@ -3608,7 +3612,8 @@ export function generateForestMap(): GeneratedMap {
     for (let i = 0; i < count; i++) {
       const angle = rnd() * Math.PI * 2;
       const r = 1 + rnd() * spread;
-      // Squashed, because the camera is a 26x15 letterbox and a circle of dressing reads as an
+      // Squashed, because the camera is a letterbox (19.41 x 11.22 tiles, the same aspect the
+      // old 26x15 figure had) and a circle of dressing reads as an
       // ellipse taller than it is wide.
       const x = ox + Math.round(Math.cos(angle) * r);
       const y = oy + Math.round(Math.sin(angle) * r * 0.75);
@@ -3984,10 +3989,12 @@ export function generateForestMap(): GeneratedMap {
    * ===========================================================================
    *
    * MEASURED ON THE FRAME RATHER THAN ON THE MAP, which is the only reason this exists. The game's
-   * camera shows about 26 x 15 tiles at 1280 wide, and the title and spawn cameras are both the
-   * same frame: tiles (0,13) to (25,27). Counted over its top two rows -- the rows a crown has to
-   * occupy to be CUT OFF by the edge of the screen -- three of the nineteen columns a landscape
-   * visitor can actually see carried canopy. The other sixteen were open lawn running off the top
+   * camera shows 19.41 x 11.22 tiles at 1280x800 -- NOT the "about 26 x 15" this file claimed in
+   * four places, which came from the abandoned 1.5x zoom option and sent three rounds of
+   * composition at a rectangle a third too big. Ask `cameraFor()` in @otp/core, never a comment.
+   * Counted over the top two rows -- the rows a crown has to occupy to be CUT OFF by the edge of
+   * the screen -- and over the columns a landscape visitor can actually see past the title card,
+   * which `visibleTitleColumns()` returns. The other sixteen were open lawn running off the top
    * of the hero shot of a marketing asset. `docs/DESIGN_BOARD.md` section 2 cause 2 is exactly
    * this: "a bright field evenly dotted with dark holes reads as watched", and every frame on the
    * board has canopy cut off by its top AND bottom edges, which is what says the wood carries on
@@ -5385,19 +5392,37 @@ export function generateForestMap(): GeneratedMap {
     /*
      * 7b. CANOPY CLOSES THE TOP OF THE TITLE CAMERA.
      *
-     * The camera shows about 26 x 15 tiles at 1280 wide and the title and spawn frames are both
-     * (0,13) to (25,27). In landscape the title card is opaque over the left 24% of that frame, so
-     * the columns a visitor can actually see start at x 7; measured there, not over the whole row,
-     * because a crown behind the card is a crown nobody sees. Counted before this round: three of
-     * the nineteen.
+     * THE RECTANGLE IS NO LONGER QUOTED HERE. This guard used to say "the camera shows about
+     * 26 x 15 tiles at 1280 wide" and count columns 7..25. The camera shows 19.41 x 11.22 tiles,
+     * so columns 20-25 are off the right of the screen and were never visible to anyone: the
+     * guard certified a framing pass by counting five columns the game does not draw. The figure
+     * came from the ABANDONED 1.5x zoom option (see MAX_ZOOM in @otp/core's camera.ts, which has
+     * said "~19 tiles across at 1280px wide" since the remaster), and three rounds of composition
+     * were aimed at it.
+     *
+     * `visibleTitleColumns()` derives the range from the same function the game sizes its canvas
+     * with, so this cannot drift again: change the frame, the margins or the zoom rule and both
+     * move together.
+     *
+     * THE FLOOR IS A RATCHET, NOT THE TARGET. Pointed at the real columns the map closes 6 of the
+     * 15 a visitor sees, so 6 is what this holds. (Six, not the four a hand count produced, because
+     * that count started at column 7 -- itself inherited from the 26-tile frame. The card's real
+     * edge is 4.78 tiles, so columns 5 and 6 are visible and both carry canopy.) The board closes
+     * its top edge except the single gap the path exits through. Raise this as the framing
+     * improves; never lower it.
      */
+    const { from: visFrom, to: visTo } = visibleTitleColumns();
+    const firstVisible = Math.ceil(visFrom);
+    const lastVisible = Math.floor(visTo);
     const crowned = (x: number, y: number): boolean => CANOPY_GIDS.has(at(above, x, y) & BASE_GID);
     let closed = 0;
-    for (let x = 7; x <= 25; x++) if (crowned(x, 13) || crowned(x, 14)) closed++;
+    for (let x = firstVisible; x <= lastVisible; x++)
+      if (crowned(x, 13) || crowned(x, 14)) closed++;
+    const visibleCols = lastVisible - firstVisible + 1;
     if (closed < 6)
       faults.push(
-        `only ${closed} of the 19 visible columns of the title camera's top edge carry canopy ` +
-          '(an open field with the sky above it: see DESIGN_BOARD section 2, cause 2)',
+        `only ${closed} of the ${visibleCols} visible columns of the title camera's top edge ` +
+          'carry canopy (an open field with the sky above it: see DESIGN_BOARD section 2, cause 2)',
       );
 
     /*
@@ -5456,7 +5481,8 @@ export function generateForestMap(): GeneratedMap {
     }
     console.log(
       `  composition: edge ruled for ${straightest} column(s) at worst, ${bitten} bitten, ` +
-        `north edge on ${rowsUsed} rows; ${closed}/19 visible title columns closed by canopy; ` +
+        `north edge on ${rowsUsed} rows; ${closed}/${visibleCols} visible title columns closed by ` +
+        'canopy; ' +
         `longest crown file ${longestFile}; visible ground ${[
           'grass-0',
           'grass-1',

@@ -1,0 +1,219 @@
+/*
+ * HOW BIG THE CAMERA ACTUALLY IS.
+ *
+ * This module exists because the answer was wrong for three rounds and nobody could see it. The
+ * art tooling composed the world against a camera of "about 26 x 15 tiles at 1280 wide", written
+ * as a comment in tools/graybox/src/forest-map.ts and repeated in four places including the guard
+ * that certified the framing. The real camera at 1280x800 is 19.41 x 11.22 tiles -- a third
+ * narrower and a third shorter. Every framing decision was aimed at a rectangle that does not
+ * exist, which is why a canopy pass credited with nine closed columns moved the visible top edge
+ * of the hero shot from three columns to four: five of its nine columns are off-camera, and the
+ * stand it genuinely built sits behind the title card.
+ *
+ * The number was wrong in a comment rather than in code, so no test could catch it and no renderer
+ * disagreed with it. The remedy is not a better comment. It is that the game and the tools now
+ * derive the rectangle from the same function, so the two cannot drift again: if the frame chrome,
+ * the margins or the zoom rule change, both move together or neither does.
+ *
+ * Pure arithmetic, per CLAUDE.md's rule for this package -- no DOM, no `window`, no Phaser. The
+ * caller passes the viewport in; reading `innerWidth` stays in apps/game/src/ui/stage.ts.
+ */
+
+/**
+ * World pixels per tile. The art moved from 16px to 32px tiles; the map stayed 60x42 TILES and the
+ * level was never retuned, because everything written against this is a fraction of a tile rather
+ * than a pixel count. Keep it that way: the next rescale should be this one constant.
+ */
+export const TILE = 32;
+
+/** The frame drawn around the world: a 3px border all round plus the numbered header strip. */
+export const FRAME = { border: 3, header: 44 } as const;
+
+/**
+ * Breathing room between the frame and the window edge. A phone gets none: 32px of a 390px screen
+ * is a whole zoom step, and losing it drops the world from 2x to 1x, which is the difference
+ * between 32px tiles and 16px ones.
+ */
+export const MARGIN = { landscape: 16, portrait: 0 } as const;
+
+/** Share of a portrait screen the world takes; the rest is the docked panel strip (decision D5). */
+export const PORTRAIT_WORLD = 0.72;
+
+/**
+ * The smallest camera worth playing on: a phone still shows about eleven tiles across.
+ *
+ * Eleven, not the twelve the 16px build floored at, because this is also the floor the view is
+ * clamped UP to. The narrowest width the game is built for is 375px (BRAND_AND_UI), which leaves
+ * 369 CSS px inside the frame, and at zoom 1 that is 11.5 tiles. A twelve-tile floor would make
+ * the canvas 384 CSS px wide inside a 375px window -- a horizontal scrollbar on a phone, which
+ * e2e/ui.spec.ts rightly fails on.
+ */
+export const MIN_VIEW = { width: TILE * 11, height: TILE * 6.75 } as const;
+/** The largest, so a desktop player does not see most of the map at once: 40x25 of the 60x42. */
+export const MAX_VIEW = { width: TILE * 40, height: TILE * 25 } as const;
+/**
+ * A 32px tile should read at 32-64 CSS px, so never magnify past 2.
+ *
+ * ART_PRODUCTION section 1 proposed 1.5x here, which would have kept both the old field of view
+ * (26x15 tiles) and the old apparent tile size (48 CSS px) across the move to 32px art. It cannot
+ * be done. The canvas is scaled in CSS over a nearest-sampled backing store, so a 1.5x scale draws
+ * every other source pixel two CSS pixels wide on any DPR-1 display: the shimmer BRAND_AND_UI
+ * forbids, and a direct violation of the two e2e tests that assert a whole number of CSS pixels per
+ * game pixel (e2e/smoke.spec.ts, e2e/world.spec.ts). Letterboxing to reach an exact zoom is out for
+ * the same reason -- e2e/world.spec.ts also asserts the canvas fills its frame.
+ *
+ * So the zoom stays a whole number and the field of view moves instead. Of the two whole numbers:
+ *   zoom 1  -- 32 CSS px per tile, ~39 tiles across at 1280px wide. Half the map on screen at once,
+ *              and every sprite SMALLER on screen than it is today, which spends the remaster's
+ *              four times the detail on making everything harder to see.
+ *   zoom 2  -- 64 CSS px per tile, ~19 tiles across at 1280px wide, ~29 at 1920px.
+ * Taken: zoom 2.
+ *
+ * NOTE THAT "~19 TILES ACROSS AT 1280" HAS BEEN WRITTEN HERE SINCE THE REMASTER. The art tooling
+ * spent three rounds composing against 26x15 -- the figure from the ABANDONED 1.5x option two
+ * paragraphs up -- because it quoted a comment of its own instead of reading this one. That is the
+ * whole argument for `cameraFor()` below: a number both sides derive cannot drift from a number one
+ * side remembers.
+ */
+export const MAX_ZOOM = 2;
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+export interface StageFit {
+  /** Whole CSS pixels per game pixel. */
+  zoom: number;
+  /** Camera size in game pixels. */
+  view: Size;
+}
+
+/** What the camera shows, for one viewport, in every unit anyone has asked for. */
+export interface Camera extends StageFit {
+  portrait: boolean;
+  /** The space left for the world once the frame, header and margins are taken out. */
+  available: Size;
+  /** The camera in TILES, which is the unit the map and the art direction are written in. */
+  tiles: Size;
+}
+
+const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
+
+/**
+ * Picks a whole-CSS-pixel zoom and then derives the camera from whatever space is left, so the
+ * canvas fills its frame at every size instead of being letterboxed.
+ *
+ * The previous rule floored the zoom in DEVICE pixels against a fixed 480x270 camera, which cannot
+ * be shown at a whole zoom on a phone: a 390px screen at DPR 3 fitted 2.44 and floored to 2, giving
+ * a 320x180 canvas, and at DPR 2 it floored to 1 and gave 240x135 — a world occupying a third of
+ * the screen. Choosing the zoom in CSS pixels and letting the camera grow keeps one game pixel an
+ * exact whole number of CSS pixels (which is what keeps the art crisp) while filling the space.
+ */
+export function stageFit(
+  available: Size,
+  limits: { min: Size; max: Size; maxZoom: number } = {
+    min: MIN_VIEW,
+    max: MAX_VIEW,
+    maxZoom: MAX_ZOOM,
+  },
+): StageFit {
+  // The biggest whole zoom that still shows the minimum camera, capped so tiles stay tile-sized.
+  const zoom = clamp(
+    Math.min(
+      Math.floor(available.width / limits.min.width),
+      Math.floor(available.height / limits.min.height),
+    ),
+    1,
+    limits.maxZoom,
+  );
+  return {
+    zoom,
+    view: {
+      width: clamp(Math.floor(available.width / zoom), limits.min.width, limits.max.width),
+      height: clamp(Math.floor(available.height / zoom), limits.min.height, limits.max.height),
+    },
+  };
+}
+
+/**
+ * The space the world gets inside a viewport, once the frame, the header strip and the margins are
+ * taken out — and, in portrait, once the docked panel strip below the world has had its share.
+ */
+export function availableFor(viewport: Size): { portrait: boolean; available: Size } {
+  const portrait = viewport.height > viewport.width;
+  const margin = portrait ? MARGIN.portrait : MARGIN.landscape;
+  const sides = FRAME.border * 2 + margin * 2;
+  return {
+    portrait,
+    available: {
+      width: Math.max(1, viewport.width - sides),
+      height: Math.max(
+        1,
+        (portrait ? viewport.height * PORTRAIT_WORLD : viewport.height) - (sides + FRAME.header),
+      ),
+    },
+  };
+}
+
+/**
+ * THE ONE ANSWER. Give it a CSS viewport, get back what the camera actually shows — including the
+ * size in tiles, which is the unit every composition decision is made in and the unit that was
+ * wrong. Anything deciding where to put a tree, how wide a road may be, or which columns close the
+ * top of a frame must call this rather than quoting a number.
+ */
+export function cameraFor(viewport: Size): Camera {
+  const { portrait, available } = availableFor(viewport);
+  const { zoom, view } = stageFit(available);
+  return {
+    portrait,
+    available,
+    zoom,
+    view,
+    tiles: { width: view.width / TILE, height: view.height / TILE },
+  };
+}
+
+/**
+ * The viewports the project reviews at, named, so tooling and tests stop inventing their own.
+ * These are the three widths docs/UX_REVIEW.md and the e2e capture spec use, plus the landscape
+ * phone that keeps turning out to be the worst case for anything docked to the side.
+ */
+/**
+ * Width of the title screen's copy column, in CSS pixels, at --otp-ui 1.
+ *
+ * It is here rather than only in screens.css because the art tooling has to know how much of the
+ * hero frame a visitor CANNOT see: in landscape this column is opaque over the left quarter of the
+ * camera, so a tree planted behind it is a tree nobody looks at. e2e/css-contract.spec.ts asserts
+ * the stylesheet stays at or under 310px, which is what keeps these two in step.
+ */
+export const TITLE_CARD_W = 306;
+
+export const REFERENCE_VIEWPORTS = {
+  desktop: { width: 1280, height: 800 },
+  tablet: { width: 768, height: 1024 },
+  phone: { width: 375, height: 812 },
+  phoneLandscape: { width: 844, height: 390 },
+} as const satisfies Record<string, Size>;
+
+/**
+ * The tile columns of the title camera a landscape visitor can actually SEE.
+ *
+ * The copy column is opaque over the left end of the frame, so canopy counted across the whole row
+ * flatters itself: a framing pass was credited with nine closed columns of which five were off the
+ * right of the camera and the rest were behind the card, while the middle of the picture carried an
+ * unbroken seven-column hole. Returns a half-open range [from, to) in tile columns from the
+ * camera's left edge.
+ *
+ * The card's left edge and the canvas's left edge coincide (both sit one border-plus-margin in), so
+ * the hidden width is simply the card's own width over the CSS pixels a tile occupies.
+ */
+export function visibleTitleColumns(viewport: Size = REFERENCE_VIEWPORTS.desktop): {
+  from: number;
+  to: number;
+} {
+  const cam = cameraFor(viewport);
+  // Portrait docks the card BELOW the world, so nothing is hidden horizontally.
+  if (cam.portrait) return { from: 0, to: cam.tiles.width };
+  return { from: TITLE_CARD_W / (TILE * cam.zoom), to: cam.tiles.width };
+}

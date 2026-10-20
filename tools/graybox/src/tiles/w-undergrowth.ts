@@ -139,6 +139,8 @@
  *   them by. `toadstool-ring` is two caps, not three.
  *
  * ON THE SIX-AXIS SCORE, SO NOBODY SPENDS A ROUND UNDOING THIS. Measured on a 26x15 camera of these
+ * (the camera is really 19.41 x 11.22 tiles -- same aspect, a third fewer tiles, so the luma shares
+ * below stand and only the absolute tile counts would move)
  * tiles alone, the pass is WORSE: distance 1.123 to 1.177, deep shade 4.97 to 4.51, keyline 3.91 to
  * 3.29, spread 30.98 to 29.08, only edge density up at 10.17 to 10.63. That is the arithmetic of
  * lightening the objects and it was predicted before it was measured. The counter-evidence is a
@@ -171,7 +173,8 @@
  * **Measured before and after, with the lawn held constant.** This matters: `w-ground.ts` changed
  * during this pass and every tile here paints its own grass from it, so a straight before/after of
  * the finished tiles would have scored the lawn owner's work as mine. Both sides below are the
- * same six objects composited onto the same current grass, tiled to a 26x15 camera (the size the
+ * same six objects composited onto the same current grass, tiled to a 26x15 camera (really 19.41 x
+ * 11.22 -- same aspect, so these shares hold; see @otp/core camera.ts) (the size the
  * variety axis is calibrated for):
  *
  *     axis                          before   after   board   ratio after

@@ -5,12 +5,26 @@ export interface Vec {
   y: number;
 }
 
-/**
- * World pixels per tile. The art moved from 16px to 32px tiles; the map stayed 60x42 TILES and the
- * level was never retuned, because everything below this line is written as a fraction of a tile
- * rather than as a pixel count. Keep it that way: the next rescale should be this one constant.
+/*
+ * TILE and the camera geometry live in @otp/core now, and are re-exported here so every existing
+ * import keeps working. They moved because tools/graybox needs the SAME numbers and used to carry
+ * its own copy in a comment -- which was wrong by a third for three rounds (see camera.ts).
  */
-export const TILE = 32;
+export {
+  TILE,
+  MIN_VIEW,
+  MAX_VIEW,
+  MAX_ZOOM,
+  stageFit,
+  availableFor,
+  cameraFor,
+  FRAME,
+  MARGIN,
+  PORTRAIT_WORLD,
+  REFERENCE_VIEWPORTS,
+} from '@otp/core';
+export type { StageFit, Camera, Size } from '@otp/core';
+import { TILE } from '@otp/core';
 
 /**
  * Red's collision box, in pixels relative to her position (feet centre).
@@ -113,85 +127,6 @@ export const overlaps = (point: Vec, rect: Rect): boolean =>
   point.x < rect.x + rect.width &&
   point.y >= rect.y &&
   point.y < rect.y + rect.height;
-
-/**
- * The smallest camera worth playing on: a phone still shows about eleven tiles across.
- *
- * Eleven, not the twelve the 16px build floored at, because this is also the floor the view is
- * clamped UP to. The narrowest width the game is built for is 375px (BRAND_AND_UI), which leaves
- * 369 CSS px inside the frame, and at zoom 1 that is 11.5 tiles. A twelve-tile floor would make
- * the canvas 384 CSS px wide inside a 375px window -- a horizontal scrollbar on a phone, which
- * e2e/ui.spec.ts rightly fails on.
- */
-export const MIN_VIEW = { width: TILE * 11, height: TILE * 6.75 } as const;
-/** The largest, so a desktop player does not see most of the map at once: 40x25 of the 60x42. */
-export const MAX_VIEW = { width: TILE * 40, height: TILE * 25 } as const;
-/**
- * A 32px tile should read at 32-64 CSS px, so never magnify past 2.
- *
- * ART_PRODUCTION section 1 proposed 1.5x here, which would have kept both the old field of view
- * (26x15 tiles) and the old apparent tile size (48 CSS px) across the move to 32px art. It cannot
- * be done. The canvas is scaled in CSS over a nearest-sampled backing store, so a 1.5x scale draws
- * every other source pixel two CSS pixels wide on any DPR-1 display: the shimmer BRAND_AND_UI
- * forbids, and a direct violation of the two e2e tests that assert a whole number of CSS pixels per
- * game pixel (e2e/smoke.spec.ts, e2e/world.spec.ts). Letterboxing to reach an exact zoom is out for
- * the same reason -- e2e/world.spec.ts also asserts the canvas fills its frame.
- *
- * So the zoom stays a whole number and the field of view moves instead. Of the two whole numbers:
- *   zoom 1  -- 32 CSS px per tile, ~39 tiles across at 1280px wide. Half the map on screen at once,
- *              and every sprite SMALLER on screen than it is today, which spends the remaster's
- *              four times the detail on making everything harder to see.
- *   zoom 2  -- 64 CSS px per tile, ~19 tiles across at 1280px wide, ~29 at 1920px.
- * Taken: zoom 2. The cost is a field of view about a quarter narrower in tiles than the 16px build
- * at the same window size; the gain is that the new detail is actually visible, and that a phone is
- * barely touched -- it drops from 2x to 1x, which is the same 32 CSS px per tile and about the
- * same eleven or twelve tiles across as before, with four times the pixels inside them.
- */
-export const MAX_ZOOM = 2;
-
-export interface StageFit {
-  /** Whole CSS pixels per game pixel. */
-  zoom: number;
-  /** Camera size in game pixels. */
-  view: { width: number; height: number };
-}
-
-/**
- * Picks a whole-CSS-pixel zoom and then derives the camera from whatever space is left, so the
- * canvas fills its frame at every size instead of being letterboxed.
- *
- * The previous rule floored the zoom in DEVICE pixels against a fixed 480x270 camera, which cannot
- * be shown at a whole zoom on a phone: a 390px screen at DPR 3 fitted 2.44 and floored to 2, giving
- * a 320x180 canvas, and at DPR 2 it floored to 1 and gave 240x135 — a world occupying a third of
- * the screen. Choosing the zoom in CSS pixels and letting the camera grow keeps one game pixel an
- * exact whole number of CSS pixels (which is what keeps the art crisp) while filling the space.
- */
-export function stageFit(
-  available: { width: number; height: number },
-  limits: {
-    min: { width: number; height: number };
-    max: { width: number; height: number };
-    maxZoom: number;
-  } = { min: MIN_VIEW, max: MAX_VIEW, maxZoom: MAX_ZOOM },
-): StageFit {
-  const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
-  // The biggest whole zoom that still shows the minimum camera, capped so tiles stay tile-sized.
-  const zoom = clamp(
-    Math.min(
-      Math.floor(available.width / limits.min.width),
-      Math.floor(available.height / limits.min.height),
-    ),
-    1,
-    limits.maxZoom,
-  );
-  return {
-    zoom,
-    view: {
-      width: clamp(Math.floor(available.width / zoom), limits.min.width, limits.max.width),
-      height: clamp(Math.floor(available.height / zoom), limits.min.height, limits.max.height),
-    },
-  };
-}
 
 /**
  * Half-size of the box Red moves inside before the camera takes any notice, in game pixels.

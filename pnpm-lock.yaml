@@ -61,7 +61,11 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
 
-  tools/graybox: {}
+  tools/graybox:
+    dependencies:
+      '@otp/core':
+        specifier: workspace:*
+        version: link:../../packages/core
 
   tools/sim:
     dependencies:
