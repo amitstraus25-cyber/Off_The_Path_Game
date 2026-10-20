@@ -6,6 +6,37 @@
  * more than a hundred times between them -- so each one has to be legible at a 26-tile camera and
  * uninteresting enough to survive being seen a hundred times.
  *
+ * 2026-10-20, SIXTH PASS: A SECOND PLANT, A TUFT THAT IS A TUFT, AND A GUARD ON ALL OF IT.
+ *
+ * DESIGN_BOARD section 3 asked for three things here and two of them had been answered on paper
+ * rather than in the frame.
+ *
+ * 1. "TWO OR THREE BUSH SILHOUETTES." There were three tiles and one plant. `bush`, `bush-low` and
+ *    `bush-tall` all came out of `plainBush` as a mound of clumps under a spray of broad spade
+ *    leaves, so they differed in FOOTPRINT and in nothing else -- identical solidity to three
+ *    decimals, identical perimeter-to-area. `bush-low` is now a different plant: a low clump of
+ *    long narrow fronds with lawn cutting between the points, leaning left over a skirt that runs
+ *    right. See the note above `BUSH_LOW`. Measured on the plant alone, `bush` against `bush-low`
+ *    -- which are 331 of the map's 353 bushes -- fell from 0.700 of their pixels shared to 0.520,
+ *    and `bush-low` against its own mirror from 0.832 to 0.692, so the map's flip now buys a frame
+ *    on 142 tiles where it bought almost nothing.
+ *
+ * 2. "THE GRASS HAS NO TUFTS AT ALL." The lawn's half of that is `w-ground.ts`'s and is done -- it
+ *    carries a chevron per variant now. This file's half was not: `blades()` drew ONE single-pixel
+ *    stroke per entry while its own docstring claimed "two or three blades crossing an object's
+ *    foot", and the widest connected mark any of these eight tiles put on bare lawn was 2 px. It is
+ *    now the same three-blade fan the lawn carries, at the same three tones: 7 px across, 3 or 4
+ *    tall, 17 to 27 px of ink a tile against 6 to 11. See `SPRIG` and `FOOT_TUFTS`.
+ *
+ * 3. "THE TOADSTOOL TILE REDUCED FROM THREE CAPS TO ONE OR TWO." Already done, verified at two, and
+ *    now held by the guard rather than by a docstring -- the docstring above `toadstool` still said
+ *    three, which is how a cut fix gets quietly re-reverted.
+ *
+ * THE GUARD IS AT THE FOOT OF THIS FILE and it found two faults in this pass's own work that the
+ * render did not: a tuft whose left blade came apart into a dash and a speck because
+ * `Math.round(-0.5)` is -0, and a first draft of the frond plant that was 87 per cent its own
+ * mirror. Neither is visible at zoom 9 and neither is anything the six axes can see.
+ *
  * 2026-10-20, FIFTH PASS: THE BUSH IS A BRIGHT OBJECT WITH DARK CUT INTO IT, which is the way round
  * the board draws it and the opposite of what the fourth pass shipped.
  *
@@ -418,18 +449,151 @@ function contactShadow(img: Img, cx: number, cy: number, rx: number): void {
   img.ellipse(cx + 0.6, cy, rx * 0.78, 2.2, tone('shadow', 0.12, 196));
 }
 
-/**
- * Two or three blades crossing an object's foot, so it grows out of the lawn instead of onto it.
+/*
+ * THE FOOT TUFT, and it is a tuft now rather than three unrelated strokes.
  *
- * Toned down from the previous pass, which drew them in `grass` 1 and `grass` 0 -- a 35-level step
- * against the field, three times per tile, for six pixels of storytelling. They now start a third
- * of the way up the ramp and darken as they fall, which still reads as a blade against the lawn's
- * lit base but stops each one registering as six separate edges.
+ * What this used to draw: one blade per entry in the list, a single pixel wide, three tall, bent
+ * one pixel right at the root. Three of those scattered along the bottom of a tile is not a tuft,
+ * it is three dashes, and the docstring that called them "two or three blades crossing an object's
+ * foot" had been describing an intention rather than the drawing for three passes. Measured off the
+ * tiles: the biggest connected mark any of these six plants put on bare lawn was 2 px wide, and
+ * `flower-red`'s pair landed inside the contact shadow where nothing of them reads at all.
+ *
+ * The board's tuft is one drawing and `tiles/w-ground.ts` has already measured it, off
+ * `240 650 100 80 9`: "a fan of four or five short dark strokes springing from one point, about
+ * seven of our pixels across and four tall". The lawn carries that mark now -- one chevron per
+ * grass variant -- and the plants' feet carried dashes, so the two halves of the same world were
+ * drawing grass two different ways. These are the same three blades at the same three tones.
+ *
+ * WHY THIS FILE REPEATS THE SHAPE INSTEAD OF IMPORTING IT. `CHEVRON` and `chevron()` are private to
+ * `w-ground.ts`, which is not this round's file, and that file's chevron writes a LUMA into its
+ * mark field rather than a colour -- it is built for a surface that has to resolve against its own
+ * tone field, and these tiles paint onto finished pixels. The two halves agree by value today
+ * (`tone('grass', 0.34 - i * 0.1)`, which `w-ground.ts` records as "the same three this project's
+ * decor tiles have always cut their tufts in") and that agreement is currently maintained by hand.
+ * It wants one home in `paint.ts`, the way `rose`, `ember` and `rust` got one; raised as an ask.
+ *
+ * A TUFT STAYS WHOLE INSIDE ITS TILE, which is the one place this must NOT copy the lawn. The
+ * lawn's chevrons deliberately wrap across a tile edge, because a grass tile is laid against its
+ * own kind and a mark cut by the pitch is harder to find than one centred in every square. These
+ * tiles are scattered, never tiled, so a wrapped tuft would print half a plant against whatever
+ * grass tile happens to sit next door. Every root below is placed so the whole fan lands inside
+ * 1..30 on both axes; the guard at the foot of this file checks it rather than trusting the
+ * arithmetic.
+ */
+const TUFT_TOP = 0.34;
+const TUFT_STEP = 0.1;
+
+/**
+ * `[base dx, tip dx, height relative to the centre blade]`, the lawn's own chevron.
+ *
+ * The centre blade is tallest and vertical; the two flankers spring from beside it and splay out,
+ * so the fan is seven pixels across at the tips and one at the root. Three and not five: five welds
+ * into one dark mass inside seven pixels and the tuft reads as a small mushroom, which is the
+ * failure `w-ground.ts` records from the same experiment.
+ */
+const SPRIG: readonly (readonly [number, number, number])[] = [
+  [0, 0, 0],
+  [-1, -2, -1],
+  [1, 2, -1],
+];
+
+/**
+ * Round away from zero, which `Math.round` does not do and which this fan needs.
+ *
+ * `Math.round(0.5)` is 1 and `Math.round(-0.5)` is -0: it rounds half UP, not away from zero, so a
+ * splay curve that is symmetric in the arithmetic comes out asymmetric on the pixels. The first
+ * render of this tuft had it exactly: the right blade stepped 9, 8, 7 across three rows and the
+ * left one stepped 3, 5, 5, which leaves the tip a single pixel two columns clear of the rest of
+ * the mark. The guard at the foot of this file is what found it -- it was not visible at zoom 9 and
+ * nothing in the six axes can see a one-pixel hole.
+ */
+const away = (v: number): number => Math.sign(v) * Math.round(Math.abs(v));
+
+/**
+ * One tuft per entry: `[x, y, h]` is the ROOT of the centre blade and its height, not the top.
+ *
+ * `i` counts DOWN from the point, which is where the tone ramp starts: a blade is lightest where it
+ * catches the light and darkest at the root. The sideways step is squared in the remaining height,
+ * so a blade stands vertical for its lower half and gives way only near its point -- a blade that
+ * steps sideways on every row is a 45-degree dash, and a handful of those is pen hatching.
  */
 function blades(img: Img, spots: readonly (readonly [number, number, number])[]): void {
-  for (const [x, y, h] of spots)
-    for (let i = 0; i < h; i++) img.px(x + (i > 1 ? 1 : 0), y + i, tone('grass', 0.34 - i * 0.1));
+  for (const [bx, by, h] of spots)
+    for (const [bdx, tdx, dh] of SPRIG) {
+      const n = h + dh;
+      // A BLADE MAY NOT STEP SIDEWAYS FASTER THAN ONE PIXEL A ROW, so the splay is capped by the
+      // blade's own height. Without the cap a short flanker reaches its full splay in a single row
+      // and lands two columns clear of the pixel below it: the stroke comes apart into a dash and a
+      // speck, which is what the three-row tufts did until the guard counted the marks. It also
+      // gives the two sizes their own silhouettes for free -- the four-row fan is seven across, the
+      // three-row one five -- rather than making the small one a clipped copy of the big one.
+      const splay = Math.sign(tdx) * Math.min(Math.abs(tdx), n - 1);
+      for (let i = 0; i < n; i++) {
+        const u = n < 2 ? 1 : i / (n - 1);
+        const x = bx + bdx + away(splay * (1 - u) ** 2);
+        img.px(x, by - (n - 1) + i, tone('grass', TUFT_TOP - i * TUFT_STEP));
+      }
+    }
 }
+
+/**
+ * Where each tile's tufts stand, in one table rather than eight literals down the file.
+ *
+ * Gathered here for two reasons. The first is that the thing DESIGN_BOARD section 3 asks for is
+ * "positioned differently in each", which is a statement about the SET and cannot be read off eight
+ * separate call sites. The second is that the guard at the foot of this file checks the fan's shape
+ * and its distance from the tile edge, and a guard that cannot see the data it is guarding is a
+ * guard on something else.
+ *
+ * `[x, y, h]` is the ROOT of the centre blade and its height. A four-row fan is seven pixels across
+ * and a three-row one is five -- the splay is capped by the blade's own height, see `blades` -- so a
+ * root covers `x-3 .. x+3` at worst and `y-3 .. y`. Every root below keeps the whole mark inside
+ * 1..30 on both axes (`x` in 4..27, `y` in 4..30), because a mark on a tile's own edge prints
+ * against whatever grass tile is laid next door, and these tiles are scattered rather than tiled.
+ *
+ * Two or three per tile, never more. These are 400-odd tiles of the map between them; a fourth tuft
+ * buys nothing and starts to read as a lawn of its own inside the square.
+ */
+type Tufts = readonly (readonly [number, number, number])[];
+
+const FOOT_TUFTS: Record<string, Tufts> = {
+  bush: [
+    [6, 27, 4],
+    [15, 29, 3],
+    [24, 28, 4],
+  ],
+  'bush-low': [
+    [5, 28, 4],
+    [16, 30, 3],
+    [26, 29, 3],
+  ],
+  'bush-tall': [
+    [9, 29, 4],
+    [21, 28, 3],
+  ],
+  'flower-white': [
+    [7, 28, 4],
+    [20, 29, 3],
+  ],
+  'flower-pink': [
+    [5, 28, 3],
+    [27, 29, 4],
+  ],
+  'flower-red': [
+    [8, 29, 4],
+    [22, 28, 3],
+  ],
+  rock: [
+    [5, 26, 3],
+    [26, 29, 4],
+  ],
+  'toadstool-ring': [
+    [5, 28, 3],
+    [19, 29, 4],
+    [26, 27, 3],
+  ],
+};
 
 /* ------------------------------------------------------------------------------ the leaf masses */
 
@@ -1367,25 +1531,52 @@ const BUSH: readonly Lobe[] = [
 ];
 
 /*
- * `bush-low`: a wide bank in the bottom half of the tile, two humps of different size with a deep V
- * between them. The board's garden bushes are plainly wider than they are tall -- about 1.6 to 1 in
- * `1180 403 209 97 6` -- and ours were all 1 to 1, so a scatter of them read as a dot grid however
- * well each dot was drawn.
+ * `bush-low`: A SECOND PLANT, not a third footprint of the first one.
  *
- * The lawn above it is the point as much as the mass below is: a tile whose object does not reach
- * the top gives the map owner something that banks along a wall or a path edge without walling it
- * off, which is what DESIGN_BOARD asks for under the cottage.
+ * 2026-10-20, SIXTH PASS. DESIGN_BOARD section 3 asks for "two or three bush silhouettes" and the
+ * three tiles here answered it with three FOOTPRINTS of one plant: `bush` fills its tile,
+ * `bush-low` banked along the bottom, `bush-tall` stood up. Every one of them was a mound of clumps
+ * under a spray of spade leaves, so all three came out of `plainBush` with the same solidity to
+ * three decimal places -- 0.775, 0.762, 0.779 -- and the same perimeter-to-area ratio, 10.5 to
+ * 10.8. Measured where it matters: `bush` and `bush-low` are 189 and 142 of the map's 353 bushes
+ * and their silhouettes agreed on 70 per cent of their pixels. At a 26-tile camera that is one
+ * plant, and the spawn frame shows it -- a row of four by the stall reads as four copies.
+ *
+ * TWO HYPOTHESES ARE ALREADY DISPROVEN HERE AND NEITHER IS BEING RE-RUN. Mirroring is a no-op on a
+ * near-circular disc, and thinning the fine octave of the layout noise did not change the spacing.
+ * Both were attempts to vary the SAMPLING of one shape. The shape is what has to change.
+ *
+ * So this is a different plant rather than a shorter one: a low clump of long splayed FRONDS. Seven
+ * small clumps make a base that barely shows, and nine narrow blades -- half-width 2.3 to 2.7
+ * against `bush`'s 3.4, and half again as long -- fan up and out of it, so what you see is a spray
+ * of separate points with lawn cutting between them down to the root. `bush` is a mass with leaves
+ * lying on it; this is leaves with a mass behind them. The board draws both: the right-hand plant
+ * in `1218 400 190 90 7` is a rosette of bright blades radiating from one centre with the dark
+ * showing all the way between them, where the left-hand one is a filled mound.
+ *
+ * It is still a wide low bank and still leaves lawn above it -- the highest tip is row 14 and the
+ * whole plant is about 28 by 16 against `bush`'s 26 by 23 -- so the map's use of it along the
+ * cottage wall is unchanged.
+ *
+ * THE MESH IS THE FAILURE MODE AND THE LENGTHS ARE WHAT AVOID IT. This file's own note on
+ * `rosette` records an outer ring of seven short blades plus an inner ring of five printing a
+ * connected dark net -- "lighter patches behind a dark chain-link fence" -- because `leafBlades`
+ * darkens every mass pixel that touches a blade and short blades packed round one centre leave the
+ * mass as a network rather than as slivers. These blades spring from a base nine pixels wide
+ * instead of from a point, and they are six to nine long, so the gaps between them WIDEN outwards
+ * into lawn notches instead of closing into a net. Rendered and looked at, not assumed.
  */
 const BUSH_LOW: readonly Lobe[] = [
-  { x: 7.0, y: 19.0, r: 3.0, band: 2 },
-  { x: 11.4, y: 17.6, r: 3.4, band: 2 },
-  { x: 16.4, y: 19.4, r: 3.2, band: 1 },
-  { x: 20.8, y: 17.8, r: 3.0, band: 2 },
-  { x: 24.0, y: 20.4, r: 2.8, band: 1 },
-  { x: 8.6, y: 23.2, r: 3.2, band: 0 },
-  { x: 13.4, y: 23.6, r: 3.2, band: 0 },
-  { x: 18.4, y: 23.6, r: 3.0, band: 0 },
-  { x: 22.6, y: 23.4, r: 3.0, band: 0 },
+  { x: 10.6, y: 21.6, r: 3.0, band: 2 },
+  { x: 14.8, y: 20.8, r: 2.9, band: 2 },
+  { x: 18.8, y: 22.4, r: 2.7, band: 1 },
+  { x: 7.0, y: 22.8, r: 2.6, band: 1 },
+  // The foot, staggered in y rather than ruled. Four clumps on one row leave `seat()` a straight
+  // horizontal band to clamp dark and the plant comes out standing on a brick.
+  { x: 12.2, y: 24.0, r: 2.8, band: 0 },
+  { x: 17.0, y: 24.6, r: 2.6, band: 0 },
+  { x: 21.4, y: 23.6, r: 2.4, band: 0 },
+  { x: 24.4, y: 24.8, r: 2.0, band: 0 },
 ];
 
 /*
@@ -1409,13 +1600,6 @@ const BUSH_TALL: readonly Lobe[] = [
   { x: 17.4, y: 24, r: 2.8, band: 0 },
 ];
 
-/**
- * One plain bush: mass, one light, seated, weathered, then the blades, then ringed and planted.
- *
- * `shadowAt` is the contact shadow's own centre and width, which is not the tile's centre any more:
- * a bush that leans has its weight somewhere other than the middle, and a shadow under the middle
- * of a lopsided plant is the fastest way to make it float.
- */
 /**
  * SIX PLANTS, ONE GREEN. The fourth pass lifted the plain bushes and the flower bushes by different
  * amounts and seated them to different depths, on the argument that "a bloom is the bright mark on
@@ -1502,6 +1686,51 @@ const BUSH_LIFT = 0.3;
  */
 const BUSH_SLOPE = 0.62;
 
+/**
+ * The plant alone, ringed on its own transparent scratch, before it meets the lawn.
+ *
+ * Split out of `plainBush` so the guard at the foot of this file can measure a SILHOUETTE. A
+ * finished tile is opaque ground with the plant blitted onto it, so the only way to recover the
+ * plant's outline from one is to diff it against the bare grass -- and that diff also catches the
+ * contact shadow, a solid ellipse that fills in exactly the notches between the leaf points this
+ * round is about. Measured both ways on the same tiles, the shadow moves a bush's solidity by six
+ * hundredths and its cross-tile overlap by a tenth, which is the whole size of the effect being
+ * guarded. The alpha of this scratch is the plant and nothing else.
+ */
+const plainBushPlant = (list: readonly Lobe[], blds: readonly Blade[], seed: number): Img => {
+  const m = mass();
+  foliage(m, list, seed);
+  lift(m, BUSH_LIFT);
+  slope(m, BUSH_SLOPE);
+  // Three rows rather than four, and the reason is the leaves. `seat()` clamps the bottom of the
+  // mass to a fixed dark and `leafBlades` then rises OVER that, so at depth 4 the lowest leaf on
+  // the plant started from -0.30 and the bottom quarter of every bush came out as one black band
+  // with no leaf in it. Three rows still seats the plant -- the contact shadow under it does most
+  // of that work anyway -- and leaves the lowest row of leaves somewhere to rise from.
+  // `fall` 0.62 rather than the flower bushes' full depth, and this is the black-skirt fix.
+  //
+  // At full fall the bottom row of the mass is clamped to -0.30, luma 51, which is thirteen levels
+  // under the channels and eight under the keyline drawn round the whole plant: the foot of every
+  // bush was a solid band darker than its own outline. The board's bush foot is dark and it is
+  // dark in the way a leaf underside is dark -- crop `1218 400 190 90` and there are plainly lit
+  // leaves hard against its bottom rim with the near-black only in the scallop between them. At
+  // 0.62 the floor is -0.13, luma 68, which sits above the channels and leaves the lowest row of
+  // leaves somewhere to rise from. The contact shadow under the plant does the seating.
+  seat(m, 3, 3, 0.62);
+  weather(m, seed + 77, 0.07);
+  leafBlades(m, blds);
+  const leaves = render(m, leafTone);
+  ring(leaves, LEAF_LINE);
+  return leaves;
+};
+
+/**
+ * One plain bush: the lawn, its shadow, the plant, and the tufts that cross its foot.
+ *
+ * `shadowAt` is the contact shadow's own centre and width, which is not the tile's centre any more:
+ * a bush that leans has its weight somewhere other than the middle, and a shadow under the middle
+ * of a lopsided plant is the fastest way to make it float.
+ */
 const plainBush = (
   list: readonly Lobe[],
   blds: readonly Blade[],
@@ -1513,30 +1742,7 @@ const plainBush = (
   function paintPlainBush(img) {
     ground(img, variant);
     contactShadow(img, shadowAt[0], shadowAt[1], shadowAt[2]);
-    const m = mass();
-    foliage(m, list, seed);
-    lift(m, BUSH_LIFT);
-    slope(m, BUSH_SLOPE);
-    // Three rows rather than four, and the reason is the leaves. `seat()` clamps the bottom of the
-    // mass to a fixed dark and `leafBlades` then rises OVER that, so at depth 4 the lowest leaf on
-    // the plant started from -0.30 and the bottom quarter of every bush came out as one black band
-    // with no leaf in it. Three rows still seats the plant -- the contact shadow under it does most
-    // of that work anyway -- and leaves the lowest row of leaves somewhere to rise from.
-    // `fall` 0.62 rather than the flower bushes' full depth, and this is the black-skirt fix.
-    //
-    // At full fall the bottom row of the mass is clamped to -0.30, luma 51, which is thirteen levels
-    // under the channels and eight under the keyline drawn round the whole plant: the foot of every
-    // bush was a solid band darker than its own outline. The board's bush foot is dark and it is
-    // dark in the way a leaf underside is dark -- crop `1218 400 190 90` and there are plainly lit
-    // leaves hard against its bottom rim with the near-black only in the scallop between them. At
-    // 0.62 the floor is -0.13, luma 68, which sits above the channels and leaves the lowest row of
-    // leaves somewhere to rise from. The contact shadow under the plant does the seating.
-    seat(m, 3, 3, 0.62);
-    weather(m, seed + 77, 0.07);
-    leafBlades(m, blds);
-    const leaves = render(m, leafTone);
-    ring(leaves, LEAF_LINE);
-    img.blit(leaves, 0, 0);
+    img.blit(plainBushPlant(list, blds, seed), 0, 0);
     blades(img, tufts);
   };
 
@@ -1629,21 +1835,44 @@ const BUSH_BLADES: readonly Blade[] = [
 ];
 
 /*
- * `bush-low`: a bank in the bottom half with lawn above it, 25 px across against 13 of height. The
- * leaves lie flatter -- nothing points straight up -- which is what makes it read as a thing banked
- * against something rather than a bush that got shorter.
+ * `bush-low`'s fronds: nine of them, springing from a nine-pixel-wide base rather than from a
+ * point, fanning from due left round through vertical to due right.
+ *
+ * NARROW AND LONG, which is the opposite of what the fifth pass did to `bush` and is the whole
+ * reason the two plants no longer look alike. A `bush` leaf is a spade -- half-width 3.4, length
+ * 4 to 8, a quarter of the plant across -- and eight of them cover the mass. A frond here is
+ * half-width 2.3 to 2.7 and six to nine long, so it is a sixth of the plant across and twice as
+ * long as it is wide, and nine of them cover about half the mass and leave the rest as lawn
+ * between the points.
+ *
+ * In reading order, best-lit first, because `leafBlades` resolves an overlap in favour of the
+ * EARLIER blade: the up-and-left fronds come first and the down-and-right ones give up the pixel.
+ *
+ * Every tip is `base + len` along its own angle, computed rather than nudged, and the extremes are
+ * (3.2, 20.7) and (2.8, 24.0) on the left, (27.8, 20.6) and (27.8, 24.5) on the right, (12.6, 14.4)
+ * at the top and (11.8, 28.2) at the bottom. `ring()` adds one pixel above and left and two below
+ * and right of the waist, so those land inside 1..30 on both axes -- and the guard at the foot of
+ * this file checks the rendered tile rather than this paragraph.
  */
 const BUSH_LOW_BLADES: readonly Blade[] = [
-  leaf(10.0, 19.6, 0.56, 6.4, 0.66, 3.4),
-  leaf(14.4, 19.0, 0.72, 5.4, 0.6, 3.3),
-  leaf(19.4, 19.2, 0.8, 5.2, 0.52, 3.2),
-  leaf(22.6, 20.4, 0.93, 4.6, 0.46, 3.0),
-  // Staggered in y, which the first layout was not: four leaves on one row left a straight dark
-  // channel the width of the tile between them and the row above, and a horizontal bar across a
-  // plant reads as a mouth. Half a pixel of stagger is enough to break it.
-  leaf(10.6, 22.6, 0.4, 5.4, 0.42, 3.3),
-  leaf(16.0, 23.4, 0.24, 4.6, 0.36, 3.3),
-  leaf(21.0, 23.0, 0.12, 4.8, 0.34, 3.1),
+  leaf(12.0, 23.0, 0.66, 9.6, 0.7, 2.6),
+  leaf(14.6, 22.2, 0.73, 9.0, 0.66, 2.7),
+  leaf(10.0, 23.6, 0.58, 8.0, 0.62, 2.5),
+  leaf(17.4, 22.8, 0.79, 7.2, 0.56, 2.6),
+  leaf(8.6, 24.6, 0.52, 5.8, 0.48, 2.3),
+  leaf(20.2, 23.4, 0.87, 7.0, 0.46, 2.5),
+  leaf(21.8, 24.4, 0.94, 6.0, 0.4, 2.4),
+  leaf(22.6, 25.6, 1.0, 4.8, 0.34, 2.2),
+  // TWO FRONDS DOWN ONTO THE BOTTOM RIM, and they are the fix for a dark bar the first render of
+  // this layout printed right across the plant's foot. With every blade springing UPWARD, the row
+  // of clumps under them stayed bare mass, `seat()` clamped its bottom three rows dark, and the
+  // result was a straight horizontal near-black band the width of the plant -- a mouth. `bush`
+  // never shows it because two of its leaves point down and reach its own bottom rim. The board
+  // agrees: crop `1218 400 190 90 7` and there are plainly lit leaves hard against the bottom edge
+  // of both its bushes, with the near-black only in the scallops between them. These two also
+  // break the straight channel the radiating fronds leave up the middle.
+  leaf(11.4, 24.4, 0.3, 4.6, 0.42, 2.4),
+  leaf(16.6, 24.6, 0.21, 4.2, 0.36, 2.4),
 ];
 
 /*
@@ -1666,28 +1895,14 @@ const BUSH_TALL_BLADES: readonly Blade[] = [
   leaf(15.0, 23.8, 0.23, 4.6, 0.34, 3.0),
 ];
 
-const bushTile = plainBush(
-  BUSH,
-  BUSH_BLADES,
-  4100,
-  [15, 27, 12],
-  [
-    [6, 25, 3],
-    [14, 27, 3],
-    [24, 26, 3],
-  ],
-);
+const bushTile = plainBush(BUSH, BUSH_BLADES, 4100, [15, 27, 12], FOOT_TUFTS['bush']!);
 
 const bushLowTile = plainBush(
   BUSH_LOW,
   BUSH_LOW_BLADES,
   4300,
   [16, 27, 12.5],
-  [
-    [4, 26, 3],
-    [16, 28, 3],
-    [28, 27, 3],
-  ],
+  FOOT_TUFTS['bush-low']!,
   1,
 );
 
@@ -1696,10 +1911,7 @@ const bushTallTile = plainBush(
   BUSH_TALL_BLADES,
   4400,
   [14, 27, 8],
-  [
-    [8, 27, 3],
-    [20, 27, 3],
-  ],
+  FOOT_TUFTS['bush-tall']!,
 );
 
 /* ---------------------------------------------------------------------------------- the flowers */
@@ -1744,10 +1956,7 @@ const moundFlower = (b: Petals): Painter =>
     bloom(plant, 24, 19, 2, b, -0.08);
     ring(plant, LEAF_LINE);
     img.blit(plant, 0, 0);
-    blades(img, [
-      [7, 26, 3],
-      [20, 27, 3],
-    ]);
+    blades(img, FOOT_TUFTS['flower-white']!);
   };
 
 /**
@@ -1799,10 +2008,7 @@ const sprawlFlower = (b: Petals): Painter =>
     budAt(plant, 20, 12, b);
     ring(plant, LEAF_LINE);
     img.blit(plant, 0, 0);
-    blades(img, [
-      [4, 26, 3],
-      [29, 27, 3],
-    ]);
+    blades(img, FOOT_TUFTS['flower-pink']!);
   };
 
 /**
@@ -1861,10 +2067,7 @@ const spireFlower = (b: Petals): Painter =>
     bloom(plant, 19, 19, 3, b, -0.04);
     ring(plant, LEAF_LINE);
     img.blit(plant, 0, 0);
-    blades(img, [
-      [8, 27, 3],
-      [22, 27, 3],
-    ]);
+    blades(img, FOOT_TUFTS['flower-red']!);
   };
 
 /* ------------------------------------------------------------------------------------- the rock */
@@ -2048,18 +2251,16 @@ const rockTile: Painter = (img) => {
   const stones = render(m, rockTone);
   ring(stones, ROCK_LINE);
   img.blit(stones, 0, 0);
-  blades(img, [
-    [3, 24, 3],
-    [26, 27, 3],
-  ]);
+  blades(img, FOOT_TUFTS['rock']!);
 };
 
 /* ------------------------------------------------------------------------------- the toadstools */
 
 /**
- * Cream stems under russet caps. Three to a tile rather than one -- `forest-map.ts` lays these
- * round a glade, and a cluster gives the ring a rhythm where a single mushroom gives it a dotted
- * line.
+ * Cream stems under russet caps, TWO to a tile -- see the note in `toadstoolRing` below, which is
+ * where the count lives and why. (This line used to say three, which is what the tile drew before
+ * the rash was cut, and a docstring that argues for the count the code no longer uses is how a
+ * reverted fix gets re-reverted. The guard at the foot of this file now holds the number.)
  *
  * Each toadstool is composed and ringed on its own scratch and planted back to front, so the front
  * one's line cuts the one behind it instead of the three of them sharing a silhouette.
@@ -2169,11 +2370,7 @@ const toadstoolRing: Painter = (img) => {
     [15, 15, true],
     [17, 19, false],
   ]);
-  blades(img, [
-    [5, 26, 3],
-    [19, 27, 3],
-    [27, 25, 3],
-  ]);
+  blades(img, FOOT_TUFTS['toadstool-ring']!);
 };
 
 /* ----------------------------------------------------------------------------------- the tiles */
@@ -2213,17 +2410,359 @@ export const UNDERGROWTH_TILES: Record<string, (img: Img) => void> = {
   // and the plant reads as a pink mass sitting ON the grass instead of dissolving into it.
   'flower-pink': sprawlFlower({ tone: rose, lo: 0, hi: 0.42, eye: (t) => tone('wall', t) }),
   'flower-red': spireFlower({ tone: ember, lo: 0.08, hi: 0.95, eye: (t) => tone('gold', t) }),
-  // Three bushes, three footprints, and a mirror that now does something. See the note above `BUSH`:
-  // the lever was never the scallop depth, it was that an ellipse stepped by 45 degrees is its own
-  // mirror, so half of `forest-map.ts`'s 273 placements were flipping a symmetric frame for nothing.
+  // TWO PLANTS IN THREE TILES, which is not what this comment used to claim. `bush` and `bush-tall`
+  // are one plant at two footprints -- a mound of clumps under a spray of broad spade leaves --
+  // and `bush-low` is now a second species: a low clump of long narrow fronds with lawn cutting
+  // between the points. See the note above `BUSH_LOW`. The map lays 189, 142 and 22 of them, so the
+  // second silhouette lands on 40 per cent of the bushes in the world.
+  //
+  // The mirror still buys a frame on top of that: none of the three is symmetric about any axis, so
+  // `forest-map.ts` flipping about half its decor gives six frames rather than three.
   //
   // `bush-low` and `bush-tall` are NEW NAMES, appended to the end of `TILE_NAMES`. Appending cannot
   // move an existing gid -- a gid is the index plus one -- so `map-forest.json` stays valid and no
-  // tile on the map shifts. They will not appear in the world until the map owner places them, and
-  // `pnpm graybox` has to be re-run by whoever owns the generated assets before they can be.
+  // tile on the map shifts. `pnpm graybox` has to be re-run by whoever owns the generated assets
+  // before any change in this file reaches the game.
   bush: bushTile,
   'bush-low': bushLowTile,
   'bush-tall': bushTallTile,
   rock: rockTile,
   'toadstool-ring': toadstoolRing,
 };
+
+/* ------------------------------------------------------------------------------- the guards */
+
+/*
+ * Three findings this round closed, checked on the rendered tiles rather than asserted in a
+ * docstring. The idiom is `w-trees.ts`'s crown guard: paint the thing, take a signature, throw with
+ * the numbers in the message. It runs at module load, so `pnpm graybox`, `pnpm world`, `pnpm score`
+ * and `pnpm preview` all fail loudly rather than writing a quietly reverted asset.
+ *
+ * Every bound here is TWO-SIDED, because each of these has a cheap one-sided way to pass that is
+ * worse than the fault:
+ *
+ *   - A tuft could satisfy "at least five pixels across" by growing into a bush at the plant's
+ *     foot, so it is also capped, and the mark count is capped at three a tile.
+ *   - Two bush silhouettes could stop overlapping by one of them shrinking to a pea, so each
+ *     plant's area is held in a band as well.
+ *   - The toadstool count is an equality, which is the only shape of bound that holds a number
+ *     somebody has already had to cut twice.
+ *
+ * WHAT EACH ONE IS ACTUALLY PROTECTING, so a future pass can tell a retune from a regression:
+ *
+ *   1. THE FOOT TUFT IS A FAN. It was three single-pixel dashes for three passes while the
+ *      docstring above it said "two or three blades crossing an object's foot". The thing being
+ *      held is the board's own measure, recorded in `w-ground.ts`: "about seven of our pixels
+ *      across and four tall".
+ *   2. THERE ARE TWO PLANTS. DESIGN_BOARD section 3 asks for "two or three bush silhouettes" and
+ *      three tiles of one plant at three footprints answered it on paper and not in the frame --
+ *      `bush` and `bush-low` are 331 of the map's 353 bushes and their silhouettes agreed on 70
+ *      per cent of their pixels. Measured on the PLANT alone, which is why `plainBushPlant` exists:
+ *      a diff against the bare lawn also catches the contact shadow, and the shadow is a solid
+ *      ellipse filling exactly the notches between the leaf points that carry the difference.
+ *   3. THE TOADSTOOL IS TWO CAPS. It was three, `forest-map.ts` stamped 58 tiles, and 174 red caps
+ *      in a forest whose board shows none in its Explore frame is the rash the client's note about
+ *      the landing screen named. The map is down to three stamps; this holds the other factor.
+ *
+ * And one invariant that is not a finding but is the easiest thing in this file to break by
+ * accident: NOTHING PAINTS ON A TILE'S OWN EDGE. These tiles are scattered, never tiled, so a
+ * keyline pixel or a blade tip on row 0 or column 31 prints a hard line against whatever grass tile
+ * is laid next door -- DESIGN_BOARD section 4.2, "the shared border ring". Checked by requiring
+ * every tile's 124 border pixels to be byte-identical to one of the four bare grass variants, which
+ * a clipped blade cannot be.
+ */
+
+/** The eight neighbours, for marks the eye reads as one stroke along a diagonal. */
+const RING8: readonly (readonly [number, number])[] = [
+  ...CROSS,
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+];
+
+/**
+ * Connected marks in a mask: width, height and pixel count each.
+ *
+ * `diagonal` picks the neighbourhood, and which one is right depends on what is being counted. A
+ * TUFT is eight-connected, because a blade that gives way near its tip steps a pixel sideways on
+ * every row and the eye reads that as one stroke; counting it four-connected reports a three-pixel
+ * blade as three marks. TWO TOADSTOOL CAPS are four-connected, because two domes that touch at a
+ * corner are still two mushrooms and eight-connectivity would weld them into one and hide exactly
+ * the thing the cap count is guarding.
+ */
+function marksOf(on: Uint8Array, diagonal = false): { w: number; h: number; n: number }[] {
+  const near = diagonal ? RING8 : CROSS;
+  const seen = new Uint8Array(AREA);
+  const out: { w: number; h: number; n: number }[] = [];
+  for (let s = 0; s < AREA; s++) {
+    if (!on[s] || seen[s]) continue;
+    const stack = [s];
+    seen[s] = 1;
+    let x0 = TILE;
+    let x1 = -1;
+    let y0 = TILE;
+    let y1 = -1;
+    let n = 0;
+    while (stack.length) {
+      const i = stack.pop()!;
+      const x = i % TILE;
+      const y = (i / TILE) | 0;
+      n += 1;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      for (const [dx, dy] of near) {
+        const jx = x + dx;
+        const jy = y + dy;
+        if (jx < 0 || jy < 0 || jx >= TILE || jy >= TILE) continue;
+        const j = jy * TILE + jx;
+        if (on[j] && !seen[j]) {
+          seen[j] = 1;
+          stack.push(j);
+        }
+      }
+    }
+    out.push({ w: x1 - x0 + 1, h: y1 - y0 + 1, n });
+  }
+  return out;
+}
+
+const opaqueMask = (img: Img): Uint8Array => {
+  const on = new Uint8Array(AREA);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) if (img.get(x, y)[3] > 0) on[y * TILE + x] = 1;
+  return on;
+};
+
+const mirrorMask = (on: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(AREA);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) out[y * TILE + x] = on[y * TILE + (TILE - 1 - x)]!;
+  return out;
+};
+
+/** Intersection over union of two silhouettes: 1 is the same shape, 0 is no shared pixel. */
+const overlapOf = (a: Uint8Array, b: Uint8Array): number => {
+  let both = 0;
+  let either = 0;
+  for (let i = 0; i < AREA; i++) {
+    if (a[i] || b[i]) either += 1;
+    if (a[i] && b[i]) both += 1;
+  }
+  return either === 0 ? 1 : both / either;
+};
+
+const paintedTile = (name: string): Img => {
+  const img = new Img(TILE, TILE);
+  UNDERGROWTH_TILES[name]!(img);
+  return img;
+};
+
+/* 1. The foot tuft is a fan, two or three to a tile, clear of every edge. */
+
+const TUFT_BOUNDS = { wide: [5, 9], tall: [3, 5], ink: [6, 16], perTile: [2, 3] } as const;
+
+for (const [name, spots] of Object.entries(FOOT_TUFTS)) {
+  const scratch = new Img(TILE, TILE);
+  blades(scratch, spots);
+  const on = opaqueMask(scratch);
+  const found = marksOf(on, true);
+  const say = `${name}: ${found.length} tuft(s) ${found.map((m) => `${m.w}x${m.h}:${m.n}px`).join(' ')}`;
+  if (spots.length < TUFT_BOUNDS.perTile[0] || spots.length > TUFT_BOUNDS.perTile[1])
+    throw new Error(
+      `A plant tile carries two or three foot tufts, never ${spots.length} (DESIGN_BOARD section 3). ${say}`,
+    );
+  if (found.length !== spots.length)
+    throw new Error(
+      `Two foot tufts have merged into one mark, which reads as a patch rather than as blades: ${say}.`,
+    );
+  for (const m of found)
+    if (
+      m.w < TUFT_BOUNDS.wide[0] ||
+      m.w > TUFT_BOUNDS.wide[1] ||
+      m.h < TUFT_BOUNDS.tall[0] ||
+      m.h > TUFT_BOUNDS.tall[1] ||
+      m.n < TUFT_BOUNDS.ink[0] ||
+      m.n > TUFT_BOUNDS.ink[1]
+    )
+      throw new Error(
+        `A foot tuft is not a fan any more (want ${TUFT_BOUNDS.wide.join('..')} px across, ` +
+          `${TUFT_BOUNDS.tall.join('..')} tall, ${TUFT_BOUNDS.ink.join('..')} px of ink -- the board's own ` +
+          `tuft is 7 by 4, see w-ground.ts). ${say}`,
+      );
+}
+
+/*
+ * 2. Two plants in three tiles, neither of them shrunk to get there, and a mirror that still buys
+ *    a frame.
+ *
+ * Measured on the plant alone, this round's change against the fifth pass's drawing:
+ *
+ *     overlap                         before   after   cap
+ *     bush vs bush-low                 0.700   0.520
+ *     worst cross-tile pair            0.700   0.591   0.64
+ *     bush-low against its own mirror  0.874   0.712   0.80
+ *     bush against its own mirror      0.733   0.729   0.80
+ *     bush-tall against its own mirror 0.624   0.624   0.80
+ *
+ * `bush` and `bush-low` are the first row because they are 331 of the map's 353 bushes; the worst
+ * cross-tile pair is now `bush` against a mirrored `bush-tall`, which SHOULD be alike -- they are
+ * one plant at two footprints and nobody asked for a third species.
+ *
+ * THE MIRROR CAP IS NOT DECORATION. `forest-map.ts` flips about half its decor, so a tile that is
+ * its own mirror halves the vocabulary of every scatter it appears in. This file's third pass found
+ * that the hard way -- 273 copies of a bush whose rim was an ellipse, with a coin flip that changed
+ * nothing -- and the first draft of the frond plant below walked straight back into it at 0.874,
+ * because a fan laid symmetrically about the tile's centre is a symmetric fan. The guard caught it;
+ * the render did not.
+ *
+ * Both caps sit between the before and the after, nearer the failure, so there is room to retune a
+ * layout without tripping them and none to put either drawing back.
+ */
+
+const PLANT_GUARDS = [
+  { name: 'bush', plant: plainBushPlant(BUSH, BUSH_BLADES, 4100), lo: 300, hi: 420 },
+  { name: 'bush-low', plant: plainBushPlant(BUSH_LOW, BUSH_LOW_BLADES, 4300), lo: 215, hi: 320 },
+  { name: 'bush-tall', plant: plainBushPlant(BUSH_TALL, BUSH_TALL_BLADES, 4400), lo: 260, hi: 370 },
+] as const;
+
+const PLANT_OVERLAP_CAP = 0.64;
+const PLANT_MIRROR_CAP = 0.8;
+
+{
+  const frames: { name: string; on: Uint8Array }[] = [];
+  for (const g of PLANT_GUARDS) {
+    const on = opaqueMask(g.plant);
+    let n = 0;
+    for (let i = 0; i < AREA; i++) n += on[i]!;
+    if (n < g.lo || n > g.hi)
+      throw new Error(
+        `${g.name} is ${n} px of plant, outside ${g.lo}..${g.hi}. The band is here because the cheap ` +
+          `way to pass the overlap bounds below is to shrink one of the three, and a pea on a lawn is ` +
+          `worse than two bushes that look alike.`,
+      );
+    const self = overlapOf(on, mirrorMask(on));
+    if (self > PLANT_MIRROR_CAP)
+      throw new Error(
+        `${g.name} is ${(self * 100).toFixed(1)}% its own mirror, over the ` +
+          `${(PLANT_MIRROR_CAP * 100).toFixed(0)}% cap, so forest-map.ts flipping half its decor buys ` +
+          `nothing on it. Lean the plant: the fault is a layout laid symmetrically about x 16, not the ` +
+          `sampling. See the note above BUSH_LOW.`,
+      );
+    frames.push({ name: g.name, on }, { name: `${g.name} mirrored`, on: mirrorMask(on) });
+  }
+  let worst = 0;
+  let pair = '';
+  for (let i = 0; i < frames.length; i++)
+    for (let j = i + 1; j < frames.length; j++) {
+      const a = frames[i]!;
+      const b = frames[j]!;
+      if (a.name.split(' ')[0] === b.name.split(' ')[0]) continue;
+      const v = overlapOf(a.on, b.on);
+      if (v > worst) {
+        worst = v;
+        pair = `${a.name} vs ${b.name}`;
+      }
+    }
+  if (worst > PLANT_OVERLAP_CAP)
+    throw new Error(
+      `Two bush silhouettes have converged again: ${pair} share ${(worst * 100).toFixed(1)}% of ` +
+        `their pixels, over the ${(PLANT_OVERLAP_CAP * 100).toFixed(0)}% cap (DESIGN_BOARD section 3, ` +
+        `"two or three bush silhouettes"). Mirroring and resampling were both tried upstream and ` +
+        `neither moves this -- the LEAF has to change: see the note above BUSH_LOW.`,
+    );
+}
+
+/* 3. The toadstool is two caps. */
+
+const TOADSTOOL_CAPS = 2;
+
+{
+  const img = paintedTile('toadstool-ring');
+  const on = new Uint8Array(AREA);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      // `rust` is the only red-dominant family on this tile; the stem, the spots and the gills are
+      // all cream or near-black. A 24-level lead in red over both other channels picks the dome and
+      // nothing else.
+      const [r, g, b] = img.get(x, y);
+      if (r > g + 24 && r > b + 24 && r > 60) on[y * TILE + x] = 1;
+    }
+  const caps = marksOf(on).filter((m) => m.n >= 6);
+  if (caps.length !== TOADSTOOL_CAPS)
+    throw new Error(
+      `toadstool-ring draws ${caps.length} caps, not ${TOADSTOOL_CAPS}. At three caps a tile the map's ` +
+        `stamps put 174 red mushrooms in the forest and the client called the landing screen creepy; ` +
+        `at one a tile a row of stamps is a dotted line. See the note in toadstoolRing.`,
+    );
+}
+
+/* 4. Nothing DRAWN lands on a tile's own edge. */
+
+/*
+ * The cap is a step, not an equality, and the difference is a finding rather than a convenience.
+ *
+ * Byte equality was the first version of this check and every one of the eight tiles failed it: the
+ * contact shadow's outermost ring is a flattened ellipse 1.22 times the object's base, and on all
+ * eight it reaches the border. Measured against each tile's own grass variant, 3 to 22 of the 124
+ * border pixels differ, by at most 21 to 23 in any channel.
+ *
+ * That is under 24, which is the step this project's own edge census calls an edge, so the join
+ * between a plant tile and the grass beside it does not register as a line -- and it is plainly
+ * deliberate, because the three shadow rings are drawn at alpha 46, 92 and 196 and only the
+ * faintest reaches that far. It is worth knowing about rather than guarding away: DESIGN_BOARD
+ * section 4 states "there is not one seam between ground and decor anywhere in the world", and
+ * what is actually true is that there is no seam the census can see. Shrinking the shadow to make
+ * the border byte-clean would unseat every plant in the file, which is a worse trade.
+ *
+ * So the bound is 32: comfortably above the 23 the shadows sit at, and comfortably below what a
+ * DRAWN mark on the border costs. A tuft blade on the edge steps about 50 against the lawn and a
+ * keyline pixel about 95, which is the fault this is here to catch -- a clipped leaf tip or a tuft
+ * nudged one column too far prints a hard line against whatever grass tile is laid next door, and
+ * these tiles are scattered rather than tiled, so it prints everywhere they land.
+ */
+const BORDER_STEP_CAP = 32;
+
+{
+  const lawns = [0, 1, 2, 3].map((v) => {
+    const img = new Img(TILE, TILE);
+    GROUND_TILES[`grass-${v}`]!(img);
+    return img;
+  });
+  const border: [number, number][] = [];
+  for (let x = 0; x < TILE; x++) border.push([x, 0], [x, TILE - 1]);
+  for (let y = 1; y < TILE - 1; y++) border.push([0, y], [TILE - 1, y]);
+  for (const name of Object.keys(UNDERGROWTH_TILES)) {
+    const img = paintedTile(name);
+    // The best-matching variant, because a painter picks its own lawn and this guard does not know
+    // which. A mark on the border is far outside every variant's spread, so the minimum is enough.
+    let step = 255;
+    let at = '';
+    for (const lawn of lawns) {
+      let worst = 0;
+      let where = '';
+      for (const [x, y] of border) {
+        const a = img.get(x, y);
+        const b = lawn.get(x, y);
+        const d = Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+        if (d > worst) {
+          worst = d;
+          where = `${x},${y}`;
+        }
+      }
+      if (worst < step) {
+        step = worst;
+        at = where;
+      }
+    }
+    if (step > BORDER_STEP_CAP)
+      throw new Error(
+        `${name} draws on its own border: ${step} levels off the bare lawn at ${at}, over the ` +
+          `${BORDER_STEP_CAP} cap. Every copy of this tile prints a hard line against the grass tile ` +
+          `beside it (DESIGN_BOARD section 4, "the shared border ring"). A clipped leaf tip, or a ` +
+          `tuft root closer to an edge than half its own fan is wide, is the usual cause.`,
+      );
+  }
+}

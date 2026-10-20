@@ -97,7 +97,7 @@
  * constraint is gone with it, and `cottageDoor` is rebuilt as the board's doorway: a stone surround,
  * a segmental timber arch, a planked leaf, a threshold step and the bushes either side.
  */
-import { ember, Img, keyline, rose, tone } from '../paint.ts';
+import { ember, Img, keyline, lumaOf, rose, tone } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
 
 const TILE = 32;
@@ -2134,8 +2134,9 @@ const cottageDoor: Painter = (img) => {
   img.rect(OPEN_R, archTop(OPEN_R) + 4, 1, DOOR_FOOT - archTop(OPEN_R) - 3, WOOD_LINE);
 
   /*
-   * The brass light: a cross-muntin of four panes over the same navy glass as the wall windows, and
-   * with the knob the only gold on the building.
+   * The brass light: a cross-muntin of four panes over the same navy glass as the wall windows, the
+   * astragal that carries it above and below, and the pair of knobs. Together they are the only gold
+   * on the building.
    */
   img.rect(12, 13, 8, 7, tone('gold', 0.5));
   img.rect(12, 13, 8, 1, tone('gold', 0.9));
@@ -2151,10 +2152,41 @@ const cottageDoor: Painter = (img) => {
   img.rect(13, 16, 6, 1, tone('gold', 0.46));
   img.rect(13, 16, 3, 1, tone('gold', 0.7));
 
-  // The knob, on the swing side.
-  img.rect(22, 21, 2, 3, tone('gold', 0.56));
-  img.px(22, 21, tone('gold', 0.92));
-  img.rect(22, 24, 2, 1, WOOD_LINE);
+  /*
+   * THE ASTRAGAL, which is the board's and which we did not have: the vertical muntin does not stop
+   * at the light's frame, it runs on past it in both directions.
+   *
+   * Probed on the mock (gold pixels in the Arrive frame's doorway, x 2260..2420, y 1300..1450), the
+   * light's frame spans y 1353..1397 and the gold bar spans y 1341..1401 -- twelve board pixels
+   * proud above it and four below, on a bar twelve board pixels wide. Ours is a two-pixel bar, so
+   * on the light's own ruler (53 board px of frame against our 8, call it 6.6 to one) that is two
+   * rows above and one below.
+   *
+   * It is six pixels and it is worth them. A four-pane light centred in a slab is a WINDOW; the same
+   * light with a bar running out of the top and bottom of it is the meeting of two door leaves, and
+   * which of those two this reads as is the whole difference between Grandma's front door and a
+   * cupboard. The knobs below do the other half of the same job.
+   */
+  img.rect(15, 11, 2, 2, tone('gold', 0.46));
+  img.rect(15, 11, 1, 2, tone('gold', 0.74));
+  img.rect(15, 20, 2, 1, tone('gold', 0.34));
+  img.px(15, 20, tone('gold', 0.6));
+
+  /*
+   * THE KNOBS, ONE ON EACH LEAF. There was one, on the right, and a single knob on a plank slab is
+   * a cupboard door.
+   *
+   * The board's pair is symmetric about the astragal and measured: its left knob sits at x 2290..2297
+   * and its right at 2367..2376, so their centres are 78 board pixels apart about a centre line at
+   * 2332, which the light's own frame puts at 2334. On the same 6.6-to-one ruler that is about twelve
+   * of our pixels apart -- six either side of the leaf's centre at 15.5 -- and the knob already here
+   * is at seven. So the second one is the first one mirrored, and nothing moves.
+   */
+  for (const kx of [8, 22] as const) {
+    img.rect(kx, 21, 2, 3, tone('gold', 0.56));
+    img.px(kx, 21, tone('gold', 0.92));
+    img.rect(kx, 24, 2, 1, WOOD_LINE);
+  }
 
   /*
    * The threshold: a stone slab standing proud of the opening on both sides, lit along its tread and
@@ -2252,15 +2284,70 @@ const BLOCK_H = 9;
  * and to the left over a darker body, which is a lit sphere rather than a flat disc. Nothing here is
  * keylined -- `outline()` runs before the smoke is drawn, deliberately. Vapour has no edge, and a
  * near-black ring round each puff would read as three grey rocks floating over the roof.
+ *
+ * ---------------------------------------------------------------------------------------------
+ * ROUND TWO: IT WAS LYING DOWN, AND THE BOARD'S IS STANDING UP.
+ *
+ * Three puffs "up and to the right" came out as a shallow dash. Measured on the painted tile: a
+ * bounding box 13 wide by 6 tall, h/w = 0.46, widest in its middle and NARROW at the flue. At the
+ * 26-tile camera that is a white tick flying off the chimney -- it reads as something thrown, not
+ * as something rising, and it was the last thing left on this building that the board does and we
+ * did not.
+ *
+ * The board's, probed on the mock itself (`2660 1130 130 90 8`, and the row scan is in the handback)
+ * is the opposite shape in every respect:
+ *
+ *     y 1190..1201   x 2701..2720     ~18 board px wide   <- at the flue, NARROWEST
+ *     y 1167..1182   x 2696..2737     ~41
+ *     y 1142..1157   x 2714..2772     ~58                 <- at the top, WIDEST, and drifted right
+ *
+ * So it is a CONE standing on the flue: it leaves the pot about as wide as the pot, widens as it
+ * climbs, and only leans right at the very top where the air takes it. Its bounding box is 78 by 60
+ * board pixels -- h/w 0.77 -- and it is a continuous billowing mass with a lumpy edge, not a row of
+ * separate discs.
+ *
+ * TWO NUMBERS CONVERT IT, and both are taken off this same chimney rather than off the facade,
+ * because the two are not drawn at the same scale. The board's crown is 83 board px wide against our
+ * 26, which is 3.19 board px to one of ours. On that ruler its plume is 60/3.19 = 19 of our rows
+ * tall, which this tile does not have and never will -- the row above the chimney is lawn. What
+ * transfers instead is the RATIO to the stack it stands on: the board's plume is 0.47 of its own
+ * stack's height (60 against 129), and its aspect is 0.77.
+ *
+ * THE CROWN GIVES UP A ROW AND THE STACK TWO, which buys the plume nine rows against seven. At a
+ * stack of eighteen rows, nine is a ratio of 0.50 -- the board's 0.47, as near as whole rows get --
+ * and nine rows against an eleven-wide cone is an aspect of 0.82 against the board's 0.77. The crown
+ * loses nothing by it: five rows still carry the lit top edge, the flue notch and the dark
+ * under-edge of the overhang, which is everything it was drawing in six.
+ *
+ * THE PUFFS ARE SEVEN, NOT THREE, AND THEY DO NOT SIT IN A LINE. Three discs on a path is a string
+ * of beads however the path is drawn; what makes a mass look like vapour is that its edge is lumpy,
+ * and the cheapest lumpy edge is the union of more, smaller, off-axis circles. Four climb the middle
+ * and three sit out to one side or the other, so the silhouette bulges and pinches on both edges
+ * without a single pixel having to be knocked out of it -- which matters, because knocking pixels
+ * out of an opaque mass drawn on transparency is how this project puts holes in things.
  */
-const SMOKE_Y = 7; // rows 0..6 are the plume; the crown starts here
-const STACK_Y = SMOKE_Y + 6; // and the stack below the crown
+const SMOKE_Y = 9; // rows 0..8 are the plume; the crown starts here
+const CROWN_H = 5; // the crown slab, flue notch included
+const STACK_Y = SMOKE_Y + CROWN_H; // and the stack below it
 
-/** Three puffs, up and to the right, thinning as they go: x, y, radius, tone. */
+/**
+ * The plume: centre, radii and tone per puff, ordered from the flue upward.
+ *
+ * `t` fades as the puffs climb, which is the dispersal the board draws at the top of its own column
+ * -- but it fades slowly and it never goes near the floor. The plume has to stay LIGHTER than the
+ * lawn it is seen against (about luma 180) along its whole height, or the top of it simply vanishes
+ * and the cone becomes a blob again. At the thinnest puff the body still lands around 192 and its
+ * core around 228, and the guard at the foot of this file holds that.
+ */
 const PLUME = [
-  [15.5, 5, 3.4, 2.6, 1],
-  [19.6, 2.7, 2.8, 2.1, 0.9],
-  [23.2, 1.3, 2, 1.5, 0.8],
+  [15.0, 8.3, 2.6, 2.0, 1.0], // in the flue mouth, and no wider than the flue
+  [16.2, 6.2, 3.2, 2.1, 0.98],
+  [14.2, 5.2, 2.2, 1.9, 0.94], // a lobe out to the left, so the column is not a tube
+  [18.0, 4.2, 3.4, 2.2, 0.92],
+  [15.2, 3.2, 2.8, 2.0, 0.9],
+  [19.8, 2.4, 3.0, 2.0, 0.86],
+  [17.0, 1.8, 2.8, 1.7, 0.82],
+  [21.4, 1.6, 2.0, 1.4, 0.78], // the last of it, breaking up as it goes over
 ] as const;
 
 const chimney: Painter = (img) => {
@@ -2290,7 +2377,11 @@ const chimney: Painter = (img) => {
   // edge -- the stack went dark, and without one bright row the whole thing loses its top.
   for (let y = SMOKE_Y; y < STACK_Y; y++)
     for (let x = 3; x < 29; x++)
-      img.px(x, y, tone('stone', clamp(0.72 - 0.46 * ((y - SMOKE_Y) / 5) - 0.12 * ((x - 3) / 25))));
+      img.px(
+        x,
+        y,
+        tone('stone', clamp(0.72 - 0.46 * ((y - SMOKE_Y) / (CROWN_H - 1)) - 0.12 * ((x - 3) / 25))),
+      );
   img.rect(3, STACK_Y - 1, 26, 1, tone('stone', 0.08)); // the dark under-edge of the overhang
   img.rect(11, SMOKE_Y, 10, 3, tone('night', 0.35)); // the flue
   img.rect(11, SMOKE_Y, 10, 1, keyline('night', 10));
@@ -2344,9 +2435,13 @@ const chimney: Painter = (img) => {
    * Each puff is a lit sphere rather than a flat disc: a body at the puff's own tone with a brighter
    * core set up and to the left, from the same top-left sun as every other object on this building.
    *
-   * IT WAS DRAWN TWICE, which is this round's housekeeping: two consecutive loops over `PLUME`, the
-   * second at a different pair of tones, so the first was overwritten everywhere the second covered
-   * it and showed as a one-pixel fringe everywhere it did not. One loop.
+   * The bodies are laid FIRST and the cores second, in two passes over the same list rather than one
+   * pass drawing both. In one pass a later puff's body covers an earlier puff's core, so the column
+   * came out as a row of bright crescents with dark gaps between them -- the beads this round is
+   * getting rid of. Two passes let the cores read as one continuous lit spine up the middle of the
+   * mass, which is what the board's does. (This is not the old "it was drawn twice" bug, which was
+   * two loops drawing the whole puff at two different tone pairs; here each pass draws a different
+   * part of it.)
    *
    * AND THE CORE IS `wall`, NOT `stone`. `stone` tops out at luma 210 and the grass behind this tile
    * reads about 180, so a puff built entirely from that ramp had thirty luma of silhouette at its
@@ -2355,10 +2450,10 @@ const chimney: Painter = (img) => {
    * a frame; `wall`'s head is the lightest value the palette holds, and the body stays in `stone` so
    * the puff still has a shaded underside.
    */
-  for (const [px, py, rx, ry, t] of PLUME) {
+  for (const [px, py, rx, ry, t] of PLUME)
     img.ellipse(px, py, rx, ry, tone('stone', clamp(t - 0.16)));
+  for (const [px, py, rx, ry, t] of PLUME)
     img.ellipse(px - rx * 0.28, py - ry * 0.28, rx * 0.62, ry * 0.62, tone('wall', clamp(t - 0.3)));
-  }
 };
 
 export const COTTAGE_TILES: Record<string, Painter> = {
@@ -2374,3 +2469,148 @@ export const COTTAGE_TILES: Record<string, Painter> = {
   'roof-peak': roof('peak'),
   chimney,
 };
+
+/* ------------------------------------------------- the guards, at import time */
+
+/*
+ * Two things on this building are one edit away from going back to what the board round found, and
+ * neither of them says anything at runtime when it does. They are checked here rather than in a test
+ * file for the same reason `w-trees.ts` checks its crown here: every tool that paints a tile loads
+ * this module, so `pnpm graybox`, `pnpm world`, `pnpm score` and `pnpm preview` all run them, and
+ * two 32x32 paints is a cost nobody will notice.
+ *
+ * Both are TWO-SIDED where a one-sided bound could be satisfied by deleting the thing. The cheapest
+ * way to pass "the plume stands up" is to paint no plume at all -- an empty region has whatever
+ * aspect you like -- so the area floor is the load-bearing line here, not the aspect.
+ */
+
+/**
+ * The plume: everything above the crown that is lighter than the stonework's keyline.
+ *
+ * The luma floor is what separates smoke from the line `outline()` lays along the top of the crown,
+ * which lands in the same rows. `STONE_LINE` is about luma 38 and the dimmest smoke about 175, so
+ * 160 is nowhere near either of them.
+ */
+function plumeSignature(): {
+  area: number;
+  w: number;
+  h: number;
+  rise: number;
+  pale: number;
+  base: number;
+} {
+  const img = new Img(TILE, TILE);
+  chimney(img);
+  let area = 0;
+  let pale = 0;
+  let minx = TILE;
+  let maxx = -1;
+  let miny = TILE;
+  let maxy = -1;
+  let base = 0;
+  for (let y = 0; y < SMOKE_Y; y++)
+    for (let x = 0; x < TILE; x++) {
+      const c = img.get(x, y);
+      if (c[3] === 0 || lumaOf(c) < 160) continue;
+      area++;
+      if (y === SMOKE_Y - 1) base++;
+      // The lawn behind this tile reads about 180, so smoke under that value is smoke nobody sees.
+      if (lumaOf(c) >= 185) pale++;
+      minx = Math.min(minx, x);
+      maxx = Math.max(maxx, x);
+      miny = Math.min(miny, y);
+      maxy = Math.max(maxy, y);
+    }
+  const w = maxx - minx + 1;
+  const h = maxy - miny + 1;
+  return { area, w, h, rise: area > 0 ? h / w : 0, pale: area > 0 ? pale / area : 0, base };
+}
+
+/*
+ * Measured on the tile as drawn: area 73, bbox 11 x 9, rise 0.82, pale share 0.86, base row 6 wide.
+ * Measured by this same function on the version it replaces -- the failure these bounds are aimed
+ * at -- area 49, bbox 13 x 7, rise 0.54, base row 5 wide: a dash lying across the crown.
+ *
+ * Every bound sits between the two and nearer the failure, so there is room to retune the puffs and
+ * none to lay the plume down again. The old plume trips BOTH of the two that matter rather than one
+ * of them, which is what says they discriminate: 49 is under the area floor of 58 and 0.54 is under
+ * the aspect floor of 0.62. Proven by reverting this file's `SMOKE_Y`, `CROWN_H` and `PLUME` to
+ * their old values and watching each throw in turn, then restoring and watching it pass.
+ */
+const PLUME_GUARD = {
+  areaLo: 58,
+  areaHi: 110,
+  riseLo: 0.62,
+  riseHi: 1.4,
+  paleLo: 0.7,
+  baseLo: 4,
+  baseHi: 10, // the flue is ten columns: smoke leaves the pot no wider than the pot
+} as const;
+
+{
+  const s = plumeSignature();
+  const say = `area ${s.area}px, bbox ${s.w}x${s.h}, rise ${s.rise.toFixed(2)}, pale ${s.pale.toFixed(2)}, base ${s.base}px`;
+  if (s.area < PLUME_GUARD.areaLo || s.area > PLUME_GUARD.areaHi)
+    throw new Error(
+      `Chimney plume out of band (want ${PLUME_GUARD.areaLo}..${PLUME_GUARD.areaHi}px): ${say}. Under the floor there is barely a plume left; over the ceiling it is a cloud sitting on the roof.`,
+    );
+  if (s.rise < PLUME_GUARD.riseLo || s.rise > PLUME_GUARD.riseHi)
+    throw new Error(
+      `Chimney plume is not standing up (want h/w ${PLUME_GUARD.riseLo}..${PLUME_GUARD.riseHi}, the board's is 0.77): ${say}. Below the floor it is the dash that read as something thrown off the chimney; above the ceiling it is a stick.`,
+    );
+  if (s.pale < PLUME_GUARD.paleLo)
+    throw new Error(
+      `Chimney plume has gone darker than the lawn it is seen against (want at least ${PLUME_GUARD.paleLo} of it over luma 185): ${say}.`,
+    );
+  if (s.base < PLUME_GUARD.baseLo || s.base > PLUME_GUARD.baseHi)
+    throw new Error(
+      `Chimney plume does not leave the flue properly (want its lowest row ${PLUME_GUARD.baseLo}..${PLUME_GUARD.baseHi}px wide): ${say}.`,
+    );
+}
+
+/*
+ * THE DOOR HAS TWO KNOBS, one on each leaf, symmetric about the astragal.
+ *
+ * It had one, on the right, and a single knob on a plank slab is a cupboard. The pair is what says
+ * the board's double door, and it is three lines of drawing that a tidy-up would happily fold back
+ * into one. Gold is told from the timber around it by its green-to-blue gap, which runs 84 to 126
+ * across the `gold` ramp and 35 to 58 across `wood`: 70 sits in the middle of that with room either
+ * side, and it needs no hex.
+ */
+{
+  const img = new Img(TILE, TILE);
+  cottageDoor(img);
+  const furniture = (x: number, y: number): boolean => {
+    const c = img.get(x, y);
+    return c[3] > 0 && c[1] - c[2] > 70;
+  };
+  const seen = new Set<string>();
+  const centres: number[] = [];
+  for (let y = 21; y <= DOOR_FOOT; y++)
+    for (let x = OPEN_L; x <= OPEN_R; x++) {
+      if (!furniture(x, y) || seen.has(`${x},${y}`)) continue;
+      let n = 0;
+      let sum = 0;
+      const queue: [number, number][] = [[x, y]];
+      while (queue.length) {
+        const [cx, cy] = queue.pop()!;
+        if (cx < OPEN_L || cx > OPEN_R || cy < 21 || cy > DOOR_FOOT) continue;
+        const key = `${cx},${cy}`;
+        if (seen.has(key) || !furniture(cx, cy)) continue;
+        seen.add(key);
+        n++;
+        sum += cx;
+        queue.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+      }
+      centres.push(sum / n);
+    }
+  const middle = (OPEN_L + OPEN_R) / 2;
+  const say = `${centres.length} mark(s) at x ${centres.map((c) => c.toFixed(1)).join(', ')}`;
+  if (centres.length !== 2)
+    throw new Error(`Grandma's door wants exactly two knobs, one per leaf; found ${say}.`);
+  const skew = Math.abs((centres[0]! + centres[1]!) / 2 - middle);
+  if (skew > 1)
+    throw new Error(
+      `The door's knobs are not symmetric about the astragal at x ${middle} (out by ${skew.toFixed(1)}px): ${say}.`,
+    );
+}

@@ -6,6 +6,7 @@
   "scripts": {
     "generate": "node src/generate.ts",
     "preview": "node src/preview.ts",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "world": "node src/world.ts",
     "score": "node src/score.ts"

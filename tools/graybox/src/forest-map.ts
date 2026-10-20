@@ -1686,12 +1686,51 @@ export function generateForestMap(): GeneratedMap {
    * Random order matters: scanning row by row packs trees into a grid, and a grid of trees looks
    * planted.
    */
+  /*
+   * THE LAST ROW IS A PLANTING ROW, and excluding it was the whole of why the bottom of the world
+   * was a hedge.
+   *
+   * This ran `y < MAP_H - 1`, so no trunk was ever offered row 41. A trunk carries its crown two
+   * rows ABOVE it, so a tree on the last row needs nothing off the map and takes nothing from the
+   * walked band -- but with the row closed to planting, the south treeline's trunks all landed on
+   * row 40 and row 41 fell to `sealBorder`, which is scrub. Printed, the bottom of the map read:
+   *
+   *     row 40  #ooooooo...........oo#oooo##..ooooooo...ooTToooo.ooooo.oooo#
+   *     row 41  ########oooo##oo##########################oo################
+   *
+   * -- fifty-two tiles of bush in a row along the bottom edge of the world, in one unbroken run of
+   * twenty-six, with not one crown over it. That is the "dotted line along the top and bottom edges
+   * of the world" the design board names as the clearest "the map does not make sense" artefact,
+   * arrived at a second time in a different material after the toadstools were taken out of it.
+   *
+   * The band is still sealed and still solid: `sealBorder` only plants where `below` is empty and
+   * calls `solid` on every border cell either way, so a tree standing there replaces the hedge
+   * without changing one tile of collision. The edge of the world is now a treeline, which is what
+   * the file's own note on `sealBorder` promised and could not deliver while this loop stopped
+   * short.
+   */
   const sites: [number, number][] = [];
   for (let y = 2; y < MAP_H - 1; y++) for (let x = 0; x < MAP_W - 1; x++) sites.push([x, y]);
   for (let i = sites.length - 1; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
     [sites[i], sites[j]] = [sites[j]!, sites[i]!];
   }
+  /*
+   * ...AND THE LAST ROW IS APPENDED AFTER THE SHUFFLE, which is not fussiness.
+   *
+   * Row 41 belongs in this list for the reason above, and the first version of that change simply
+   * widened the loop. That re-rolls the Fisher-Yates over a list 59 entries longer, so every tree
+   * on the map moves, and measured it cost 3.3 points of canopy across the whole world and about
+   * 0.03 of score distance on every one of the four frames -- a forest rebuilt from scratch as the
+   * price of a hedge at the bottom edge.
+   *
+   * Appended after the shuffle, the first 2,301 sites come out in exactly the order they did
+   * before, so rows 2 to 40 are planted tree for tree as they were, and the last row is offered at
+   * the end, left to right, into whatever the density field still allows. A single row filled in
+   * scan order is the one case where "scanning packs trees into a grid" does not apply: there is
+   * only one row, so there is no lattice for it to pack into.
+   */
+  for (let x = 0; x < MAP_W - 1; x++) sites.push([x, MAP_H - 1]);
   /** The field that decides which SCALE a site wants, read in both passes so they agree. */
   const grainAt = (x: number, y: number): number => lobe(x / 5.5 + 211, y / 5.5 + 211);
   /**
@@ -2070,6 +2109,115 @@ export function generateForestMap(): GeneratedMap {
     }
     if (changed === 0) break;
   }
+
+  /*
+   * ===========================================================================
+   * AND THEN THE TREELINE IS BROUGHT DOWN TO THE BAND, which is what deletes the hem.
+   * ===========================================================================
+   *
+   * The design board's first instruction to this file is "delete the border hem", and the whole of
+   * the reason it cannot simply be deleted is two lines below: the band is the WALL. What it can
+   * stop being is a DRAWN LINE, and the file's own note on `sealBorder` already says how -- "where a
+   * wood stands on the margin, its canopy covers this band outright, so the longest visible run of
+   * hedge is not the length of the band at all". It said so and it was not true. Printed, with the
+   * last row opened to planting and every density pass finished:
+   *
+   *     col  0  #########TTTTTTo###########TTTTo####TTTTo#
+   *     col 59  ########TTo##################TTo####TTTTo#
+   *
+   * -- `#` is uncovered hedge, `T` canopy, `o` a trunk. Eighteen tiles of unbroken bush down the
+   * east edge behind Grandma's garden, eleven down the west edge beside the title camera. A hedge
+   * of eighteen is a line; four hedges of four with trees between them is undergrowth at the foot
+   * of a wood, and the difference costs about a dozen trees rather than a hundred.
+   *
+   * So this is a LIMIT rather than a quota: walk each of the four bands, and whenever the run of
+   * cells that nothing is standing on reaches `HEM_RUN`, plant one tree that lands on the band and
+   * start counting again. It cannot plant where a path, a glade, the water or the enclosure already
+   * says no -- `plantKind` refuses all of those -- so the pass simply gives up on that stretch and
+   * carries on, which is correct: the gate approach and the river mouth are meant to be open.
+   *
+   * WHICH TREE COVERS WHICH BAND is geometry and it is worth writing down, because it is not the
+   * same answer on all four sides. A crown sits ABOVE its trunk, never beside it.
+   *
+   *   rows 0 and 1   a trunk on row 2 carries its crown over both of them, two columns at a time.
+   *   row 41         nothing can put a crown there, because there is no row 42 to stand on. What
+   *                  covers it is the TRUNK itself: `below` is then occupied, `sealBorder` steps
+   *                  over the cell, and the bottom of the world shows the feet of the treeline
+   *                  instead of a hedge. That is the right picture anyway -- it is the row the
+   *                  camera clamps to, so it is seen edge-on.
+   *   cols 0 and 59  a trunk on the column covers its own cell and the two above it, so one tree
+   *                  takes three tiles out of a vertical run. Column 59 is reached by planting at
+   *                  58, since a mid trunk is two wide and `sites` stops at MAP_W - 2.
+   */
+  const HEM_RUN = 4;
+  /** Nothing is standing here yet, so the seal will reach it. The predicate for the EARLY call. */
+  const bandIsBare = (x: number, y: number): boolean =>
+    at(below, x, y) === 0 && at(above, x, y) === 0;
+  /**
+   * Nothing is standing here but the seal itself. The predicate for the LATE call, which runs after
+   * `sealBorder` has filled the band, so "bare" there means "bare or already hedge".
+   *
+   * `SCRUB_GIDS` is declared below this point and read only from inside this body, which the late
+   * call evaluates long after it exists. It is the one backward reference in this pass and it is
+   * deliberate: the alternative is a second copy of the same three gids.
+   */
+  const bandIsHedge = (x: number, y: number): boolean =>
+    at(above, x, y) === 0 && (at(below, x, y) === 0 || SCRUB_GIDS.has(at(below, x, y) & BASE_GID));
+  /** Plant the first of several candidates that will take, or report that none would. */
+  const anyOf = (...tries: (readonly [string, number, number])[]): boolean =>
+    tries.some(([kind, x, y]) => plantKind(kind, x, y));
+  /**
+   * The same, for the late call: lift whatever cover is on the trunk row first, because by then it
+   * is the seal's own hedge and replacing it is the entire point. A candidate that then fails on
+   * its crown leaves the row bare, which `sealBorder` fills again two lines later and the lone-bush
+   * sweep tidies after that -- so an unsuccessful try costs nothing.
+   */
+  const anyOver = (...tries: (readonly [string, number, number])[]): boolean =>
+    tries.some(([kind, x, y]) => {
+      const w = KINDS[kind]!.trunk.length;
+      for (let dx = 0; dx < w; dx++)
+        if (bandIsHedge(x + dx, y) && at(below, x + dx, y) !== 0) set(below, x + dx, y, 0);
+      return plantKind(kind, x, y);
+    });
+  const breakHem = (
+    cells: readonly (readonly [number, number])[],
+    bare: (x: number, y: number) => boolean,
+    cover: (x: number, y: number) => boolean,
+  ): number => {
+    let run = 0;
+    let planted = 0;
+    for (const [x, y] of cells) {
+      if (!bare(x, y)) {
+        run = 0;
+        continue;
+      }
+      run++;
+      if (run <= HEM_RUN) continue;
+      if (!cover(x, y)) continue;
+      planted++;
+      run = 0;
+    }
+    return planted;
+  };
+  const down = (x: number): readonly (readonly [number, number])[] =>
+    Array.from({ length: MAP_H }, (_v, y) => [x, y] as const);
+  const across = (y: number): readonly (readonly [number, number])[] =>
+    Array.from({ length: MAP_W }, (_v, x) => [x, y] as const);
+  /** All four bands, each with the tree that can reach it. Run twice; see the second call. */
+  const breakEveryHem = (
+    bare: (x: number, y: number) => boolean,
+    any: (...tries: (readonly [string, number, number])[]) => boolean,
+  ): number =>
+    breakHem(across(0), bare, (x) => any(['mid', x, 2], ['mid', x - 1, 2], ['elder', x - 1, 3])) +
+    breakHem(across(1), bare, (x) => any(['mid', x, 2], ['mid', x - 1, 2], ['elder', x - 1, 3])) +
+    breakHem(across(MAP_H - 1), bare, (x) =>
+      any(['mid', x, MAP_H - 1], ['mid', x - 1, MAP_H - 1], ['sapling', x, MAP_H - 1]),
+    ) +
+    breakHem(down(0), bare, (_x, y) => any(['mid', 0, y], ['sapling', 0, y])) +
+    breakHem(down(MAP_W - 1), bare, (_x, y) =>
+      any(['mid', MAP_W - 2, y], ['sapling', MAP_W - 2, y]),
+    );
+  const hemTrees = breakEveryHem(bandIsBare, anyOf);
 
   /*
    * THE EDGE OF THE WORLD. The border must be solid even where a tree could not be planted.
@@ -3975,7 +4123,19 @@ export function generateForestMap(): GeneratedMap {
     'toadstool-ring',
     'waterfall',
     'fence-h',
-    'fence-post',
+    /*
+     * `fence-post` IS NOT IN THIS SET AND MUST NOT BE PUT BACK.
+     *
+     * It was, and the reason was sound while the tile was two post tops on a 16-pixel pitch with
+     * lawn between them: that drawing is almost symmetric across, so a flip only moved its grass
+     * sprigs and it bought a second image for free. The tile has since been redrawn as the board's
+     * own foreshortened channel -- a nine-column lit face, two columns of shaded timber down the FAR
+     * side and a cast shadow on the lawn beyond that, all on one side. A horizontal flip puts the
+     * shade and the shadow on the near side instead, so with half the cells flipped the run zigzags
+     * down its length and is lit from both directions at once. Variation comes from the four
+     * distinct caps inside the tile now, which is more than the flip ever gave it. See the long note
+     * in `tiles/s-outdoor.ts`.
+     */
   ]);
   for (const layer of [ground, below, above])
     for (let y = 0; y < MAP_H; y++)
@@ -4265,6 +4425,30 @@ export function generateForestMap(): GeneratedMap {
     }
     return seen;
   };
+  /*
+   * AND THE TREELINE IS BROUGHT DOWN TO THE BAND AGAIN, for the same reason the seal runs twice.
+   *
+   * `breakHem` is called once up with the planting, where it belongs, and once here, where it
+   * matters. Everything between the two FELLS: the shoreline sweep, the verge sweep and the east
+   * walk all call `clearArea`, and `clearArea` strikes a tree off with its whole crown.
+   * Instrumented, the first call found the east margin already 24 cells deep in canopy and so
+   * planted nothing there -- and by the time the map was written, thirteen of those trees had been
+   * felled by passes that had no idea they were holding up the edge of the world, so the band under
+   * them fell back to scrub and printed as an eighteen-tile hedge down the right of the arrival
+   * frame.
+   *
+   * IT RUNS IMMEDIATELY BEFORE THE CONNECTIVITY FLOOD, and that is the whole of why it is here
+   * rather than beside the second seal. A tree on the margin stands on cells that are walkable --
+   * the trunk of the tree covering column 59 is at column 58, inside the map -- so planting one can
+   * close a pocket behind it. A first version ran after the flood and the generator's own audit
+   * caught it at once: eleven walkable tiles sealed off from the spawn at (5,2), (58,16) and six
+   * other places. Put in front of the flood, every pocket it makes is found and opened by the pass
+   * that exists to do exactly that, and the audit is clean. The flood is also the last thing that
+   * fells, so nothing after this can undo it.
+   */
+  const hemTreesLate = breakEveryHem(bandIsHedge, anyOver);
+  console.log(`  hem: ${hemTrees} tree(s) with the planting, ${hemTreesLate} after the felling`);
+
   let felled = 0;
   for (let guard = 0; guard < 400; guard++) {
     const reachable = reachableFromSpawn();
@@ -4794,6 +4978,51 @@ export function generateForestMap(): GeneratedMap {
           onWater.push([x, y] as [number, number]);
       }
     fault(`tile(s) of "${o.name}" standing in the water or inside a tree`, onWater);
+  }
+
+  /*
+   * 6. NO STRETCH OF THE BORDER BAND IS A DRAWN LINE OF HEDGE.
+   *
+   * The band has to be sealed and it must not look sealed, and the two are easy to confuse because
+   * only the first one is load-bearing: every pass in this file that fells a tree is free to drop
+   * the edge of the world back to scrub without breaking anything a test can see. That is how the
+   * bottom row became fifty-two bushes in a row with a twenty-six-tile unbroken run in it, and how
+   * the east margin became an eighteen-tile hedge behind Grandma's garden, both AFTER the note on
+   * `sealBorder` claimed the treeline would cover them.
+   *
+   * So the limit is asserted rather than hoped for, in the same place and for the same reason as
+   * the five above. `breakHem` runs twice to hold it. The ceiling is generous on purpose -- it is
+   * there to catch a line, not to pin a number: a hedge of twelve is undergrowth at the foot of a
+   * wood, and the runs this file leaves are five to nine.
+   */
+  const HEM_LIMIT = 12;
+  {
+    const isCrown = (x: number, y: number): boolean => CANOPY_GIDS.has(at(above, x, y) & BASE_GID);
+    const isHedge = (x: number, y: number): boolean =>
+      SCRUB_GIDS.has(at(below, x, y) & BASE_GID) && !isCrown(x, y);
+    const bands: [string, [number, number][]][] = [
+      ['row 0', Array.from({ length: MAP_W }, (_v, x) => [x, 0] as [number, number])],
+      ['row 1', Array.from({ length: MAP_W }, (_v, x) => [x, 1] as [number, number])],
+      [
+        `row ${MAP_H - 1}`,
+        Array.from({ length: MAP_W }, (_v, x) => [x, MAP_H - 1] as [number, number]),
+      ],
+      ['column 0', Array.from({ length: MAP_H }, (_v, y) => [0, y] as [number, number])],
+      [
+        `column ${MAP_W - 1}`,
+        Array.from({ length: MAP_H }, (_v, y) => [MAP_W - 1, y] as [number, number]),
+      ],
+    ];
+    for (const [where, cells] of bands) {
+      let run: [number, number][] = [];
+      let worst: [number, number][] = [];
+      for (const [x, y] of cells) {
+        run = isHedge(x, y) ? [...run, [x, y] as [number, number]] : [];
+        if (run.length > worst.length) worst = run;
+      }
+      if (worst.length > HEM_LIMIT)
+        fault(`tile(s) of unbroken hedge along ${where}, over the ${HEM_LIMIT} limit`, worst);
+    }
   }
 
   console.log(

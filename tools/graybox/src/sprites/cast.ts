@@ -51,7 +51,7 @@
  * is ever passed one: a partly-transparent colour drawn onto a transparent pixel leaves partial
  * alpha in the file, which docs/ASSETS.md forbids. Soft edges are built out of a darker tone.
  */
-import { ember, Img, keyline, pull, rose, shade, tone } from '../paint.ts';
+import { ember, Img, keyline, lumaOf, pull, rose, shade, tone } from '../paint.ts';
 import type { Ramp, RGBA } from '../paint.ts';
 import { BYSTANDER_FRAMES, BYSTANDER_PLAN } from './bystanders.ts';
 
@@ -230,11 +230,24 @@ const RABBIT_DARK: RGBA = keyline('fur', 165);
  * Painting the eyes in the value the sprite is outlined in is what made the face read as perforated
  * rather than as looking at you: the highest-contrast feature on a white animal was drawn in the
  * silhouette's own line, so at a 20-tile camera the eyes joined the outline and the head came back
- * as a white shape with two holes in it. `ink` level 1 sits three luma above the keyline and carries
- * a trace of violet, so the eye is a dark glossy bead INSIDE a white face and the keyline stays the
- * darkest thing on the sprite, which is where a keyline belongs.
+ * as a white shape with two holes in it. `ink` carries a trace of violet, so the eye is a dark
+ * glossy bead INSIDE a white face and the keyline stays the darkest thing on the sprite, which is
+ * where a keyline belongs.
+ *
+ * LEVEL 2, NOT LEVEL 1 (2026-10-20, design board section 3: "a value that is NOT the keyline
+ * value"). Level 1 is luma 34 against a keyline at 29. Five luma is a different hex and the same
+ * ink: nothing at 1x can tell them apart, so the sprite still satisfied the letter of the rule and
+ * none of it. Level 2 is luma 52, a 23-luma step, and it costs nothing visible -- against fur at
+ * 243 the bead is still 191 luma down, which is as black as the face can tell. Rendered side by
+ * side at zoom 22 the two frames are all but identical, which is the point: the metric moved and
+ * the picture did not.
+ *
+ * Worth recording against the board rather than against the prescription: the board's own rabbit
+ * draws its eyes in very nearly the black it outlines in (crop `990 565 58 58 10`). What makes them
+ * read there is that they are small, rounded and ringed in white, not that they are a different
+ * ink. The value step is cheap insurance and it is not what fixed the face.
  */
-const RABBIT_EYE: RGBA = shade('ink', 1);
+const RABBIT_EYE: RGBA = shade('ink', 2);
 
 /**
  * The warm family, and the reason he is no longer a white shape with holes in it.
@@ -485,7 +498,21 @@ function paintRabbit(img: Img, blink: boolean): void {
   // At a twelve-row body an arm is three pixels of nothing; two paws and a groove read at once.
   // They sit a row lower than before, because the chin they used to touch now reaches row 39.
   for (const px0 of [13.4, 18.6]) orb(img, px0, 41.2, 2.0, 1.8, 'fur', 0.08, 0.72);
-  img.line(16, 40.4, 16, 42.2, RABBIT_DARK);
+  /*
+   * NO GROOVE BETWEEN THE PAWS ANY MORE, and this is the satchel's "dark gash" caught a third time.
+   *
+   * The groove was `img.line(16, 40.4, 16, 42.2, RABBIT_DARK)`, and it was right when both paws were
+   * white and needed telling apart. The garment below covers the right paw entirely, so from the
+   * moment the cloth landed the groove's only remaining neighbour was the cloth's own near-black
+   * seat one column over at x 17 -- and `RABBIT_DARK` at luma 29 beside `RABBIT_CLOTH_SEAT` at 28
+   * is a TWO-pixel near-black column standing between a white chest and a red garment. That is
+   * precisely the fault section 2 of the design board convicts the old satchel of ("at 1x a dark
+   * gash on a white animal"), in a new hue, at a smaller size, and it was visible at zoom 3.
+   *
+   * One keyline is a boundary; two side by side is a hole. The seat already rings the cloth on
+   * every side, so the read -- white paw, line, red cloth -- survives the groove's removal intact,
+   * and `assertFaceMetrics()`' rabbit numbers are untouched because nothing above row 43 moves.
+   */
 
   /*
    * --- the garment, over the near flank, between the white chest and the basket ---
@@ -617,6 +644,21 @@ function paintRabbit(img: Img, blink: boolean): void {
 const OWL_PUPIL: RGBA = keyline('trunk', 24);
 
 /**
+ * The glint, and WHERE it goes is the whole of it (2026-10-20, design board section 3).
+ *
+ * The value was never the problem and neither was the size: one pixel of `wall` level 3 is right.
+ * It was drawn at the pupil's own LEFT COLUMN, so it had the white disc immediately beside it at
+ * luma 247 against its own 250 -- three luma apart, which is no boundary at all. At 1x the glint
+ * and the sclera were one mass and the pupil was a C opening towards the nose: not an eye with a
+ * light in it, a bead with a bite out of it, which is the same failure the previous pass thought it
+ * had fixed by shrinking a 2 x 2 highlight to one pixel. A notch is a notch at any size.
+ *
+ * It is now at the pupil's second column, so pupil encloses it above, below and on both sides, and
+ * `assertFaceMetrics()` below measures that enclosure rather than trusting this note.
+ */
+const OWL_CATCH: RGBA = shade('wall', 3);
+
+/**
  * WIDE AND SQUAT, which is the whole of him: 22 x 26, against the rabbit's 21 x 34.
  *
  * Crop the owl off the board (`648 282 104 118 9`, panel 01, in the crown left of the signpost) and
@@ -637,8 +679,9 @@ const OWL_PUPIL: RGBA = keyline('trunk', 24);
  *
  *   - the pupil is ROUND and is 0.47 of the white disc's diameter (board: about 0.55), so a clear
  *     two pixels of white survive all the way round it on every side;
- *   - the catchlight is ONE pixel of `wall` level 3 set INSIDE the pupil's upper-left, never
- *     overlapping its rim, so it reads as a light in a round eye and cannot cut the shape;
+ *   - the catchlight is ONE pixel of `wall` level 3 set INSIDE the pupil, never on its rim, so it
+ *     reads as a light in a round eye and cannot cut the shape. The pass that wrote this line put
+ *     it on the rim anyway; see `OWL_CATCH`, and `assertFaceMetrics()` now measures it;
  *   - the white disc's floor is raised from 0.35 to 0.6, because at 0.35 its own lower-right went
  *     dingy enough to merge into the dark rim and the "white all the way round" was only true at
  *     the top.
@@ -757,9 +800,15 @@ function paintOwl(img: Img, blink: boolean): void {
    * The pupil is 3 wide by 4 tall inside a white disc 7 by 8, which is the board's ratio, and two
    * pixels of white survive on every side of it.
    */
+  /*
+   * `px0` is the pupil's left column and `lit` the column the glint goes in -- the SECOND one, not
+   * the first. They were the same number until 2026-10-20 and that is the whole of what read as a
+   * bitten eye; see `OWL_CATCH`. Carried as a pair rather than as `px0 + 1` so the two numbers are
+   * visible side by side at the one place a reader will look for them.
+   */
   for (const [px0, lit] of [
-    [10, 10],
-    [19, 19],
+    [10, 11],
+    [19, 20],
   ] as const) {
     const cx = px0 === 10 ? 11.6 : 20.4;
     // The dark rim the board rings the discs in, dropped 0.7 of a row so it shows below and beside
@@ -778,10 +827,10 @@ function paintOwl(img: Img, blink: boolean): void {
       img.line(cx - 2.4, 29.9 + b, cx + 2.4, 29.9 + b, tone('wall', 0.9));
     } else {
       img.rect(px0, 29 + b, 3, 4, OWL_PUPIL);
-      // ONE pixel of light, enclosed by pupil above, right and below, so it reads as a glint in a
-      // round eye. The old pass stamped a 2 x 2 over the pupil's CORNER, which did not light the
-      // eye, it bit a notch out of it and left a wedge sloping down towards the nose: an eyebrow.
-      img.px(lit, 30 + b, shade('wall', 3));
+      // ONE pixel of light, with pupil on all four sides of it, so it reads as a glint in a round
+      // eye and cannot cut the shape. Measured: the glint is luma 250 and the white disc beside the
+      // pupil is 247, so anywhere on the pupil's rim the two fuse and the bead becomes a crescent.
+      img.px(lit, 30 + b, OWL_CATCH);
     }
   }
 
@@ -826,6 +875,21 @@ function paintOwl(img: Img, blink: boolean): void {
 
 /** His near-black: the hood's inside, the badger's mask, the grip, and the keyline. */
 const KEEPER_DARK: RGBA = keyline('roof');
+
+/**
+ * The eye, and the two values of the lantern caught in it.
+ *
+ * At module scope because `FACE_PLAN` at the foot of this file measures the drawn face against
+ * them. A guard that re-derives a colour the painter also derives is a guard that silently stops
+ * measuring the thing it names the moment one of the two moves.
+ *
+ * `KEEPER_EYE` is a real step above `KEEPER_DARK` -- luma 54 against the outline's 30 -- for the
+ * reason the design board gives about the rabbit: an eye painted in the value its own silhouette is
+ * drawn in makes the face read as perforated.
+ */
+const KEEPER_EYE: RGBA = keyline('wood', 22);
+const KEEPER_CATCH_NEAR: RGBA = tone('gold', 0.22);
+const KEEPER_CATCH_FAR: RGBA = tone('gold', 0.08);
 
 /**
  * No reference exists for this character anywhere (docs/ART_PRODUCTION.md section 5), so this is
@@ -919,8 +983,6 @@ const KEEPER_DARK: RGBA = keyline('roof');
 function paintKeeper(img: Img, blink: boolean): void {
   const b = blink ? 1 : 0;
   const CX = 20;
-  /** The eye's dark: a real step above `KEEPER_DARK`, which is the outline. See the note above. */
-  const EYE: RGBA = keyline('wood', 22);
   /** The nose pad: below the fur ramp, a step under the eye, still clear of the keyline. */
   const NOSE: RGBA = keyline('wood', 30);
   /** The mouth corner: lighter than the pad, so the two do not fuse into one blob. */
@@ -1043,40 +1105,48 @@ function paintKeeper(img: Img, blink: boolean): void {
    *
    * Two dark eyes on a pale field is the oldest signal there is and it is still the construction
    * here; what was wrong was that the field was bone and the eyes were the outline's own near-black,
-   * so the pair read as holes punched through a skull. `EYE` is a real step lighter than the
-   * keyline, and the gold is the lamp he is carrying reflected back.
+   * so the pair read as holes punched through a skull. `KEEPER_EYE` is a real step lighter than the
+   * keyline -- 54 against 30 -- and the gold is the lamp he is carrying reflected back.
    *
-   * A CATCH INSIDE A PUPIL, NOT A GOLD EYE (2026-10-20, review). The previous pass described the
-   * reflection as one pixel and it was one pixel -- but in a pupil only two by two, one pixel is a
-   * QUARTER of the eye and it sat in the corner, touching fur on two sides. Measured: the catch came
-   * back at luma 199 against lit fur at 173, so the two brightest marks on the whole face were the
-   * eyes, and the review read them exactly as they rendered -- "two glowing gold slits under a hood".
-   * Brightest-thing-is-the-eye is how an animal becomes a demon, and no amount of warm fur elsewhere
-   * argues with it.
+   * THE VALUES WERE RIGHT AND THE SHAPE WAS NOT (2026-10-20, design board sections 2 and 3). The
+   * previous pass chased brightness: the catch came down from `shade('gold', 2)` to `tone('gold',
+   * 0.22)` and `tone('gold', 0.08)`, luma 151 and 130, so the order on the face is stripe 207, fur
+   * 178, catch 151, which is the order it is on a live animal and is worth keeping. In the same
+   * move it took the pupil to TWO WIDE BY THREE TALL to get the catch enclosed on three sides. That
+   * is the measurement the board uses to convict the rabbit -- "a solid ellipse, TALLER THAN IT IS
+   * WIDE, which is the shape a narrowed eye makes" -- applied to a face a third the rabbit's size,
+   * and it rendered exactly as that sentence predicts: two vertical slots with a spark in each. The
+   * enclosure was bought with the one property of an eye that decides whether it is open or narrowed.
    *
-   * The owl in this same file already had the answer and it is copied here wholesale: a dark pupil
-   * with the gold ENCLOSED. The pupil goes to two by three, so the catch at its middle-left has
-   * pupil above it, pupil below it and pupil to its right, and only the fur-side edge open -- which
-   * is the side the lamp is on, so the opening is where the light comes from. And the gold drops from
-   * `shade('gold', 2)` to `tone('gold', 0.22)` and `tone('gold', 0.08)`, luma 151 and 130: still
-   * plainly a spark against a pupil at 53, no longer brighter than the fur it sits in. The order of
-   * brightness on the face is now stripe, fur, catch, which is the order it is on every animal.
+   * So the pupil is 2 x 2 -- square, never taller than wide, the same shape the rabbit's is -- and
+   * the catch takes its upper-left pixel. That pixel touches fur on two sides, which the previous
+   * pass was right to want to avoid and wrong to pay for in aspect: measured, the catch is 151
+   * against lit fur at 174 and brow fur at 123, so it stands 23 and 28 luma clear of both and
+   * cannot fuse into either. `assertFaceMetrics()` measures that clearance. The owl's glint is
+   * enclosed outright because a 3-wide pupil has an inside; a 2-wide one does not, and inventing
+   * the width to satisfy the rule is how the slot got here.
    *
-   * The pupil's third row is taken off the lit band at row 17 rather than off the muzzle below,
-   * because the alternative -- growing downwards -- puts the eye's foot against the top of the cream
-   * stripe and fuses the two into one mark running from brow to nose, which is the blaze again.
+   * BOTH catches sit on the LEFT. Mirroring them is what turns two lit corners into a frown (see the
+   * rabbit's eye note); matching them makes the pair one glance, and the lamp is on his left, so the
+   * glance is at the thing he is carrying.
+   *
+   * Losing the third row also buys back the gap the previous pass worried about: at rows 17..18 the
+   * eye's foot is a clear row above the cream stripe's crown at row 19, so the two cannot fuse into
+   * one mark running from brow to nose.
    */
   if (blink) {
     // Lids a pixel wider than the pupil on the OUTER side only, so the two of them stay symmetric
     // about the bridge and leave two pixels of fur between: a lid that runs inward instead closes
     // the gap and the pair becomes one dark band across the eyes, which is the badger mask again.
-    img.rect(15, 19 + b, 3, 1, EYE);
-    img.rect(20, 19 + b, 3, 1, EYE);
+    // On the pupil's LOWER row, which is where a closing lid finishes -- at row 19, below the open
+    // eye entirely, it was a line under the face rather than a shut one.
+    img.rect(15, 18 + b, 3, 1, KEEPER_EYE);
+    img.rect(20, 18 + b, 3, 1, KEEPER_EYE);
   } else {
-    img.rect(16, 17 + b, 2, 3, EYE);
-    img.rect(20, 17 + b, 2, 3, EYE);
-    img.px(16, 18 + b, tone('gold', 0.22)); // the lantern, caught in the near eye
-    img.px(20, 18 + b, tone('gold', 0.08)); // and dimmer in the far one, which is turned away
+    img.rect(16, 17 + b, 2, 2, KEEPER_EYE);
+    img.rect(20, 17 + b, 2, 2, KEEPER_EYE);
+    img.px(16, 17 + b, KEEPER_CATCH_NEAR); // the lantern, caught in the near eye
+    img.px(20, 17 + b, KEEPER_CATCH_FAR); // and dimmer in the far one, which is turned away
   }
 
   /*
@@ -1578,4 +1648,253 @@ export function assertBodyPlans(): void {
     );
 }
 
+// ------------------------------------------------- the face plan (design board sections 2 and 3)
+
+/**
+ * What the design board measures when it says "creepy", turned into numbers the build checks.
+ *
+ * Section 2 convicts the rabbit arithmetically rather than by taste -- "each eye is a third of the
+ * head's height, the pair spans 63% of the face width, both are vertically elongated, and
+ * `RABBIT_DARK` is the identical value the sprite is outlined in" -- and section 3 then convicts
+ * the owl on the same three counts, "and worse". Three passes have since fixed those numbers by
+ * hand, and nothing in this repo was watching them: `assertBodyPlans()` guards the silhouette's
+ * BOX, which is the one property of a face that stays correct while the face goes wrong. A 3 x 4
+ * keyline-valued eye could go back in tomorrow and every gate in the build would stay green.
+ *
+ * So the four numbers are measured off the rendered frame, not off the source:
+ *
+ *   area       the eye's ink as a share of the opaque face, which is section 2's "a third of the
+ *              head's height" in the form a painter can measure
+ *   span       the pair's outer span over the face's width -- section 2's 63%
+ *   tall       the taller eye's height over its width. Section 2: "TALLER THAN IT IS WIDE, which
+ *              is the shape a narrowed eye makes". The owl is allowed past 1 because his pupil
+ *              sits in a disc that is itself taller than wide; nobody else is
+ *   lift       the eye's luma above the keyline's -- section 2's "the identical value the sprite
+ *              is outlined in", which is lift 0
+ *
+ * And a fourth this pass added, because it is the shape the fault actually took when I rendered it:
+ *
+ *   clearance  the smallest luma step from a glint pixel to an opaque neighbour that is not the
+ *              eye. The owl's glint sat on the pupil's left column against a white disc at 247 with
+ *              its own 250, so the light did not land IN the eye, it opened a notch out of it and
+ *              the bead read as a crescent. Three luma. A catchlight that cannot be told from what
+ *              it touches is not a catchlight.
+ *
+ * THE CAPS ARE THIS ROUND'S MEASUREMENTS WITH HEADROOM, not targets to drift up to. Each is
+ * commented with the value that would have to come back for it to fire, so the next painter can see
+ * what the number is holding shut rather than guessing. Raising one is a decision to be argued in
+ * the diff; the board's own failing numbers are in the comments to argue against.
+ *
+ * The wolf is not in this table. The board says "the wolf is right, leave him", his eye is amber on
+ * purpose and his whole point is reading as a silhouette, so a guard built out of the rabbit's
+ * problem has nothing true to say about him.
+ */
+interface FaceWatch {
+  /** The pupil's value, taken from the painter's own constant rather than re-derived. */
+  readonly eye: RGBA;
+  /** Every value the glint is drawn in. Empty when the eye carries no light. */
+  readonly light: readonly RGBA[];
+  /** The value the sprite is outlined in. */
+  readonly line: RGBA;
+  /** The face: the box the head fills in the 32 x 48 frame, inclusive at both ends. */
+  readonly box: {
+    readonly x0: number;
+    readonly x1: number;
+    readonly y0: number;
+    readonly y1: number;
+  };
+  readonly maxArea: number;
+  readonly maxSpan: number;
+  readonly maxTall: number;
+}
+
+const FACE_PLAN: Record<string, FaceWatch> = {
+  // area 0.040 -- the board's own 3 x 4 ellipse pair measures 0.099 here. span 0.563 against
+  // section 2's 63%. lift 22.6; it was 5.1 until this round and 0 before that.
+  'npc-rabbit-0': {
+    eye: RABBIT_EYE,
+    light: [],
+    line: RABBIT_DARK,
+    box: { x0: 8, x1: 23, y0: 27, y1: 39 },
+    maxArea: 0.06,
+    maxSpan: 0.6,
+    maxTall: 1,
+  },
+  // area 0.136 -- "a near-black blob filling the disc", which is what section 3 describes, measures
+  // about 0.5. span 0.75, and an owl's eyes are meant to be far apart. tall 1.33 in a disc that is
+  // 7 x 8. clearance is enclosed outright: a 3-wide pupil has an inside and the glint is in it.
+  'npc-owl-0': {
+    eye: OWL_PUPIL,
+    light: [OWL_CATCH],
+    line: keyline('trunk'),
+    box: { x0: 8, x1: 23, y0: 26, y1: 36 },
+    maxArea: 0.18,
+    maxSpan: 0.8,
+    maxTall: 1.4,
+  },
+  // area 0.089 -- the 2 x 3 slot this round removed measures 0.133, so the cap holds that shut on
+  // area as well as on aspect. tall 1.0 exactly, which is the whole edit. lift 24.7.
+  'npc-lantern-keeper-0': {
+    eye: KEEPER_EYE,
+    light: [KEEPER_CATCH_NEAR, KEEPER_CATCH_FAR],
+    line: KEEPER_DARK,
+    box: { x0: 14, x1: 23, y0: 14, y1: 22 },
+    maxArea: 0.11,
+    maxSpan: 0.65,
+    maxTall: 1,
+  },
+};
+
+/** An eye has to clear its own outline by this much, in luma. Section 2's fault is lift 0. */
+const MIN_LIFT = 12;
+
+/** And a glint has to clear whatever it touches by this much. The owl's notch was 3. */
+const MIN_CLEARANCE = 12;
+
+export interface FaceMetrics {
+  /** Pupil and glint pixels together. */
+  eye: number;
+  /** Opaque pixels inside the face box. */
+  head: number;
+  /** `eye / head`. */
+  area: number;
+  /** The pair's outer span in columns, over the face box's width. */
+  span: number;
+  /** The taller eye's height over its own width. */
+  tall: number;
+  /** The eye's luma minus the keyline's. */
+  lift: number;
+  /** The smallest luma step from a glint to an opaque neighbour outside the eye; `Infinity` when
+   *  there is no glint, or when the glint has pupil on all four sides. */
+  clearance: number;
+}
+
+const sameColour = (a: RGBA, b: RGBA): boolean =>
+  a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+
+/**
+ * The four numbers, read back off the painted frame.
+ *
+ * Off the FRAME and not off the source, because every fault the board names is a property of what
+ * landed in the PNG: a 2 x 2 eye whose glint merges with the sclera beside it is the wrong shape in
+ * the file however square the rectangle in the code was.
+ */
+export function measureFace(name: string): FaceMetrics {
+  const watch = FACE_PLAN[name];
+  const paint = CAST_FRAMES[name];
+  if (!watch || !paint) throw new Error(`${name}: no face plan, or no frame to measure`);
+  const img = new Img(32, 48);
+  paint(img);
+
+  const eye: [number, number][] = [];
+  const light: [number, number][] = [];
+  let head = 0;
+  for (let y = watch.box.y0; y <= watch.box.y1; y++)
+    for (let x = watch.box.x0; x <= watch.box.x1; x++) {
+      const c = img.get(x, y);
+      if (c[3] !== 0) head++;
+      if (sameColour(c, watch.eye)) eye.push([x, y]);
+      else if (watch.light.some((k) => sameColour(c, k))) light.push([x, y]);
+    }
+  const all = [...eye, ...light];
+  if (!all.length) throw new Error(`${name}: the face plan found no eye inside its own box`);
+
+  const xs = all.map((p) => p[0]);
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  const mid = (lo + hi) / 2;
+  // The two eyes, split at the midline of their own span. A face with one eye, or with both on one
+  // side of the bridge, has no aspect worth quoting and is reported as unbounded.
+  const aspect = (side: [number, number][]): number => {
+    if (!side.length) return Infinity;
+    const sx = side.map((p) => p[0]);
+    const sy = side.map((p) => p[1]);
+    return (Math.max(...sy) - Math.min(...sy) + 1) / (Math.max(...sx) - Math.min(...sx) + 1);
+  };
+
+  const inEye = new Set(all.map(([x, y]) => `${x},${y}`));
+  let clearance = Infinity;
+  for (const [x, y] of light) {
+    const self = lumaOf(img.get(x, y));
+    for (const [nx, ny] of [
+      [x - 1, y],
+      [x + 1, y],
+      [x, y - 1],
+      [x, y + 1],
+    ] as const) {
+      if (nx < 0 || ny < 0 || nx >= img.w || ny >= img.h) continue;
+      if (inEye.has(`${nx},${ny}`)) continue;
+      const n = img.get(nx, ny);
+      if (n[3] === 0) continue;
+      clearance = Math.min(clearance, Math.abs(lumaOf(n) - self));
+    }
+  }
+
+  return {
+    eye: all.length,
+    head,
+    area: all.length / head,
+    span: (hi - lo + 1) / (watch.box.x1 - watch.box.x0 + 1),
+    tall: Math.max(aspect(all.filter(([x]) => x < mid)), aspect(all.filter(([x]) => x > mid))),
+    lift: lumaOf(watch.eye) - lumaOf(watch.line),
+    clearance,
+  };
+}
+
+/**
+ * The gate, beside `assertBodyPlans()` and for the same reason.
+ *
+ * Sprite art reaches the game through one door -- `pnpm graybox` imports this module to write
+ * `apps/game/src/assets/npc-*.png` -- so throwing here means a face that has drifted back towards
+ * the board's four complaints cannot be baked into the assets at all. `tools/graybox` still has no
+ * `test` script and CI still does not run `pnpm graybox`, so this is the strongest gate available
+ * from inside this file; the ask for a vitest spec is recorded with the one `assertBodyPlans()`
+ * already raised.
+ */
+export function assertFaceMetrics(): void {
+  const faults: string[] = [];
+  for (const name of Object.keys(FACE_PLAN)) {
+    const want = FACE_PLAN[name]!;
+    const got = measureFace(name);
+    const say = (what: string, is: string, cap: string): void => {
+      faults.push(`${name}: ${what} is ${is}, over ${cap}`);
+    };
+    if (got.area > want.maxArea)
+      say(
+        'the eye',
+        `${(got.area * 100).toFixed(1)}% of the face`,
+        `${(want.maxArea * 100).toFixed(0)}% -- design board section 2, "a third of the head's height"`,
+      );
+    if (got.span > want.maxSpan)
+      say(
+        'the eye pair',
+        `${(got.span * 100).toFixed(1)}% of the face width`,
+        `${(want.maxSpan * 100).toFixed(0)}% -- design board section 2, "the pair spans 63%"`,
+      );
+    if (got.tall > want.maxTall)
+      say(
+        'the eye',
+        `${got.tall.toFixed(2)} times as tall as it is wide`,
+        `${want.maxTall.toFixed(2)} -- design board section 2, "the shape a narrowed eye makes"`,
+      );
+    if (got.lift < MIN_LIFT)
+      faults.push(
+        `${name}: the eye is only ${got.lift.toFixed(1)} luma above its own keyline, under ${MIN_LIFT} ` +
+          `-- design board section 2, "the identical value the sprite is OUTLINED in"`,
+      );
+    if (got.clearance < MIN_CLEARANCE)
+      faults.push(
+        `${name}: the glint is only ${got.clearance.toFixed(1)} luma from something beside it that ` +
+          `is not the eye, under ${MIN_CLEARANCE}; it is cutting a notch rather than lighting a bead`,
+      );
+  }
+
+  if (faults.length)
+    throw new Error(
+      `The cast's faces have drifted back towards docs/DESIGN_BOARD.md sections 2 and 3:\n  ` +
+        faults.join('\n  '),
+    );
+}
+
 assertBodyPlans();
+assertFaceMetrics();

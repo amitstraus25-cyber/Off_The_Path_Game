@@ -134,6 +134,38 @@ const TRUNK_H = TILE;
  */
 const GROUND_Y = 24;
 
+/**
+ * THE ROWS A CROWN LEAVES ABOVE ITSELF FOR ITS OWN KEYLINE -- the cap's half of `reach`, and the
+ * 2026-10-20 correction to crown scale three.
+ *
+ * `reach` has always clamped how far a contour bump may stand off the centre LINE, for a reason its
+ * own note states: `Img.outline()` only paints inside the image, so a crown that touches the edge of
+ * its drawing has no row to put a line on and comes out looking sliced. There was no equivalent for
+ * the TOP, and the sapling is small enough to need one. Measured on the drawings:
+ *
+ *   crown     painted on row 0 of its own drawing
+ *   mid                 0 px
+ *   elder               0 px
+ *   sapling            18 px        -- a flat cut across the cap, with no keyline on it
+ *
+ * The sapling's own docstring has recorded that cut as a known defect and concluded the real fix is
+ * a taller drawing, which means a 2x3 stamp and is the map owner's footprint decision. That is still
+ * true of the crown's HEIGHT and it is not what the cut is: the egg's top sits on row 2 with two rows
+ * to spare, and what overshoots is the contour bumps and the matrix blobs standing proud of it. So
+ * the fix is the one `reach` already makes on the sides -- place the blob where it fits.
+ *
+ * `clearCap` in `crownBlobs` pushes a blob's centre down until its own reach clears this row.
+ * `lump()` paints at most 0.9 * 1.41 = 1.27 radii above a centre (the `r * 0.9` in its `dy`, times
+ * the largest bulge its three sine terms can make), so a clamp at 1.3 radii is a bound rather than
+ * an estimate, and a blob clamped to exactly it still fills down to this row.
+ *
+ * Two, not one: `outline()` puts the line on the first row and `weight()` may ask for a second.
+ * Mid and elder clear it already, so for them the clamp is an identity -- both drawings hash
+ * byte-for-byte the same before and after it, which is the property this file keeps buying with
+ * literals and is the reason this was safe to add at the bottom of a round.
+ */
+const CAP_ROOM = 2;
+
 /*
  * There was a `CROWN_SKY = 2` here, shared by nothing: the mid crown was the only spec that used
  * it, the elder and the sapling wrote their own, and when the squat of 2026-10-20 moved the mid
@@ -1066,6 +1098,15 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
   const { span, eggHalfW } = shape;
   const RND = noise(s.seed);
 
+  /**
+   * Push a blob's centre down until its own reach clears the rows the keyline needs. See `CAP_ROOM`.
+   *
+   * It takes no draw from `RND`, and it is applied to the centre AFTER the radius is drawn, so the
+   * seeded stream below is the same sequence whether a blob is clamped or not -- which is why the
+   * mid and the elder come out byte-for-byte unchanged rather than merely looking unchanged.
+   */
+  const clearCap = (y: number, r: number): number => Math.max(y, CAP_ROOM + 1.3 * r);
+
   const blob = (x: number, y: number, r: number, lift = 0): Blob => ({
     x,
     y,
@@ -1095,7 +1136,7 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
       const hw = eggHalfW(y);
       if (hw < 3 * s.k) continue;
       for (let x = s.cx - hw + 3 * s.k; x <= s.cx + hw - 3 * s.k; x += 5 * s.k)
-        out.push(blob(x, y, 4.4 * s.k));
+        out.push(blob(x, clearCap(y, 4.4 * s.k), 4.4 * s.k));
     }
     /*
      * The contour bumps, and they are bigger and further apart than they were.
@@ -1116,7 +1157,13 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
       const hw = eggHalfW(y);
       if (hw < 1.5 * s.k) continue;
       const r = (4.0 + RND() * 4.0) * s.k;
-      out.push(blob(s.cx + Math.sign(Math.sin(th)) * Math.min(hw - r * 0.25, s.reach - r), y, r));
+      out.push(
+        blob(
+          s.cx + Math.sign(Math.sin(th)) * Math.min(hw - r * 0.25, s.reach - r),
+          clearCap(y, r),
+          r,
+        ),
+      );
     }
     /*
      * The scallop: hanging lobes along the crown's underside, with notches between them.
@@ -1151,7 +1198,8 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
     for (let x = s.cx - (s.eggHalfW - 0.5); x <= s.cx + (s.eggHalfW - 0.5);) {
       const r = (4.0 + RND() * 3.4) * s.k;
       const by = eggBottom(Math.round(x));
-      if (by > 0 && x - r >= 2.5 && x + r <= s.w - 2.5) out.push(blob(x, by + r * 0.45, r));
+      if (by > 0 && x - r >= 2.5 && x + r <= s.w - 2.5)
+        out.push(blob(x, clearCap(by + r * 0.45, r), r));
       x += r * s.lobeStep + RND() * 2.4 * s.k;
     }
 
@@ -1174,7 +1222,10 @@ function crownBlobs(s: CrownSpec, shape: CrownShape) {
      * The skirt still has to reach both of the trunk's shoulders -- at row 61 it spans about x 22..42
      * over a column 15 wide, so there is no grass showing at either shoulder and no lollipop stem.
      */
-    for (const [x, y, r] of s.skirt) out.push(blob(x, y, r));
+    /* The hem's blobs cannot reach the cap, so `clearCap` is an identity here; it is applied all
+     * the same, so that "no blob is placed where it would paint above the ring's rows" is a
+     * property of the whole list rather than of the three places somebody remembered. */
+    for (const [x, y, r] of s.skirt) out.push(blob(x, clearCap(y, r), r));
     return out;
   })();
 
@@ -1966,17 +2017,23 @@ const ELDER_TRUNK: TrunkSpec = {
  * Its egg is 42 across and 36 down, an aspect of 1.167, and that number is now the FAMILY's: the
  * squat of 2026-10-20 brought the mid and the elder down to it rather than taking this one anywhere,
  * because this was the only one of the three already on the right side of the line. Its painted
- * silhouette is 53 by 47.
+ * silhouette is 53 by 46.
  *
- * **Two things about it are known defects rather than choices, and both are measured.** Its cap is
- * clipped: eighteen pixels of the crown sit on row 0 of a 48-row drawing, so `outline()` has no row
- * to put a keyline on and the top of the sapling is a flat cut. Unclipping it from here needs
- * `eggHalfH` at 15.5 or less, which takes the lit share to 0.060 against the guard's floor of 0.06,
- * the separate marks to four against a floor of five, and the aspect to 1.25 -- so the knob that
- * fixes it breaks two bounds and leaves the family. The real fix is a taller drawing, which means a
- * 2x3 stamp rather than a 2x2, and that is a footprint decision for whoever owns the map. Second,
- * its bark is nearly hidden: the skirt sits almost on the root flare, with two or three rows of
- * clear cylinder between them rather than the ten the note on `eggCY` below aims at.
+ * **THE FLAT CAP, 2026-10-20, and the note it replaces had the diagnosis right and the knob wrong.**
+ * That note read: eighteen pixels of the crown sit on row 0 of a 48-row drawing, `outline()` has no
+ * row to put a keyline on, the top of the sapling is a flat cut -- and the only way out is a taller
+ * drawing, which means a 2x3 stamp and belongs to the map owner. The first three clauses are exactly
+ * what the render showed. The last one does not follow: the knob it reached for was `eggHalfH`, which
+ * shrinks the whole crown and does break the family, but the egg's top already sits on row 2 with
+ * room to spare and what overshoots is the BLOBS standing proud of it. `CAP_ROOM` clamps those the
+ * way `reach` has always clamped the sides, and the cut closes with the egg, the aspect, the ladder
+ * and the two other crowns all untouched. Row 0 goes from 18 px to 0 and the crown loses one row of
+ * height. See `CAP_ROOM`.
+ *
+ * The crown's HEIGHT is still what the old note says it is -- the sapling is 46 rows of leaf over ten
+ * of bark inside a 64-row stamp, which is tight, and its bark is nearly hidden: the skirt sits almost
+ * on the root flare, with two or three rows of clear cylinder between them rather than the ten the
+ * note on `eggCY` below aims at. That one does want a 2x3, and it stays with the map owner.
  */
 const SAPLING_CROWN: CrownSpec = {
   w: 64,
@@ -1994,19 +2051,88 @@ const SAPLING_CROWN: CrownSpec = {
   eggCY: 20,
   eggHalfH: 18,
   eggHalfW: 21,
-  reach: 29.5,
+  /*
+   * 29.5 until 2026-10-20, and it was the mid crown's bug still sitting here unfixed.
+   *
+   * `MID_CROWN.reach` came down from 29.5 to 28.0 because the outermost painted pixel of a bump
+   * lands at `reach + 0.3r` from the centre line, so at 29.5 with r up to 8 the mid crown reached
+   * x 0 and x 63 of its own 64-wide drawing and lost its keyline down both sides. The sapling has
+   * the same 64-wide drawing and the same arithmetic -- its biggest bump is r 5.76, so 29.5 puts its
+   * outermost pixel at 31.2 from a centre line at 32, which is x 0.8 and x 63.2 -- and it kept the
+   * number. It survived only because its own seed never threw a big bump at the widest row: measured
+   * on the drawing, columns 0 and 63 carry nothing, and the body stands seven columns clear of each.
+   * That is this seed's luck rather than clearance, and the seed below is one knob anybody may turn
+   * -- 160 of them were turned this round. 28.0 lands the widest bump a crown of this size can throw
+   * at x 62 whatever the seed says, which leaves the ring its column.
+   */
+  reach: 28.0,
   sky: 1,
   fall: 37,
   tilt: 22,
   capX: 13,
   capY: 17.5,
-  capSeed: 33199,
+  /*
+   * Re-shopped with the cap clamp, 2026-10-20, and it is the ONLY seed in this spec that moved.
+   *
+   * `CAP_FIELD`'s stated job is to make neighbouring clusters differ, and the clamp changed what the
+   * cap's neighbours are: with the bumps that used to stand proud of the egg now sitting inside it,
+   * clusters at the cap came out on the same rung and welded. Measured on the dappled band of the
+   * crown -- the median width of a lit leaf mass, and of the dark channel between two of them, on
+   * ours and on a board crown taken down to our own resolution -- it went from 8 and 4 to 10 and 4
+   * against a board that reads 7-8 and 5-6. That is the number that says a crown's detail sits at the
+   * board's SCALE rather than merely at its value, and it is what this seed buys back:
+   *
+   *   capSeed   share   biggest   marks   conc   under 81   under 60   leaf px   channel px
+   *   33199     0.082      48       5     0.32     47.7       36.1        10          4
+   *   33413     0.102      58       5     0.31     47.6       35.4         8          4
+   *   33521     0.088      62       5     0.38     48.2       35.9         8          4
+   *   board                                        ~50        ~36         7-8        5-6
+   *
+   * **It is alpha-neutral, and that is why it was the knob rather than the dart seed.** `CAP_FIELD`
+   * is read only by `grade`, which is read only by the painters; no blob moves, so the three crown
+   * drawings' opaque masks come out bit-identical whatever this is -- checked, 48 combinations of
+   * `capX`, `capY` and this, one hash. `forest-map.ts` plants trees by exactly those masks, so this
+   * cannot move a tile on the map. The dart `seed` below can, and did; see it.
+   */
+  capSeed: 33413,
   k: 0.72,
   clump: 0.85,
   bump: 1.15,
   lobeStep: 3.0,
   clusters: 62,
   darts: 4700,
+  /*
+   * THE DART SEED DOES NOT MOVE, AND THE REASON IS WORTH THE PARAGRAPH, 2026-10-20.
+   *
+   * Every other time this file has changed a crown's geometry it has re-shopped this seed, because
+   * one `noise(seed)` stream places the matrix blobs, the contour bumps, the pendant lobes AND the
+   * leaf clusters (see `MID_CROWN.seed`). The cap clamp is a geometry change, so that is what was
+   * tried first: 160 seeds rendered and measured. Two of them are better art than this one --
+   *
+   *   seed     share  biggest  marks  conc   under 81   under 60   leaf px   channel px   silhouette
+   *   14009    0.082     48      5    0.32     47.7       36.1        10          4        53 x 46
+   *   14027    0.087     61      6    0.37     52.8       34.4         7          5        56 x 46
+   *   14191    0.103     46      8    0.23     44.5       32.8         6          5        55 x 45
+   *
+   * -- and both were rejected on the MAP rather than on the art, which is a thing this file has not
+   * had to say before. A dart seed moves the silhouette, the silhouette is the tile's alpha, and
+   * `forest-map.ts` plants trees by reading that alpha: its crown-bite rule only lets one crown cover
+   * another where the incoming tile is opaque over every pixel of the sitting one. Of the 180 ordered
+   * pairs that satisfy it today, 14027 and 14191 each lose `canopy-br covers sapling-br` and its
+   * mirror. No quarter is destroyed by that -- the rule is exactly what stops that, and it still
+   * holds -- but the planting shifts, and with the map as it stands on 2026-10-20 the shift seals 11
+   * walkable tiles off from the spawn and `generateForestMap` refuses its own output. Rendered, read,
+   * and backed out: `pnpm world` exits 0 at 14009 with 1555 of 1555 tiles reachable and 1 at 14027.
+   *
+   * So the clamp ships on the seed the review saw, and the colour knob above -- which cannot move a
+   * tile, because it cannot move a pixel of alpha -- buys back what the clamp cost the texture. What
+   * it does not buy back is the fifth column: the clamp takes the sapling's separate marks of
+   * highlight from six to five, which is exactly the floor the guard at the foot of this file sets.
+   * The bound is left where it is rather than loosened to make room, and 48 alpha-neutral
+   * combinations of `capX`, `capY` and `capSeed` were measured looking for a sixth mark without
+   * success: a crown this small does not break its cap into six. Flagged for the map owner with the
+   * 2x3 stamp, since a taller drawing is what gives this crown its room back.
+   */
   seed: 14009,
   seatFrom: 28,
   /*
@@ -2483,9 +2609,17 @@ export function crownSignature(
  * records for `CAP_FIELD`.
  *
  *   crown     share   biggest   patches   concentration   median luma   under 81   under 60
- *   mid       0.128     133       7           0.38            84          43.3%      29.7%
- *   elder     0.120     205      14           0.35            84          42.2%      28.5%
- *   sapling   0.089      48       6           0.29            83          45.2%      33.8%
+ *   mid       0.127     133       7           0.38            83          43.8%      30.2%
+ *   elder     0.119     205      14           0.35            83          42.5%      28.8%
+ *   sapling   0.102      58       5           0.31            83          47.6%      35.4%
+ *
+ * The sapling's row is the cap clamp of 2026-10-20 and the `capSeed` that answers it; the other two
+ * are unchanged, and byte-for-byte so -- see `CAP_ROOM`. **Its `patches` now sits ON the bound.**
+ * The clamp costs the cap one separate mark of highlight, six to five, and neither the dart seed nor
+ * 48 alpha-neutral combinations of the cap field buy a sixth back for a crown this small; the two
+ * dart seeds that do are refused by the map, which `SAPLING_CROWN.seed` sets out in full. The bound
+ * is deliberately NOT loosened to make room for it. If a later pass trips it, the thing to reach for
+ * is the 2x3 stamp this crown has wanted since it was drawn, not this number.
  *
  * Re-measured after the squat and the fringe of 2026-10-20. Two of the moves are worth knowing
  * about before anyone reads them as drift. The mid crown's deep shade fell from 46.5 per cent to
@@ -2523,3 +2657,189 @@ for (const g of SHOULDER_GUARDS) {
       `Crown's highlight is too few separate marks to read as foliage (want >= ${g.marks}, see UX_REVIEW 17): ${say}.`,
     );
 }
+
+/* --------------------------------------- the ring, the fringe and the three scales, guarded */
+
+/**
+ * The line/leaf split, and it is a value rather than a judgement call.
+ *
+ * `LEAF_LINE` is luma 14 and the darkest tone on the leaf ladder, `leaf(0)`, is luma 33, so there is
+ * a nineteen-luma gap with nothing in it and the midpoint separates the keyline from any leaf the
+ * crown can paint. Everything below is written in terms of this rather than of a number somebody
+ * typed, so a change to either end of the ladder moves it with them.
+ */
+const LINE_MAX = (lumaOf(LEAF_LINE) + lumaOf(leaf(0))) / 2;
+
+/**
+ * What a finished crown's own EDGE is made of: how close its body comes to each side of its drawing,
+ * and what the outermost ring of body pixels is painted in.
+ *
+ * Exported for the same reason `crownSignature` is -- the numbers below are measurements and a tool
+ * or a test has to be able to take them again rather than believe a comment.
+ */
+export function crownEdge(img: Img): {
+  /** Rows and columns of the drawing the BODY leaves clear, which is where the keyline goes. */
+  top: number;
+  left: number;
+  right: number;
+  /** The outermost ring of body pixels: the fringe. */
+  rimMax: number;
+  rimMedian: number;
+  /** The brightest body pixel that is NOT on that ring: the lit arc the fringe stands in front of. */
+  insideMax: number;
+  /** The painted silhouette's width, keyline included. */
+  width: number;
+} {
+  const body = (x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= img.w || y >= img.h) return false;
+    const c = img.get(x, y);
+    return c[3] !== 0 && lumaOf(c) > LINE_MAX;
+  };
+  let top = img.h;
+  let left = img.w;
+  let right = img.w;
+  let x0 = img.w;
+  let x1 = -1;
+  const rim: number[] = [];
+  let insideMax = 0;
+  for (let y = 0; y < img.h; y++)
+    for (let x = 0; x < img.w; x++) {
+      if (img.get(x, y)[3] !== 0) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+      }
+      if (!body(x, y)) continue;
+      if (y < top) top = y;
+      if (x < left) left = x;
+      if (img.w - 1 - x < right) right = img.w - 1 - x;
+      let open = false;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !body(x + dx, y + dy)) open = true;
+      const l = lumaOf(img.get(x, y));
+      if (open) rim.push(l);
+      else if (l > insideMax) insideMax = l;
+    }
+  rim.sort((a, b) => a - b);
+  return {
+    top,
+    left,
+    right,
+    rimMax: rim[rim.length - 1] ?? 0,
+    rimMedian: rim[rim.length >> 1] ?? 0,
+    insideMax,
+    width: x1 - x0 + 1,
+  };
+}
+
+/*
+ * THREE THINGS THE DESIGN BOARD ASKED FOR BY NAME, CHECKED AT IMPORT, 2026-10-20.
+ *
+ * Same mechanism and same argument as the shoulder guard above: a crown that has quietly lost one of
+ * these is silent at runtime, and every tool that paints a tile loads this module, so `pnpm graybox`,
+ * `pnpm world`, `pnpm score` and `pnpm preview` all run them off the one memoised drawing the tiles
+ * were going to need anyway.
+ *
+ * **1. THE RING IS CLOSED.** `Img.outline()` only paints inside the image, so a crown that brings its
+ * body up against the edge of its own drawing has no row to put a line on and renders as a flat cut
+ * -- which is what crown scale three did until this round, eighteen pixels of it across the cap. The
+ * sides have been clamped by `reach` since the mid crown was drawn; the top is `CAP_ROOM`. Measured,
+ * after, as mid / elder / sapling: the body clears the top of its drawing by 11 / 20 / 2 rows, its
+ * left edge by 2 / 5 / 7 columns and its right edge by 4 / 7 / 7. The sapling sits exactly on
+ * CAP_ROOM because `clearCap` puts it there by construction, which is an invariant rather than a
+ * tuned bound; the side figures have room, and the thinnest of them, the mid crown's two columns, is
+ * what `MID_CROWN.reach` was lowered to 28.0 to buy.
+ *
+ * **2. THE FOLIAGE FRINGE.** The design board's priority 8, and the thing it warns is expensive:
+ * "the lit arc one pixel in from the keyline, never touching it". `fringe()` caps the outermost ring
+ * of body at `leaf(FRINGE_LIT)`, and nothing has ever checked that it still does. Scanned in from the
+ * lawn on the upper-left shoulder, ours now reads `14 | 83 109 109 125 126 126 126 163` against the
+ * board's `43 41 39 42 | 53 66 79 88 90 92 92 95 103 113 125 133` -- a keyline, then a mid tone, then
+ * the climb; the lit value is eighty luma above anything on the rim. So: every rim pixel at or under
+ * the cap, measured 83 on all three crowns.
+ *
+ * It is TWO-SIDED, and that half is the load-bearing one. The cheapest way to pass "no lit pixel on
+ * the rim" is to paint the rim black, which would satisfy a ceiling and destroy the thing the cap
+ * exists to protect -- the crown would gain a second keyline and lose its surface. So the rim's
+ * median is held above `leaf(1/6)` as well: measured 64 against a floor of 53 and a ceiling of 83.
+ * **Nothing here writes a pixel. The shared border ring is read and not touched.**
+ *
+ * **A GUARD WRITTEN IN TERMS OF THE THING IT GUARDS IS NOT A GUARD, and both of the first two were,
+ * which is what breaking them on purpose was for.** The first draft read `e.top < CAP_ROOM` and
+ * `e.rimMax > lumaOf(leaf(FRINGE_LIT))`. Setting `CAP_ROOM` back to 0 -- exactly the regression --
+ * moved the bound down with the defect and the guard passed in silence; so would raising
+ * `FRINGE_LIT` to 1, which is the whole fringe undone. Each check now also carries a bound that the
+ * constant cannot move: one row is what `Img.outline()` needs whatever `CAP_ROOM` says, and the lit
+ * arc has to stand clear of the rim by a stated number of luma whatever `FRINGE_LIT` says. Proven by
+ * breaking each of them in turn and watching it throw.
+ *
+ * **3. THERE ARE STILL THREE SCALES.** ART_DIRECTION section 7.5's whole point is that the wood is
+ * built of trees of three sizes, and nothing stopped a later pass from quietly tuning two of them
+ * onto the same width -- at which point 318 stamps are one stamp again and the forest is wallpaper
+ * for the second time. Painted silhouette widths, measured: sapling 53, mid 62, elder 88.
+ *
+ * The bands are wider than the drift anyone should want and the ORDER is the real assertion. Read
+ * the spread before trusting it: 7.5 wants 44-48, 60-65 and 85-90, and ours are 53, 62 and 88, so
+ * the sapling is five pixels over its band and sits nine under the mid tree where the board's two
+ * small scales are twelve apart. That is a known residual, it is the crown's WIDTH rather than its
+ * height, and it is not reachable from here -- narrowing the egg to 7.5's 44-48 takes the lit share
+ * under the shoulder guard's floor, which is the same wall the old note on `SAPLING_CROWN` hit from
+ * the other side. Raised for the map owner with the 2x3 stamp rather than hidden inside a band that
+ * calls 53 correct.
+ */
+/* Smallest first, because the daylight check below reads the list in order. */
+const EDGE_GUARDS = [
+  { name: 'sapling', ...CROWNS.sapling!, wLo: 50, wHi: 60 },
+  { name: 'mid', ...CROWNS.mid!, wLo: 58, wHi: 68 },
+  { name: 'elder', ...CROWNS.elder!, wLo: 82, wHi: 94 },
+] as const;
+
+/**
+ * One row is what `Img.outline()` needs to put a line on, and it is a property of that function
+ * rather than of anything in this file -- which is the point of stating it separately from
+ * `CAP_ROOM`. See the note above on guards written in terms of the thing they guard.
+ */
+const RING_ROWS = 1;
+
+/**
+ * How far the lit arc has to stand clear of the rim, in luma, for the two to read as two things.
+ *
+ * Measured rather than chosen: the gap is 80 on all three crowns today (rim 83, brightest inside
+ * 163), and the defect this guards against -- a lit leaf painted on the silhouette's own edge --
+ * closes it to zero. 40 is half of what we have, which leaves the ladder room to be retuned and
+ * none to put a highlight back on the rim.
+ */
+const ARC_CLEARANCE = 40;
+
+const RIM_CEILING = lumaOf(leaf(FRINGE_LIT));
+const RIM_FLOOR = lumaOf(leaf(1 / 6));
+const widths: number[] = [];
+
+for (const g of EDGE_GUARDS) {
+  const e = crownEdge(g.img());
+  const say = `${g.name}: body clears top ${e.top}, left ${e.left}, right ${e.right}; rim max ${e.rimMax.toFixed(0)}, median ${e.rimMedian.toFixed(0)}, brightest inside it ${e.insideMax.toFixed(0)}; width ${e.width}px`;
+  const wantTop = Math.max(RING_ROWS, CAP_ROOM);
+  if (e.top < wantTop || e.left < RING_ROWS || e.right < RING_ROWS)
+    throw new Error(
+      `Crown has no room left for its own keyline, so its silhouette renders as a flat cut (want top >= ${wantTop}, sides >= ${RING_ROWS}): ${say}. See CAP_ROOM and \`reach\`.`,
+    );
+  if (e.rimMax > RIM_CEILING + 1 || e.insideMax - e.rimMax < ARC_CLEARANCE)
+    throw new Error(
+      `A lit leaf is touching the keyline again -- the foliage fringe is gone (want every rim pixel <= ${RIM_CEILING.toFixed(0)} and the lit arc >= ${ARC_CLEARANCE} luma above it, ART_DIRECTION section 4): ${say}. See \`fringe\`.`,
+    );
+  if (e.rimMedian < RIM_FLOOR)
+    throw new Error(
+      `The crown's rim has gone dark, which is a second keyline rather than a fringe (want its median >= ${RIM_FLOOR.toFixed(0)}): ${say}. See \`fringe\`.`,
+    );
+  if (e.width < g.wLo || e.width > g.wHi)
+    throw new Error(
+      `Crown width has drifted off its scale (want ${g.wLo}..${g.wHi}, ART_DIRECTION section 7.5): ${say}.`,
+    );
+  widths.push(e.width);
+}
+
+/* Three sizes, in order, with daylight between them: the whole argument for three crowns. */
+for (let i = 1; i < widths.length; i++)
+  if (widths[i]! - widths[i - 1]! < 4)
+    throw new Error(
+      `Two of the three crown scales have closed up on each other, so the wood is one stamp again (want 4px of daylight, ART_DIRECTION section 7.5): widths ${widths.join(', ')}px for ${EDGE_GUARDS.map((g) => g.name).join(', ')}.`,
+    );

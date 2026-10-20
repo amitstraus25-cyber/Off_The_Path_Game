@@ -371,282 +371,205 @@ const fenceRail: Painter = (img) => {
 };
 
 /*
- * THE RUN SEEN FROM ABOVE, north-south: SEPARATE POSTS WITH LAWN BETWEEN THEM.
+ * THE RUN SEEN FROM ABOVE, north-south: A CHANNEL OF POST TOPS, FORESHORTENED.
  *
  * This is the client's own complaint -- "the fence is nice, but from the top view, in the front, it
- * looks weird" -- and the fifth version of this tile. The four before it were all the same object
- * drawn more and more accurately, and the object was wrong. Recorded properly, because the evidence
- * that killed them is worth more than the code that replaced them.
+ * looks weird" -- and the sixth version of this tile. The history is kept because the evidence that
+ * killed each one is worth more than the code that replaced it, and because this version revisits a
+ * shape a previous one rejected. It does not revisit it on taste.
  *
- * WHAT THEY ALL DREW. A CONTINUOUS CHANNEL: a brown band running the full height of the tile between
- * two straight near-black keylines, with a rhythm of pale caps standing in it. It is a faithful
- * reading of the board. Crop `1172 370 48 145 13` and the board's north-south run really is a
- * channel with caps in it, and the last version matched it to within a few luma on every row of both
- * the crest and the joint. It still rendered as a rope, a bamboo pole or a stack of coins lying on
- * the lawn, and the client said so.
+ * VERSIONS ONE TO FOUR: A CONTINUOUS CHANNEL with a rhythm of pale caps standing in it. Rejected as
+ * a ROPE: the caps were a four-pixel lozenge at `timber` 0.34 to 0.43 inside a ten-column brown
+ * band, so the band was the object and the caps were texture on it.
  *
- * WHY MEASURING HARDER COULD NOT FIX IT. The board is 2.21x our resolution. Its channel is ten of
- * our columns and its cap period is ten of our rows, so at 1:1 a cap is a four-pixel lozenge with
- * one pixel of brown between it and the next. At the board's own scale that reads as a row of posts;
- * at ours, ten rows is not enough to carry a post AND the space beside it, so the brown wins and the
- * caps become surface texture on one long object. Copying the board's drawing at a third of its
- * resolution does not copy its reading. That is the whole lesson of this tile.
+ * VERSION FIVE: SEPARATE POSTS WITH LAWN BETWEEN THEM, two to a tile on the picket run's own
+ * 16-pixel pitch, twelve rows of post and four of nothing, joined by a four-column rail. The
+ * reasoning was that a fence reads as a fence because you can see between its posts, which is true.
+ * Rendered into the arrival frame at 2x and cropped out as a column (`before-fencecol`), it reads as
+ * a CHAIN -- identical links on a cord, or a strip of film. Three numbers say why, measured on four
+ * stacked tiles against the board's own north-south run (board `1176 376 40 110`, masked to its
+ * warm pixels, both scanned row by row for the brightest wood pixel in the run):
  *
- * WHAT THE BOARD ACTUALLY HAS, and what every version so far lacked. Crop
- * `1180 390 220 110 6`: along the bottom of that frame are THREE SEPARATE POST TOPS, each a domed
- * tan cap inside its own CLOSED near-black keyline, with BRIGHT LAWN VISIBLE BETWEEN THEM. Crop
- * `1210 460 150 110 11` and the same thing is unmistakable on the picket run -- the gap between two
- * pickets is seventeen board pixels against a picket's twenty-four, so grass is seventy per cent of
- * a picket's width and there is more sky than wood along the top of the run. A fence reads as a
- * fence because you can see between its posts. That is the one device this tile never had.
+ *     axis                                     version five   the board (in our px)
+ *     narrowest point of the silhouette             5 px            10.4 px
+ *     darkest scanline's brightest wood pixel      luma 7          luma 98
+ *     share of scanlines reading as CAP             0.250           0.359
  *
- * SO THE TILE IS NOW MOSTLY TRANSPARENT -- 30 per cent of it carries a pixel at all, counted. Two
- * posts, twelve rows of silhouette each, FOUR ROWS OF NOTHING between them, on the picket run's own
- * 16-pixel pitch, because it is the same fence and a fence has one pitch. Two whole posts land
- * inside every tile and the boundary falls in the middle of a gap, so consecutive posts never touch
- * however many tiles the map stacks.
+ * The first two are the chain. Our run drops to five columns in the gaps, half its own width, and it
+ * lays a full-width near-black bar across itself twice per post -- so every sixteen rows the object
+ * vanishes and comes back. The board's never narrows below eighty per cent of its width and never
+ * goes black across itself at all: between two of its caps the wood is luma 121 to 150, which is
+ * SHADED TIMBER, not a gap.
  *
- * MIRROR-SAFE, WHICH IS A PLACEMENT CONSTRAINT AND NOT AN AESTHETIC ONE. `forest-map.ts` puts
- * `fence-post` in its `SIDEWAYS` set, so roughly half the cells in the column are flipped
- * horizontally. The silhouette is therefore an EVEN ten columns at x 11..20, centred on 15.5 -- the
- * same centre as `fence-corner`'s 8..23 -- so a flip leaves every wood column exactly where it was
- * and the run stays a straight line. An odd width centred on an integer would have matched the
- * corner post's own wood span, 9..21, one pixel better, and it is not worth a one-column sideways
- * shift on every second cell: counted, the mirrored tile moves only the four columns its grass
- * sprigs occupy, and the sprigs are meant to vary. All the strong modelling is therefore ALONG the
- * post, top to bottom, which a horizontal flip preserves exactly, and the across-profile keeps only
- * a slight left bias (14 luma end to end) so that a flipped post reads as a different piece of
- * timber rather than as one lit from the wrong side. The contact shadow is centred and below, never
- * off to one side, for the same reason -- the previous version's shadow column sat to the right of
- * the run and the mirror put it on the left, so the run had shadows down both sides at once.
+ * SO THE CHANNEL IS RIGHT AND THE OLD CHANNEL'S RATIO WAS WRONG. Scanned at the board's own
+ * resolution down `1176 376 40 116`, one period runs:
  *
- * THREE THINGS TRIED AND REJECTED, recorded so they are not tried again. SHEARING the head to make
- * the joint diagonal: it renders as a BARBER POLE, four identical diagonals at a regular pitch
- * reading as one helix. A NEAR-BLACK RING under each cap inside the channel: a LADDER, four rungs to
- * the tile. And now the channel itself: a ROPE, at every width and every cross-section anyone
- * measured. All three are the same mistake -- decorating a continuous band instead of breaking it.
+ *     ourY   0.0  1.4  2.7  4.1  5.4  6.8  8.1  9.5 (the next cap's lit top)
+ *     luma   218  197  190  184  171  155  121  209
  *
- * AND THEN THE GAPS NEEDED A RAIL IN THEM, which is the half of this the brief did not have and the
- * render settled in one picture. Posts-with-lawn-between and nothing else, composed at 3x and put
- * beside the picket run in the same frame, reads as a DOTTED LINE OF SMALL BLOCKS -- a row of crates
- * laid out on the grass. The rope was gone and beads had replaced it. The picket run in the same
- * image reads as a fence immediately, and the reason is visible the moment the two are side by side:
- * its pickets are JOINED. `RAIL_ROWS` is nine dark rows in eighteen with two lit rails in among
- * them, and the pickets stand in front of it. Sky between the posts is necessary and it is not
- * sufficient; what makes a fence is sky between posts THAT ARE CONNECTED.
+ * -- a 9.0px period, a HARD RISE into each cap's lit top in a single pixel, then a gradual fall of
+ * about 90 luma across the rest of it. That sawtooth is the whole drawing: a domed top with its own
+ * near face under it, repeated, seen down the line. The pitch is 8 rather than 9 because 8 divides
+ * 32 and 9 does not, and foreshortening is why it is half the picket run's 16: a fence seen along
+ * its length shows its posts compressed, and the board's own ratio of cap period to picket pitch is
+ * 9.0 to 21, which is 0.43.
  *
- * So the rail comes back, and the difference from the four channel versions is the whole point. The
- * channel was TEN COLUMNS -- the full width of the post -- at `timber` 0.34 to 0.43, luma 100 to
- * 110: wider than anything standing in it and brighter than the post's own body, so it was the
- * object and the caps were texture on it. This rail is FOUR columns against the post's ten, at
- * `timber` 0.02 to 0.20, which probes at luma 61 to 86 against the post's body at 123 to 126 and its
- * cap at 189 -- narrower than the post and a clear 40 luma under its body, which is the same
- * relationship `RAIL_ROWS` has to `picket` and the same one the board draws. It is behind, so it
- * keylines in `WOOD_LINE` rather than `WOOD_BLACK`: a thing passing behind does not out-ring the
- * thing in front of it.
+ * THE PITCH IS NOT "THE SAME FENCE SO THE SAME PITCH". That was version five's reasoning and it is
+ * the one piece of it that was simply a mistake.
  *
- * It is CENTRED on 15.5, like the post, for the mirror. Offsetting it to the far side of the post is
- * what a three-quarter camera would really show, and it is also a one-pixel zigzag down the run as
- * soon as half the cells are flipped.
+ * AND IT IS NO LONGER MIRRORED. `forest-map.ts` took `fence-post` out of its `SIDEWAYS` set in the
+ * same change, which is what lets this tile have a real light direction: the board's channel is a
+ * face of nine columns with TWO COLUMNS OF SHADED TIMBER down its far side and a cast shadow on the
+ * lawn beyond that, all on the same side for the whole run. Under a horizontal flip that shaded side
+ * alternates every other tile and the run zigzags, which is exactly why version five's across-
+ * profile was flat to within 14 luma. The caps carry the variation instead, four to a tile.
+ *
+ * TWO THINGS TRIED AND REJECTED, recorded so they are not tried again. SHEARING the head to make the
+ * joint diagonal: it renders as a BARBER POLE. A NEAR-BLACK RING under each cap inside the channel:
+ * a LADDER. Both are the same mistake, and so was the 16-pitch chain -- all three break the run into
+ * pieces, where what it needs is to stay one object whose brightness pulses.
  */
-const RUN_RAIL_X = 13; // keyline 13, wood 14..17, keyline 18 -- centred on 15.5 like the post
-const RUN_RAIL_W = 6;
 
 /*
- * Across the rail's four columns: a top face turned a little away from a top-left light. It never
- * reaches the post's body value, which is what keeps it behind.
- */
-const RUN_RAIL_ACROSS: readonly number[] = [0.2, 0.15, 0.08, 0.02];
-
-/**
- * The rail, the full height of the tile, under everything. The posts overdraw it where they stand,
- * so it is only ever seen in the four rows of lawn between them.
- */
-function runRail(img: Img): void {
-  for (let y = 0; y < TILE; y++) {
-    /*
-     * One lit row where the rail comes out from under a post, and one darker where it goes back
-     * under the next. That is the board's rail device -- a single bright top edge over a dark body
-     * is the whole of how you read a rail as passing behind something -- stood on its end.
-     */
-    const r = y % POST_PITCH;
-    const lit = r === POST_ROWS ? 0.14 : r === POST_PITCH - 1 ? -0.02 : 0;
-    img.px(RUN_RAIL_X, y, WOOD_LINE);
-    img.px(RUN_RAIL_X + RUN_RAIL_W - 1, y, WOOD_LINE);
-    for (let i = 0; i < RUN_RAIL_ACROSS.length; i++)
-      img.px(RUN_RAIL_X + 1 + i, y, timber(Math.max(RUN_RAIL_ACROSS[i]! + lit, 0)));
-  }
-}
-/*
- * TALLER THAN IT IS WIDE, which is the correction the first render of this design forced.
+ * THE CHANNEL. Thirteen columns, which is `fenceCorner`'s own wood span (9 to 21) exactly, so the
+ * run and the post it dies into are flush on both sides instead of stepping in by two.
  *
- * It began 12 across by 10 down, on the reasoning that a post seen from above shows its sawn top and
- * the top is square. Rendered and put beside `1210 460 150 110 11`, that is a BREAD ROLL: a wide
- * domed lozenge sitting in a ring of grass, and six of them down a column read as stepping stones.
- * The board's fence from this camera is a row of objects clearly TALLER than they are wide, because
- * you do not only see a post's top -- you see its near FACE under the top, the same sliver of timber
- * that makes the pickets in the east-west run rectangles rather than circles. Ten across by twelve
- * down, and the post reads as a post.
+ *     x 9        near-black keyline
+ *     x 10..18   the post face, nine columns, lit from the upper left
+ *     x 19..20   the shaded far side of the run
+ *     x 21       near-black keyline
+ *     x 22       the run's cast shadow on the lawn, in the ground's own dark
  *
- * THE GAP IS FOUR ROWS AND THE BOARD'S IS TWO, and this is the one deliberate departure in the tile.
- * Measured off `1172 370 48 145 13`: the board's caps sit on a 19 board-pixel period -- 8.7 of ours
- * -- with about 15 board pixels of cap and 4 of gap, so its gap is a quarter of a post. At our
- * resolution a quarter of a post is one pixel, which is the rope. The pitch is therefore the picket
- * run's 16 (the only other number that divides 32 is 32, which would be one post every tile), the
- * post takes 12 of it and the lawn takes 4 -- a gap a third of a post, against the board's own
- * quarter. Flagged as a departure, and it is a small one: it is the ratio, not the drawing, that had
- * to move to carry the board's reading down to our resolution. A five-row gap was tried first, read
- * off the brief's 60 per cent, and at that width the run loses its line -- see the rail note above.
+ * The board's own section, sampled across at `1176..1214` and divided by 2.21: 1 column of keyline,
+ * 7.2 of face, 2.7 of fall, 1.8 of keyline -- 12.7 in all.
  */
-const POST_X = 11; // silhouette x 11..20, centred on 15.5 like `fence-corner`
-const POST_SPAN = 10; // 1 keyline, 8 of wood, 1 keyline
-const POST_PITCH = 16; // `PICKET_PITCH`: it is the same fence, so it has the same pitch
-const POST_ROWS = 12; // of which 9 carry wood; the other 4 of the pitch are lawn
+const RUN_X = 9;
+const RUN_FACE = 10; // first column of the nine-column face
+const RUN_FACE_W = 9;
+const RUN_SHADE_X = 19; // the two columns of shaded timber down the far side
+const RUN_EDGE = 21; // the far keyline
+const RUN_PITCH = 8; // four caps a tile; the board's period is 9.0 of our pixels
 
 /*
- * The post down its length, as a `timber` t. Rows 0, 10 and 11 are keyline and carry no entry.
- *
- * FOUR ROWS OF CAP AND FIVE OF BODY, OVER A 62-LUMA STEP. What makes `fenceCorner` read as a post at
- * 1:1 is not its outline -- it is a flat bright cap sitting over a body a clear 60 luma darker with
- * ONE hard step between them. This is that profile, which is also `PICKET_ALONG`'s, compressed from
- * twenty-eight rows to nine. The step keeps its single row, because a graded turn is a dowel and it
- * is the first thing to lose when the rows run out. Two earlier versions of this tile spent six of
- * seven wood rows at the top of the ramp and rendered as pale blobs with a dark smudge at the
- * bottom; the step has to be most of the drawing.
+ * ONE CAP, down its length, as a `timber` t. A sawtooth, not a curve: the rise into row 0 is the
+ * whole of what reads as a separate post top, and it must stay in one row.
  */
-const POST_ALONG: readonly (number | null)[] = [
-  null, // 0   the crown: all keyline
-  1.0, // 1   the cap: sawn end grain, the one face of a fence turned straight at the light
-  1.0, // 2
-  1.0, // 3
-  0.95, // 4
-  0.46, // 5   ONE step row, and a 62-luma drop. The whole turn from top to near face is here.
-  0.44, // 6   the body: the sliver of the post's own face you see under its top
-  0.41, // 7
-  0.36, // 8
-  0.24, // 9   and down into the grass shade
-  null, // 10  the closed bottom keyline
-  null, // 11  its second row, near-black's thickening on the side the light does not reach
+const CAP_ALONG: readonly number[] = [
+  1.0, // 0  the lit top of the cap -- the board's 218 after a 121
+  0.88, // 1  it falls fast out of the top row and then slowly, which is the board's own shape
+  0.83, // 2
+  0.8, // 3
+  0.74, // 4  and away into the near face of the post under it
+  0.65, // 5
+  0.52, // 6
+  0.34, // 7  the trough, which is shaded timber and never a gap
 ];
 
 /*
- * And across the eight columns of wood, as offsets from the row tone.
- *
- * NEARLY SYMMETRIC ON PURPOSE. A picket is a board turned a few degrees and takes a hard tonal turn
- * across its face; a post top is a flat sawn square seen straight on and takes almost none. The
- * slight crown left of centre and the 0.11 fall at the far edge are the only light direction in it,
- * 14 luma end to end -- enough to sit the post under the same top-left sun as everything else in the
- * file, little enough that the mirror pass cannot turn it into a post lit from the right.
+ * And across the nine columns of face, as offsets from the row tone. A crown left of centre falling
+ * away to the right, 0.24 of a step end to end, which is the board's own 197-to-167 across its face.
+ * It can be this strong because nothing flips the tile any more.
  */
-const POST_ACROSS: readonly number[] = [0.03, 0.06, 0.06, 0.04, 0.01, -0.02, -0.06, -0.11];
+const RUN_ACROSS: readonly number[] = [-0.1, 0.02, 0.02, 0.0, -0.04, -0.07, -0.1, -0.13, -0.17];
+
+/**
+ * The cap's silhouette: how many columns of the face are given up to the dark at each end, row by
+ * row. A flat lit top on angled shoulders, full width through the middle, and a two-column pinch
+ * where one cap meets the next -- the board's rounded hexagon, at nine columns.
+ */
+const CAP_INSET: readonly number[] = [2, 1, 0, 0, 0, 0, 1, 2];
 
 /*
- * THE TWO POSTS IN A TILE. A fence is built post by post and no two are the same piece of timber:
- * `gain` takes one a dozen luma below its neighbour, `slide` moves the crown a column across its
- * top, and the grain mark sits at a different column and height in each. With the map's mirror pass
- * on top of this, a stacked run shows four distinct post tops rather than one stamp repeated.
+ * FOUR CAPS IN A TILE, because a 32px tile at an 8px pitch holds four and the run must not print the
+ * same post every eight rows. `gain` takes one a few luma below its neighbour, `grainCol` moves its
+ * one grain mark across the face, and `sprig` says whether grass breaks the channel's edge beside
+ * it. The run's repeat is therefore the tile, 32px, the same as the picket run's.
  */
 interface Head {
   readonly gain: number;
-  readonly slide: number;
   readonly grainCol: number;
-  readonly tuftRight: boolean;
+  readonly sprig: 'none' | 'left' | 'right';
 }
-const POST_HEAD: readonly Head[] = [
-  { gain: 1.0, slide: 0, grainCol: 2, tuftRight: false },
-  { gain: 0.93, slide: 1, grainCol: 5, tuftRight: true },
+const RUN_HEAD: readonly Head[] = [
+  { gain: 1.0, grainCol: 3, sprig: 'none' },
+  { gain: 0.95, grainCol: 6, sprig: 'right' },
+  { gain: 0.98, grainCol: 2, sprig: 'none' },
+  { gain: 0.93, grainCol: 5, sprig: 'left' },
 ];
 
-/**
- * The contact shadow on the lawn under one post: centred, so a mirror does not move it.
- *
- * SMALL, AND ALMOST ENTIRELY UNDER THE POST, which a luma probe of the gap settled. At rx 6 by
- * ry 1.6 it covered both of the four gap rows nearest the post across ten columns, so a probe of
- * the gap read 35, 36, rail, rail: the lawn Paul asked to see between the posts was there in the
- * geometry and dark green in the picture, and the run came back looking like beads on a cord. At rx
- * 3.5 by ry 1.2 the post's own bottom rows overdraw all but one row of it, that row is seven columns
- * wide rather than ten, and two clear columns of bright lawn run down each side of the rail in every
- * gap. A contact shadow seats a thing on the ground; the moment it is visible all round, it is a
- * halo, and the moment it fills the gap it is the gap.
- */
-function postShadow(img: Img, top: number): void {
-  img.ellipse(POST_X + POST_SPAN / 2 - 0.5, top + POST_ROWS + 0.3, 5.5, 1.3, turf(0.08));
-}
-
-/** One post top, its own closed keyline round it, at `top`. */
-function postTop(img: Img, top: number, head: Head): void {
-  /*
-   * ONE ROW OF CLIPPED CORNER AND NOTHING ELSE ROUNDED, which is the third correction the render
-   * forced. The version before this domed the top over two rows the way `picket` does and tapered
-   * the bottom keyline as well, and ten columns is not wide enough to carry a dome at both ends: it
-   * printed a rounded pebble with a heavy ring round it, so a run of six read as stepping stones
-   * laid in the lawn. Crop `1210 460 150 110 11` and the board's picket top is a RECTANGLE with its
-   * two top corners knocked off -- straight parallel sides the whole way down, and a bottom cut dead
-   * square. The sides are the thing that reads as sawn timber at this size.
-   */
-  for (let r = 0; r < POST_ROWS; r++) {
+/** One cap and the eight rows of post under it, inside the channel, at `top`. */
+function runCap(img: Img, top: number, head: Head): void {
+  for (let r = 0; r < RUN_PITCH; r++) {
     const y = top + r;
-    const ins = r === 0 ? 1 : 0;
-    const x0 = POST_X + ins;
-    const w = POST_SPAN - ins * 2;
+    if (y < 0 || y >= TILE) continue;
+    const t = CAP_ALONG[r]! * head.gain;
 
-    // Crown, closed bottom keyline, and its thickening: three rows that are nothing but line.
-    if (r === 0 || r === POST_ROWS - 2) {
-      img.rect(x0, y, w, 1, WOOD_BLACK);
-      continue;
+    img.px(RUN_X, y, WOOD_BLACK);
+    img.px(RUN_EDGE, y, WOOD_BLACK);
+    /*
+     * The face, and its OUTLINE is as much of the drawing as its tone.
+     *
+     * A first version of this pitch drew the face full width on every row but the top, and rendered
+     * as a PLANK WITH RUNGS -- one long board with evenly spaced dark lines ruled across it. The
+     * board's caps are not a tone on a band, they are SHAPES: crop `1172 370 48 180 8` and each one
+     * is a rounded hexagon, flat across its lit top, widening through angled shoulders to the full
+     * channel in its middle, then narrowing again into a dark V where it meets the next. That
+     * pinch, twice a cap, is what the eye counts. `CAP_INSET` is it.
+     */
+    const ins = CAP_INSET[r]!;
+    for (let i = 0; i < RUN_FACE_W; i++) {
+      const x = RUN_FACE + i;
+      if (i < ins || i >= RUN_FACE_W - ins) {
+        // The corner between two caps: the deepest timber in the run, and never a gap.
+        img.px(x, y, timber(0.1));
+        continue;
+      }
+      img.px(x, y, timber(Math.max(t + RUN_ACROSS[i]!, 0.04)));
     }
-    if (r === POST_ROWS - 1) {
-      img.rect(x0, y, w, 1, WOOD_DEEP);
-      continue;
-    }
-
-    const t = POST_ALONG[r]!;
-    img.px(x0, y, WOOD_BLACK);
-    img.px(x0 + w - 1, y, WOOD_BLACK);
-    for (let i = 1; i < w - 1; i++) {
-      // Index into the across-profile by the column's place in the full eight, not from the row's
-      // own edge, so the crown stays put wherever `slide` puts it.
-      const c = Math.min(Math.max(x0 + i - (POST_X + 1) + head.slide, 0), POST_ACROSS.length - 1);
-      img.px(x0 + i, y, timber(t * head.gain + POST_ACROSS[c]!));
-    }
+    // The far side, turned away: two columns that never reach the face's value.
+    img.px(RUN_SHADE_X, y, timber(Math.max(t - 0.34, 0.04)));
+    img.px(RUN_SHADE_X + 1, y, timber(Math.max(t - 0.46, 0.04)));
   }
 
   /*
-   * Grain: one mark down the BODY, a sixth of a step darker than the face it sits on -- which is
-   * where `fenceCorner` puts its own, and for the same reason. One continuous mark running down a
-   * face is what says "one piece of timber" rather than "a shape"; the first version put a two-pixel
-   * mark on the cap instead, where the cap is four rows of near-flat 189 and the mark is the only
-   * dark thing in it, so it read as a chip out of the top.
+   * Grain: one mark down the lit face, a sixth of a step darker than the face it sits on -- which is
+   * where `fenceCorner` and `picket` put theirs, and for the same reason. It runs the cap's lower
+   * rows only, where the face is turning, because a dark mark on the one bright row is a chip.
    */
-  for (let r = 5; r <= 9; r++)
+  for (let r = 2; r <= 6; r++) {
+    const y = top + r;
+    if (y < 0 || y >= TILE) continue;
     img.px(
-      POST_X + 1 + head.grainCol,
-      top + r,
-      timber(POST_ALONG[r]! * head.gain + POST_ACROSS[head.grainCol]! - 0.15),
+      RUN_FACE + head.grainCol,
+      y,
+      timber(Math.max(CAP_ALONG[r]! * head.gain + RUN_ACROSS[head.grainCol]! - 0.15, 0.04)),
     );
-
-  /*
-   * And grass breaking the foot of each post, as at the foot of every picket in the run. Drawn last,
-   * over the wood, so the sprig genuinely overlaps the bottom keyline the way the board's do.
-   *
-   * ONE SPRIG, AND IT CHANGES SIDES. Two is what made the halo above; one post with grass at its
-   * left foot and the next with grass at its right is also the cheapest variation in the tile, and
-   * it breaks the base line without ever closing the gap that separates one post from the next.
-   */
-  tuft(img, head.tuftRight ? POST_X + POST_SPAN - 3 : POST_X - 2, top + POST_ROWS - 2);
+  }
 }
 
-/*
- * ALL THE SHADOWS, THEN THE RAIL, THEN THE POSTS, and the order is the fix for a defect the probe
- * found and the eye read only as "the gaps look murky". Drawing each post's shadow immediately
- * before its own body put a band of `turf` straight across the rail -- deep green lying over wood,
- * which is not a shadow, it is a stain. The ground's shadow belongs on the ground.
+/**
+ * The run's cast shadow: one column of the ground's own dark, down the whole tile, outside the far
+ * keyline. A fence standing in sunlight throws a line, not a halo, and with the mirror gone it can
+ * stay on the one side for the length of the run.
  */
+function runShadow(img: Img): void {
+  for (let y = 0; y < TILE; y++) img.px(RUN_EDGE + 1, y, turf(0.1));
+}
+
 const fencePost: Painter = (img) => {
-  const posts = Math.ceil(TILE / POST_PITCH);
-  for (let i = 0; i < posts; i++) postShadow(img, i * POST_PITCH);
-  runRail(img);
-  for (let i = 0; i < posts; i++) postTop(img, i * POST_PITCH, POST_HEAD[i % POST_HEAD.length]!);
+  runShadow(img);
+  const caps = Math.ceil(TILE / RUN_PITCH);
+  for (let i = 0; i < caps; i++) runCap(img, i * RUN_PITCH, RUN_HEAD[i % RUN_HEAD.length]!);
+  /*
+   * Grass breaking the channel's edge, drawn last so it genuinely overlaps the keyline. Two sprigs a
+   * tile, on opposite sides at different heights: without them the run lays two dead-straight
+   * near-black rules down ten tiles of lawn, which is the one thing a 32px repeat cannot hide.
+   */
+  for (let i = 0; i < caps; i++) {
+    const head = RUN_HEAD[i % RUN_HEAD.length]!;
+    if (head.sprig === 'none') continue;
+    tuft(img, head.sprig === 'right' ? RUN_EDGE - 1 : RUN_X - 3, i * RUN_PITCH + 3);
+  }
 };
 
 /*
@@ -1049,6 +972,58 @@ function bridgePlank(kind: 'left' | 'middle' | 'right'): Painter {
     if (kind === 'left') endPost(img, 'left');
     if (kind === 'right') endPost(img, 'right');
   };
+}
+
+/*
+ * ===========================================================================
+ * THE GUARD ON THE NORTH-SOUTH RUN: it must never come apart into beads again.
+ * ===========================================================================
+ *
+ * Five versions of `fencePost` have been wrong and two of them were wrong in the same way -- the
+ * run breaks into separate objects, as a rope's coils or as a chain's links -- and neither
+ * `pnpm score` nor any test could see it: these two columns are about three per cent of a camera,
+ * and the six axes are whole-frame statistics that a fence cannot move.
+ *
+ * So the two numbers that separate the board's run from version five's chain are asserted here,
+ * at import, which is where this file's neighbours put their own craft guards. Both are measured
+ * on four stacked tiles, scanning each row for the warm pixels inside the channel:
+ *
+ *     axis                                     board (in our px)   version five   now
+ *     narrowest point of the silhouette             10.4                 5         11
+ *     darkest scanline's brightest wood pixel      luma 98             luma 7     107
+ *
+ * The first says the run never thins; the second says it never goes black across itself, which is
+ * what a gap between two posts looks like and what the board's run never has. Either one failing
+ * means the channel has been broken back into pieces.
+ */
+{
+  const cell = new Img(TILE, TILE);
+  fencePost(cell);
+  let narrowest = TILE;
+  let darkest = 255;
+  for (let y = 0; y < TILE; y++) {
+    let width = 0;
+    let brightest = 0;
+    for (let x = 0; x < TILE; x++) {
+      const [r, g, b, a] = cell.get(x, y);
+      // Wood only: the grass sprigs and the cast shadow are green, and they are not the run.
+      if (a < 40 || g > r) continue;
+      width++;
+      brightest = Math.max(brightest, 0.299 * r + 0.587 * g + 0.114 * b);
+    }
+    if (width === 0) continue;
+    narrowest = Math.min(narrowest, width);
+    darkest = Math.min(darkest, brightest);
+  }
+  const MIN_WIDTH = 10; // the board's own channel, resampled to our resolution
+  const MIN_DARKEST = 80; // the board's darkest scanline still carries wood at luma 98
+  if (narrowest < MIN_WIDTH || darkest < MIN_DARKEST)
+    throw new Error(
+      `the north-south fence run has come apart again: narrowest ${narrowest} columns ` +
+        `(floor ${MIN_WIDTH}), darkest scanline peaks at luma ${darkest.toFixed(0)} ` +
+        `(floor ${MIN_DARKEST}). A run that thins or goes black across itself reads as a chain ` +
+        `of separate objects -- see the long note above RUN_X.`,
+    );
 }
 
 export const OUTDOOR_TILES: Record<string, (img: Img) => void> = {
