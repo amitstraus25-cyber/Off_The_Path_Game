@@ -10,67 +10,55 @@ import { z } from 'zod';
  * module makes are recorded in its section 9.
  */
 
-/**
- * The three verdicts, in collection language (GAME_DESIGN_V2 section 4): take it, take it limited,
- * leave it. The ORDER is the tie-break order of `bestVerdict`, read right to left: when two are
- * worth the same, the safer one wins.
- */
-export const VERDICTS = ['take', 'limit', 'leave'] as const;
-/** The two verdicts that put a skill in the basket. Leaving is nothing, by rule rather than data. */
-export const TAKES = ['take', 'limit'] as const;
+/** Two verdicts: take it or leave it (the user's decision, 2026-10-22). */
+export const VERDICTS = ['take', 'leave'] as const;
+/** The one verdict that puts a skill in the basket. */
+export const TAKES = ['take'] as const;
 
 export type Verdict = (typeof VERDICTS)[number];
 export type Take = (typeof TAKES)[number];
 export type SkillId = string;
 export type CharacterId = string;
+/** Which of its two variants a skill is in this run. Decided by the deal (deal.ts), never by data. */
+export type Kind = 'good' | 'bad';
 
-/** GAME_DESIGN_V2 section 3: "six or seven". Enforced on a launch build only. */
-export const LAUNCH_CAST = { min: 6, max: 7 } as const;
+/** Seven characters, each offering one skill; three are dealt good each run. Launch builds only. */
+export const LAUNCH_CAST = { skills: 7, good: 3 } as const;
+
+/**
+ * The most words the giveaway line may have. "Short" is the user's word: the line is the lesson,
+ * and a lesson a player has to wade through is one they skip under a three-minute clock. Ten is
+ * the longest line the shipped cast needs (eight) with a little room, not a reading-science figure.
+ */
+export const GIVEAWAY_WORDS = 10;
 
 const text = z.string().trim().min(1);
 const slug = z.string().regex(/^[a-z][a-z0-9-]*$/);
 
 /**
- * What a skill did on the way, under one verdict. This is the field that carries the whole lesson
- * (GAME_DESIGN_V2 section 5): "sent word ahead, so she expects you" and "sent word ahead, and the
- * wolf reads the post" are the same sentence until the last clause, so the last clause is its own
- * field and its PRESENCE is the fact the rules score.
+ * ONE VARIANT OF A SKILL: its card and its reveal, and nothing else. Strict, so a variant cannot
+ * carry a name, promise, icon or greeting of its own -- which is how "nothing before the card is
+ * opened differs between the variants" is held: not by a lint comparing two copies, but by there
+ * being only one copy to compare.
  */
-const did = z.strictObject({
-  /** What it did, as the reveal says it. True to the promise, always: the promise is never a lie. */
-  line: text,
-  /** What the kept promise was worth to the player. */
-  points: z.number().int().min(0),
+const variant = z.strictObject({
   /**
-   * Present when the skill ALSO served the wolf: the sentence that makes the lesson land. A skill
-   * can carry this and still have earned its points -- that is the point.
+   * The inspect card. `take` is what taking it does, one short line each; `leave` is what leaving
+   * it costs. The lint holds the bad card to the good card plus or instead of ONE line.
    */
-  wolf: text.optional(),
+  card: z.strictObject({ take: z.array(text).min(1), leave: text }),
+  /** What it did on the way, as the end of the run says it. */
+  reveal: text,
 });
 
 const skill = z.strictObject({
   id: slug,
   name: text,
   icon: slug,
-  /** One line, in the character's voice. Always true. */
+  /** One line, in the character's voice. True in both variants: a bad skill keeps it too. */
   promise: text,
-  /**
-   * The inspect card: three verbs, three one-line explanations -- the shape the client approved in
-   * v1 and the best thing in that round. One line per verdict, about THIS skill.
-   */
-  card: z.strictObject({ take: text, limit: text, leave: text }),
-  /**
-   * Its cost in a hurry: how long a player takes to read the card, against a three-minute clock.
-   * The reducer never charges it -- real reading takes real time, and the clock the game injects is
-   * the only time the rules know. It is the SIMULATOR's model of that reading, so Phase B can ask
-   * whether a careful player can make it.
-   */
-  inspectMs: z.number().int().min(0),
-  /**
-   * Per verdict, what it did. There is no `leave` entry and the schema refuses one: a skill that
-   * was left did nothing, earned nothing and served nobody. That is a rule, not a tuning knob.
-   */
-  did: z.strictObject({ take: did, limit: did }),
+  good: variant,
+  bad: variant,
 });
 
 const character = z.strictObject({
@@ -93,11 +81,16 @@ export const contentSchema = z.strictObject({
   rules: z.literal(2),
   version: text,
   status: text,
+  /** How many skills each run deals good. The rest are dealt bad. */
+  deal: z.strictObject({ good: z.number().int().min(1) }),
+  /**
+   * A clean arrival scores `clean`, plus `good` for each good skill in the basket. A run that let
+   * the wolf in scores 0, by rule (scoring.ts). The lint holds `outOf` to the best run.
+   */
   scoring: z.strictObject({
-    /** What the score is shown out of. The lint holds it equal to the best possible run. */
     outOf: z.number().int().min(1),
-    /** What each skill that served the wolf costs, against the points its kept promise earned. */
-    wolfCost: z.number().int().min(1),
+    good: z.number().int().min(1),
+    clean: z.number().int().min(1),
   }),
   characters: z.array(character).min(1),
   skills: z.array(skill).min(1),
@@ -108,8 +101,8 @@ export const contentSchema = z.strictObject({
 
 export type Content = z.infer<typeof contentSchema>;
 export type Skill = Content['skills'][number];
+export type Variant = Skill['good'];
 export type Character = Content['characters'][number];
-export type Did = Skill['did'][Take];
 
 export const findSkill = (content: Content, id: SkillId): Skill | undefined =>
   content.skills.find((s) => s.id === id);
@@ -119,33 +112,28 @@ export const findCharacter = (content: Content, id: CharacterId): Character | un
 export const findCharacterForSkill = (content: Content, id: SkillId): Character | undefined =>
   content.characters.find((c) => c.skillId === id);
 
-/**
- * What one verdict on one skill is worth: the points its kept promise earned, less `wolfCost` if it
- * also served the wolf. Leaving is worth exactly 0.
- *
- * ONE RULE, THREE CALLERS. `score()` sums it, the lint below holds the ceiling to it, and the
- * simulator's careful player maximises it. They are the same function so they cannot disagree.
- */
-export function worth(s: Skill, v: Verdict, content: Content): number {
-  if (v === 'leave') return 0;
-  const d = s.did[v];
-  return d.points - (d.wolf === undefined ? 0 : content.scoring.wolfCost);
-}
-
-/** The verdict worth most for this skill. A tie goes to the safer verdict: leave, then limit. */
-export function bestVerdict(s: Skill, content: Content): Verdict {
-  let best: Verdict = 'leave';
-  for (const v of ['limit', 'take'] as const)
-    if (worth(s, v, content) > worth(s, best, content)) best = v;
-  return best;
-}
-
-export const bestWorth = (s: Skill, content: Content): number =>
-  worth(s, bestVerdict(s, content), content);
-
-/** The best score any run can reach: every skill given its best verdict. Never below 0. */
+/** The best score any run can reach: a clean arrival with every dealt-good skill in the basket. */
 export const ceiling = (content: Content): number =>
-  content.skills.reduce((t, s) => t + bestWorth(s, content), 0);
+  content.scoring.clean + content.scoring.good * content.deal.good;
+
+export const countWords = (line: string): number => line.split(/\s+/).filter(Boolean).length;
+
+/**
+ * THE LINE THAT GIVES A BAD SKILL AWAY: the one line of its bad card's `take` list that is not on
+ * its good card, when the bad card is the good card with exactly that one line added or put in
+ * place of another. Null when the two cards differ in any other way -- which the lint refuses.
+ */
+export function giveaway(s: Skill): string | null {
+  const good = s.good.card.take;
+  const bad = s.bad.card.take;
+  for (const [i, line] of bad.entries()) {
+    const replaced = bad.length === good.length && bad.every((l, j) => j === i || l === good[j]);
+    const rest = bad.filter((_l, j) => j !== i);
+    const added = bad.length === good.length + 1 && rest.every((l, j) => l === good[j]);
+    if ((replaced || added) && !good.includes(line)) return line;
+  }
+  return null;
+}
 
 /**
  * Vendor names the content may not mention. COPIED from v1's `content.ts`, which does not export
@@ -169,7 +157,7 @@ export const BANNED_WORDS = [
 const BANNED = new RegExp(`\\b(${BANNED_WORDS.join('|')})\\b`, 'i');
 
 export interface LintOptions {
-  /** A launch build: six or seven skills, and no PLACEHOLDER text anywhere. */
+  /** A launch build: seven skills, three dealt good, and no PLACEHOLDER text anywhere. */
   launch?: boolean;
 }
 
@@ -183,12 +171,8 @@ function collectStrings(value: unknown, path: string, out: [string, string][]): 
 const duplicates = (ids: string[]): string[] => ids.filter((id, i) => ids.indexOf(id) !== i);
 
 /**
- * Rules the schema cannot express. Returns human-readable issues; empty means clean.
- *
- * These are STRUCTURAL: each is a statement about one skill or about the whole set that holds
- * whatever the numbers are tuned to. Whether the tuned numbers still make a game -- greed punished,
- * limiting everything not a rote win -- is measured by playing it, in `sim.ts`, and `load.ts` runs
- * both.
+ * Rules the schema cannot express. Returns human-readable issues; empty means clean. Whether the
+ * content still makes a game is measured by playing it, in `sim.ts`, and `load.ts` runs both.
  */
 export function lintContent(content: Content, opts: LintOptions = {}): string[] {
   const issues: string[] = [];
@@ -210,39 +194,43 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
       add(`skill "${s.id}" must be offered by exactly one character (found ${offered})`);
   }
 
+  /*
+   * THE TWO VARIANTS, ONE LINE APART. What is shared before the card is shared by construction
+   * (the schema has one copy of it). On the card, the leave line is the same and the take list is
+   * the same but for one line -- added, or in place of another -- and that line is short.
+   */
   for (const s of content.skills) {
-    const { take, limit } = s.did;
-    // A boundary takes capability away. It can never add value or exposure that full trust lacks.
-    if (limit.points > take.points)
-      add(`skill "${s.id}": limit earns more than take (${limit.points} > ${take.points})`);
-    if (limit.wolf !== undefined && take.wolf === undefined)
-      add(`skill "${s.id}": limit serves the wolf and take does not`);
-    /*
-     * THE LESSON, as a rule on every skill: a skill that kept its promise AND served the wolf must
-     * leave the player worse off than leaving it. Not merely worse than limiting it -- worse than
-     * nothing. Otherwise "take it anyway, the points outweigh the wolf" is a correct reading of the
-     * card, and the game teaches the opposite of its thesis.
-     */
-    for (const v of TAKES)
-      if (s.did[v].wolf !== undefined && worth(s, v, content) >= 0)
-        add(
-          `skill "${s.id}": ${v} serves the wolf but is worth ${worth(s, v, content)}; ` +
-            `serving the wolf must cost the player (worth below 0)`,
-        );
+    if (s.bad.card.leave !== s.good.card.leave)
+      add(`skill "${s.id}": the bad card's leave line must be the good card's, word for word`);
+    const line = giveaway(s);
+    if (line === null)
+      add(
+        `skill "${s.id}": the bad card must be the good card with exactly one new line, added or in place of one`,
+      );
+    else if (countWords(line) > GIVEAWAY_WORDS)
+      add(
+        `skill "${s.id}": the giveaway line is ${countWords(line)} words, at most ${GIVEAWAY_WORDS}`,
+      );
+    if (s.bad.reveal === s.good.reveal)
+      add(`skill "${s.id}": the two variants need their own reveal lines`);
   }
 
-  // "Out of 1,000" is a promise to the player. If no run can reach it, the denominator is a lie.
+  // Every deal must hold both kinds, or there is nothing to tell apart.
+  const n = content.skills.length;
+  if (content.deal.good >= n)
+    add(`a deal of ${content.deal.good} good among ${n} skills leaves nothing bad`);
+
+  // "Out of 100" is a promise to the player. If no run can reach it, the denominator is a lie.
   const best = ceiling(content);
   if (best !== content.scoring.outOf)
     add(
       `the best possible run scores ${best}, but the score is shown out of ${content.scoring.outOf}`,
     );
 
-  if (opts.launch) {
-    const n = content.skills.length;
-    if (n < LAUNCH_CAST.min || n > LAUNCH_CAST.max)
-      add(`a launch build needs ${LAUNCH_CAST.min} to ${LAUNCH_CAST.max} skills (found ${n})`);
-  }
+  if (opts.launch && (n !== LAUNCH_CAST.skills || content.deal.good !== LAUNCH_CAST.good))
+    add(
+      `a launch build needs ${LAUNCH_CAST.skills} skills, ${LAUNCH_CAST.good} dealt good (found ${n}, ${content.deal.good} good)`,
+    );
 
   const strings: [string, string][] = [];
   collectStrings(content, 'content', strings);

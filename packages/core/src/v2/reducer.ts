@@ -1,5 +1,6 @@
 import { findCharacter } from './content.ts';
 import type { Content } from './content.ts';
+import { isSeed } from './deal.ts';
 import { RUNNING, TIME_LIMIT_MS, createState } from './state.ts';
 import type { Action, RejectReason, RunEvent, State } from './state.ts';
 
@@ -85,23 +86,14 @@ export function tryReduce(state: State, action: Action, content: Content): StepR
       if (state.phase !== 'talk' && state.phase !== 'card') return no(state, 'wrong-phase');
       const c = findCharacter(content, state.active!)!;
       if (c.skillId !== action.s) return no(state, 'wrong-skill');
-      /*
-       * Take and leave can be said straight from the conversation, on the offerer's word or on
-       * sight. Limit cannot: a boundary names what to strip, and from here nothing has been named.
-       * You cannot scope what you have not read -- v1's rule, kept, and it is what lets the server
-       * refuse a forged careful verdict (runlog.ts). Once the card has been read, going back to the
-       * conversation does not unread it.
-       */
-      if (action.v === 'limit' && !state.inspected.includes(action.s))
-        return no(state, 'must-open-the-card');
+      // Take or leave, from the conversation or from the card. Reading is the player's choice.
       return ok({
         ...state,
         phase: 'forest',
         now: action.at,
         active: null,
         verdicts: { ...state.verdicts, [action.s]: action.v },
-        basket:
-          action.v === 'leave' ? state.basket : [...state.basket, { s: action.s, v: action.v }],
+        basket: action.v === 'take' ? [...state.basket, { s: action.s, v: 'take' }] : state.basket,
         log: append(state, { e: 'verdict', s: action.s, v: action.v, at: action.at }),
       });
     }
@@ -127,7 +119,7 @@ export function tryReduce(state: State, action: Action, content: Content): StepR
       return no(state, RUNNING.has(state.phase) ? 'time-not-up' : 'wrong-phase');
 
     case 'RESET':
-      return ok(createState(content));
+      return isSeed(action.seed) ? ok(createState(content, action.seed)) : no(state, 'bad-seed');
   }
 }
 

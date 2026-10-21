@@ -2,19 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { ContentError } from '../../src/content.ts';
 import {
   BANNED_WORDS,
+  GIVEAWAY_WORDS,
   LAUNCH_CAST,
   VERDICTS,
-  bestVerdict,
-  bestWorth,
   ceiling,
   contentSchema,
   findCharacter,
   findCharacterForSkill,
   findSkill,
+  giveaway,
   lintContent,
-  worth,
 } from '../../src/v2/content.ts';
 import type { Content } from '../../src/v2/content.ts';
+import {
+  SEED_LIMIT,
+  bestVerdict,
+  deal,
+  dealCount,
+  everySeed,
+  isSeed,
+  kindOf,
+  variantOf,
+} from '../../src/v2/deal.ts';
 import { loadContent } from '../../src/v2/load.ts';
 import { raw, variant } from './fixture.ts';
 
@@ -44,17 +53,30 @@ describe('schema', () => {
     expect(() => loadContent(untagged)).toThrow(/rules/);
   });
 
-  it('rejects unknown keys, empty text and a verdict outcome for leave', () => {
+  it('rejects unknown keys, empty text, and a third verdict', () => {
     const extra = variant() as Record<string, unknown>;
     extra['score'] = 1000;
     expect(() => loadContent(extra)).toThrow(ContentError);
     const blank = variant();
     blank.skills[0]!.promise = '   ';
     expect(() => loadContent(blank)).toThrow(/promise/);
-    // Leaving is nothing by rule, not by data: content cannot give it points or a wolf.
-    const leave = variant();
-    (leave.skills[0]!.did as Record<string, unknown>)['leave'] = { line: 'x', points: 900 };
-    expect(() => loadContent(leave)).toThrow(ContentError);
+    const limitCard = variant();
+    (limitCard.skills[0]!.good.card as Record<string, unknown>)['limit'] = 'Fixture card: some.';
+    expect(() => loadContent(limitCard)).toThrow(ContentError);
+    expect(VERDICTS).toEqual(['take', 'leave']);
+  });
+
+  /*
+   * NOTHING BEFORE THE CARD DIFFERS BETWEEN THE VARIANTS, held by construction: a variant is a card
+   * and a reveal, strictly, so there is one name, promise, icon and greeting and nowhere to put a
+   * second. Proved by trying to put one there.
+   */
+  it('refuses a variant that carries anything seen before the card', () => {
+    for (const key of ['name', 'promise', 'icon', 'greet']) {
+      const v = variant();
+      (v.skills[0]!.bad as Record<string, unknown>)[key] = 'Fixture: a different one.';
+      expect(() => loadContent(v), key).toThrow(ContentError);
+    }
   });
 
   it('lists every issue on the error', () => {
@@ -68,41 +90,135 @@ describe('schema', () => {
   });
 });
 
-describe('worth: the one rule scoring and the lint share', () => {
-  it('is points, less the wolf cost when the skill served the wolf, and leaving is always 0', () => {
+describe('the deal', () => {
+  it('seeds 0 to dealCount-1 are every deal exactly once, in content order, and then it wraps', () => {
     const c = parsed();
-    const { wolfCost } = c.scoring;
-    for (const s of c.skills) {
-      expect(worth(s, 'leave', c)).toBe(0);
-      for (const v of ['take', 'limit'] as const) {
-        const d = s.did[v];
-        expect(worth(s, v, c)).toBe(d.points - (d.wolf === undefined ? 0 : wolfCost));
-      }
+    expect(dealCount(c)).toBe(3);
+    expect(everySeed(c).map((s) => deal(c, s))).toEqual([['lantern'], ['courier'], ['locksmith']]);
+    expect(deal(c, 3)).toEqual(deal(c, 0));
+    expect(deal(c, SEED_LIMIT - 1)).toEqual(deal(c, (SEED_LIMIT - 1) % 3));
+  });
+
+  it('a seed is a 32-bit unsigned integer; anything else is refused', () => {
+    expect([0, 1, SEED_LIMIT - 1].map(isSeed)).toEqual([true, true, true]);
+    expect([-1, 0.5, SEED_LIMIT, Number.NaN, '1', null].map(isSeed)).toEqual(Array(6).fill(false));
+    expect(() => deal(parsed(), -1)).toThrow(/not a seed: -1/);
+  });
+
+  it('picks larger hands too: seven choose three is 35 distinct deals of three', () => {
+    const c = parsed();
+    for (let i = 0; i < 4; i++) {
+      const s = structuredClone(c.skills[0]!);
+      c.skills.push({ ...s, id: `extra-${i}` });
+    }
+    c.deal.good = 3;
+    const hands = everySeed(c).map((s) => deal(c, s).join(','));
+    expect(hands).toHaveLength(35);
+    expect(new Set(hands).size).toBe(35);
+    expect(hands.every((h) => h.split(',').length === 3)).toBe(true);
+  });
+
+  it('reads the dealt variant and the careful verdict off the good set', () => {
+    const c = parsed();
+    const good = deal(c, 1);
+    expect(c.skills.map((s) => [s.id, kindOf(good, s.id), bestVerdict(good, s.id)])).toEqual([
+      ['lantern', 'bad', 'leave'],
+      ['courier', 'good', 'take'],
+      ['locksmith', 'bad', 'leave'],
+    ]);
+    expect(variantOf(good, skill(c, 'courier'))).toBe(skill(c, 'courier').good);
+    expect(variantOf(good, skill(c, 'lantern'))).toBe(skill(c, 'lantern').bad);
+  });
+
+  it('the ceiling is a clean arrival with every dealt-good skill taken', () => {
+    const c = parsed();
+    expect(ceiling(c)).toBe(c.scoring.clean + c.scoring.good * c.deal.good);
+    expect(ceiling(c)).toBe(100);
+  });
+});
+
+describe('the giveaway: the bad card is the good card and one line', () => {
+  it('finds the replaced line and the added line', () => {
+    const c = parsed();
+    expect(giveaway(skill(c, 'lantern'))).toBe('Fixture: signals a stranger.');
+    expect(giveaway(skill(c, 'courier'))).toBe('Fixture: and a copy elsewhere.');
+    expect(giveaway(skill(c, 'locksmith'))).toBe('Fixture: opens any door.');
+  });
+
+  it('finds an added line wherever it stands, first, middle or last', () => {
+    const c = parsed();
+    const s = skill(c, 'lantern');
+    const [a, b] = s.good.card.take as [string, string];
+    for (const take of [
+      ['x.', a, b],
+      [a, 'x.', b],
+      [a, b, 'x.'],
+    ]) {
+      s.bad.card.take = take;
+      expect(giveaway(s), take.join(' | ')).toBe('x.');
     }
   });
 
-  it('picks the verdict worth most, and settles a tie on the safer verdict', () => {
-    const c = parsed();
-    expect(bestVerdict(skill(c, 'lantern'), c)).toBe('take');
-    expect(bestVerdict(skill(c, 'courier'), c)).toBe('limit');
-    expect(bestVerdict(skill(c, 'locksmith'), c)).toBe('leave');
-    // A tie between take and limit goes to limit; a tie with leave goes to leave.
-    const lantern = skill(c, 'lantern');
-    lantern.did.limit.points = lantern.did.take.points;
-    expect(bestVerdict(lantern, c)).toBe('limit');
-    const zero = skill(c, 'courier');
-    zero.did.limit.points = 0;
-    zero.did.take.points = 0;
-    expect(bestVerdict(zero, c)).toBe('leave');
-  });
+  const cases: [string, (c: Content) => void, RegExp][] = [
+    [
+      'identical cards',
+      (c) => void (skill(c, 'lantern').bad.card.take = [...skill(c, 'lantern').good.card.take]),
+      /skill "lantern": the bad card must be the good card with exactly one new line/,
+    ],
+    [
+      'two lines changed',
+      (c) => void (skill(c, 'lantern').bad.card.take = ['Fixture: one.', 'Fixture: two.']),
+      /skill "lantern": the bad card must be the good card with exactly one new line/,
+    ],
+    [
+      'two lines added',
+      (c) => void skill(c, 'courier').bad.card.take.push('Fixture: another.'),
+      /skill "courier": the bad card must be the good card with exactly one new line/,
+    ],
+    [
+      'a line taken away',
+      (c) => void skill(c, 'lantern').bad.card.take.pop(),
+      /skill "lantern": the bad card must be the good card with exactly one new line/,
+    ],
+    [
+      'an "added" line that is a copy of one already there',
+      (c) =>
+        void (skill(c, 'courier').bad.card.take = [
+          'Fixture: sends your word.',
+          'Fixture: sends your word.',
+        ]),
+      /skill "courier": the bad card must be the good card with exactly one new line/,
+    ],
+    [
+      'a different leave line',
+      (c) => void (skill(c, 'locksmith').bad.card.leave = 'Fixture card: knock louder.'),
+      /skill "locksmith": the bad card's leave line must be the good card's/,
+    ],
+    [
+      'a giveaway over the word limit',
+      (c) =>
+        void (skill(c, 'locksmith').bad.card.take = [
+          'Fixture: opens any door for anyone at all who happens to ask nicely.',
+        ]),
+      new RegExp(`skill "locksmith": the giveaway line is 13 words, at most ${GIVEAWAY_WORDS}`),
+    ],
+    [
+      'one reveal line for both variants',
+      (c) => void (skill(c, 'courier').bad.reveal = skill(c, 'courier').good.reveal),
+      /skill "courier": the two variants need their own reveal lines/,
+    ],
+  ];
+  for (const [name, mutate, expected] of cases)
+    it(`flags ${name}`, () => {
+      const c = parsed();
+      mutate(c);
+      expect(lintContent(c).join('\n')).toMatch(expected);
+    });
 
-  it('ceiling is the sum of the best worth of every skill', () => {
+  it('ten words is on the line and passes', () => {
     const c = parsed();
-    const sum = c.skills.reduce((t, s) => t + Math.max(...VERDICTS.map((v) => worth(s, v, c))), 0);
-    expect(ceiling(c)).toBe(sum);
-    expect(c.skills.map((s) => bestWorth(s, c))).toEqual(
-      c.skills.map((s) => worth(s, bestVerdict(s, c), c)),
-    );
+    skill(c, 'locksmith').bad.card.take = ['one two three four five six seven eight nine ten.'];
+    expect(lintContent(c)).toEqual([]);
   });
 });
 
@@ -130,24 +246,14 @@ describe('lint rules', () => {
       /skill "courier" must be offered by exactly one character \(found 0\)/,
     ],
     [
-      'a limit that earns more than taking it in full',
-      (c) => void (skill(c, 'lantern').did.limit.points = 700),
-      /lantern.*limit earns more than take/,
-    ],
-    [
-      'a limit that serves the wolf when taking it in full does not',
-      (c) => void (skill(c, 'lantern').did.limit.wolf = 'x'),
-      /lantern.*limit serves the wolf and take does not/,
-    ],
-    [
-      'a skill that serves the wolf and still comes out ahead',
-      (c) => void (skill(c, 'courier').did.take.points = 500),
-      /courier.*take serves the wolf but is worth 0/,
+      'a deal with nothing bad in it',
+      (c) => void (c.deal.good = 3),
+      /a deal of 3 good among 3 skills leaves nothing bad/,
     ],
     [
       'a ceiling that is not the score the player is told it is out of',
-      (c) => void (c.scoring.outOf = 1200),
-      /best possible run scores 1000, but the score is shown out of 1200/,
+      (c) => void (c.scoring.outOf = 120),
+      /best possible run scores 100, but the score is shown out of 120/,
     ],
     [
       'a banned vendor word',
@@ -173,32 +279,37 @@ describe('lint rules', () => {
     expect(lintContent(c)).toEqual([]);
   });
 
-  it('holds a launch build to six or seven skills and no placeholder text', () => {
-    expect(LAUNCH_CAST).toEqual({ min: 6, max: 7 });
+  it('holds a launch build to seven skills, three dealt good, and no placeholder text', () => {
+    expect(LAUNCH_CAST).toEqual({ skills: 7, good: 3 });
     const c = parsed();
     expect(lintContent(c)).toEqual([]);
     expect(lintContent(c, { launch: true }).join('\n')).toMatch(
-      /a launch build needs 6 to 7 skills \(found 3\)/,
+      /a launch build needs 7 skills, 3 dealt good \(found 3, 1 good\)/,
     );
     c.strings['x'] = 'PLACEHOLDER copy';
     expect(lintContent(c, { launch: true }).join('\n')).toMatch(/strings\.x: placeholder text/);
     expect(lintContent(c)).toEqual([]);
   });
 
-  it('a launch-sized cast passes the count check, at both ends', () => {
-    for (const size of [6, 7]) {
+  it('a launch-sized cast passes the count check only with seven skills and three good', () => {
+    const grow = (extra: number, good: number): Content => {
       const c = parsed();
-      const [first] = c.skills;
-      for (let i = c.skills.length; i < size; i++) {
-        c.skills.push({ ...structuredClone(first!), id: `extra-${i}` });
+      for (let i = 0; i < extra; i++) {
+        const id = `extra-${i}`;
+        c.skills.push({ ...structuredClone(c.skills[0]!), id });
         c.characters.push({
           ...structuredClone(c.characters[0]!),
           id: `extra-c-${i}`,
           spawn: `spawn-extra-${i}`,
-          skillId: `extra-${i}`,
+          skillId: id,
         });
       }
-      expect(lintContent(c, { launch: true }).join('\n')).not.toMatch(/launch build needs/);
-    }
+      c.deal.good = good;
+      c.scoring.outOf = ceiling(c);
+      return c;
+    };
+    expect(lintContent(grow(4, 3), { launch: true })).toEqual([]);
+    expect(lintContent(grow(4, 2), { launch: true }).join('\n')).toMatch(/found 7, 2 good/);
+    expect(lintContent(grow(5, 3), { launch: true }).join('\n')).toMatch(/found 8, 3 good/);
   });
 });

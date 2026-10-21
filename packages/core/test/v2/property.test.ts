@@ -4,7 +4,7 @@ import * as barrel from '../../src/v2/index.ts';
 import { VERDICTS } from '../../src/v2/content.ts';
 import { tryReduce } from '../../src/v2/reducer.ts';
 import { checkRunLog, toRunLog } from '../../src/v2/runlog.ts';
-import { reveal, score } from '../../src/v2/scoring.ts';
+import { result } from '../../src/v2/scoring.ts';
 import { mulberry32 } from '../../src/v2/sim.ts';
 import { TIME_LIMIT_MS, createState } from '../../src/v2/state.ts';
 import type { Action } from '../../src/v2/state.ts';
@@ -41,7 +41,7 @@ describe('property: random play under a random clock', () => {
     const endings = { cottage: 0, late: 0, open: 0 };
     for (let seed = 1; seed <= 800; seed++) {
       const rnd = mulberry32(seed);
-      let state = deepFreeze(createState(content));
+      let state = deepFreeze(createState(content, seed % 3));
       for (const a of [{ type: 'START', runId: `r${seed}` }, { type: 'BEGIN' }] as Action[])
         state = tryReduce(state, a, content).state;
       let clock = 0;
@@ -65,11 +65,11 @@ describe('property: random play under a random clock', () => {
       expect(check.state.basket).toEqual(state.basket);
       expect(check.state.verdicts).toEqual(state.verdicts);
       expect(check.state.phase === 'late' || check.state.phase === 'cottage').toBe(check.ended);
-      expect(score(check.state.log, content)).toEqual(score(state.log, content));
-      // The reveal is the basket, row for row: nothing taken is missing, nothing left is shown.
-      expect(reveal(state.log, content).map((e) => [e.skillId, e.verdict])).toEqual(
-        state.basket.map((b) => [b.s, b.v]),
-      );
+      expect(check.state.good).toEqual(state.good);
+      expect(result(check.state, content)).toEqual(result(state, content));
+      // The reveal's takes are the basket: nothing taken is missing, nothing left is counted.
+      const taken = result(state, content).entries.filter((e) => e.verdict === 'take');
+      expect(taken.map((e) => e.skillId).sort()).toEqual(state.basket.map((b) => b.s).sort());
       if (state.phase === 'cottage') endings.cottage++;
       else if (state.phase === 'late') endings.late++;
       else endings.open++;
@@ -94,7 +94,12 @@ describe('the v2 barrel', () => {
       'tryReduce',
       'reduce',
       'score',
+      'result',
       'reveal',
+      'deal',
+      'dealCount',
+      'variantOf',
+      'giveaway',
       'ending',
       'checkRunLog',
       'toRunLog',
@@ -102,8 +107,7 @@ describe('the v2 barrel', () => {
       'play',
       'trapChecks',
       'everyRun',
-      'roteRuns',
-      'surfaceWords',
+      'blindAverages',
       'clockCheck',
       'TIME_LIMIT_MS',
       'RULES',

@@ -5323,8 +5323,34 @@ export function generateForestMap(): GeneratedMap {
     // footpath, so the trunk and its crown stand behind his head. See the note beside that tree.
     npc('npc-owl', 18, 12),
     npc('npc-lantern-keeper', 37, 33),
-    // One per stretch of the walk: the start, the far side of the bridge, and the gate approach.
-    bystander('bystander-toadstool', 10, besideTrack(10)),
+    /*
+     * FIVE TILES EAST, ON THE SAME SOUTH VERGE -- moved for v2 Phase C (2026-10-22).
+     *
+     * He stood at (10, besideTrack(10)) = (10,22), five tiles from Purple's pad, which made him the
+     * first face in the forest. v2 meets the cast in CONTENT order (content/game.v2.json: rabbit,
+     * toadstool, owl, magpie, snail, lantern keeper, cat), and GAME_DESIGN_V2 section 10 records why
+     * that order is not cosmetic: the first and the last offer are a rote clause, and with the
+     * Toadstool met first "take the first offer" scored 850 clean. The Rabbit has to be met first,
+     * and she cannot move -- composition guard 7k holds her inside her own stall's columns -- so he
+     * does: past her stall, at column 15, still on the track's south verge.
+     *
+     * THE FIRST MOVE WENT TO (14,13), on the Owl's row-12 lane, and was reverted the same day. It
+     * kept the v2 order but took him out of the opening shot and off the straight walk from the pad:
+     * `e2e/scene-second-pass.spec.ts` found only Purple and the Rabbit left in shot to measure
+     * shadows on, and `e2e/bystanders.spec.ts`'s walk to him stuck in the planting. Column 15 keeps
+     * both, because the live game is still v1 and he is its bystander there.
+     *
+     * Measured on the regenerated map, four-connected walk from `spawn-purple` to talking range:
+     * rabbit 7, toadstool 10, owl 19, magpie 25, snail 34, lantern keeper 44, cat 46 -- each further
+     * than the one before, and the cat close enough to the door that the tour's last leg is zero
+     * tiles. That order is NOT asserted anywhere; what is asserted is the content-order tour's
+     * total (108 tiles at this placement, 104 before the move) against the clock's maximum in
+     * `packages/core/test/v2/real-content.test.ts`.
+     *
+     * The other three bystanders keep the stretch of the walk they were placed for: the far side
+     * of the bridge, the gate approach, and the doorstep.
+     */
+    bystander('bystander-toadstool', 15, besideTrack(15)),
     // East of the deck. It used to stand at x 22, which the river now runs through: the water
     // crosses the track at a slant and the far bank has moved with it.
     bystander('bystander-magpie', 30, besideTrack(30)),

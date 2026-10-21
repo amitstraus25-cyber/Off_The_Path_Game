@@ -433,8 +433,29 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
 - [x] **B. Content** (M) — done 2026-10-21 as draft 4, after three refutations (GAME_DESIGN_V2 section 10). Checked by an independent scorer: one run of 2,187 at 1000, the best wolf run 500, the best two-clause rote rule 650. Phase C must lay the cast out in content order, Rabbit first. — six or seven skills and characters as data: what each promises, the card,
       and what it did under each verdict. The mix is tuned through `pnpm sim` until the ceiling, the
       greedy floor and restrict-everything all come out right.
-- [ ] **C. World** (M) — three or four new characters on the map, one regeneration with every
+- [x] **C. World** (M) — done 2026-10-22: the cast in walking order (Rabbit first, Cat by the cottage), v2 wired behind a dev/e2e-only switch with a seeded deal per run, the timer and basket HUD. — three or four new characters on the map, one regeneration with every
       changed cell claimed; a timer and the basket in the HUD.
+      _Progress 2026-10-22 (world and wiring, not ticked):_ the seven stand in content order —
+      the Toadstool moved from (10,22) to (15,22), past the Rabbit's stall on the same verge, the one
+      cast move; walk from the spawn rabbit 7, toadstool 10, owl 19, magpie 25, snail 34, lantern
+      keeper 44, cat 46; content-order tour 108 tiles (104 before) against the clock test's
+      maximum. One regeneration, deterministic (`cmp` clean on a second run); the changed cells are
+      the Toadstool's own cell and the old one, plus one tree shifted and one planting added by the
+      generator's own pass near the old spot.
+      v2 runs in the real forest behind `?otp-v2`, dev and e2e builds only
+      (`world/v2-wiring.tsx`): the scene reads either rulebook through `world/run.ts`, the v2 store
+      stamps from an injected clock, 180 s ends the run late, the HUD is mounted, and the offer
+      and ending panels are labelled placeholders for Phase D. EVERY RUN IS DEALT: the wiring
+      draws a seed with `crypto.getRandomValues` for the first run and for every replay (core
+      `createState(content, seed)` / `RESET { seed }`), the offer shows the dealt variant's card
+      (`variantOf(state.good, skill)`), and the wolf's prints follow core's `ending`, not the data.
+      `?otp-v2-seed=N` pins the seed (0 to 34 are the 35 deals). The test clock override
+      (`v2Clock`), the switch (`otp-v2`) and the pin (`otp-v2-seed`) are in `csp.test.ts`'s bundle
+      grep, which also covers F's first item. `e2e/v2-run.spec.ts`: seeds 0 and 34 deal different
+      hands and the same character's opened card changes with them (proved by breaking the
+      variant lookup); the seven met in walking order (Purple placed beside each, not walked);
+      the careful run scores 100 at Grandma's, the greedy one lets the wolf in at 0; the clock
+      override ends a run late.
 - [ ] **D. Screens** (M) — the how-to-play rewritten for v2; **the reveal screen**; the late
       ending; the Cyera-branded landing page (**blocked on the background image**).
 - [ ] **E. Leaderboard** (M) — **including a server-issued start token**, because v2's run-log

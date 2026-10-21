@@ -1,10 +1,14 @@
 {
   "rules": 2,
-  "version": "2.0.0-draft.4",
+  "version": "2.0.0-draft.6",
   "status": "draft: copy awaits the human read",
+  "deal": {
+    "good": 3
+  },
   "scoring": {
-    "outOf": 1000,
-    "wolfCost": 650
+    "outOf": 100,
+    "good": 30,
+    "clean": 10
   },
   "characters": [
     {
@@ -12,95 +16,94 @@
       "name": "Rabbit",
       "spawn": "npc-rabbit",
       "skillId": "cottage-finder",
-      "greet": "Fresh from the crate. No maker's mark."
+      "greet": "I made the compass myself. Never once lost."
     },
     {
       "id": "toadstool",
       "name": "Toadstool",
       "spawn": "bystander-toadstool",
       "skillId": "way-teller",
-      "greet": "I made it myself, before the path."
+      "greet": "My aunt made it, long before the path."
     },
     {
       "id": "owl",
       "name": "Owl",
       "spawn": "npc-owl",
       "skillId": "word-weaver",
-      "greet": "A traveller left this with me. Maker unknown."
+      "greet": "My sister made it. She has the finest hand."
     },
     {
       "id": "magpie",
       "name": "Magpie",
       "spawn": "bystander-magpie",
       "skillId": "short-cut",
-      "greet": "Picked it up. Never saw who made it."
+      "greet": "My cousin made it. Clever bird, my cousin."
     },
     {
       "id": "snail",
       "name": "Snail",
       "spawn": "bystander-snail",
       "skillId": "slow-post",
-      "greet": "I made the post. Slow, but sure."
+      "greet": "I made it. Slow, but sure."
     },
     {
       "id": "lantern-keeper",
       "name": "Lantern Keeper",
       "spawn": "npc-lantern-keeper",
       "skillId": "night-light",
-      "greet": "I made this lamp for the pines."
+      "greet": "I made the lamp for the pines."
     },
     {
       "id": "cat",
       "name": "Cat",
       "spawn": "bystander-cat",
       "skillId": "latch-lifter",
-      "greet": "Grandma made it. She has the kettle going."
+      "greet": "Grandma made it. The kettle's on."
     }
   ],
   "skills": [
-    {
-      "id": "way-teller",
-      "name": "Way Teller",
-      "icon": "item-signpost",
-      "promise": "It takes you to her door, the old way.",
-      "card": {
-        "take": "Leads you the old way its maker knew.",
-        "limit": "Shows you only one turn at a time.",
-        "leave": "You find your own way."
-      },
-      "inspectMs": 13500,
-      "did": {
-        "take": {
-          "line": "Walked you the old way.",
-          "points": 250
-        },
-        "limit": {
-          "line": "Showed each turn. You found her door.",
-          "points": 50
-        }
-      }
-    },
     {
       "id": "cottage-finder",
       "name": "Cottage Finder",
       "icon": "item-compass",
       "promise": "This compass will help you find Grandma.",
-      "card": {
-        "take": "Searches your whole basket for her address.",
-        "limit": "Sees only the address on her note.",
-        "leave": "You guess the way."
-      },
-      "inspectMs": 12000,
-      "did": {
-        "take": {
-          "line": "Your note found her cottage.",
-          "points": 250,
-          "wolf": "Open basket. The wolf helped himself."
+      "good": {
+        "card": {
+          "take": ["Reads Grandma's address from your note.", "Points you to her door."],
+          "leave": "You guess the way."
         },
-        "limit": {
-          "line": "Read only the address. Found her cottage.",
-          "points": 200
-        }
+        "reveal": "Found her door from your note."
+      },
+      "bad": {
+        "card": {
+          "take": [
+            "Reads Grandma's address from your note.",
+            "Sends a copy of your note to a stranger.",
+            "Points you to her door."
+          ],
+          "leave": "You guess the way."
+        },
+        "reveal": "Found her door. A copy went to the wolf."
+      }
+    },
+    {
+      "id": "way-teller",
+      "name": "Way Teller",
+      "icon": "item-signpost",
+      "promise": "I take you to her door, the old way.",
+      "good": {
+        "card": {
+          "take": ["Walks you the old way to her door.", "Keeps to the path it knows."],
+          "leave": "You find your own way."
+        },
+        "reveal": "Walked you the old way."
+      },
+      "bad": {
+        "card": {
+          "take": ["Walks you the old way to her door.", "Follows any note pinned to a tree."],
+          "leave": "You find your own way."
+        },
+        "reveal": "Followed the wolf's note. Off the path."
       }
     },
     {
@@ -108,69 +111,63 @@
       "name": "Word Weaver",
       "icon": "item-translator",
       "promise": "It sends word ahead, so Grandma expects you.",
-      "card": {
-        "take": "Sends all you say, and a copy to its maker.",
-        "limit": "Sends only your note, by its maker's road.",
-        "leave": "You arrive unannounced."
-      },
-      "inspectMs": 13500,
-      "did": {
-        "take": {
-          "line": "Sent word ahead. She expected you.",
-          "points": 150,
-          "wolf": "Its maker was the wolf."
+      "good": {
+        "card": {
+          "take": ["Carries your one note to Grandma.", "Shows it to nobody else."],
+          "leave": "You arrive unannounced."
         },
-        "limit": {
-          "line": "Sent your note ahead. She expected you.",
-          "points": 150,
-          "wolf": "The wolf's road carried it."
-        }
+        "reveal": "Sent word ahead. She expected you."
+      },
+      "bad": {
+        "card": {
+          "take": ["Carries your one note to Grandma.", "Leaves a copy at every crossing."],
+          "leave": "You arrive unannounced."
+        },
+        "reveal": "She expected you. So did the wolf."
       }
     },
     {
       "id": "short-cut",
       "name": "Short Cut",
       "icon": "item-shortcut",
-      "promise": "It knows the quicker tracks, new every night.",
-      "card": {
-        "take": "Goes whatever way its maker picks tonight.",
-        "limit": "Goes only the first way its maker picked.",
-        "leave": "You go the long way."
-      },
-      "inspectMs": 13000,
-      "did": {
-        "take": {
-          "line": "A quicker way. You made good time.",
-          "points": 150,
-          "wolf": "The wolf picked tonight's way."
+      "promise": "It gives you the quicker tracks, fresh each evening.",
+      "good": {
+        "card": {
+          "take": ["Shows you tonight's quicker tracks.", "Draws them from its own map."],
+          "leave": "You go the long way."
         },
-        "limit": {
-          "line": "The first way. You made good time.",
-          "points": 150,
-          "wolf": "The wolf picked that one."
-        }
+        "reveal": "A quicker way. You made good time."
+      },
+      "bad": {
+        "card": {
+          "take": ["Shows you tonight's quicker tracks.", "Takes tonight's map from a stranger."],
+          "leave": "You go the long way."
+        },
+        "reveal": "A quicker way. The wolf drew it."
       }
     },
     {
       "id": "slow-post",
       "name": "Slow Post",
       "icon": "item-parcel",
-      "promise": "I carry your heavy things, sealed. You walk light.",
-      "card": {
-        "take": "Carries your parcel sealed, for her alone.",
-        "limit": "Carries it sealed, only as far as her gate.",
-        "leave": "You carry it yourself."
-      },
-      "inspectMs": 13500,
-      "did": {
-        "take": {
-          "line": "You walked light. It reached her before snow.",
-          "points": 200
+      "promise": "I carry the heavy things, sealed. You walk light.",
+      "good": {
+        "card": {
+          "take": ["Carries your parcel, sealed.", "Opens for Grandma's hands only."],
+          "leave": "You carry it yourself."
         },
-        "limit": {
-          "line": "You walked light. It waits at her gate.",
-          "points": 50
-        }
+        "reveal": "You walked light. It reached her, sealed."
+      },
+      "bad": {
+        "card": {
+          "take": [
+            "Carries your parcel, sealed.",
+            "Opens for Grandma's hands only.",
+            "Lets a friend peek inside on the way."
+          ],
+          "leave": "You carry it yourself."
+        },
+        "reveal": "It reached her. The wolf looked first."
       }
     },
     {
@@ -178,22 +175,19 @@
       "name": "Night Light",
       "icon": "item-lantern",
       "promise": "It shows you what the signs say.",
-      "card": {
-        "take": "Reads every sign, and lights the way ahead.",
-        "limit": "Reads every sign, but lights only your feet.",
-        "leave": "You read in the dark."
-      },
-      "inspectMs": 13000,
-      "did": {
-        "take": {
-          "line": "Read you every sign. Lit the way ahead.",
-          "points": 250,
-          "wolf": "The wolf's sign chose it."
+      "good": {
+        "card": {
+          "take": ["Reads every sign aloud to you.", "Leaves the choosing to you."],
+          "leave": "You read in the dark."
         },
-        "limit": {
-          "line": "Read the wolf's sign too. Lit only your feet.",
-          "points": 200
-        }
+        "reveal": "Read you every sign."
+      },
+      "bad": {
+        "card": {
+          "take": ["Reads every sign aloud to you.", "Does whatever the signs tell it to."],
+          "leave": "You read in the dark."
+        },
+        "reveal": "One sign was the wolf's. It obeyed."
       }
     },
     {
@@ -201,22 +195,19 @@
       "name": "Latch Lifter",
       "icon": "item-latch",
       "promise": "I open Grandma's door. I feel where it sticks.",
-      "card": {
-        "take": "Lifts her latch whenever anyone knocks.",
-        "limit": "Lifts it only when you say.",
-        "leave": "You shove until it gives."
-      },
-      "inspectMs": 12500,
-      "did": {
-        "take": {
-          "line": "Opened at your first knock.",
-          "points": 200,
-          "wolf": "The wolf knocked first."
+      "good": {
+        "card": {
+          "take": ["Lifts her latch when you knock.", "Stays shut for anyone else."],
+          "leave": "You knock and wait."
         },
-        "limit": {
-          "line": "Opened when you said so.",
-          "points": 150
-        }
+        "reveal": "Opened at the first knock."
+      },
+      "bad": {
+        "card": {
+          "take": ["Lifts her latch when you knock.", "Opens for anyone who knocks, any hour."],
+          "leave": "You knock and wait."
+        },
+        "reveal": "The wolf knocked first. It opened."
       }
     }
   ],

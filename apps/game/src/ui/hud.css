@@ -1,0 +1,159 @@
+/*
+ * The v2 HUD: the clock and the art placeholder, the two things v1's basket never had (ui/Hud.tsx).
+ *
+ * WHAT IS REUSED, AND WHY. The basket pill, its caption, its slot row and its wells are
+ * panels.css's `.otp-hud-basket*` and `.otp-hud-slot*` rules, used by class and not copied: the
+ * same object keeps the same look, and the corner it stands in keeps the landscape lift over the A
+ * button that panels.css already computes. Everything below is scoped under `.otp-hud2` so that it
+ * wins by specificity whichever stylesheet the bundler emits first -- this file is imported by a
+ * component that main.ts reaches BEFORE it imports panels.css, so source order is not a thing to
+ * lean on.
+ *
+ * Tokens only. No hex, no Lime (the HUD spends none: the Title's Play and Results' Read the
+ * Research own it), no Season Mix, no new radius (the pill and the inset are two of the brand's
+ * three), no drop shadow. Status is a shape and a word, never a hue.
+ */
+
+.otp-ui {
+  /*
+   * Where the clock's bottom edge sits above the world's. By default exactly where the basket's
+   * is, so the two pills share a baseline and the transient toast layer, which stops above that
+   * baseline, clears both with no new arithmetic.
+   */
+  --otp-hud-timer-bottom: var(--otp-hud-basket-bottom);
+}
+
+/*
+ * On a touch device in landscape the joystick owns the bottom-left corner the clock lives in, the
+ * same way the A button owns the basket's (panels.css lifts the basket over it). The clock lifts
+ * over the stick by the stick's own height, read from the token that sizes it rather than copied:
+ * the pad's gutter, then its diameter, then the same 12px gap the basket leaves over the button.
+ * e2e/hud.spec.ts measures the overlap at zero instead of trusting this sum.
+ */
+@media (pointer: coarse) and (orientation: landscape) {
+  .otp-ui {
+    --otp-hud-timer-bottom: calc(var(--otp-pad-gutter) + var(--otp-pad-stick) + 12px);
+  }
+}
+
+/* Fills the world's box so the two pills can stand in its corners; takes no pointer events. */
+.otp-hud2 {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------------------- the clock */
+
+.otp-hud2 .otp-hud2__timer {
+  position: absolute;
+  left: calc(14px * var(--otp-ui));
+  bottom: var(--otp-hud-timer-bottom);
+  /* The basket pill's own height, from the token it is declared by, so the two cannot differ. */
+  min-height: var(--otp-hud-basket-h);
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--otp-ui));
+  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  border-radius: var(--otp-r-pill);
+  padding: calc(6px * var(--otp-ui)) calc(16px * var(--otp-ui));
+  color: var(--cyera-offwhite);
+  pointer-events: none;
+}
+
+.otp-hud2 .otp-hud2__clock {
+  /* Tabular figures: the face must not breathe as the digits change, or the pill's edge jitters
+     once a second for three minutes. `tnum` is asked for twice because a variable font may honour
+     one spelling and not the other. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  font-size: max(14px, calc(20px * var(--otp-ui)));
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  /* Four characters, centred: "3:00" is the widest face, and a bold "0:29" must not push the
+     pill wider than it was. */
+  min-width: 4ch;
+  text-align: center;
+}
+
+/*
+ * UNDER 0:30. A weight and a ring, which are shapes; the text colour does not change at all.
+ * The ring is the brand's own 2px inset Haze (`--otp-ring`, UI_FOUNDATIONS section 4), the one
+ * separation device the system has -- not a shadow, which the system forbids.
+ */
+.otp-hud2 .otp-hud2__timer[data-urgent='true'] {
+  box-shadow: var(--otp-ring);
+}
+
+.otp-hud2 .otp-hud2__timer[data-urgent='true'] .otp-hud2__clock {
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------------------ the basket */
+
+/*
+ * Seven wells and a caption do not fit beside the clock on a phone: at 375 the two pills would
+ * leave 3px between them. The captions are aria-hidden duplicates of the accessible names, so
+ * where there is no room they go, and nothing is lost to a reader.
+ */
+@media (max-width: 640px) {
+  .otp-hud2 .otp-hud2__label {
+    display: none;
+  }
+}
+
+.otp-hud2 .otp-hud2__slot {
+  /* The containing block for the visually hidden name. */
+  position: relative;
+}
+
+.otp-hud2 .otp-hud-slot img {
+  /* A quarter of the 64px source: whole source pixels, and never smoothed. */
+  width: 16px;
+  height: 16px;
+  image-rendering: pixelated;
+}
+
+/* The item grows into its well. The same beat v1's basket plays, under its own name. */
+.otp-hud2 .otp-hud2__slot img,
+.otp-hud2 .otp-hud2__placeholder {
+  animation: otp-hud-in var(--otp-arrive-ms) ease-out backwards;
+}
+
+@keyframes otp-hud-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+/*
+ * THE PLACEHOLDER, for a skill whose icon has not been drawn. Some have no art and
+ * nothing may be drawn in its place (CLAUDE.md rule 5), so the well wears the skill's initials on
+ * a Natural ground -- the palette's own "slots, icon wells" fill -- and the name is read to a
+ * screen reader from the visually hidden line beside it. A filled well, where an EMPTY one is
+ * dashed and transparent, so the two cannot be mistaken for each other.
+ */
+.otp-hud2 .otp-hud2__placeholder {
+  box-sizing: border-box;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  display: grid;
+  place-items: center;
+  border-radius: var(--otp-r-inset);
+  background: var(--cyera-natural);
+  color: var(--cyera-black);
+  /* The caption floor: nothing here is set below 11px. */
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-hud2 .otp-hud2__slot img,
+  .otp-hud2 .otp-hud2__placeholder {
+    animation: none;
+  }
+}

@@ -10,7 +10,8 @@ export { deepFreeze };
 
 export const content = loadContent(raw);
 
-export const fresh = (): State => deepFreeze(createState(content));
+/** A fresh title. Seed 0 deals the lantern good (fixture.ts). */
+export const fresh = (seed = 0): State => deepFreeze(createState(content, seed));
 
 /**
  * An action whose `at` may be left out: `run` stamps it from a fake clock that ticks one second
@@ -51,10 +52,13 @@ export function encounter(skill: string, verdict: Verdict, inspect = true): Step
 }
 
 /** Title to cottage, one verdict per skill in content order, every card opened. */
-export function fullRun(verdicts: Record<string, Verdict>): State {
-  return run([
-    ...begin,
-    ...content.skills.flatMap((s) => encounter(s.id, verdicts[s.id]!)),
-    { type: 'ENTER_COTTAGE' },
-  ]);
+export function fullRun(verdicts: Record<string, Verdict>, seed = 0): State {
+  return run(
+    [
+      ...begin,
+      ...content.skills.flatMap((s) => encounter(s.id, verdicts[s.id]!)),
+      { type: 'ENTER_COTTAGE' },
+    ],
+    fresh(seed),
+  );
 }

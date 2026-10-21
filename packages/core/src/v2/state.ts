@@ -2,6 +2,7 @@ import '../zod-config.ts';
 import { z } from 'zod';
 import { VERDICTS } from './content.ts';
 import type { CharacterId, Content, SkillId, Take, Verdict } from './content.ts';
+import { deal } from './deal.ts';
 
 /**
  * Three minutes, hard. The client's decision (GAME_DESIGN_V2 section 3, "do not re-litigate").
@@ -42,7 +43,7 @@ export const runEventSchema = z.union([
 ]);
 export type RunEvent = z.infer<typeof runEventSchema>;
 
-/** One thing in the basket: which skill, and how it was taken. In the order it was taken. */
+/** One thing in the basket, in the order it was taken. `v` is always 'take'; kept for the shape. */
 export interface BasketEntry {
   s: SkillId;
   v: Take;
@@ -51,6 +52,10 @@ export interface BasketEntry {
 export interface State {
   phase: Phase;
   contentVersion: string;
+  /** The number this run was dealt from. The run log carries it, so the server deals the same. */
+  seed: number;
+  /** The skills dealt good this run, in content order: `deal(content, seed)`, fixed at creation. */
+  good: SkillId[];
   runId: string | null;
   /**
    * The latest time the run has accepted, in elapsed milliseconds. Kept apart from the log because
@@ -66,10 +71,13 @@ export interface State {
   log: RunEvent[];
 }
 
-export function createState(content: Content): State {
+/** A fresh run on the title screen, dealt from `seed`. Throws on a number that is not a seed. */
+export function createState(content: Content, seed: number): State {
   return {
     phase: 'title',
     contentVersion: content.version,
+    seed,
+    good: deal(content, seed),
     runId: null,
     now: 0,
     met: [],
@@ -96,16 +104,17 @@ export type Action =
   | { type: 'ENTER_COTTAGE'; at: number }
   /** The game's timer firing. Legal only at or after the limit. */
   | { type: 'TIME_UP'; at: number }
-  | { type: 'RESET' };
+  /** Back to a fresh title, dealt again: "walk it again" meets a different set of bad skills. */
+  | { type: 'RESET'; seed: number };
 
 export type RejectReason =
   | 'wrong-phase'
   | 'unknown-character'
   | 'wrong-skill'
   | 'already-decided'
-  /** Limiting names what to strip, and from the conversation nothing has been named. */
-  | 'must-open-the-card'
   | 'time-went-backwards'
+  /** RESET with a number that is not a 32-bit seed. */
+  | 'bad-seed'
   /** NaN, infinite or negative: not a reading any clock gives. */
   | 'bad-time'
   /** TIME_UP before the limit: a fast timer cannot end a run early. */

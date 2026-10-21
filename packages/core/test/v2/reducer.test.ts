@@ -13,10 +13,12 @@ const refuse = (state: State, action: Action) => {
 const forest = (): State => run(begin);
 
 describe('createState', () => {
-  it('starts on the title with an empty basket, an unstarted clock and the content version', () => {
-    expect(createState(content)).toEqual({
+  it('starts on the title with an empty basket, an unstarted clock, the content version and the deal', () => {
+    expect(createState(content, 1)).toEqual({
       phase: 'title',
-      contentVersion: 'fixture-1',
+      contentVersion: 'fixture-2',
+      seed: 1,
+      good: ['courier'],
       runId: null,
       now: 0,
       met: [],
@@ -88,49 +90,36 @@ describe('inspecting', () => {
   });
 });
 
-describe('the three verdicts', () => {
-  it('take and limit put the skill in the basket, in the order taken; leave does not', () => {
+describe('the two verdicts', () => {
+  it('take puts the skill in the basket, in the order taken; leave does not', () => {
     const s = run(
       [
-        ...encounter('courier', 'limit'),
+        ...encounter('courier', 'take'),
         ...encounter('locksmith', 'leave'),
         ...encounter('lantern', 'take'),
       ],
       forest(),
     );
     expect(s.basket).toEqual([
-      { s: 'courier', v: 'limit' },
+      { s: 'courier', v: 'take' },
       { s: 'lantern', v: 'take' },
     ]);
-    expect(s.verdicts).toEqual({ courier: 'limit', locksmith: 'leave', lantern: 'take' });
+    expect(s.verdicts).toEqual({ courier: 'take', locksmith: 'leave', lantern: 'take' });
     expect(s).toMatchObject({ phase: 'forest', active: null });
     expect(s.log.filter((e) => e.e === 'verdict')).toEqual([
-      { e: 'verdict', s: 'courier', v: 'limit', at: expect.any(Number) },
+      { e: 'verdict', s: 'courier', v: 'take', at: expect.any(Number) },
       { e: 'verdict', s: 'locksmith', v: 'leave', at: expect.any(Number) },
       { e: 'verdict', s: 'lantern', v: 'take', at: expect.any(Number) },
     ]);
   });
 
-  it('take and leave can be said straight from the conversation, without reading the card', () => {
+  it('either can be said straight from the conversation, without reading the card', () => {
     const s = run(
       [...encounter('courier', 'take', false), ...encounter('locksmith', 'leave', false)],
       forest(),
     );
     expect(s.inspected).toEqual([]);
     expect(s.basket).toEqual([{ s: 'courier', v: 'take' }]);
-  });
-
-  it('limit cannot: you cannot scope what you have not read', () => {
-    const talking = run([{ type: 'MEET', c: 'magpie' }], forest());
-    expect(refuse(talking, { type: 'VERDICT', s: 'courier', v: 'limit', at: 5000 })).toBe(
-      'must-open-the-card',
-    );
-    // ...and once the card has been read, going back to the conversation does not unread it.
-    const read = run([{ type: 'INSPECT', s: 'courier' }, { type: 'BACK' }], talking);
-    expect(read.phase).toBe('talk');
-    expect(run([{ type: 'VERDICT', s: 'courier', v: 'limit' }], read).basket).toEqual([
-      { s: 'courier', v: 'limit' },
-    ]);
   });
 
   it('only for the skill on offer, and only while it is on offer', () => {
@@ -254,7 +243,7 @@ describe('three minutes, and then it is over', () => {
     const late: Action[] = [
       { type: 'MEET', c: 'fox', at: TIME_LIMIT_MS },
       { type: 'INSPECT', s: 'courier', at: TIME_LIMIT_MS + 1 },
-      { type: 'VERDICT', s: 'courier', v: 'limit', at: TIME_LIMIT_MS + 1 },
+      { type: 'VERDICT', s: 'courier', v: 'take', at: TIME_LIMIT_MS + 1 },
       { type: 'BACK', at: TIME_LIMIT_MS + 60_000 },
       { type: 'ENTER_COTTAGE', at: TIME_LIMIT_MS },
     ];
@@ -292,8 +281,15 @@ describe('purity', () => {
     expect(reduce(s, { type: 'MEET', c: 'fox', at: TIME_LIMIT_MS }, content).phase).toBe('late');
   });
 
-  it('RESET goes back to a fresh title from anywhere', () => {
-    const done = deepFreeze(fullRun({ lantern: 'take', courier: 'limit', locksmith: 'leave' }));
-    expect(reduce(done, { type: 'RESET' }, content)).toEqual(createState(content));
+  it('RESET goes back to a fresh title from anywhere, dealt again from the seed it carries', () => {
+    const done = deepFreeze(fullRun({ lantern: 'take', courier: 'leave', locksmith: 'leave' }));
+    expect(reduce(done, { type: 'RESET', seed: 2 }, content)).toEqual(createState(content, 2));
+    expect(reduce(done, { type: 'RESET', seed: 2 }, content).good).toEqual(['locksmith']);
+  });
+
+  it('RESET refuses a number that is not a seed, and createState throws on one', () => {
+    for (const seed of [-1, 1.5, 2 ** 32, Number.NaN])
+      expect(refuse(fresh(), { type: 'RESET', seed }), String(seed)).toBe('bad-seed');
+    expect(() => createState(content, -1)).toThrow(RangeError);
   });
 });

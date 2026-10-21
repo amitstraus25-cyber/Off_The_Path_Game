@@ -5,9 +5,8 @@ import Phaser from 'phaser';
  * the move to the core package, and world/logic.ts belongs to another owner this round; a new
  * symbol does not need to be threaded through it to be used here.
  */
-import { ending, snapCentreToRow } from '@otp/core';
-import type { Phase } from '@otp/core';
-import type { Store } from '../store';
+import { snapCentreToRow } from '@otp/core';
+import type { WorldRun } from './run';
 import type { Bus } from '../bus';
 import type { Input } from './input';
 import {
@@ -122,11 +121,10 @@ const SHADOW = {
  */
 const CONTACT_ROWS = 4;
 
-/**
- * The phases that happen at the cottage. From the first arrival beat to the end of the run the
- * camera belongs to the door, not to Purple, so Results does not pan the forest back behind itself.
+/*
+ * The phases that happen at the cottage moved to `run.ts` (`AT_THE_COTTAGE`, v1's adapter), with
+ * every other question this scene used to ask the v1 store directly. See `WorldRun`.
  */
-const AT_THE_COTTAGE: readonly Phase[] = ['cottage', 'results', 'leaderboard'];
 
 /**
  * The wolf's trail, in world pixels from the top-left of the door lane: three prints walking NORTH
@@ -326,7 +324,8 @@ const shaded = (ink: number): number =>
   Math.round((ink & 0xff) * SHADOW.tone);
 
 export class ForestScene extends Phaser.Scene {
-  private readonly store: Store;
+  /** The run being walked, through the one interface both rulebooks answer (world/run.ts). */
+  private readonly run: WorldRun;
   private readonly bus: Bus;
   private readonly controls: Input;
   /** False while a DOM panel owns the screen, including ones that do not change the store phase. */
@@ -397,9 +396,9 @@ export class ForestScene extends Phaser.Scene {
   /** Reused each frame so the update loop allocates nothing. */
   private readonly step: Vec = { x: 0, y: 0 };
 
-  constructor(store: Store, bus: Bus, controls: Input, hasInput: () => boolean = () => true) {
+  constructor(run: WorldRun, bus: Bus, controls: Input, hasInput: () => boolean = () => true) {
     super('Forest');
-    this.store = store;
+    this.run = run;
     this.bus = bus;
     this.controls = controls;
     this.hasInput = hasInput;
@@ -610,10 +609,11 @@ export class ForestScene extends Phaser.Scene {
   }
 
   private createNpcs(): void {
-    for (const spawn of npcSpawns(this.map))
-      this.npcs.push(this.createCharacter('character', spawn));
-    for (const spawn of bystanderSpawns(this.map))
-      this.npcs.push(this.createCharacter('bystander', spawn));
+    // Who each spawn is depends on the rulebook: v1's bystanders are v2's cast (world/run.ts).
+    for (const spawn of [...npcSpawns(this.map), ...bystanderSpawns(this.map)]) {
+      const who = this.run.castOf(spawn.spawnName);
+      if (who) this.npcs.push(this.createCharacter(who.kind, { ...spawn, id: who.id }));
+    }
   }
 
   /**
@@ -734,11 +734,11 @@ export class ForestScene extends Phaser.Scene {
   }
 
   override update(_time: number, deltaMs: number): void {
-    const state = this.store.getState();
-    const exploring = state.phase === 'explore' && this.hasInput();
+    const state = this.run.state();
+    const exploring = this.run.exploring() && this.hasInput();
     const input = this.controls.read();
 
-    if (!this.arrived && AT_THE_COTTAGE.includes(state.phase)) this.stageArrival();
+    if (!this.arrived && this.run.atCottage()) this.stageArrival();
 
     if (exploring) {
       this.move(input.x, input.y, deltaMs);
@@ -809,9 +809,7 @@ export class ForestScene extends Phaser.Scene {
      * `arrivePawEndings` names the endings on which something came up this path ahead of you. On
      * the other endings the approach lines say the earth by the step is unmarked, and it must be.
      */
-    const earned = (this.store.content.strings['arrivePawEndings'] ?? '')
-      .split('|')
-      .includes(ending(this.store.getState(), this.store.content).id);
+    const earned = this.run.pawsEarned();
     for (const paw of this.paws) paw.setVisible(earned);
 
     /*
@@ -865,13 +863,7 @@ export class ForestScene extends Phaser.Scene {
    * because they are scenery and repeating themselves is in character.
    */
   private available(): Npc[] {
-    const { verdicts } = this.store.getState();
-    const { content } = this.store;
-    return this.npcs.filter((npc) => {
-      if (npc.kind === 'bystander') return true;
-      const character = content.characters.find((c) => c.id === npc.id);
-      return character !== undefined && verdicts[character.skillId] === undefined;
-    });
+    return this.npcs.filter((npc) => npc.kind === 'bystander' || this.run.stillOffering(npc.id));
   }
 
   /** Puts the bubble over whoever is in range, and hands that person back to the caller. */

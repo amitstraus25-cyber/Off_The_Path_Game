@@ -9,8 +9,13 @@ import { score } from '../../src/v2/scoring.ts';
 import { content as v1Content, fullRun as v1FullRun } from '../helpers.ts';
 import { begin, content, encounter, fullRun, run } from './helpers.ts';
 
-const careful = { lantern: 'take', courier: 'limit', locksmith: 'leave' } as const;
-const envelope = (events: unknown) => ({ rules: RULES, content: content.version, events });
+const careful = { lantern: 'take', courier: 'leave', locksmith: 'leave' } as const;
+const envelope = (events: unknown, seed = 0) => ({
+  rules: RULES,
+  content: content.version,
+  seed,
+  events,
+});
 
 describe('legal logs', () => {
   it('a live full run replays to the same state and the same score', () => {
@@ -22,12 +27,25 @@ describe('legal logs', () => {
     expect(r.state.basket).toEqual(live.basket);
     expect(r.state.verdicts).toEqual(live.verdicts);
     expect(r.state.phase).toBe('cottage');
-    expect(score(r.state.log, content)).toEqual(score(live.log, content));
+    expect(r.state.good).toEqual(live.good);
+    expect(score(r.state, content)).toBe(score(live, content));
+  });
+
+  it('the seed travels with the log, so the server deals the same hand', () => {
+    const live = fullRun({ lantern: 'leave', courier: 'take', locksmith: 'leave' }, 1);
+    const r = checkRunLog(toRunLog(live), content);
+    expect(r).toMatchObject({ legal: true, state: { seed: 1, good: ['courier'] } });
+    if (r.legal) expect(score(r.state, content)).toBe(100);
+    // The same verdicts posted under another seed are scored against that deal instead.
+    // That is also the hole runlog.ts states: the seed is client-reported, like the stamps.
+    const other = checkRunLog({ ...toRunLog(live), seed: 0 }, content);
+    expect(other).toMatchObject({ legal: true });
+    if (other.legal) expect(score(other.state, content)).toBe(0);
   });
 
   it('toRunLog tags the log with the rules and the content it was played under', () => {
     const live = fullRun(careful);
-    expect(toRunLog(live)).toEqual({ rules: 2, content: 'fixture-1', events: live.log });
+    expect(toRunLog(live)).toEqual({ rules: 2, content: 'fixture-2', seed: 0, events: live.log });
     expect(RULES).toBe(2);
   });
 
@@ -58,7 +76,7 @@ describe('legal logs', () => {
       { type: 'MEET', c: 'fox' },
       { type: 'VERDICT', s: 'locksmith', v: 'take' },
       { type: 'MEET', c: 'magpie' },
-      { type: 'VERDICT', s: 'courier', v: 'limit' },
+      { type: 'VERDICT', s: 'courier', v: 'leave' },
       { type: 'MEET', c: 'glowworm' },
       { type: 'INSPECT', s: 'lantern' },
       { type: 'VERDICT', s: 'lantern', v: 'take' },
@@ -81,12 +99,15 @@ describe('forged logs', () => {
   const live = fullRun(careful).log;
   const forged = (events: RunEvent[]) => checkRunLog(envelope(events), content);
 
-  it('a careful verdict the player never read for', () => {
-    const events: RunEvent[] = [
+  it('a third verdict: "limit" is gone from the rules, so a log claiming one is not a log', () => {
+    const events = [
       { e: 'met', c: 'magpie', at: 1000 },
       { e: 'verdict', s: 'courier', v: 'limit', at: 2000 },
     ];
-    expect(forged(events)).toEqual({ legal: false, reason: 'event 1: must-open-the-card' });
+    expect(checkRunLog(envelope(events), content)).toEqual({
+      legal: false,
+      reason: 'malformed log',
+    });
   });
 
   it('a verdict for someone never met', () => {
@@ -159,7 +180,17 @@ describe('forged logs', () => {
   });
 
   it('anything that is not the shape at all, including one too long to be worth replaying', () => {
-    for (const bad of [null, 'log', 42, {}, { rules: 2, content: 'fixture-1' }])
+    for (const bad of [
+      null,
+      'log',
+      42,
+      {},
+      { rules: 2, content: 'fixture-2', seed: 0 },
+      envelope([], -1),
+      envelope([], 2 ** 32),
+      envelope([], 0.5),
+      { rules: 2, content: 'fixture-2', events: [] },
+    ])
       expect(checkRunLog(bad, content)).toEqual({ legal: false, reason: 'malformed log' });
     const long = Array.from({ length: MAX_LOG_EVENTS + 1 }, () => ({ e: 'arrived', at: 1 }));
     expect(runLogSchema.safeParse(envelope(long)).success).toBe(false);

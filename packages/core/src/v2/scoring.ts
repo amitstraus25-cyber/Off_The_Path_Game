@@ -1,117 +1,107 @@
-import { findSkill, worth } from './content.ts';
-import type { Content, SkillId, Take } from './content.ts';
-import type { RunEvent } from './state.ts';
+import { findSkill, giveaway } from './content.ts';
+import type { Content, SkillId, Verdict } from './content.ts';
+import { variantOf } from './deal.ts';
+import type { State } from './state.ts';
 
 /**
  * How a run ended. `null` while it is still in the forest.
  *
  *  - `late`     the clock ran out. Its own ending, not a penalty (GAME_DESIGN_V2 section 2).
- *  - `wolf`     arrived, and at least one skill in the basket served the wolf.
- *  - `grandma`  arrived, and nothing in the basket served the wolf.
+ *  - `wolf`     arrived, and at least one skill in the basket was dealt bad.
+ *  - `grandma`  arrived, and nothing in the basket was bad.
  */
 export type Ending = 'grandma' | 'wolf' | 'late';
 
-/** One row of the reveal: one skill the player took, in the order they took it. */
+/** One row of the reveal: one character's offer, in walking order, and what it really was. */
 export interface RevealEntry {
   skillId: SkillId;
   name: string;
-  /** What it promised. Always true. */
+  /** What it promised. Kept in both variants: that is the lesson. */
   promise: string;
-  verdict: Take;
+  /** Whether it was dealt good this run. */
+  good: boolean;
+  /** What the player said to it, or null if they never answered. Unanswered counts as left. */
+  verdict: Verdict | null;
   /** Whether the player opened its card before deciding. */
   read: boolean;
-  /** What it did on the way. */
-  did: string;
-  /** For the ones that served the wolf, the sentence that lands the lesson. Otherwise null. */
-  wolf: string | null;
-  /** What the kept promise earned. */
-  points: number;
-  /** What it was worth in the end: `points`, less the wolf's cost if it served the wolf. */
-  worth: number;
+  /** This run's variant's reveal line: what it did, or would have done. */
+  line: string;
+  /** For a skill dealt bad, the card line that gave it away. Null for a good one. */
+  giveaway: string | null;
 }
 
 /**
- * THE REVEAL, AS DATA: per skill taken, what it promised and what it did, in basket order. The
- * product's payoff (GAME_DESIGN_V2 section 6), ready for Phase D to render and for nothing else to
- * have to work out.
- *
- * A pure function of the log, like `score`, so the browser and the server cannot tell two stories.
- * Assumes a legal log (runlog.ts `checkRunLog`).
+ * THE REVEAL, AS DATA: every offer, in walking order, with what the dealt variant really did and,
+ * for a bad one, the line on its card that said so. A pure function of the state's deal and log,
+ * like `score`, so the browser and the server cannot tell two stories. Assumes a legal log.
  */
-export function reveal(log: readonly RunEvent[], content: Content): RevealEntry[] {
+export function reveal(state: State, content: Content): RevealEntry[] {
   const opened = new Set<SkillId>();
-  const rows: RevealEntry[] = [];
-  for (const e of log) {
+  const said = new Map<SkillId, Verdict>();
+  for (const e of state.log) {
     if (e.e === 'inspected') opened.add(e.s);
-    if (e.e !== 'verdict' || e.v === 'leave') continue;
-    const s = findSkill(content, e.s)!;
-    const d = s.did[e.v];
-    rows.push({
+    if (e.e === 'verdict') said.set(e.s, e.v);
+  }
+  return content.characters.map((c) => {
+    const s = findSkill(content, c.skillId)!;
+    const good = state.good.includes(s.id);
+    return {
       skillId: s.id,
       name: s.name,
       promise: s.promise,
-      verdict: e.v,
+      good,
+      verdict: said.get(s.id) ?? null,
       read: opened.has(s.id),
-      did: d.line,
-      wolf: d.wolf ?? null,
-      points: d.points,
-      worth: worth(s, e.v, content),
-    });
-  }
-  return rows;
+      line: variantOf(state.good, s).reveal,
+      giveaway: good ? null : giveaway(s),
+    };
+  });
 }
 
-/** Which ending a log reached. The late event outranks everything; a log cannot hold both. */
-export function ending(log: readonly RunEvent[], content: Content): Ending | null {
-  if (log.some((e) => e.e === 'late')) return 'late';
-  if (!log.some((e) => e.e === 'arrived')) return null;
-  return reveal(log, content).some((r) => r.wolf !== null) ? 'wolf' : 'grandma';
+/** Which ending a run reached. The late event outranks everything; a log cannot hold both. */
+export function ending(state: State, content: Content): Ending | null {
+  if (state.log.some((e) => e.e === 'late')) return 'late';
+  if (!state.log.some((e) => e.e === 'arrived')) return null;
+  return reveal(state, content).some((r) => r.verdict === 'take' && !r.good) ? 'wolf' : 'grandma';
 }
 
-export interface ScoreResult {
-  /**
-   * Out of `outOf`, floored at 0. NULL -- not zero -- for a run that never made it or has not
-   * arrived: running out of time is an ending, not a score, and a late run is not on the board.
-   */
-  total: number | null;
+export interface RunResult {
+  /** The score, as `score` gives it. */
+  total: number;
   outOf: number;
   ending: Ending | null;
-  /** The reveal the total was summed from. */
+  /** The reveal the total was read from. */
   entries: RevealEntry[];
-  /** Everything the kept promises earned. */
-  earned: number;
-  /** Everything the wolf took back. */
-  lost: number;
-  /** How many skills in the basket served the wolf. */
+  /** How many good skills are in the basket. */
+  good: number;
+  /** How many bad skills are in the basket: each one let the wolf in. */
   served: number;
 }
 
 /**
- * SCORED BY WHAT THE SKILLS DID, NEVER BY HOW MANY. The total is the sum of `worth` over the
- * basket -- what each kept promise earned, less `wolfCost` for each that also served the wolf --
- * floored at 0. A skill passed by or left adds nothing either way. There is no per-skill bonus for
- * collecting, so a full basket of the wrong things sums to near zero. The lint holds every
- * wolf-serving verdict below zero, so adding one lowers the SUM -- but not always the TOTAL: this
- * used to say "always lowers the total", and at the floor it does not. A basket holding only a
- * wolf-serving skill scores 0, exactly as leaving it does (a reviewer measured it). What differs
- * there is the ENDING, 'wolf' against 'grandma', and the reveal row that says what the skill did.
- * The lesson at the floor is carried by those, not by the number.
+ * EVERYTHING THE END OF A RUN SAYS, in one call: the score, the ending and the reveal.
  *
- * Every number comes from content, so Phase B tunes it without code (golden rule 3). Pure function
- * of the log and content; assumes a legal log.
+ * THE SCORE, out of 100 with the shipped weights (GAME_DESIGN_V2 section 9):
+ *
+ *   - arrived clean (nothing bad taken):   `clean` + `good` for each good skill taken
+ *   - the wolf got in (any bad skill):     0
+ *   - late, or not arrived yet:            0, and the ending says which
+ *
+ * So the only 100 in a deal is its three good taken and its four bad left; leaving everything is a
+ * clean arrival with nothing in hand, `clean` alone; and every wolf run sits below every clean
+ * one. The weights are content (golden rule 3); the zero for the wolf is a rule. A late run scores
+ * 0 rather than nothing so that the score is always an integer, but it is not a run for the board:
+ * the board reads `ending`, and only `grandma` and `wolf` are runs that finished.
  */
-export function score(log: readonly RunEvent[], content: Content): ScoreResult {
-  const entries = reveal(log, content);
-  const end = ending(log, content);
-  const earned = entries.reduce((t, r) => t + r.points, 0);
-  const lost = entries.reduce((t, r) => t + (r.points - r.worth), 0);
-  return {
-    total: end === null || end === 'late' ? null : Math.max(0, earned - lost),
-    outOf: content.scoring.outOf,
-    ending: end,
-    entries,
-    earned,
-    lost,
-    served: entries.filter((r) => r.wolf !== null).length,
-  };
+export function result(state: State, content: Content): RunResult {
+  const entries = reveal(state, content);
+  const end = ending(state, content);
+  const taken = entries.filter((r) => r.verdict === 'take');
+  const good = taken.filter((r) => r.good).length;
+  const { clean, good: each, outOf } = content.scoring;
+  const total = end === 'grandma' ? clean + each * good : 0;
+  return { total, outOf, ending: end, entries, good, served: taken.length - good };
 }
+
+/** The score: an integer from 0 to `content.scoring.outOf` (100). See `result` for the rule. */
+export const score = (state: State, content: Content): number => result(state, content).total;

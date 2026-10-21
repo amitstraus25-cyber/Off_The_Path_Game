@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { MAX_LOG_EVENTS } from '../leaderboard.ts';
 import { findCharacterForSkill } from './content.ts';
 import type { Content } from './content.ts';
+import { SEED_LIMIT } from './deal.ts';
 import { tryReduce } from './reducer.ts';
 import { createState, runEventSchema } from './state.ts';
 import type { Action, RunEvent, State } from './state.ts';
@@ -20,10 +21,21 @@ export const RULES = 2;
  *
  * `content` names the content version the run was played under. The server refuses a log played
  * against other content rather than replaying it into rules it was never played by.
+ *
+ * `seed` is the deal the run was played under (deal.ts), and the server deals from it. LIKE THE
+ * TIMESTAMPS, IT IS CLIENT-REPORTED: a forger can take any basket of three and post the one seed
+ * whose deal makes it the careful answer, and it replays as legal and scores 100. Replay proves the
+ * log is consistent with its seed, not that the seed was drawn fairly. Closing it is the same fix
+ * as the clock's (below): the server issues the seed with the start token at BEGIN.
  */
 export const runLogSchema = z.strictObject({
   rules: z.literal(RULES),
   content: z.string().min(1),
+  seed: z
+    .number()
+    .int()
+    .min(0)
+    .max(SEED_LIMIT - 1),
   events: z.array(runEventSchema).max(MAX_LOG_EVENTS),
 });
 export type RunLog = z.infer<typeof runLogSchema>;
@@ -31,6 +43,7 @@ export type RunLog = z.infer<typeof runLogSchema>;
 export const toRunLog = (state: State): RunLog => ({
   rules: RULES,
   content: state.contentVersion,
+  seed: state.seed,
   events: state.log,
 });
 
@@ -66,7 +79,7 @@ export function checkRunLog(raw: unknown, content: Content): LogCheck {
   if (!parsed.success) return { legal: false, reason: 'malformed log' };
   if (parsed.data.content !== content.version) return { legal: false, reason: 'content-mismatch' };
 
-  let state = createState(content);
+  let state = createState(content, parsed.data.seed);
   const run = (action: Action): string | null => {
     const r = tryReduce(state, action, content);
     state = r.state;
@@ -109,11 +122,8 @@ export function checkRunLog(raw: unknown, content: Content): LogCheck {
             : { type: 'VERDICT', s: e.s, v: e.v, at: e.at };
         /*
          * A verdict is replayed from the CONVERSATION, never by opening a card on the player's
-         * behalf. Limit's legality rests on whether the card was ever opened, which the log
-         * already says; inserting an INSPECT here would invent an `inspected` event an honest log
-         * does not have, and the equality check would call it a forgery. And it is what makes the
-         * rule self-enforcing on the server: a log claiming an unread `limit` replays into
-         * `must-open-the-card`.
+         * behalf: inserting an INSPECT here would invent an `inspected` event an honest log does
+         * not have, and the equality check would call it a forgery.
          */
         reason = focus(c.id, e.at) ?? run(step);
         break;

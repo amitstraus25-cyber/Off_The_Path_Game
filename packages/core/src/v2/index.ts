@@ -4,6 +4,7 @@
  * Phase D switches the game over; until then nothing outside this directory changes behaviour.
  */
 export * from './content.ts';
+export * from './deal.ts';
 export * from './state.ts';
 export * from './reducer.ts';
 export * from './scoring.ts';

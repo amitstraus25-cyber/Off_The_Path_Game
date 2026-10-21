@@ -14,14 +14,19 @@ import {
 import type { Verdict } from '@otp/core';
 import gameContent from '../../../content/game.json';
 import { createBus } from './bus';
+import type { Bus } from './bus';
 import { createStore } from './store';
 import { loadManifest } from './world/assets';
+import type { Manifest } from './world/assets';
 import { BootScene, ForestScene } from './world/scenes';
+import { v1Run } from './world/run';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
 import { watchStage } from './ui/stage';
 import { App } from './ui/App';
+// Before panels.css, so hud.css lands first in the cascade, as the HUD's selectors expect.
+import { V2_SWITCH, startV2 } from './world/v2-wiring';
 import { ProblemScreen } from './ui/ProblemScreen';
 import type { NoticeClose } from './ui/Notice';
 import { createLeaderboardClient } from './net/leaderboard';
@@ -132,13 +137,142 @@ window.addEventListener('unhandledrejection', (event) => {
   showFatal('crash');
 });
 
+/**
+ * Phaser around the forest scene, sized from the stage, for whichever rulebook is running: v1's
+ * store (the live game) or v2's behind the dev/e2e switch. Returns the boot scene, which the
+ * retry screen restarts.
+ */
+function mountWorld(
+  stage: HTMLElement,
+  manifest: Manifest,
+  bus: Bus,
+  forest: ForestScene,
+): BootScene {
+  /*
+   * The camera Phaser is born with.
+   *
+   * This was a literal `{ width: 480, height: 270 }` that fitStage overwrote on the first frame --
+   * a camera size written down rather than derived, which is the exact mistake packages/core's
+   * camera.ts exists to stop, and which cost this project two rounds of art composed against a
+   * rectangle that does not exist. Derived here from the same two pure functions ui/stage.ts
+   * calls, so the canvas is created at the size it is going to keep.
+   */
+  const firstView = stageFit(
+    availableFor({ width: innerWidth, height: innerHeight }).available,
+  ).view;
+
+  const boot = new BootScene(manifest, bus);
+
+  // Phaser reads this too, so movement, prompts and triggers all stop together.
+  const game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: stage,
+    width: firstView.width,
+    height: firstView.height,
+    pixelArt: true,
+    roundPixels: true,
+    backgroundColor: cssColor('--cyera-black'),
+    scale: { mode: Phaser.Scale.NONE },
+    // Plain <img> loading keeps the strict CSP free of a blob: allowance.
+    loader: { imageLoadType: 'HTMLImageElement' },
+    /*
+     * Phaser builds a WebAudioSoundManager and an AudioContext on boot unless told not to, and
+     * this game has never played a sound through Phaser. That context was being created on every
+     * page load, in an iframe on someone else's page, for nothing. The music has its own context
+     * and builds it only when the player asks for sound.
+     */
+    audio: { noAudio: true },
+    /*
+     * The same argument as `noAudio`, and it is the larger half of the boot bill.
+     *
+     * Phaser's PipelineManager compiles the whole built-in FX set on boot unless told not to --
+     * blur, bloom, glow, shadow, displacement, the lot -- and this game applies none of them: no
+     * `preFX`, no `postFX`, no `setPipeline` anywhere in the tree. Every one of those shaders was
+     * being compiled on every page load, in an iframe on someone else's page, to be used by
+     * nothing. A pixel-art game that draws tiles and sprites at integer scale wants the plain
+     * multi pipeline and nothing else.
+     *
+     * Measured end to end, cold, with the scene drawing exactly the same pixels either way; the
+     * numbers and the identical render are in the task report. If a later round wants a built-in
+     * effect on a game object, these two lines are what it has to take out, and the cost of taking
+     * them out is the boot time back.
+     */
+    disablePreFX: true,
+    disablePostFX: true,
+    scene: [boot, forest],
+  });
+
+  /*
+   * THE CANVAS BOX HAS TO REACH CSS BEFORE THE DOM PAINTS.
+   *
+   * ui/stage.ts publishes --otp-canvas-x/y/w/h, and three position:fixed panels -- the world
+   * frame, the title dock and the HUD -- are positioned entirely from them. This call used to sit
+   * in `bus.on('worldReady')`, which fires only once BootScene has loaded every asset, so the
+   * title screen painted first against the 0px fallbacks and then lurched into place: ONE layout
+   * shift, measured at 0.7811 at 1280x800 against a "good" threshold of 0.1, on the first screen
+   * of a public research-page asset. In landscape .otp-title-panel is
+   * `min(306px * var(--otp-ui), 62%)` of the dock, and 62% of a 0px dock leaves the copy column at
+   * nothing but its own 48px of padding before it snaps out to 306px, taking the heading,
+   * Grandma's note and the body copy with it.
+   *
+   * Phaser's Game.boot() calls AddToDOM before it emits BOOT, so game.canvas exists and is in the
+   * document by then -- before any scene preloads, and before the first `draw()` below. Boot runs
+   * SYNCHRONOUSLY inside the constructor whenever document.readyState is already 'interactive' or
+   * 'complete' (phaser/src/dom/DOMContentLoaded.js), which is the case here because this is a
+   * deferred module script that has already awaited the manifest, so by this line the event has
+   * usually been and gone: `isBooted` is the path actually taken, and the listener covers a boot
+   * still waiting on the DOM. Either way fitStage runs in this same task, so the first paint is
+   * already the final layout. The camera size is derived from the space available, so the canvas
+   * fills its frame instead of being letterboxed; the scene reads this.scale every frame.
+   *
+   * `stage.dataset['ready']` deliberately STAYS on worldReady. It is the gate every e2e spec
+   * waits on and it has to keep meaning "the world is loaded", not "the canvas has a size".
+   */
+  const fitToStage = (): void => {
+    watchStage(stage, game.canvas, (w, h) => game.scale.resize(w, h));
+  };
+  if (game.isBooted) fitToStage();
+  else game.events.once('boot', fitToStage);
+  return boot;
+}
+
 async function start(): Promise<void> {
-  const content = loadContent(gameContent);
   const manifest = await loadManifest();
 
   const stage = document.getElementById('game');
   const uiRoot = document.getElementById('ui');
   if (!stage || !uiRoot) throw new Error('Page is missing the #game or #ui container');
+
+  /*
+   * v2 PHASE C, DEV AND E2E ONLY. Dot access on `import.meta.env`, so a production build folds this
+   * to false and drops `startV2` and the v2 content with it; test/csp.test.ts greps the shipped
+   * bundle for the switch's name. The live game is v1 until Phase D.
+   */
+  if (
+    (import.meta.env.DEV || import.meta.env.VITE_E2E === '1') &&
+    new URLSearchParams(location.search).has(V2_SWITCH)
+  ) {
+    const bus = createBus();
+    startV2({
+      stage,
+      uiRoot,
+      bus,
+      clock: () => performance.now(),
+      touchLabels: {
+        walkGroup: strings['touchWalkLabel'] ?? '',
+        up: strings['touchWalkUp'] ?? '',
+        down: strings['touchWalkDown'] ?? '',
+        left: strings['touchWalkLeft'] ?? '',
+        right: strings['touchWalkRight'] ?? '',
+        stop: strings['touchWalkStop'] ?? '',
+        interact: strings['touchInteract'] ?? '',
+      },
+      mountWorld: (forest) => void mountWorld(stage, manifest, bus, forest),
+    });
+    return;
+  }
+
+  const content = loadContent(gameContent);
 
   const store = createStore(content, () => performance.now());
   const bus = createBus();
@@ -398,92 +532,13 @@ async function start(): Promise<void> {
     store.dispatch({ type: 'ENTER_COTTAGE' });
   });
 
-  /*
-   * The camera Phaser is born with.
-   *
-   * This was a literal `{ width: 480, height: 270 }` that fitStage overwrote on the first frame --
-   * a camera size written down rather than derived, which is the exact mistake packages/core's
-   * camera.ts exists to stop, and which cost this project two rounds of art composed against a
-   * rectangle that does not exist. Derived here from the same two pure functions ui/stage.ts
-   * calls, so the canvas is created at the size it is going to keep.
-   */
-  const firstView = stageFit(
-    availableFor({ width: innerWidth, height: innerHeight }).available,
-  ).view;
-
   // Held, not inlined, because the retry screen has to be able to restart it.
-  const boot = new BootScene(manifest, bus);
-
-  // Phaser reads this too, so movement, prompts and triggers all stop together.
-  const game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: stage,
-    width: firstView.width,
-    height: firstView.height,
-    pixelArt: true,
-    roundPixels: true,
-    backgroundColor: cssColor('--cyera-black'),
-    scale: { mode: Phaser.Scale.NONE },
-    // Plain <img> loading keeps the strict CSP free of a blob: allowance.
-    loader: { imageLoadType: 'HTMLImageElement' },
-    /*
-     * Phaser builds a WebAudioSoundManager and an AudioContext on boot unless told not to, and
-     * this game has never played a sound through Phaser. That context was being created on every
-     * page load, in an iframe on someone else's page, for nothing. The music has its own context
-     * and builds it only when the player asks for sound.
-     */
-    audio: { noAudio: true },
-    /*
-     * The same argument as `noAudio`, and it is the larger half of the boot bill.
-     *
-     * Phaser's PipelineManager compiles the whole built-in FX set on boot unless told not to --
-     * blur, bloom, glow, shadow, displacement, the lot -- and this game applies none of them: no
-     * `preFX`, no `postFX`, no `setPipeline` anywhere in the tree. Every one of those shaders was
-     * being compiled on every page load, in an iframe on someone else's page, to be used by
-     * nothing. A pixel-art game that draws tiles and sprites at integer scale wants the plain
-     * multi pipeline and nothing else.
-     *
-     * Measured end to end, cold, with the scene drawing exactly the same pixels either way; the
-     * numbers and the identical render are in the task report. If a later round wants a built-in
-     * effect on a game object, these two lines are what it has to take out, and the cost of taking
-     * them out is the boot time back.
-     */
-    disablePreFX: true,
-    disablePostFX: true,
-    scene: [boot, new ForestScene(store, bus, input, worldHasInput)],
-  });
-
-  /*
-   * THE CANVAS BOX HAS TO REACH CSS BEFORE THE DOM PAINTS.
-   *
-   * ui/stage.ts publishes --otp-canvas-x/y/w/h, and three position:fixed panels -- the world
-   * frame, the title dock and the HUD -- are positioned entirely from them. This call used to sit
-   * in `bus.on('worldReady')`, which fires only once BootScene has loaded every asset, so the
-   * title screen painted first against the 0px fallbacks and then lurched into place: ONE layout
-   * shift, measured at 0.7811 at 1280x800 against a "good" threshold of 0.1, on the first screen
-   * of a public research-page asset. In landscape .otp-title-panel is
-   * `min(306px * var(--otp-ui), 62%)` of the dock, and 62% of a 0px dock leaves the copy column at
-   * nothing but its own 48px of padding before it snaps out to 306px, taking the heading,
-   * Grandma's note and the body copy with it.
-   *
-   * Phaser's Game.boot() calls AddToDOM before it emits BOOT, so game.canvas exists and is in the
-   * document by then -- before any scene preloads, and before the first `draw()` below. Boot runs
-   * SYNCHRONOUSLY inside the constructor whenever document.readyState is already 'interactive' or
-   * 'complete' (phaser/src/dom/DOMContentLoaded.js), which is the case here because this is a
-   * deferred module script that has already awaited the manifest, so by this line the event has
-   * usually been and gone: `isBooted` is the path actually taken, and the listener covers a boot
-   * still waiting on the DOM. Either way fitStage runs in this same task, so the first paint is
-   * already the final layout. The camera size is derived from the space available, so the canvas
-   * fills its frame instead of being letterboxed; the scene reads this.scale every frame.
-   *
-   * `stage.dataset['ready']` deliberately STAYS on worldReady. It is the gate every e2e spec
-   * waits on and it has to keep meaning "the world is loaded", not "the canvas has a size".
-   */
-  const fitToStage = (): void => {
-    watchStage(stage, game.canvas, (w, h) => game.scale.resize(w, h));
-  };
-  if (game.isBooted) fitToStage();
-  else game.events.once('boot', fitToStage);
+  const boot = mountWorld(
+    stage,
+    manifest,
+    bus,
+    new ForestScene(v1Run(store), bus, input, worldHasInput),
+  );
 
   bus.on('worldReady', () => {
     stage.dataset['ready'] = 'true';
