@@ -1,4 +1,4 @@
-/* POST /api/score. See ./top.ts for why the routes live in the game service. */
+/* POST /api/score. See ./top.ts for the export shape and the `.ts` specifiers. */
 import { deps } from '../src/deps.ts';
 import { handleScore } from '../src/handlers.ts';
 

@@ -1,11 +1,12 @@
 import {
+  DEFAULT_TOP_LIMIT,
   isMintedHandle,
   mintHandle,
   submitResponseSchema,
   topLimit,
   topResponseSchema,
+  v2,
 } from '@otp/core';
-import type { Content, GameState } from '@otp/core';
 
 export interface LeaderboardEntry {
   rank: number;
@@ -35,12 +36,21 @@ export type BoardRead =
   { state: 'rows'; entries: LeaderboardEntry[] } | { state: 'empty' } | { state: 'unavailable' };
 
 /**
- * The content key of every sentence a post can answer with. Four, and no fifth without a line
+ * The content key of every sentence a post can answer with. Five, and no sixth without a line
  * here: `Results.tsx` declares what each one ASSERTS, and a key with no declaration is a line
  * nobody has thought about.
+ *
+ * `leaderboardClosed` is v2's (Phase E): the server answers 410 when a run's posting window has
+ * shut -- the run was real, it was simply posted too long after the token was issued
+ * (apps/api/src/handlers.ts, POST_WINDOW_MS). It is not a refusal of the run and not a board that
+ * is down, so it is neither of their sentences. Only the v2 `submit` below produces it.
  */
 export type NoticeKey =
-  'handleAssigned' | 'leaderboardAlready' | 'leaderboardRefused' | 'leaderboardDown';
+  | 'handleAssigned'
+  | 'leaderboardAlready'
+  | 'leaderboardRefused'
+  | 'leaderboardDown'
+  | 'leaderboardClosed';
 
 /**
  * What a post answered: the sentence to show, AND which of the four it is.
@@ -63,15 +73,8 @@ export interface PostOutcome {
   text: string;
 }
 
-export interface LeaderboardClient {
-  /** Returns what to show the player, or null when there is nothing to say. Never throws. */
-  submit(state: GameState, handle: string): Promise<PostOutcome | null>;
-  /** Never throws, never hangs, and never reports an absent board as an empty one. */
-  top(limit: number): Promise<BoardRead>;
-}
-
 /*
- * Phase 6: the real adapter, behind the interface Phase 5 shipped against and unchanged from it.
+ * Phase 6: the real adapter, the same-origin calls to apps/api.
  *
  * Three promises from the stub's docstring are kept here rather than inherited:
  *   - nothing blocks results or the CTA. Both calls are same-origin, time-limited, and every
@@ -88,6 +91,7 @@ export interface LeaderboardClient {
  * same function from the same log, one of them on a machine the player does not control.
  */
 
+const START_PATH = '/api/start';
 const SCORE_PATH = '/api/score';
 const TOP_PATH = '/api/top';
 /** Past this the board is down as far as the player is concerned. */
@@ -157,10 +161,8 @@ async function ask(path: string, init: RequestInit): Promise<Reply | null> {
 /**
  * Reads the board. The three answers, never a throw and never a hang.
  *
- * A FREE FUNCTION rather than only a method, because it needs nothing from `Content`: it reads no
- * string, so there is no reason for the one screen that shows a board to have to be handed a whole
- * client to get at it. `createLeaderboardClient().top()` is this function, so there is one
- * implementation and `test/leaderboard.test.ts` exercises it through the interface either way.
+ * A FREE FUNCTION because it needs nothing from `Content`: it reads no string, so the one screen
+ * that shows a board is not handed a whole client to get at it.
  *
  * THE THREE ANSWERS ARE DERIVED HERE, not written down anywhere else. `entries.length === 0` is
  * what makes a board empty; nothing else may decide it. The alternative -- a screen that checks the
@@ -177,131 +179,106 @@ export async function readTop(limit: number): Promise<BoardRead> {
 }
 
 /*
- * Every player-facing line this adapter can produce now comes out of content/game.json, which is
- * CLAUDE.md rule 3 and was an ask the last round could not close: the three keys below were written
- * in code because the content file belonged to someone else. They are shipped now --
- * `handleAssigned`, `leaderboardRefused`, `leaderboardAlready` -- and `test/strings.test.ts` holds
- * the file and these reads against each other in both directions.
+ * ------------------------------------------------------------------------------------------------
+ * v2 (Phase E): a run STARTS on the server, so the server's seed and the server's clock bound it.
  *
- * The literals that remain are BACKSTOPS, not copy. `submit()` promises an outcome or null, and a
- * key deleted from the content file must not turn that promise into `undefined` rendered on the
- * payoff screen; the build-time guard is the thing that keeps them unreachable.
+ * `startRun()` asks `POST /api/start` for a seed and a token sealing it with the moment it was
+ * drawn. The game deals from that seed and keeps the token for the length of the run, then posts
+ * `{ handle, log, token }`. The server refuses a log dealt from any other seed, or claiming more
+ * time than it saw, or posted more than five minutes off the game clock (`leaderboardClosed`).
+ *
+ * WHEN TO CALL IT: as close to the run's start as the screens allow, and once per run -- every
+ * replay gets a new token. The window counts the title and how-to as well as the reveal, so a
+ * token fetched when the page loads and held while a visitor reads the research page for ten
+ * minutes will not post.
+ *
+ * NULL MEANS PLAY ANYWAY. No board, offline, rate-limited, or an answer we cannot believe: the game
+ * draws its own seed with `crypto.getRandomValues` and says posting is unavailable for this run.
+ * Nothing here blocks play.
+ *
+ * ------------------------------------------------------------------------------------------------
  */
-export function createLeaderboardClient(content: Content): LeaderboardClient {
-  /*
-   * Indexed with a LITERAL key on purpose, not through a helper taking the key as an argument:
-   * `test/strings.test.ts` scans these sources for `strings['...']` to decide which keys the UI
-   * actually reads, and a key assembled behind a function call is invisible to it. The guard is
-   * only worth having if the code it reads is written the way it scans for.
-   */
-  const say = (value: string | undefined, backstop: string): string => value?.trim() || backstop;
-  /*
-   * The backstops are the CLAIM as well as the words. `leaderboardDown`'s used to read
-   * "Leaderboard unavailable right now.", which asserts something this client never observed --
-   * it saw no reply, which is not the same as a board that is down, and on 2026-10-21 that
-   * sentence was measured sitting above the player's own run on a board that was plainly
-   * answering. A backstop that says more than the shipped line would reintroduce the defect on
-   * the day the key goes missing.
-   */
-  const unavailable: PostOutcome = {
-    key: 'leaderboardDown',
-    text: say(content.strings['leaderboardDown'], 'No reply came back for that post.'),
-  };
-  const refused: PostOutcome = {
-    key: 'leaderboardRefused',
-    text: say(content.strings['leaderboardRefused'], 'That run could not be posted.'),
-  };
-  const already: PostOutcome = {
-    key: 'leaderboardAlready',
-    text: say(content.strings['leaderboardAlready'], 'That run is already on the board.'),
-  };
-  const assigned = (handle: string): PostOutcome => ({
-    key: 'handleAssigned',
-    text: say(content.strings['handleAssigned'], 'Posted to the board as {handle}.').replace(
-      '{handle}',
-      handle,
-    ),
-  });
 
-  return {
-    async submit(state, handle) {
-      /*
-       * The handle is minted, so a handle this game did not mint is not sent: the server would
-       * refuse it (`handleSchema` is the same schema on both ends), and a player-typed string
-       * reaching the table is the thing decision D4 rules out.
-       *
-       * THE SCREEN AND THIS FUNCTION NOW AGREE. For four rounds they did not, and it was visible:
-       * a player typed `wolfspotter` into the Results field, pressed Post, and the body on the
-       * wire carried `deft-cloak-81` while the status line read "Posted to the board as
-       * deft-cloak-81." The typed name was discarded in the line below and nothing on the screen
-       * said so. `Results.tsx` holds `newHandle()` in state now, renders it as text, offers a
-       * reroll, and passes that value to `onPost`, so `handle` arrives here already minted.
-       *
-       * The line below therefore has nothing left to substitute in the shipped UI, and it stays
-       * anyway. It is the boundary, not the screen's helper: this module is what reaches the
-       * network, and it is the last place that can promise "no string a player composed is ever
-       * posted" independently of whatever a future screen hands it. The cost of keeping it is one
-       * comparison; the cost of removing it is that the promise moves into a component.
-       */
-      const minted = isMintedHandle(handle) ? handle : newHandle();
-      const reply = await ask(SCORE_PATH, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ handle: minted, log: state.log }),
-      });
-      if (!reply) return unavailable;
-      /*
-       * 400 and 409 are the two answers that mean "this submission", and they are the only 4xx a
-       * well-formed client can provoke: 400 for a log that does not replay or a handle the server
-       * did not mint, 409 for a run already on the board. 405/413/415 cannot happen from here.
-       * Everything else -- a 404 because apps/api is not deployed, a 503 because the store is not
-       * configured, a 429 because the service is shedding writes, a 500, a timeout -- means there
-       * is no board to post to right now, which is a different sentence and the one Phase 5
-       * promised. A 404 reported as "that run could not be posted" would blame the player for an
-       * undeployed service.
-       *
-       * 409 gets its own sentence, and it is the one a REAL PLAYER meets. The Post button is
-       * enabled again the moment a post succeeds, so posting twice is a click, not an attack: the
-       * second one is the same run log, the server answers 409 "that run is already on the board",
-       * and reading that out as "that run could not be posted" tells a player their score failed
-       * when it is sitting on the board under the name they were just shown. Measured against the
-       * real handler: `apps/api` answers 409 on the second post of an identical log.
-       */
-      if (!reply.ok) {
-        if (reply.status === 409) return already;
-        return reply.status === 400 ? refused : unavailable;
-      }
-
-      const parsed = submitResponseSchema.safeParse(reply.body);
-      if (!parsed.success) return unavailable;
-      /*
-       * Always a sentence, never a silent success. The name is minted, so it is not the name the
-       * player typed and they have to be told which one went up -- and when the results screen
-       * migrates to showing a minted handle (see the ask list), a success that returned null
-       * would render nothing at all on the one screen that asked them to post.
-       */
-      return assigned(parsed.data.handle);
-    },
-
-    /*
-     * THE MEASUREMENT THAT MADE THIS RETURN A STATE AND NOT AN ARRAY, kept because it is the
-     * evidence and not the conclusion.
-     *
-     * An empty array meant one of two quite different things and the old signature could not tell
-     * them apart: a board that answered and has no rows yet, and no board at all. The second is not
-     * hypothetical and it is not loud. Measured on 2026-10-20 against the shipped build on a plain
-     * `vite preview` -- and it is the same shape a deploy takes if the `/api/(.*)` rewrite never
-     * reaches apps/api, because the catch-all rewrite serves the SPA for every path:
-     *
-     *     GET /api/top?limit=10  ->  200, content-type: text/html, 654 bytes of index.html
-     *     POST /api/score        ->  404, no body
-     *
-     * The 200 is not a board. `ask()` survives it -- `res.json()` throws on the HTML and the catch
-     * turns it into "no reply" -- so this used to return `[]` either way, and a screen rendering
-     * that as "no scores yet" would have told a visitor to a data-security company's research page
-     * that the board was empty when the truth is that it is not there. `readTop` answers
-     * `unavailable` for it now, and `test/board.test.ts` fails if that ever becomes `empty` again.
-     */
-    top: readTop,
-  };
+export interface RunStart {
+  seed: number;
+  token: string;
 }
+
+/** The token's shape, as apps/api/src/schema.ts checks it: two base64url segments, short. */
+const TOKEN_PATTERN = /^[\w-]+\.[\w-]+$/;
+const TOKEN_MAX = 256;
+
+const isRunStart = (body: unknown): body is RunStart => {
+  if (typeof body !== 'object' || body === null) return false;
+  const { seed, token } = body as Record<string, unknown>;
+  return (
+    v2.isSeed(seed) &&
+    typeof token === 'string' &&
+    token.length <= TOKEN_MAX &&
+    TOKEN_PATTERN.test(token)
+  );
+};
+
+/** Asks the server to start a run. Null for anything but a seed and a token we can believe. */
+export async function startRun(): Promise<RunStart | null> {
+  const reply = await ask(START_PATH, {
+    method: 'POST',
+    // JSON on purpose: the route refuses anything else, so a cross-origin page cannot start one
+    // without a preflight it fails.
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  if (!reply?.ok || !isRunStart(reply.body)) return null;
+  return { seed: reply.body.seed, token: reply.body.token };
+}
+
+/** What a player reads when the content file does not carry the key. Backstops, not copy. */
+const BACKSTOPS: Record<NoticeKey, string> = {
+  handleAssigned: 'Posted to the board as {handle}.',
+  leaderboardAlready: 'That run is already on the board.',
+  leaderboardRefused: 'That run could not be posted.',
+  leaderboardDown: 'No reply came back for that post.',
+  leaderboardClosed: 'Posting has closed for that run.',
+};
+
+/**
+ * Posts a finished v2 run. Always answers an outcome: never throws, never hangs.
+ *
+ * The statuses: 400 is a run the server refused, 409 a token already
+ * on the board (the second press of Post), 410 a run whose posting window shut; everything else --
+ * 404 undeployed, 503 unconfigured, 429 shedding, 500, a timeout -- is no board right now.
+ *
+ * `strings` is the content file's `ui.chrome`, read by key; a key it does not carry falls back to
+ * the sentence above, so a deleted key can never render as `undefined` on the payoff screen.
+ */
+export async function submit(
+  handle: string,
+  log: v2.RunLog,
+  token: string,
+  strings: Readonly<Record<string, string>> = {},
+): Promise<PostOutcome> {
+  const say = (key: NoticeKey): PostOutcome => ({
+    key,
+    text: strings[key]?.trim() || BACKSTOPS[key],
+  });
+  // The boundary's promise: no string a player composed is ever posted.
+  const minted = isMintedHandle(handle) ? handle : newHandle();
+  const reply = await ask(SCORE_PATH, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ handle: minted, log, token }),
+  });
+  if (!reply) return say('leaderboardDown');
+  if (!reply.ok) {
+    if (reply.status === 409) return say('leaderboardAlready');
+    if (reply.status === 410) return say('leaderboardClosed');
+    return say(reply.status === 400 ? 'leaderboardRefused' : 'leaderboardDown');
+  }
+  const parsed = submitResponseSchema.safeParse(reply.body);
+  if (!parsed.success) return say('leaderboardDown');
+  const posted = say('handleAssigned');
+  return { ...posted, text: posted.text.replace('{handle}', parsed.data.handle) };
+}
+
+/** Reads the board: the same three answers as `readTop`, scores now 0 to 100. */
+export const readBoard = (limit: number = DEFAULT_TOP_LIMIT): Promise<BoardRead> => readTop(limit);

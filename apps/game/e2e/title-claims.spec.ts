@@ -40,11 +40,16 @@ test.describe('on a touch screen', () => {
     const text = (await hint.count()) > 0 ? ((await hint.first().textContent()) ?? '') : '';
     console.log(`375 coarse: hint ${text ? `"${text}"` : 'absent'}`);
 
-    // Keys a phone has not got, and a tap that does not walk: ~4px of a 120px/s step.
+    // Keys a phone has not got, and a tap that does not walk: ~4px of a 120px/s step. "Tap A to
+    // talk" is true on a phone with an A button; a tap attached to WALKING is what is barred.
     expect(text, 'no keyboard controls in the hint read on a phone').not.toMatch(
       /arrow|\bspace\b|wasd|\besc\b/i,
     );
-    expect(text, 'no tap-to-walk promise: only a held stick walks').not.toMatch(/\btap/i);
+    for (const sentence of text.split(/(?<=[.!?])\s+/))
+      expect(
+        /\btap/i.test(sentence) && /\b(walk|move|step)/i.test(sentence),
+        `no tap-to-walk promise: "${sentence}"`,
+      ).toBe(false);
   });
 
   /*

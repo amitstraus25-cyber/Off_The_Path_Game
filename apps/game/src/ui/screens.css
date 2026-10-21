@@ -299,10 +299,22 @@
   background: var(--cyera-haze);
 }
 
+/*
+ * The last beat. "Step inside" is a wide pill, not the 34px caret, and the endings' last lines run
+ * long, so absolutely placed in the caret's corner it sat on top of the wolf's and the late
+ * ending's final sentence at 375 and 768. It gets its own row instead, right-aligned under the
+ * text, and the caret's reserved right padding is given back to the text.
+ */
+.otp-arrive--done {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 0;
+  padding-right: calc(12px * var(--otp-ui));
+}
+
 .otp-arrive__finish {
-  position: absolute;
-  right: calc(14px * var(--otp-ui));
-  bottom: calc(12px * var(--otp-ui));
+  grid-column: 1 / -1;
+  justify-self: end;
 }
 
 .otp-arrive__line {
@@ -1544,4 +1556,110 @@ html[data-otp-shell='cabinet'] .otp-touch > [role='group']:focus-within {
 
 .otp-problem__action {
   margin-top: calc(6px * var(--otp-ui));
+}
+
+/* ---------------------------------------------------------------- v2 screens (Phase D)
+
+   Only what the v2 screens have that v1's did not. Every colour, radius and size is a token or a
+   multiple of --otp-ui; nothing here introduces a look the deck does not have. */
+
+/* The how-to's heading sits where the wordmark does, a step down. */
+.otp-title__mark.otp-howto__title {
+  font-size: calc(40px * var(--otp-ui));
+  margin-bottom: calc(14px * var(--otp-ui));
+}
+
+/* A skill icon that has not been drawn: initials on Natural, as the HUD's basket wears it. */
+.otp-icon-placeholder {
+  width: calc(64px * var(--otp-px));
+  height: calc(64px * var(--otp-px));
+  display: grid;
+  place-items: center;
+  border-radius: var(--otp-r-inset);
+  border: 2px dashed var(--cyera-clay);
+  color: var(--cyera-deep-purple);
+  font-size: calc(22px * var(--otp-ui));
+  font-weight: 600;
+}
+
+/* The offer has no portrait, for all seven: the text takes the whole panel. */
+.otp-dialogue--bare .otp-dialogue__text {
+  padding-top: 0;
+}
+.otp-offer__promise {
+  margin-top: calc(10px * var(--otp-ui));
+}
+.otp-offer__promise .otp-row__eyebrow {
+  margin: 0 0 2px;
+}
+
+/* The card's take lines: a list that reads as the row's heading, one line each. */
+.otp-card__lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: calc(4px * var(--otp-ui));
+}
+
+/* The reveal. */
+.otp-reveal__title {
+  margin: 0 0 calc(14px * var(--otp-ui));
+  font-size: calc(30px * var(--otp-ui));
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  color: var(--cyera-deep-purple);
+}
+.otp-reveal {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.otp-reveal__chose {
+  margin: 2px 0 calc(6px * var(--otp-ui));
+  font-size: max(11px, calc(12px * var(--otp-ui)));
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyera-deep-purple);
+}
+.otp-reveal__pairs {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px calc(10px * var(--otp-ui));
+  font-size: max(12px, calc(15px * var(--otp-ui)));
+  line-height: 1.3;
+}
+.otp-reveal__pairs dt {
+  color: var(--cyera-ash);
+}
+.otp-reveal__pairs dd {
+  margin: 0;
+}
+.otp-reveal__real {
+  margin: calc(8px * var(--otp-ui)) 0 0;
+  font-size: max(12px, calc(14px * var(--otp-ui)));
+  line-height: 1.35;
+  color: var(--cyera-black);
+}
+.otp-reveal__term {
+  font-weight: 600;
+  color: var(--cyera-deep-purple);
+}
+.otp-reveal__ending {
+  margin: calc(10px * var(--otp-ui)) 0 calc(4px * var(--otp-ui));
+}
+.otp-reveal__ending .otp-body-text {
+  margin: 0 0 calc(4px * var(--otp-ui));
+}
+
+@media (max-width: 480px) {
+  .otp-reveal__pairs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .otp-reveal__pairs dd {
+    margin-bottom: calc(4px * var(--otp-ui));
+  }
 }

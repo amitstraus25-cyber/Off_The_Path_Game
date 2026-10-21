@@ -1,10 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import type { Content } from '@otp/core';
+import type { ComponentChildren } from 'preact';
+import type { v2 } from '@otp/core';
 import { CyeraMark, Highlighted, WorldFrame } from './components';
+import { PENDING, strings } from './copy';
 
 export interface TitleProps {
-  content: Content;
+  ui: v2.Content['ui'];
   onPlay(): void;
+}
+
+export interface HowToProps {
+  ui: v2.Content['ui'];
+  onGo(): void;
+  /** The run's start is still being asked of the server: the button says so and ignores presses. */
+  busy: boolean;
 }
 
 /**
@@ -115,40 +124,9 @@ export function useFrameMarkHidden(): boolean {
  *
  * Pure and exported so the branch is testable without a DOM; the component supplies `padHidden`.
  */
-export function titleHint(strings: Record<string, string>, padHidden: boolean): string {
-  if (!padHidden) return strings['titleMetaTouch'] ?? '';
-  return strings['titleMeta'] ?? strings['controlsHint'] ?? '';
-}
-
-/**
- * The how-to-play, for the machine this player is actually on.
- *
- * WHAT WAS MISSING, and it is not a tone complaint. Before this the title screen said what the
- * encounters are ("Every offer does what it promises. Read what else it does.") and the hint under
- * the CTA named two keys, and between them the screen never said what the player DECIDES or what
- * they are trying to reach. A visitor to a research page had to infer Allow / Restrict / Reject and
- * "get to the cottage" from the forest itself. The three lines below are the whole of that, read in
- * about five seconds, and the controls come first because they are the question anybody asks first.
- *
- * THE CONTROLS LINE BRANCHES ON THE SAME QUERY `titleHint` BRANCHES ON, and the keys it names are
- * the two the pad actually has. This is finding 11's defect waiting to happen in a new place: the
- * keyboard line names Arrow keys and Space, which are not on a phone, and the touch line must name
- * the joystick (a TAP of the stick is 0px -- see ui/touch-controls.ts, measured) and the A button.
- * One wrong branch here puts instructions on screen that the device in the player's hand cannot
- * follow, which is exactly what e2e/title-claims.spec.ts asserts against for the whole card.
- *
- * Steps two and three describe the game rather than the machine, so they do not branch.
- *
- * Pure and exported so the branch is testable without a DOM, exactly as `titleHint` is; the
- * component supplies `padHidden`. `filter(Boolean)` so a content file missing one of these keys
- * renders a shorter list rather than a blank bullet -- the same call `titleHint` makes when its own
- * key is absent, and the same call `App.tsx` makes on the world summary's lines.
- */
-export function howToPlaySteps(strings: Record<string, string>, padHidden: boolean): string[] {
-  const walk = padHidden ? strings['howToPlayWalk'] : strings['howToPlayWalkTouch'];
-  return [walk, strings['howToPlayOffer'], strings['howToPlayDecide']].filter(
-    (line): line is string => Boolean(line),
-  );
+export function titleHint(strings: Readonly<Record<string, string>>, padHidden: boolean): string {
+  if (!padHidden) return strings['howToPlayWalkTouch'] ?? '';
+  return strings['controlsHint'] ?? '';
 }
 
 /**
@@ -264,49 +242,38 @@ function useTitleFit(panel: { current: HTMLDivElement | null }, markHidden: bool
 }
 
 /**
- * The cold open.
+ * The card both opening screens share: the frame, the dock and the column, the fit ladder, the
+ * one Lime call to action in the foot and the controls line under it. The landing and the how-to
+ * are the same object on purpose -- the how-to used to live inside the landing card, and splitting
+ * it into its own step must not give it a second look.
  *
- * This used to be an `.otp-screen`: a centred card on an opaque black field, which meant the first
- * thing anyone saw of a pixel game was a brochure. Phaser boots before the first render and the
- * store starts in `title`, so the forest is already running behind this -- the world just had a
- * full-bleed panel painted over it. Now the frame and the world are the same ones the rest of the
- * game uses, and the copy sits in a column docked inside them, so you can see what you are about
- * to play before you decide to play it.
- *
- * What the screen does not do any more is narrate that. It used to carry a chip reading "Purple is
- * already standing on the path" while she rendered behind the column: at 1280 her right edge stops
- * 46px short of clearing it, and an 88%-black ground over a 32px sprite is about 1:1, so the one
- * sentence pointing at her was false at the width most people read it (UX_REVIEW finding 11). The
- * forest either frames her or the screen says nothing about her; it does not claim her.
- *
- * Purple does not move here: world/input.ts only accepts input while the phase is `explore`.
+ * The world is already running behind this (Phaser boots before the first render), so a visitor
+ * sees what they are about to play before they decide to play it.
  */
-export function Title({ content, onPlay }: TitleProps) {
-  const s = (key: string): string => content.strings[key] ?? '';
-
-  /*
-   * The hint is read on two different machines, and `titleMeta` only describes one of them: arrow
-   * keys and Space are not on a phone, and "just tap" promises a walk a tap does not give -- one
-   * tap is about 4px of a 120px/s step (world/logic.ts WALK_SPEED), only a held stick walks, and
-   * the pad itself is not drawn until the phase is `explore` (main.ts). So the machine that gets
-   * the pad reads the pad's line. Matched per render, as Dialogue.tsx matches reduced motion: a
-   * pointer does not change mid-screen.
-   *
-   * With no `matchMedia` there is no player to be wrong about -- a server or a test renderer -- so
-   * it takes the keyboard branch, which is also what every capture shows.
-   */
-  const padHidden = padIsHidden();
-  const hint = titleHint(content.strings, padHidden);
-  /* The same question, asked once for both the hint and the steps, so they cannot disagree. */
-  const steps = howToPlaySteps(content.strings, padHidden);
-
+function TitleCard({
+  children,
+  action,
+  onAction,
+  busy = false,
+  focus = false,
+}: {
+  children: ComponentChildren;
+  action: string;
+  onAction(): void;
+  busy?: boolean;
+  /** Take focus on arrival, so a keyboard player's next Enter is this button. */
+  focus?: boolean;
+}) {
+  const cta = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focus) cta.current?.focus({ preventScroll: true });
+  }, []);
+  const hint = titleHint(strings, padIsHidden());
   /*
    * Subscribed, not sampled -- see useFrameMarkHidden. This is the one question on the screen
    * whose answer a player can change without touching the game.
    */
   const markHidden = useFrameMarkHidden();
-
-  /* The card the fit ladder settles; see useTitleFit. */
   const panel = useRef<HTMLDivElement>(null);
   useTitleFit(panel, markHidden);
 
@@ -316,96 +283,30 @@ export function Title({ content, onPlay }: TitleProps) {
       <div class="otp-title-dock">
         <div class="otp-title-panel" ref={panel}>
           {/*
-            THE PROSE SCROLLS; THE WAY IN DOES NOT.
-
-            This wrapper is the fix .otp-title__foot's note in screens.css asks for by name. The
-            card used to be the scroller itself, with the button as its last child, and the first
-            thing to go under the fold of a scrolling card is its last child. Measured on the built
-            preview at DPR 1, at the resting scroll position -- what a player sees when the screen
-            opens, before touching anything:
-
-              844x390  (REFERENCE_VIEWPORTS.phoneLandscape)   "Begin the walk" 181x0 visible
-              812x375                                          181x0 visible
-              667x375                                          181x0 visible
-              320x568                                          186x34 of 186x56
-              390x600                                          202x47 of 202x58
-
-            Zero visible pixels, on the project's own landscape-phone reference viewport, for the
-            page's single Lime call to action and the only entrance to the game. The card does
-            scroll, but it shows no scrollbar on touch, no fade and no caret, so nothing tells the
-            player there is anything below the fold to scroll to. On a marketing asset that is the
-            whole funnel.
-
-            So the copy gets a scroll box of its own and the foot stays OUTSIDE it, pinned by the
-            flex column. The button is then on screen at scrollTop 0 at every reference viewport by
-            construction rather than by having enough room, which is what
-            e2e/css-contract.spec.ts's entrance guard asserts -- at scrollTop 0, deliberately,
-            because the check that shipped this green scrolled the card to its end first.
-
-            The wrapper is scenery, not structure: it carries no role and no label, because a
-            scroll container that announces itself is a second landmark on a screen whose content
-            is one short column. Chromium makes a scrollable region keyboard-focusable on its own,
-            so the prose stays reachable without this file adding a tab stop in front of the CTA.
+            THE PROSE SCROLLS; THE WAY IN DOES NOT. The copy has a scroll box of its own and the foot
+            stays outside it, pinned by the flex column, so the one call to action is on screen at
+            scrollTop 0 at every reference viewport by construction (e2e/css-contract.spec.ts).
           */}
           <div class="otp-title__scroll">
-            {/*
-              The mark, where the deck puts it: above the wordmark, at the card's right edge. It is
-              drawn only on the widths where the frame header has dropped its own copy, so the
-              screen carries exactly one (see frameMarkIsHidden above).
-
-              `.otp-mark` is `display: block; margin-left: auto; flex: none`, and the scroll box is
-              itself a flex column (screens.css says why), so it lands top-right with no new rule
-              and with the same box model it had as a child of the card.
-
-              THE GROUND IT SITS ON. The panel has now taken the light ground that DESIGN_BOARD.md
-              section 2 asked for (Shell, not 88% Black), so the mark is black-on-light, per
-              reference/brand/logos/README.md -- a white wordmark on Shell is an invisible one.
-            */}
+            {/* Drawn only where the frame header has dropped its own copy: exactly one mark. */}
             {markHidden && <CyeraMark on="light" />}
-            <h1 class="otp-title__mark">
-              <Highlighted text={s('title')} word={s('titleHighlight')} />
-            </h1>
-            <p class="otp-title__sub">{s('subtitle')}</p>
-
-            <blockquote class="otp-note">
-              {s('introNote')}
-              <span class="otp-note__from">Pinned to the basket</span>
-            </blockquote>
-
-            <p class="otp-body-text">{s('introBody')}</p>
-
-            {/*
-              HOW TO PLAY, which the screen did not say at all. See howToPlaySteps above for why it
-              is here and why its first line branches on the pointer.
-
-              An ordered list because the three steps are a sequence -- walk, read, decide -- and
-              because a numbered list is the one shape a visitor scans without reading. The heading
-              is `.otp-section-label`, the Ash eyebrow this project already puts above every section
-              on Results and in the world frame, so it needs no type of its own and spends no Lime:
-              the card's single Lime is the CTA in the foot below, and UI_FOUNDATIONS allows exactly
-              one per screen. Nothing here is Season Mix either -- it is body copy, which the brand
-              book bars that face from outright.
-
-              It sits INSIDE `.otp-title__scroll` with the rest of the prose, which is what keeps
-              the entrance guard in e2e/css-contract.spec.ts true by construction: the foot reserves
-              its row first and the copy lives in what is left, so adding three lines here can push
-              the list under the fold but can never push "Begin the walk" off the screen.
-            */}
-            {steps.length > 0 && (
-              <>
-                <h2 class="otp-section-label otp-howto__label">{s('howToPlayLabel')}</h2>
-                <ol class="otp-howto">
-                  {steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-              </>
-            )}
+            {children}
           </div>
-
           <div class="otp-title__foot">
-            <button type="button" class="otp-cta" onClick={onPlay}>
-              {s('play')}
+            {/*
+              `aria-disabled` rather than `disabled` while the start is out, so the button keeps
+              focus (a `disabled` button is blurred to <body> the instant it lands).
+            */}
+            <button
+              type="button"
+              class="otp-cta"
+              ref={cta}
+              aria-disabled={busy ? 'true' : undefined}
+              onClick={() => {
+                if (!busy) onAction();
+              }}
+            >
+              {action}
               <span class="otp-cta__disc" aria-hidden="true">
                 →
               </span>
@@ -415,5 +316,44 @@ export function Title({ content, onPlay }: TitleProps) {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * The landing. Cyera-branded per UI_FOUNDATIONS section 8: the wordmark, "Off the Path" with one
+ * Season Mix word, the subtitle, and the one Lime pill.
+ *
+ * NO BACKGROUND PICTURE YET. The client asked for a Cyera background "like this" and the image has
+ * not arrived (GAME_DESIGN_V2 section 8). CLAUDE.md rule 5 forbids inventing one, and a labelled
+ * placeholder ("awaiting the client's art") is internal wording a public visitor must not see, so
+ * the landing ships without one. When the art lands it goes here, under the subtitle.
+ */
+export function Title({ ui, onPlay }: TitleProps) {
+  const l = ui.landing;
+  return (
+    <TitleCard action={l.start} onAction={onPlay}>
+      <h1 class="otp-title__mark">
+        <Highlighted text={l.title} word={l.titleHighlight} />
+      </h1>
+      <p class="otp-title__sub">{l.subtitle}</p>
+    </TitleCard>
+  );
+}
+
+/**
+ * How to play: the content's three or four steps, read in about five seconds, shown once at the
+ * start of a visit and skipped on every replay (main.ts). Its button is the skip: it starts the
+ * clock at once, and Enter on it works the moment the panel opens because focus starts there.
+ */
+export function HowTo({ ui, onGo, busy }: HowToProps) {
+  return (
+    <TitleCard action={PENDING.howToGo} onAction={onGo} busy={busy} focus>
+      <h1 class="otp-title__mark otp-howto__title">{ui.howTo.title}</h1>
+      <ol class="otp-howto" data-howto="">
+        {ui.howTo.steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+    </TitleCard>
   );
 }

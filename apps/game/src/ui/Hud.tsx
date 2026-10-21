@@ -162,7 +162,7 @@ export function initials(name: string): string {
  * render would blank the whole HUD, clock included. A name that does not resolve is therefore the
  * same case as no name: the labelled placeholder.
  */
-function iconUrl(icon: string | null): string | null {
+export function iconUrl(icon: string | null): string | null {
   if (icon === null) return null;
   try {
     return assetUrl(`${icon}.png`);

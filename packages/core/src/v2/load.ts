@@ -1,4 +1,3 @@
-import { ContentError } from '../content.ts';
 import { contentSchema, lintContent } from './content.ts';
 import type { Content, LintOptions } from './content.ts';
 import { trapChecks } from './sim.ts';
@@ -7,6 +6,16 @@ import { trapChecks } from './sim.ts';
  * Kept apart from content.ts so the import graph has no cycle: the trap is measured by PLAYING the
  * content (sim.ts), the simulator needs the reducer, and the reducer needs content.ts.
  */
+
+/** Every problem found in a content file, listed. Thrown by parseContent and loadContent. */
+export class ContentError extends Error {
+  readonly issues: string[];
+  constructor(issues: string[]) {
+    super(`Invalid game content:\n- ${issues.join('\n- ')}`);
+    this.name = 'ContentError';
+    this.issues = issues;
+  }
+}
 
 /** Schema only. Throws ContentError listing every problem. For tools and tests that lint by hand. */
 export function parseContent(raw: unknown): Content {

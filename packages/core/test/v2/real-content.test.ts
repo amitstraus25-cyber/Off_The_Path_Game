@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import raw from '../../../../content/game.v2.json';
-import v1 from '../../../../content/game.json';
 import design from '../../../../docs/GAME_DESIGN_V2.md?raw';
 import manifest from '../../../../apps/game/src/assets/manifest.json';
 import mapJson from '../../../../apps/game/src/assets/map-forest.json';
@@ -164,6 +163,20 @@ describe('the seven giveaway lines', () => {
   });
 
   /*
+   * NO SHAPE GIVES THE VERDICT AWAY ON REPLAY. The lint holds every bad card to its good card's
+   * line count; this holds the swap's PLACE, read off the cards: if every giveaway stood on the same
+   * line, "read only line two" would be a rote rule. Draft 6 failed both (two bad cards added a line,
+   * the other five all swapped the last one).
+   */
+  it('every bad card is as long as its good card, and the giveaway is not always on the same line', () => {
+    const at = content.skills.map((s) => {
+      expect(s.bad.card.take, s.id).toHaveLength(s.good.card.take.length);
+      return s.bad.card.take.indexOf(v2.giveaway(s)!);
+    });
+    expect(new Set(at).size, `giveaway lines: ${at.join(', ')}`).toBeGreaterThan(1);
+  });
+
+  /*
    * A CARD SAYS WHAT THE SKILL DOES, NEVER WHO IS BEHIND IT. If a card said "wolf", the careful
    * answer would be a word to spot rather than a capability to read about.
    */
@@ -233,6 +246,21 @@ describe('the seven giveaway lines', () => {
   });
 });
 
+/*
+ * THE HOW-TO NAMES THE CLOCK, so the clock it names is the rule's, read from `TIME_LIMIT_MS` and
+ * formatted the way the HUD shows it (m:ss) -- not a number remembered in the copy (PAUL_BRIEF trap 1).
+ */
+describe('the screens say what the rules do', () => {
+  it("the how-to's deadline is the rule's time limit", () => {
+    const seconds = v2.TIME_LIMIT_MS / 1000;
+    const face = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    expect(
+      content.ui.howTo.steps.filter((l) => l.includes(face)),
+      face,
+    ).toHaveLength(1);
+  });
+});
+
 describe('the cast stands on art that exists', () => {
   const spriteKeys = new Set(manifest.spritesheets.map((s) => s.key));
   const map = readForestMap(mapJson);
@@ -269,43 +297,12 @@ describe('the cast stands on art that exists', () => {
    * rule 5): they are named here so the gap is visible, and the list is a RATCHET -- once the art
    * lands, the second assertion fails until the name is removed from this list.
    *
-   * The first content reused icons that contradicted their rows (v1's ear-trumpet on a skill that
-   * pinned notes to a post). The second then put `item-letter` on Word Weaver and `item-key` on
-   * Latch Lifter -- and those are v1's STARTING BASKET, Grandma's note and the cottage key, the
-   * things the player carries rather than the skills they are offered. A reused icon that meant
-   * something else in v1 is worse than a labelled gap, so both wait for art now.
+   * The first content reused icons that contradicted their rows, and the second put `item-letter`
+   * on Word Weaver and `item-key` on Latch Lifter -- art that belonged to the retired rulebook's
+   * starting basket, not to these skills. A reused icon that meant something else is worse than a
+   * labelled gap, so both wait for art now.
    */
   const AWAITING_ART = ['item-latch', 'item-parcel', 'item-shortcut', 'item-signpost'];
-
-  /*
-   * THE RULE, read off v1's own content rather than remembered: no v2 skill wears the icon of
-   * something in v1's starting basket, and a v2 skill that wears any other v1 item's icon wears the
-   * one v1 gave THAT SAME SKILL. Word Weaver keeps v1's ear-trumpet because it is v1's Word Weaver
-   * again ("sends what you say out of the forest"); Cottage Finder and Night Light keep theirs.
-   */
-  const v1Basket = new Set(v1.startBasket.map((k) => v1.items[k as keyof typeof v1.items]));
-  const v1Items = new Set(Object.values(v1.items));
-  const v1IconOf = new Map(v1.skills.map((s) => [s.id, s.icon]));
-  const borrowedIcons = (c: v2.Content): string[] =>
-    c.skills.flatMap((s) =>
-      v1Basket.has(s.icon)
-        ? [`${s.id}: "${s.icon}" is v1's starting basket`]
-        : v1Items.has(s.icon) && v1IconOf.get(s.id) !== s.icon
-          ? [`${s.id}: "${s.icon}" meant another skill in v1`]
-          : [],
-    );
-  it("no skill icon is one of v1's basket items, or an icon v1 gave a different skill", () => {
-    expect([...v1Basket].sort()).toEqual(['item-key', 'item-letter']);
-    expect(borrowedIcons(content)).toEqual([]);
-    const round2 = edited((v) => {
-      v.skills.find((s) => s.id === 'latch-lifter')!.icon = 'item-key';
-      v.skills.find((s) => s.id === 'short-cut')!.icon = 'item-compass';
-    });
-    expect(borrowedIcons(round2)).toEqual([
-      'short-cut: "item-compass" meant another skill in v1',
-      'latch-lifter: "item-key" is v1\'s starting basket',
-    ]);
-  });
 
   it('no two skills share an icon, so every reveal row is told apart by its picture', () => {
     const icons = content.skills.map((s) => s.icon);

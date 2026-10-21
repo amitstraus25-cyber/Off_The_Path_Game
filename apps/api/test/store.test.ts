@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readStoreConfig } from '../src/env.ts';
+import { V2_LAUNCH } from '../src/store.ts';
 import { CONFIG, created, harness, jsonResponse, unreadable } from './fake.ts';
 
 /*
@@ -130,6 +131,13 @@ describe('the table adapter', () => {
     // Four pages asked for, one page served: the filter below runs after the table's own limit,
     // so it needs rows to fall through to. See the comment on `top`.
     expect(h.calls[0]?.url).toContain('limit=28');
+  });
+
+  it('reads only rows from the v2 launch on, so v1 runs out of 1,000 never outrank a v2 run', async () => {
+    const h = harness(() => jsonResponse([]));
+    await h.store.top(7);
+    const asked = new URL(h.calls[0]!.url);
+    expect(asked.searchParams.get('created_at')).toBe(`gte.${V2_LAUNCH}`);
   });
 
   it('never asks the table for more than a bounded window', async () => {

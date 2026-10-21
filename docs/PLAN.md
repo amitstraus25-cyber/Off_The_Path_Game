@@ -85,7 +85,7 @@ Phase A**.
 | D5  | Mobile portrait layout                                                                                                                                                                                                                                                                                                                                   | **Canvas on top, panels docked at the bottom; never require rotation.**                                                                                                                                                                                     | Design                 |
 | D6  | Real Haffer / Season Mix files available?                                                                                                                                                                                                                                                                                                                | **Yes: request woff2 from Brand Kit**; fallbacks meanwhile.                                                                                                                                                                                                 | Brand                  |
 | D7  | Scoring weights. **As shipped: best verdict 200, safe but costly 100, compromised 0, and Word Weaver restrict 50** (because restricting it now earns an errand goal; at 100 it was a free trade). Question bonus +100, boundary bonus +200, trust bonus +100, three errand goals at 100. The "partial credit 150" this row used to name was never built. | **Resolved 2026-10-17** by the three errand goals: reject-all is 700 against a 1,000 ceiling and draws its own ending, and the best full-errand line (750) beats it. Restrict-all at 950 — the figure for a run that reads the forest post — is still open. | Game design            |
-| D8  | Must the player meet all three characters before the cottage?                                                                                                                                                                                                                                                                                            | **Yes** (consistent scores).                                                                                                                                                                                                                                | Game design            |
+| D8  | Must the player meet all three characters before the cottage? (v1; superseded in v2, where any of the seven can be walked past)                                                                                                                                                                                                                          | **Yes** (consistent scores).                                                                                                                                                                                                                                | Game design            |
 | D9  | Where is the game hosted and who owns analytics?                                                                                                                                                                                                                                                                                                         | **Static host under a cyera.com subdomain, embedded by iframe; parent page owns analytics via postMessage events.**                                                                                                                                         | Web team               |
 | D10 | Leaderboard retention, moderation, privacy review                                                                                                                                                                                                                                                                                                        | **Handle + score only, 12-month retention, manual delete endpoint, Legal sign-off before launch.**                                                                                                                                                          | Legal + Security       |
 | D11 | After the 2026-10-21 rename of the protagonist from Red to Purple, is she "Purple" or "Little Purple"? Her cloak is Aubergine and the brand rules ban red outright, so "Red" was a contradiction from the first commit; the fairy-tale shape survives the rename and the colour error does not.                                                          | **"Little Purple" in player-facing copy, "Purple" in code, identifiers, docstrings and docs.** A player meeting "Purple" alone reads a colour; "Little Purple" reads a person and keeps the tale's shape. Four player-facing strings carry the long form.   | Game design + Brand    |
@@ -103,7 +103,7 @@ All ten decisions take the recommended default above. Owners should confirm; two
 | D5  | Canvas on top, panels docked at the bottom on portrait; never require rotation.                                                                                                                                                                                                                                                                  | Recorded                                                                                                                                                                                                                   |
 | D6  | Request Haffer and Season Mix woff2 from Brand Kit.                                                                                                                                                                                                                                                                                              | Request drafted, not yet sent                                                                                                                                                                                              |
 | D7  | Start with GAME_DESIGN section 7 scoring; tune in Phase 8.                                                                                                                                                                                                                                                                                       | Recorded                                                                                                                                                                                                                   |
-| D8  | Player must meet all three characters before the cottage.                                                                                                                                                                                                                                                                                        | Recorded                                                                                                                                                                                                                   |
+| D8  | Player must meet all three characters before the cottage. (v1; superseded in v2.)                                                                                                                                                                                                                                                                | Recorded                                                                                                                                                                                                                   |
 | D9  | Static host on a cyera.com subdomain, iframe embed, parent page owns analytics.                                                                                                                                                                                                                                                                  | Recorded; Web team to confirm                                                                                                                                                                                              |
 | D10 | Handle + score only, 12-month retention, manual delete endpoint, Legal sign-off before launch.                                                                                                                                                                                                                                                   | Recorded; Legal sign-off pending                                                                                                                                                                                           |
 
@@ -456,15 +456,61 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
       variant lookup); the seven met in walking order (Purple placed beside each, not walked);
       the careful run scores 100 at Grandma's, the greedy one lets the wolf in at 0; the clock
       override ends a run late.
-- [ ] **D. Screens** (M) — the how-to-play rewritten for v2; **the reveal screen**; the late
+- [x] **D. Screens** (M) — done 2026-10-22; the live game is v2 (landing ships without a background until the client's image arrives). — the how-to-play rewritten for v2; **the reveal screen**; the late
       ending; the Cyera-branded landing page (**blocked on the background image**).
-- [ ] **E. Leaderboard** (M) — **including a server-issued start token**, because v2's run-log
+      _Progress 2026-10-22 (built, not ticked):_ the live game is v2 -- no switch and no seed pin;
+      the only test hook left is the run clock's `testClock` override on the dot-access-gated debug
+      handle (in `csp.test.ts`'s bundle grep with the retired `otp-v2`, `otp-v2-seed`, `v2Clock`).
+      A run is started on the server at Begin (`startRun()`, once per run and per replay); its seed
+      deals the run and its token is what the Post form posts with. With no answer the game deals
+      from `crypto.getRandomValues` and the reveal says posting is unavailable; a late run says it
+      is not posted. Screens, on the existing components and styles: landing (00, one Lime, a
+      dashed token-only slot labelled as awaiting the client's background image), how-to (00, the
+      content's steps, shown once a visit, its button is the skip), offer (02, portrait-less for
+      all seven: greeting, promise, Open the card, Take / Leave, Walk on), card (03, the dealt
+      variant's two take lines and the leave line), arrive (04, the content's ending lines with
+      Grandma's or the wolf's portrait), reveal (05: one row per offer in walking order with Safe /
+      Unsafe by glyph and word, what the player did, the promise, the reveal line, the giveaway for
+      a bad card, the realWorld term and note; then the score out of 100, the ending, the question
+      band and the one Lime, the post form, the board, Walk it again). Words come from
+      `content/game.v2.json` (`ui`, `endings`, the cast); the chrome copy v2 did not change (pad,
+      music, problem screens, post form, board) is read from `content/game.v2.json` `ui.chrome`
+      through `ui/copy.ts` (moved there in Phase F; `game.json` is gone), and the dozen new labels with no content key yet are in
+      `ui/copy.ts PENDING` for the content owner. v1 screens removed: Notice, Trifecta, the v1
+      Dialogue / SkillCard / Results / Cottage bodies, the errand HUD, `world/v2-wiring.tsx`.
+      e2e: `play.spec.ts` (careful 100 and the post body, every reveal row, greedy wolf, late under
+      the test clock, no board, replay, keyboard only, 375 / 768 / 1280) and a v2 `a11y.spec.ts`;
+      fifteen v1-only specs deleted, the world and title specs moved to v2.
+      `e2e/leaderboard.spec.ts` was ported to v2 in Phase F (the start route answers a seed and a
+      token; the post body carries the token).
+- [x] **E. Leaderboard** (M) — done 2026-10-22: `/api/start` deals the seed in a signed token, `/api/score` replays v2 against it, and `/api/top` reads only rows from the v2 launch (`V2_LAUNCH`); `supabase/migrations/0006_clear_v1_rows.sql` deletes the v1 rows and is the human's to run. — **including a server-issued start token**, because v2's run-log
       times are client-reported: a log forged with every event at 0ms replays as legal today.
       The API must record when a run began and bound elapsed time on submit. Otherwise — `apps/api` recomputes with the new core in the same change. The table
       is empty today, so no posted score becomes incomparable.
+      _Fix round 2026-10-22 (scripted 100s):_ a careful log for the token's seed, claiming 15 ms,
+      replayed as legal and scored 100 -- and ties rank earliest first, so a bot's 100s would
+      outrank every later honest one for good. Three answers, and what was done with each:
+      **(a) done** -- `MIN_RUN_MS` (10 s, `apps/api/src/handlers.ts`) floors both the claimed run
+      time and the server-observed time since the token; `apps/api/test/floor.test.ts` derives it
+      from the shipped map (straight line spawn to door, less a tile each end, at `WALK_SPEED`,
+      11.2 s) and fails if it drifts above that or more than 2 s under it. It is one floor for every
+      score; a per-score floor (a 100 must also meet the three holding good skills) needs the map's distances on
+      the server and is **not done**. **(b) out of scope by design** -- GAME_DESIGN_V2 says
+      "reading is optional", so requiring an `inspected` per take would refuse the honest lucky
+      guess. **(c) the gate:**
+  - [ ] **Vercel firewall rate limit on `/api/*`, on and proved on a preview, before the board is
+        exposed to the public.** The only cross-instance bound on forged rows. Not on as of 2026-10-22.
 - [ ] **F. Readiness** (M) — a test-mode timer override (dot access on `import.meta.env`, and the
       symbol added to `csp.test.ts`'s bundle grep so it cannot ship like the debug handle did); then
       a full functional, security and accessibility sweep of v2.
+      _Progress 2026-10-22 (cleanup done, sweep not ticked):_ v1 is removed from the repository.
+      Gone: `packages/core`'s v1 rules and tests (`content`, `state`, `reducer`, `runlog`,
+      `scoring`, `outcomes`; core keeps `camera`, `leaderboard` and the `v2` namespace),
+      `content/game.json` and `game.seed.json`, v1's `createLeaderboardClient`, and the v1
+      strategies in `tools/sim`, which now runs v2 (`pnpm sim`). The chrome copy moved into
+      `ui.chrome` in `content/game.v2.json`. `docs/GAME_DESIGN.md` is marked superseded, not
+      deleted. The timer override and the bundle-grep item are done (`testClock`); the sweep
+      itself is open.
 
 ## Readiness findings (sweep of 2026-10-21)
 

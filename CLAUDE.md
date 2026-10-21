@@ -19,7 +19,9 @@ This is a Cyera marketing/research asset. It must be on-brand, fast, accessible,
   **It supersedes BRAND_AND_UI.md wherever the two disagree.** Read it before BRAND_AND_UI, not after.
 - @docs/BRAND_AND_UI.md: Cyera brand tokens and component specs. Binding except where UI_FOUNDATIONS overrides.
 - docs/PIXEL_STANDARD.md: binding for every painter in `tools/graybox/src` — sizes, colour, light, edges.
-- docs/GAME_DESIGN.md: story, characters, skills, scoring, endings (read when touching content/logic).
+- docs/GAME_DESIGN_V2.md: the game as built (seven characters, a dealt 3 good and 4 bad, take or leave, a
+  3:00 timer, the reveal). Read it when touching content/logic. `docs/GAME_DESIGN.md` is v1's design,
+  **superseded** and kept as history; v1 was removed from the repo on 2026-10-22.
 - docs/ASSETS.md: the production-art gap and the placeholder strategy. Sizes live in PIXEL_STANDARD
   section 1; the shipped file list is `apps/game/src/assets/manifest.json`.
 - docs/KICKOFF_PROMPTS.md: the prompts the human will use; useful for understanding intent.
@@ -36,7 +38,7 @@ This is a Cyera marketing/research asset. It must be on-brand, fast, accessible,
 pnpm install            # exact versions only, see Security rules
 pnpm dev                # game dev server (apps/game, Vite) on :5173
 pnpm test               # unit tests in every workspace that has them -- packages/core, apps/game,
-                        #   apps/api and tools/graybox. packages/core is gated at 100% on ALL FOUR metrics
+                        #   apps/api and tools/graybox. packages/core AND apps/api are gated at 100% on ALL FOUR metrics
                         #   (statements, branches, functions, lines); tools/graybox deliberately has
                         #   no coverage threshold and gates on art measurements instead. Must stay green
 pnpm typecheck          # tsc in every workspace
@@ -44,7 +46,8 @@ pnpm lint               # eslint + prettier --check
 pnpm format             # prettier --write
 pnpm build              # production build of apps/game
 pnpm e2e                # Playwright (builds + previews on :4173). Locally set CHROMIUM_PATH to reuse an installed Chromium
-pnpm sim                # plays strategies through the real reducer; add --strategy perfect|errand|reject-all|allow-all|restrict-all|random --questions --seed N
+pnpm sim                # plays the v2 strategies through the real reducer over every deal, then the trap
+                        #   checks; add --strategy careful|greedy|leave-all|random --seed N for one deal
 pnpm preview            # contact sheets of the generated art at an integer zoom (PIXEL_STANDARD section 7)
 pnpm world              # renders the map through the REAL camera: --frame title|arrive|portrait.
                         #   The only way to see what a visitor sees. Two rounds were lost to composing
@@ -56,14 +59,14 @@ pnpm audit              # high-severity dependency audit (also runs in CI)
 
 Workspaces, five: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + Preact),
 `apps/api` (the leaderboard functions), `tools/graybox` (placeholder art generator),
-`tools/sim` (strategy simulator).
+`tools/sim` (the v2 strategy simulator, a thin CLI over `packages/core`'s `v2.play` and `v2.table`).
 **Phase 6 landed, so `apps/api` exists** — it holds the leaderboard logic, the schema and its tests —
 **and the deploy is Vercel's Build Output API, written by us.** `vercel.json` carries
 `installCommand`, `buildCommand` and the security headers, nothing else. The build ends with
 `apps/game/scripts/vercel-output.mjs`, which writes `.vercel/output`: the static game, the two
 routes bundled into self-contained CommonJS, and the headers copied from `vercel.json`. **Vercel
-compiles none of our TypeScript.** The routes are `apps/api/api/score.ts` and `top.ts` — the
-single copy; there used to be three. `test/docs-truth.test.ts` fails if the build stops running
+compiles none of our TypeScript.** The routes are `apps/api/api/start.ts`, `score.ts` and `top.ts` —
+the single copy; there used to be three. `test/docs-truth.test.ts` fails if the build stops running
 that script, because nothing else would notice.
 
 **Why, and do not re-run any of the four things that failed.** Two services served no functions.
@@ -80,7 +83,7 @@ was never the problem. Bundling ourselves is the fix.
 mounted function answers **405 with `Allow: POST`**, because `handleScore` branches on the method
 itself. A **404** there means no function exists and the request never reached our code. A **500**
 with `FUNCTION_INVOCATION_FAILED` means the function exists and crashed on load — read the build
-log, not the runtime log. Check `/api/score`, not `/api/top`, which cannot tell these apart. The
+log, not the runtime log. `GET /api/start` answers the same way. Check those two, not `/api/top`, which cannot tell these apart. The
 routes `export default { fetch }`; the adapter in `vercel-output.mjs` turns Vercel's Node
 `(req, res)` into a web `Request` and keeps that 405 branch ours.
 
@@ -105,7 +108,7 @@ fifteen days before — clear of the fourteen-day rule below, which is why it wa
 2. **`packages/core` is pure TypeScript.** No Phaser, no DOM, no `window`, no network, no randomness without
    an injected seed. All game rules (state machine, scoring, outcomes) live there and are unit tested first (TDD).
 3. **Content is data.** Characters, skills, questions, dialogue, outcomes, scoring weights live in
-   `content/game.json`, validated by `contentSchema` and the content lint in `packages/core/src/content.ts`
+   `content/game.v2.json`, validated by `contentSchema` and the content lint in `packages/core/src/v2/content.ts`
    — **at startup and in the test suite, not at build time**; there is no build-time validation step.
    Adding a skill must not require code changes.
 4. **World in Phaser, UI in the DOM.** Phaser renders the forest only. Every panel (dialogue, skill card, basket,

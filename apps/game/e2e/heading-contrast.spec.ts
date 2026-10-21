@@ -31,15 +31,15 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
-import { ready, startGame } from './helpers';
+import { ready } from './helpers';
 
 const read = (relative: string): string =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 
 /** The player-facing words, read from the file the game reads, so a retitled heading is followed. */
 const STRINGS = (
-  JSON.parse(read('../../../content/game.json')) as { strings: Record<string, string> }
-).strings;
+  JSON.parse(read('../../../content/game.v2.json')) as { ui: { chrome: Record<string, string> } }
+).ui.chrome;
 
 /**
  * The text a heading is required BY: its first words, read from content, not typed here. The
@@ -49,7 +49,7 @@ const named = (key: string): string => {
   const text = STRINGS[key];
   expect(
     text,
-    `content/game.json has no string "${key}", so a heading cannot be required by it`,
+    `content/game.v2.json has no ui.chrome string "${key}", so a heading cannot be required by it`,
   ).toBeTruthy();
   return text!.trim().slice(0, 24);
 };
@@ -259,7 +259,7 @@ const toTheDoor = (page: Page): Promise<void> =>
     for (const [c, s] of Object.entries(skillOf)) {
       store.dispatch({ type: 'MEET', c });
       store.dispatch({ type: 'INSPECT', s });
-      store.dispatch({ type: 'VERDICT', s, v: 'restrict' });
+      store.dispatch({ type: 'VERDICT', s, v: 'leave' });
     }
     store.dispatch({ type: 'ENTER_COTTAGE' });
   }, SKILL_OF);
@@ -276,43 +276,30 @@ for (const size of SIZES) {
       await page.goto('/');
       await ready(page);
 
-      // 00 Title: the h1, and the "How to play" h2 under it. Both are named, so a selector that
-      // drifts onto nothing, or a heading that drops out of view, fails here rather than passing.
-      await expectReadable(page, at('title'), [named('title'), named('howToPlayLabel')]);
+      // 00 Title: the h1. 00 How to play: its own h1.
+      await expectReadable(page, at('title'), ['Off the']);
+      await page.getByRole('button', { name: /Begin the walk/ }).click();
+      await expectReadable(page, at('how-to'), ['How to play']);
+      await page.getByRole('button', { name: /Start walking/ }).click();
 
       // 01 Explore: the frame's own title is aria-hidden and the h1 is visually hidden, so there
       // is nothing visible to measure here and nothing is required of it.
-      await startGame(page);
+      await page.waitForFunction(() => window.__otp?.store.getState().phase === 'forest');
       await expect(page.locator('.otp-world-frame')).toBeVisible();
-      await expectReadable(page, at('explore'), []);
+      await expectReadable(page, at('forest'), []);
 
-      // 02 Question.
+      // 02 Offer.
       await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
-      await expect(page.locator('.otp-dialogue__text')).toBeFocused();
-      await expectReadable(page, at('question'), ['Question']);
+      await expect(page.locator('[data-offer]')).toBeVisible();
+      await expectReadable(page, at('offer'), ['Offer']);
 
-      // 03 Inspect, with the card's own title (an h3 on a light surface) alongside.
-      await page.locator('.otp-dialogue__show').click();
+      // 03 Card, with the card's own title (an h3 on a light surface) alongside.
+      await page.locator('[data-action="inspect"]').click();
       await expect(page.locator('.otp-card')).toBeFocused();
-      await expectReadable(page, at('inspect'), ['Inspect']);
+      await expectReadable(page, at('card'), ['Card']);
       await page.keyboard.press('Escape');
       await page.keyboard.press('Escape');
-      await expect(page.locator('.otp-dialogue')).toBeHidden();
-
-      // The post by the path, unread and read.
-      await page.evaluate(() =>
-        window.__otp!.bus.emit('reachedNotice', { noticeId: 'forest-post' }),
-      );
-      await expect(page.locator('.otp-notice')).toBeVisible();
-      // The title is in the panel's header, which is a sibling of `.otp-notice` and not inside it.
-      const noticeTitle = (await page
-        .locator('.otp-layer--modal .otp-panel__title')
-        .textContent())!.trim();
-      await expectReadable(page, at('the post, unread'), [noticeTitle]);
-      await page.getByRole('button', { name: /Read the notice/ }).click();
-      await expectReadable(page, at('the post, read'), [noticeTitle]);
-      await page.keyboard.press('Escape');
-      await expect(page.locator('.otp-notice')).toHaveCount(0);
+      await expect(page.locator('[data-offer]')).toBeHidden();
 
       // 04 Arrive. Its frame title is the page's h1 and is only visible from 560px up; the
       // ending's title is the h2 under it, and mounts late.
@@ -330,15 +317,12 @@ for (const size of SIZES) {
         (await page.locator('.otp-ending__title').textContent())!.trim().slice(0, 20),
       ]);
 
-      // 05 Results: the score is the h1, and the sections below it are h2s. Every one is named:
-      // the h1 by the one word of its `<small>` that is content (`scoreOutOf`), the three h2s by
-      // their own text. Before this only the h1 was required, so the other three could vanish.
-      await page.getByRole('button', { name: /Step inside/ }).click();
+      // 05 Reveal: the reveal title is the h1, and the score, ending and board are h2s.
+      await page.locator('[data-action="finish"]').click();
       await expect(page.locator('.otp-hero__score')).toBeVisible();
-      await expectReadable(page, at('results'), [
-        named('scoreOutOf'),
-        named('trifectaLabel'),
-        named('recapHeading'),
+      await expectReadable(page, at('reveal'), [
+        'What each skill',
+        'Your score',
         named('leaderboardTitle'),
       ]);
     } finally {

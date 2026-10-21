@@ -1,5 +1,12 @@
 # Game design: Off the Path, "That's Not My Grandma"
 
+> **SUPERSEDED, 2026-10-22.** This is v1's design: three judged travellers, four bystanders,
+> Allow / Restrict / Reject, the trifecta, the errand and a score out of 1,000. v1 has been removed
+> from the game and from the repository (`packages/core` v1 rules, `content/game.json`, the v1
+> simulator strategies), so nothing below describes what ships and the files it names are gone.
+> The design that ships is **`docs/GAME_DESIGN_V2.md`**. This file is kept as history, so that a
+> dropped idea is not proposed again, and is not checked by `apps/game/test/docs-truth.test.ts`.
+
 Source: `reference/Off_the_Path_-_Game_and_Campaign_Concept.pdf` (Amit Straus, Oct 14 2026).
 Items marked **[PLACEHOLDER]** are drafts invented for this plan and must be confirmed by the
 research / product marketing team before launch. Items marked **[DECISION]** appear in PLAN.md's decisions table.

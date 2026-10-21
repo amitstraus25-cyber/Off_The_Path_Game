@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRecentRuns, createWriteBudget, fingerprint } from '../src/limit.ts';
-import { carefulRun } from './helpers.ts';
+import { createRecentRuns, createWriteBudget } from '../src/limit.ts';
 
 /*
  * The two per-instance defences, as units. What they do against a route is in score.test.ts; this
@@ -60,15 +59,5 @@ describe('the recent runs', () => {
     const recent = createRecentRuns(2);
     for (const key of ['a', 'b', 'c']) recent.remember(key); // 'a' is dropped on 'c'.
     expect([recent.has('a'), recent.has('b'), recent.has('c')]).toEqual([false, true, true]);
-  });
-});
-
-describe('the fingerprint', () => {
-  it('is the same for the same run and different for a different one', () => {
-    const log = carefulRun().log;
-    expect(fingerprint(log)).toBe(fingerprint(log));
-    expect(fingerprint(log)).toHaveLength(64);
-    expect(fingerprint(log)).not.toBe(fingerprint(log.slice(0, -1)));
-    expect(fingerprint(log)).toMatch(/^[0-9a-f]{64}$/);
   });
 });

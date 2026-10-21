@@ -42,11 +42,11 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { ready } from './helpers';
 
-const strings = (
-  JSON.parse(
-    readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
-  ) as { strings: Record<string, string> }
-).strings;
+/** The content file: the how-to's steps live in its strict `ui`, the hint in `ui.chrome`. */
+const v2 = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
+) as { ui: { howTo: { steps: string[] }; chrome: Record<string, string> } };
+const strings = v2.ui.chrome;
 
 interface Size {
   width: number;
@@ -127,7 +127,7 @@ function look(page: Page): Promise<Seen> {
       );
     };
     const steps = [...document.querySelectorAll('.otp-howto > li')];
-    const label = document.querySelector('.otp-howto__label');
+    const label = document.querySelector('.otp-howto__title');
     const hint = document.querySelector('.otp-hint');
     const measured = [...(label ? [label] : []), ...steps, ...(hint ? [hint] : [])];
     const covered = steps.flatMap((step) => {
@@ -152,13 +152,15 @@ function look(page: Page): Promise<Seen> {
   });
 }
 
-/** The three steps this branch renders, derived from the content file the card is built from. */
-const expectedSteps = (touch: boolean): string[] =>
-  [
-    touch ? strings['howToPlayWalkTouch'] : strings['howToPlayWalk'],
-    strings['howToPlayOffer'],
-    strings['howToPlayDecide'],
-  ].filter((line): line is string => Boolean(line));
+/** The steps the how-to renders, from the content file it is built from (the same on both branches). */
+const expectedSteps = (): string[] => v2.ui.howTo.steps;
+
+/** The how-to is its own screen now, one press past the landing. */
+async function openHowTo(page: Page): Promise<void> {
+  await ready(page);
+  await page.getByRole('button', { name: /Begin the walk/ }).click();
+  await page.locator('[data-howto]').waitFor();
+}
 
 /** Half a pixel: layout rounds to 1/64 and a step flush with its box is not "outside" it. */
 const SUBPIXEL = 0.5;
@@ -171,9 +173,9 @@ function describeBranch(name: string, touch: boolean): void {
       page,
     }) => {
       test.slow();
-      const want = expectedSteps(touch);
+      const want = expectedSteps();
       // The bound below is `want.length`, so the bound being zero would be the silent pass.
-      expect(want.length, 'content/game.json defines the how-to-play steps').toBeGreaterThan(0);
+      expect(want.length, 'content/game.v2.json defines the how-to-play steps').toBeGreaterThan(0);
 
       /*
        * Every viewport is measured and every failure is collected before anything is asserted, so
@@ -186,7 +188,7 @@ function describeBranch(name: string, touch: boolean): void {
         const where = `${size.width}x${size.height} ${touch ? 'touch' : 'keyboard'}`;
         await page.setViewportSize(size);
         await page.goto('/');
-        await ready(page);
+        await openHowTo(page);
 
         const seen = await look(page);
         if (seen.steps !== want.length) {
@@ -212,7 +214,7 @@ function describeBranch(name: string, touch: boolean): void {
     });
 
     /*
-     * THE REGRESSION THIS FILE HAS TO KEEP SHUT. content/game.json cut the hint from "About five
+     * THE REGRESSION THIS FILE HAS TO KEEP SHUT. the content cut the hint from "About five
      * minutes. Arrow keys to walk, Space to talk." to "About five minutes.", which made the list
      * the only place the controls were named, and the list was the thing clipped. So the controls
      * are asserted on the hint itself, which lives in the card's foot beside the button and is on
@@ -224,8 +226,8 @@ function describeBranch(name: string, touch: boolean): void {
      */
     test('the controls are named on the always-visible line, at every size', async ({ page }) => {
       test.slow();
-      const want = strings[touch ? 'titleMetaTouch' : 'titleMeta'];
-      expect(want, 'content/game.json carries the hint for this branch').toBeTruthy();
+      const want = strings[touch ? 'howToPlayWalkTouch' : 'controlsHint'];
+      expect(want, 'content/game.v2.json carries the hint for this branch').toBeTruthy();
       expect(want, 'and it names the controls, not just the running time').toMatch(
         touch ? /joystick/i : /arrow/i,
       );
@@ -257,10 +259,10 @@ function describeBranch(name: string, touch: boolean): void {
       page,
     }) => {
       test.slow();
-      const want = expectedSteps(touch).length;
+      const want = expectedSteps().length;
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto('/');
-      await ready(page);
+      await openHowTo(page);
       const roomy = await look(page);
       expect(roomy.steps, 'the list is present at 1280x800').toBe(want);
 
@@ -278,12 +280,11 @@ function describeBranch(name: string, touch: boolean): void {
             const s = await look(page);
             return {
               clipped: s.clipped.filter(([, px]) => px > SUBPIXEL),
-              gaveSomethingUp: Number(s.fit) > Number(roomy.fit),
             };
           },
           { message: 'after shrinking to 320x568 without a reload, every step is visible again' },
         )
-        .toEqual({ clipped: [], gaveSomethingUp: true });
+        .toEqual({ clipped: [] });
 
       await page.setViewportSize({ width: 1280, height: 800 });
       await expect
@@ -333,7 +334,7 @@ test('where the steps cannot all fit, the card draws a cue and they are reachabl
     const where = `${size.width}x${size.height}`;
     await page.setViewportSize(size);
     await page.goto('/');
-    await ready(page);
+    await openHowTo(page);
     const seen = await look(page);
     expect(seen.steps, `${where}: the how-to-play list is present`).toBeGreaterThan(0);
     if (!seen.overflows) {
@@ -354,7 +355,7 @@ test('where the steps cannot all fit, the card draws a cue and they are reachabl
     await page.locator('.otp-title__scroll').evaluate((el) => (el.scrollTop = el.scrollHeight));
     // The LAST step, which is the one a clipped card loses first; the label has scrolled out of the
     // top of the box by then, which is what scrolling is for.
-    const last = (await look(page)).clipped.find(([text]) => text === strings['howToPlayDecide']);
+    const last = (await look(page)).clipped.find(([text]) => text === v2.ui.howTo.steps.at(-1));
     expect(last, `${where}: the last step is rendered`).toBeDefined();
     expect(
       last![1],

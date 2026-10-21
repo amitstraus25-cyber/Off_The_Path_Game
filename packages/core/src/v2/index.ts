@@ -1,7 +1,7 @@
 /*
- * v2's rules, built beside v1 and exported from core as the `v2` namespace (src/index.ts), so that
- * every bare name production imports today -- `reduce`, `score`, `checkLog` -- still means v1.
- * Phase D switches the game over; until then nothing outside this directory changes behaviour.
+ * The game's rules, exported from core as the `v2` namespace (src/index.ts). The number is the
+ * rules version every run log and content file is tagged with (`rules: 2`), so a file written for
+ * any other rulebook is refused by the schema.
  */
 export * from './content.ts';
 export * from './deal.ts';

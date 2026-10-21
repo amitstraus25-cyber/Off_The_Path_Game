@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
  * The two imports that leave this service root, and the one thing about them no runtime test can
  * see.
  *
- * `src/content.ts` imports `content/game.json` from the repository root and `@otp/core` resolves,
+ * `src/content.ts` imports `content/game.v2.json` from the repository root and `@otp/core` resolves,
  * through a pnpm symlink, to `packages/core/src/index.ts`. Both live OUTSIDE `apps/api`, which is
  * the `root` vercel.json gives this service. Under plain `node` and under vitest they resolve and
  * every other test in this directory passes; whether Vercel's bundler carries them into the
@@ -81,7 +81,7 @@ describe('the imports that leave apps/api', () => {
     expect(fromRoot.startsWith('..'), 'the content file is inside apps/api now -- see rule 3').toBe(
       true,
     );
-    expect(target).toBe(resolve(REPO, 'content/game.json'));
+    expect(target).toBe(resolve(REPO, 'content/game.v2.json'));
   });
 
   it('still carries the import attribute plain node requires', () => {
@@ -95,7 +95,7 @@ describe('the imports that leave apps/api', () => {
     const digest = (path: string): string =>
       createHash('sha256').update(readFileSync(path)).digest('hex');
     expect(digest(resolve(dirname(CONTENT_TS), specifier))).toBe(
-      digest(resolve(REPO, 'content/game.json')),
+      digest(resolve(REPO, 'content/game.v2.json')),
     );
   });
 

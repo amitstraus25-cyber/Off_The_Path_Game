@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { isMintedHandle } from '@otp/core';
-import raw from '../../../content/game.json';
+import raw from '../../../content/game.v2.json';
 import { newHandle } from '../src/net/leaderboard';
 
 /*
@@ -28,7 +28,7 @@ import { newHandle } from '../src/net/leaderboard';
  */
 
 const RESULTS = fileURLToPath(new URL('../src/ui/Results.tsx', import.meta.url));
-const strings = (raw as { strings: Record<string, string> }).strings;
+const strings: Record<string, string> = raw.ui.chrome;
 
 /*
  * THE CODE, WITHOUT THE PROSE -- and the first draft of this file needed the lesson.

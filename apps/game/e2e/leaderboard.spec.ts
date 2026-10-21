@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
 import { HANDLE_FIRST_WORDS, HANDLE_SECOND_WORDS, isMintedHandle } from '@otp/core';
-import { ready } from './helpers';
+import { answerAllAndArrive, ready, startGame, toTheReveal } from './helpers';
 
 /*
  * The post form, and the board under it, against an API that answers, in a real browser.
@@ -19,8 +19,8 @@ import { ready } from './helpers';
  */
 
 const CONTENT = JSON.parse(
-  readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
-) as { strings: Record<string, string> };
+  readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
+) as { ui: { chrome: Record<string, string> } };
 
 /**
  * Lime, as the browser will report it, read out of the brand file rather than typed here.
@@ -59,35 +59,24 @@ const ADAPTER_TIMEOUT_MS = ((): number => {
   return Number(ms);
 })();
 
-const SKILL_OF: Record<string, string> = {
-  rabbit: 'cottage-finder',
-  owl: 'word-weaver',
-  'lantern-keeper': 'night-light',
-};
+const TOKEN = 'dGVzdA.c2lnbmF0dXJl';
 
-/** A finished, careful run, played through the real store. */
+/**
+ * A finished run, posted from: the server starts it (`/api/start` answers a seed and a token, as
+ * apps/api would), every offer is left and the player walks in. Leaving everything is a clean
+ * arrival, which is a run the server would take; the score is not what these specs are about.
+ */
 async function reachResults(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /Begin the walk/ }).click();
-  await page.evaluate((skillOf) => {
-    const { store } = window.__otp!;
-    for (const [character, verdict] of Object.entries({
-      rabbit: 'restrict',
-      owl: 'reject',
-      'lantern-keeper': 'allow',
-    })) {
-      store.dispatch({ type: 'MEET', c: character });
-      store.dispatch({ type: 'INSPECT', s: skillOf[character] });
-      store.dispatch({ type: 'VERDICT', s: skillOf[character], v: verdict });
-    }
-    store.dispatch({ type: 'ENTER_COTTAGE' });
-  }, SKILL_OF);
-  await expect(page.locator('.otp-arrive')).toBeVisible();
-  for (let i = 0; i < 8; i++) {
-    const go = page.getByRole('button', { name: 'Go on' });
-    if ((await go.count()) === 0) break;
-    await go.click();
-  }
-  await page.getByRole('button', { name: /Step inside/ }).click();
+  await page.route('**/api/start', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ seed: 0, token: TOKEN }),
+    }),
+  );
+  await startGame(page);
+  await answerAllAndArrive(page, 'leave');
+  await toTheReveal(page);
   await expect(page.locator('.otp-hero__score')).toBeVisible();
 }
 
@@ -101,7 +90,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('a post the board takes says which name went up', async ({ page }) => {
-  let sent: { handle?: string; log?: unknown[]; score?: unknown } = {};
+  let sent: { handle?: string; log?: unknown; token?: string; score?: unknown } = {};
   await page.route('**/api/score', async (route: Route) => {
     sent = JSON.parse(route.request().postData() ?? '{}') as typeof sent;
     await route.fulfill({
@@ -120,7 +109,8 @@ test('a post the board takes says which name went up', async ({ page }) => {
   expect(sent.handle).toBe(
     await page.locator('.otp-handle [data-handle]').getAttribute('data-handle'),
   );
-  expect(Object.keys(sent).sort()).toEqual(['handle', 'log']);
+  expect(Object.keys(sent).sort()).toEqual(['handle', 'log', 'token']);
+  expect(sent.token).toBe(TOKEN);
   await expect(page.getByRole('status')).toContainText(sent.handle!);
 });
 
@@ -143,7 +133,7 @@ test('a post the board refuses is not reported as a board that is down', async (
 });
 
 /** The line the game shows for a board that is not answering, matched on its own first words. */
-const DOWN = new RegExp(CONTENT.strings['leaderboardDown']!.slice(0, 12), 'i');
+const DOWN = new RegExp(CONTENT.ui.chrome['leaderboardDown']!.slice(0, 12), 'i');
 
 test('a reply that stops mid-body gives the player the button back', async ({ page }) => {
   // Headers that promise forty bytes and a body that delivers twenty-eight: the read fails rather
@@ -334,7 +324,7 @@ async function expectNoLime(page: Page): Promise<void> {
   expect(cta, 'the research CTA is where this screen spends its Lime').toBe(LIME_RGB);
 }
 
-const say = (key: string): string => CONTENT.strings[key]!;
+const say = (key: string): string => CONTENT.ui.chrome[key]!;
 
 test('a board with runs on it shows them, and marks nothing in Lime', async ({ page }) => {
   // The fixture is only a board if the game could have minted every name on it.
@@ -419,7 +409,7 @@ test('an empty board invites a first run and does not look like a failure', asyn
  * test/board.test.ts, where the claims each line makes are declared and the pairing is checked
  * without a DOM. What a browser is for is the WIRING: that the screen really does render the pair
  * that model checked, as exact shipped sentences rather than as something near them. So these
- * assert equality against content/game.json, not a pattern over the words -- a regex over the
+ * assert equality against content/game.v2.json, not a pattern over the words -- a regex over the
  * phrasing is the bound a reviewer already walked through once with a single reworded string.
  */
 interface Outcome {
@@ -537,7 +527,7 @@ for (const outcome of OUTCOMES) {
  *     moved, because "the board was unavailable" asserted something about a board that was
  *     plainly answering two lines down.
  *
- * As with the block above, these assert the EXACT shipped sentences out of content/game.json
+ * As with the block above, these assert the EXACT shipped sentences out of content/game.v2.json
  * rather than a pattern over the words. The claim algebra is enumerated without a DOM in
  * test/board.test.ts; this is the wiring.
  */

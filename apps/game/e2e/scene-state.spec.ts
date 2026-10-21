@@ -15,7 +15,7 @@
  *   - after "Walk it again", `facing` was 'down' and the sprite was rendering `purple-idle-up-0`:
  *     every second run opened on the back of the heroine's head, and it healed on the player's
  *     first keypress -- exactly late enough to spoil the opening shot and nothing else.
- *   - standing by the Rabbit with a notice post open: `hasInput()` false, phase still 'explore',
+ *   - standing by the Rabbit with a notice post open: `hasInput()` false, phase still 'forest',
  *     the bubble still bobbing over the Rabbit and the live region still saying "Rabbit, within
  *     reach: you can talk now" -- while the key that answers it did nothing.
  *   - the payoff frame at the door: 608x359 in a 621x359 canvas at 1280, 608x499 in 941x499 at
@@ -29,8 +29,7 @@
  */
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { startGame } from './helpers';
-import { TILE } from '../src/world/logic';
+import { startGame, toTheReveal } from './helpers';
 
 /** Just enough of the scene for these three; the rest stays private. */
 interface SceneProbe {
@@ -53,9 +52,6 @@ interface SceneProbe {
   cameras: { main: { x: number; y: number; width: number; height: number } };
 }
 
-/** The live region the scene's within-reach event feeds; the same selector world-reach.spec uses. */
-const NEAR = '[data-announce="near"]';
-
 /** Two animation frames: one for the DOM to settle, one for the scene's next `update`. */
 const settle = (page: Page, frames = 3): Promise<void> =>
   page.evaluate(async (n) => {
@@ -74,7 +70,7 @@ async function reachTheDoor(page: Page): Promise<void> {
       for (const action of [
         { type: 'MEET', c },
         { type: 'INSPECT', s },
-        { type: 'VERDICT', s, v: 'restrict' },
+        { type: 'VERDICT', s, v: 'leave' },
       ])
         store.dispatch(action);
     store.dispatch({ type: 'ENTER_COTTAGE' });
@@ -134,9 +130,9 @@ test('a replay opens on the frame the first run opened on, before any key is pre
     'the arrival no longer changes the frame, so this test is vacuous',
   ).not.toBe(opening.frame);
 
-  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'FINISH' }));
+  await toTheReveal(page);
   await page.getByRole('button', { name: /Walk it again/ }).click();
-  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'explore');
+  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
   await settle(page);
 
   const replay = await purpleNow(page);
@@ -166,101 +162,6 @@ test('a replay opens on the frame the first run opened on, before any key is pre
     `the opening frame of the replay ("${replay.frame}") only agreed with her facing ` +
       `after a keypress ("${healed.frame}")`,
   ).toBe(healed.frame);
-});
-
-/* ------------------------------------- 2. the offer to talk is withdrawn with the key that takes it */
-
-/** Who the scene is currently offering a conversation to, by both the bubble and the sentence. */
-const offers = (
-  page: Page,
-): Promise<{ bubbles: string[]; said: string; live: boolean; phase: string }> =>
-  page.evaluate((near) => {
-    const scene = window.__otp!.scene as unknown as SceneProbe;
-    return {
-      bubbles: scene.npcs.filter((n) => n.prompt.visible).map((n) => n.id),
-      said: document.querySelector(near)?.textContent?.trim() ?? '',
-      live: scene.hasInput(),
-      phase: window.__otp!.store.getState().phase,
-    };
-  }, NEAR);
-
-test('the bubble and the live region go down with the key that answers them', async ({ page }) => {
-  test.setTimeout(60_000);
-  // A portrait phone: where the panel covers most of the screen and the stale bubble was measured.
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
-  await startGame(page);
-
-  // Stand her next to the Rabbit, so both halves of the offer are up before anything is opened.
-  await page.evaluate((tile) => {
-    const scene = window.__otp!.scene as unknown as SceneProbe;
-    const spot = window.__otp!.mapObjects!.find((o) => o.name === 'npc-rabbit')!;
-    // The spawn's own centre, a tile and a quarter down: where her feet stand on that tile.
-    const x = spot.x + tile / 2;
-    const y = spot.y + tile + tile / 4;
-    scene.position = { x, y };
-    scene.purple.setPosition(Math.round(x), Math.round(y));
-    scene.purple.setDepth(scene.purple.y);
-    scene.camera = scene.focus();
-    scene.syncCamera();
-  }, TILE);
-  await settle(page);
-
-  const near = await offers(page);
-  expect(near.live, 'the interact key is not live on the walk').toBe(true);
-  expect(near.bubbles.length, 'nobody is offering a conversation to stand next to').toBe(1);
-  expect(near.said, 'the live region said nothing when she came within reach').not.toBe('');
-
-  /*
-   * A notice post, named from the MAP rather than typed: `notice-<id>` objects are what the scene
-   * reads, so a regenerated map that renames the post renames it here too. It takes the input
-   * away WITHOUT changing the phase, which is the whole defect.
-   */
-  const post = await page.evaluate(
-    () => window.__otp!.mapObjects!.find((o) => o.name.startsWith('notice-'))!.name,
-  );
-  await page.evaluate(
-    (name) => window.__otp!.bus.emit('reachedNotice', { noticeId: name.slice('notice-'.length) }),
-    post,
-  );
-  await page.getByRole('button', { name: /Walk on/ }).waitFor();
-  await settle(page);
-
-  const covered = await offers(page);
-  console.log(
-    `with the notice post open\n  phase ${covered.phase}, interact key live: ${covered.live}\n` +
-      `  bubbles up: [${covered.bubbles.join(', ')}]\n  live region: "${covered.said}"`,
-  );
-  /*
-   * The precondition, measured rather than assumed: the phase has NOT moved, so anything keyed off
-   * the phase alone still thinks the player is walking about. It is `hasInput` that has gone.
-   */
-  expect(
-    covered.phase,
-    'the notice post changed the phase, so this is not the case under test',
-  ).toBe(near.phase);
-  expect(covered.live, 'the interact key is still live with a panel up').toBe(false);
-
-  expect(
-    covered.bubbles,
-    `the bubble is still over [${covered.bubbles.join(', ')}] while the key that answers it is dead`,
-  ).toEqual([]);
-  expect(
-    covered.said,
-    `the live region still says "${covered.said}" while the key that answers it is dead`,
-  ).toBe('');
-
-  /*
-   * And it is a withdrawal, not a demolition: step away from the post and the offer comes back,
-   * from the same proximity test that raised it the first time. A clear that did not re-arm would
-   * be the worse bug of the two -- an encounter nobody can find.
-   */
-  await page.getByRole('button', { name: /Walk on/ }).click();
-  await settle(page, 4);
-  const again = await offers(page);
-  expect(again.live, 'the interact key did not come back when the post closed').toBe(true);
-  expect(again.bubbles, 'the bubble did not come back when the post closed').toEqual(near.bubbles);
-  expect(again.said, 'the live region did not come back when the post closed').toBe(near.said);
 });
 
 /* ------------------------------------------- 3. the payoff frame is the canvas, scaled down */

@@ -27,7 +27,7 @@
  */
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { startGame } from './helpers';
+import { startGame, toTheReveal } from './helpers';
 import { TILE } from '../src/world/logic';
 
 /** Enough of the scene for these three tests; the rest is private and stays that way. */
@@ -347,6 +347,8 @@ interface Framing {
 /** Plays three verdicts and knocks on the door, without the walk in between. */
 async function reachTheDoor(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Begin the walk/ }).click();
+  await page.getByRole('button', { name: /Start walking/ }).click();
+  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
   await page.evaluate(() => {
     const { store } = window.__otp!;
     for (const [c, s] of [
@@ -356,7 +358,7 @@ async function reachTheDoor(page: Page): Promise<void> {
     ]) {
       store.dispatch({ type: 'MEET', c });
       store.dispatch({ type: 'INSPECT', s });
-      store.dispatch({ type: 'VERDICT', s, v: 'restrict' });
+      store.dispatch({ type: 'VERDICT', s, v: 'leave' });
     }
     store.dispatch({ type: 'ENTER_COTTAGE' });
   });
@@ -541,9 +543,9 @@ test('the letterbox belongs to the payoff, and the walk gets the whole frame bac
    * Explore -- a quarter of a 2560 screen gone for the rest of the run -- which is a worse defect
    * than the one it was put up to fix, and nothing else in the suite looks at it.
    */
-  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'FINISH' }));
+  await toTheReveal(page);
   await page.getByRole('button', { name: /Walk it again/ }).click();
-  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'explore');
+  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
   await page.evaluate(
     () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
   );

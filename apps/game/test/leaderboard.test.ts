@@ -1,19 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import raw from '../../../content/game.json';
-import {
-  HANDLE_FIRST_WORDS,
-  HANDLE_SECOND_WORDS,
-  checkLog,
-  createState,
-  isMintedHandle,
-  loadContent,
-  score,
-  submitRequestSchema,
-  tryReduce,
-} from '@otp/core';
-import type { Action, Content, GameState } from '@otp/core';
-import { createLeaderboardClient, newHandle } from '../src/net/leaderboard';
-import type { PostOutcome } from '../src/net/leaderboard';
+import rawV2 from '../../../content/game.v2.json';
+import { HANDLE_FIRST_WORDS, HANDLE_SECOND_WORDS, isMintedHandle, v2 } from '@otp/core';
+import { submitRunSchema } from '@otp/api/src/schema.ts';
+import { newHandle, readBoard, startRun, submit } from '../src/net/leaderboard';
 import { validateHandle } from '../src/ui/Results';
 
 /*
@@ -26,53 +15,14 @@ import { validateHandle } from '../src/ui/Results';
  * There is no network here. `fetch` is replaced, so these run in CI, offline, with no API deployed.
  */
 
-const content: Content = loadContent(raw);
-const client = createLeaderboardClient(content);
-
-const DOWN = content.strings['leaderboardDown']!;
-const REFUSED = content.strings['leaderboardRefused']!;
-const ALREADY = content.strings['leaderboardAlready']!;
-const ASSIGNED = content.strings['handleAssigned']!;
-
-/*
- * `submit()` answers an OUTCOME now -- the sentence and the content key that produced it -- so
- * Results can tell a refusal from a success without matching words (see `PostOutcome`). These
- * build the whole answer, so an assertion is about both halves: a key that stops matching its
- * sentence is the drift this shape exists to make visible.
- */
-const down: PostOutcome = { key: 'leaderboardDown', text: DOWN };
-const refused: PostOutcome = { key: 'leaderboardRefused', text: REFUSED };
-const already: PostOutcome = { key: 'leaderboardAlready', text: ALREADY };
-const assigned = (handle: string): PostOutcome => ({
-  key: 'handleAssigned',
-  text: ASSIGNED.replace('{handle}', handle),
-});
-
-/** A finished run, through the real reducer. The adapter posts this log and nothing else. */
-function finishedRun(): GameState {
-  let state = createState(content);
-  let clock = 0;
-  const at = (): number => {
-    clock += 1000;
-    return clock;
-  };
-  const apply = (action: Action): void => {
-    const result = tryReduce(state, action, content);
-    if (!result.ok) throw new Error(`${action.type} rejected: ${result.reason}`);
-    state = result.state;
-  };
-  apply({ type: 'START', runId: 'r1', at: at() });
-  apply({ type: 'BEGIN' });
-  for (const c of content.characters) {
-    apply({ type: 'MEET', c: c.id, at: at() });
-    apply({ type: 'INSPECT', s: c.skillId, at: at() });
-    apply({ type: 'VERDICT', s: c.skillId, v: 'restrict', at: at() });
-  }
-  apply({ type: 'ENTER_COTTAGE', at: at() });
-  return state;
-}
-
-const run = finishedRun();
+const chrome: Record<string, string> = rawV2.ui.chrome;
+const contentV2 = v2.loadContent(rawV2);
+const SEED = 123_456_789;
+/** A finished careful run through the real reducer. The adapter posts this log and nothing else. */
+const log = v2.toRunLog(
+  v2.play(contentV2, 'careful', { seed: SEED, pace: { walkMs: 1000, talkMs: 1000 } }).state,
+);
+const TOKEN = 'cGF5bG9hZA.c2lnbmF0dXJl';
 
 interface Sent {
   url: string;
@@ -112,9 +62,6 @@ const stalledBody = (_url: string, init: RequestInit): Promise<Response> => {
   );
 };
 
-const bodyOf = (sent: Sent): { handle: string; log: unknown[] } =>
-  JSON.parse(String(sent.init.body)) as { handle: string; log: unknown[] };
-
 const okScore = (handle: string, score = 500): Response =>
   new Response(JSON.stringify({ handle, score }), { status: 200 });
 
@@ -153,185 +100,6 @@ describe('minted handles', () => {
   });
 });
 
-describe('submit', () => {
-  it('posts a run log to our own origin, and no score', async () => {
-    const sent = intercept(() => okScore('brave-lantern-42'));
-    await client.submit(run, 'brave-lantern-42');
-
-    expect(sent).toHaveLength(1);
-    expect(sent[0]!.url).toBe('/api/score');
-    expect(sent[0]!.init.method).toBe('POST');
-    // Same-origin by decision D3, which is why connect-src stays 'self'. No cookies, ever.
-    expect(sent[0]!.init.credentials).toBe('omit');
-    expect(sent[0]!.init.mode).toBe('same-origin');
-
-    const body = bodyOf(sent[0]!);
-    expect(Object.keys(body).sort()).toEqual(['handle', 'log']);
-    expect(body.log).toEqual(JSON.parse(JSON.stringify(run.log)));
-    expect('score' in body).toBe(false);
-  });
-
-  it('sends a body the server accepts, scoring it to the same number the screen showed', async () => {
-    /*
-     * The two halves, held against each other without a server. Everything else in this file
-     * checks what the adapter SENDS; apps/api's tests check what the service ACCEPTS; nothing
-     * checked that those are the same thing, and "both suites are green" is exactly how a wire
-     * contract drifts. So this takes the real body off the real request and runs it through the
-     * two functions `POST /api/score` runs: `submitRequestSchema` (strict -- an extra key here is
-     * a 400), then `checkLog` (the real reducer, replaying from a zero start), then `score()`.
-     *
-     * The run was built by the reducer, so a change that makes the game log something the server
-     * cannot replay fails here rather than on the first post after a deploy. Measured the same way
-     * in a real browser against the built game and the real handler: 13 events, 900 points on both
-     * sides, one row of {handle, score}.
-     */
-    const sent = intercept(() => okScore('brave-lantern-42'));
-    await client.submit(run, 'brave-lantern-42');
-
-    const parsed = submitRequestSchema.safeParse(bodyOf(sent[0]!));
-    expect(parsed.success, 'the server would refuse the body this adapter sends').toBe(true);
-
-    const replay = checkLog(parsed.data!.log, content, 0);
-    expect(replay.legal, 'legal' in replay ? '' : (replay as { reason: string }).reason).toBe(true);
-    expect(replay.legal && replay.complete, 'the server would call this run unfinished').toBe(true);
-    expect(replay.legal && score(replay.state.log, content).total).toBe(
-      score(run.log, content).total,
-    );
-  });
-
-  it('names the handle that went up when the board took it', async () => {
-    intercept(() => okScore('brave-lantern-42'));
-    const message = await client.submit(run, 'brave-lantern-42');
-    // Never a silent success: the name is minted, so the player is told which one it was.
-    expect(message?.text).toContain('brave-lantern-42');
-    expect(message?.text).not.toContain('{handle}');
-    expect(message?.key).toBe('handleAssigned');
-  });
-
-  it('never sends a handle the game did not mint, and says which name went up', async () => {
-    const sent = intercept(() => okScore('quiet-thicket-11'));
-    const message = await client.submit(run, 'wolfspotter');
-
-    expect(isMintedHandle(bodyOf(sent[0]!).handle)).toBe(true);
-    expect(bodyOf(sent[0]!).handle).not.toBe('wolfspotter');
-    expect(message?.text).toContain('quiet-thicket-11');
-    expect(message?.text).not.toContain('{handle}');
-  });
-
-  it('never throws, whatever the network does', async () => {
-    for (const reply of [
-      (): never => {
-        throw new TypeError('Failed to fetch');
-      },
-      (): Response => new Response('', { status: 503 }),
-      (): Response => new Response('', { status: 500 }),
-    ]) {
-      intercept(reply);
-      await expect(client.submit(run, 'brave-lantern-42')).resolves.toEqual(down);
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('separates "the board refused this" from "the board is down"', async () => {
-    intercept(() => new Response(JSON.stringify({ error: 'nope' }), { status: 400 }));
-    const message = await client.submit(run, 'brave-lantern-42');
-    expect(message).toEqual(refused);
-    /*
-     * The key half, which is the one Results acts on: `boardRowKey` declines to mark the player's
-     * row while this outcome is on screen, and it decides that from the key. A 400 answering
-     * `leaderboardDown`'s key would put "This is your run." back above a refusal.
-     */
-    expect(message?.key).toBe('leaderboardRefused');
-    expect(message?.key).not.toBe('leaderboardDown');
-  });
-
-  it('tells a player who pressed Post twice that the run is up, not that it failed', async () => {
-    /*
-     * The real case, not a hostile one. The button is enabled again the moment a post succeeds, so
-     * a second press sends the same run log and `apps/api` answers 409 -- measured against the
-     * real handler, not assumed. Reading that out as "could not be posted" tells a player their
-     * score failed while it is sitting on the board under the name they were just shown.
-     */
-    intercept(
-      () =>
-        new Response(JSON.stringify({ error: 'that run is already on the board' }), {
-          status: 409,
-        }),
-    );
-    const message = await client.submit(run, 'brave-lantern-42');
-    expect(message).toEqual(already);
-    expect(message?.key).not.toBe('leaderboardRefused');
-    expect(message?.key).not.toBe('leaderboardDown');
-  });
-
-  it('says every one of its lines in the words of the content file', async () => {
-    /*
-     * CLAUDE.md rule 3. Three of these four used to be literals in the adapter, where no copy
-     * review could see them and `test/strings.test.ts` could not scan them. This asserts the
-     * reads resolve -- a key deleted from content/game.json falls through to a backstop and this
-     * fails -- and that the one template still has its slot filled.
-     */
-    for (const [key, value] of Object.entries({
-      leaderboardDown: DOWN,
-      leaderboardRefused: REFUSED,
-      leaderboardAlready: ALREADY,
-      handleAssigned: ASSIGNED,
-    })) {
-      expect(value, `content/game.json is missing ${key}`).toBeTruthy();
-    }
-    expect(ASSIGNED).toContain('{handle}');
-
-    intercept(() => okScore('quiet-thicket-11'));
-    const message = await client.submit(run, 'brave-lantern-42');
-    expect(message).toEqual(assigned('quiet-thicket-11'));
-  });
-
-  it('calls an undeployed API a board that is down, not a run that was refused', async () => {
-    // What `vite preview` and a deployment without apps/api both answer. Phase 5's promise was
-    // that the game is the same game when the board is not there, and e2e/game.spec.ts holds us
-    // to the wording: a 404 must not read as "that run could not be posted".
-    intercept(() => new Response('<!doctype html>', { status: 404 }));
-    await expect(client.submit(run, 'brave-lantern-42')).resolves.toEqual(down);
-  });
-
-  it('believes nothing it cannot parse', async () => {
-    for (const reply of [
-      (): Response => new Response('not json at all', { status: 200 }),
-      (): Response => new Response(JSON.stringify({ handle: 'wolfspotter', score: 1 })),
-      (): Response => new Response(JSON.stringify({ handle: 'brave-lantern-42', score: -5 })),
-      (): Response => new Response(JSON.stringify({ handle: 'brave-lantern-42' })),
-    ]) {
-      intercept(reply);
-      await expect(client.submit(run, 'brave-lantern-42')).resolves.toEqual(down);
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('gives up rather than hanging on a request that never answers', async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', neverAnswers);
-    const pending = client.submit(run, 'brave-lantern-42');
-    await vi.advanceTimersByTimeAsync(10000);
-    await expect(pending).resolves.toEqual(down);
-    vi.useRealTimers();
-  });
-
-  it('gives up on a reply whose headers arrive and whose body never does', async () => {
-    /*
-     * The one that used to hang. `fetch()` settles when the HEADERS arrive, so a stalled proxy or
-     * a function that writes a status and then blocks hands back a good Response over a body that
-     * never produces a chunk. If the abort timer is cleared when fetch resolves, the read below
-     * is unbounded and `submit()` never settles at all.
-     */
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', stalledBody);
-    const pending = client.submit(run, 'brave-lantern-42');
-    await vi.advanceTimersByTimeAsync(10000);
-    await expect(pending).resolves.toEqual(down);
-    vi.useRealTimers();
-  });
-});
-
 describe('top', () => {
   it('asks for a sane page and ranks what it is given', async () => {
     const sent = intercept(
@@ -345,7 +113,7 @@ describe('top', () => {
           }),
         ),
     );
-    const read = await client.top(5);
+    const read = await readBoard(5);
 
     expect(sent[0]!.url).toBe('/api/top?limit=5');
     expect(read).toEqual({
@@ -359,7 +127,7 @@ describe('top', () => {
 
   it('clamps a limit the caller got wrong instead of asking for everything', async () => {
     const sent = intercept(() => new Response(JSON.stringify({ entries: [] })));
-    expect(await client.top(100000)).toEqual({ state: 'empty' });
+    expect(await readBoard(100000)).toEqual({ state: 'empty' });
     expect(sent[0]!.url).toBe('/api/top?limit=25');
   });
 
@@ -373,11 +141,11 @@ describe('top', () => {
    */
   it('tells an empty board apart from an absent one', async () => {
     intercept(() => new Response(JSON.stringify({ entries: [] })));
-    expect(await client.top(10)).toEqual({ state: 'empty' });
+    expect(await readBoard(10)).toEqual({ state: 'empty' });
     vi.unstubAllGlobals();
 
     intercept(() => new Response('<!doctype html><title>Off the Path</title>', { status: 200 }));
-    expect(await client.top(10)).toEqual({ state: 'unavailable' });
+    expect(await readBoard(10)).toEqual({ state: 'unavailable' });
   });
 
   it('comes back unavailable, never thrown, when the board is down or lying', async () => {
@@ -393,7 +161,7 @@ describe('top', () => {
         new Response(JSON.stringify({ entries: [{ rank: 1, handle: '<img src=x>', score: 1 }] })),
     ]) {
       intercept(reply);
-      await expect(client.top(5)).resolves.toEqual({ state: 'unavailable' });
+      await expect(readBoard(5)).resolves.toEqual({ state: 'unavailable' });
       vi.unstubAllGlobals();
     }
   });
@@ -401,9 +169,210 @@ describe('top', () => {
   it('comes back unavailable rather than hanging on a body that never arrives', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', stalledBody);
-    const pending = client.top(5);
+    const pending = readBoard(5);
     await vi.advanceTimersByTimeAsync(10000);
     await expect(pending).resolves.toEqual({ state: 'unavailable' });
     vi.useRealTimers();
+  });
+});
+
+/*
+ * The game asks the server for a run, plays the seed it is given, and posts the log with the token.
+ */
+describe('startRun', () => {
+  const TOKEN =
+    'eyJpZCI6IngiLCJzZWVkIjo3LCJpc3N1ZWRBdCI6MH0.c2lnbmF0dXJlLWJ5dGVzLWhlcmUtMzItbG9uZw';
+
+  it('asks our own origin for a run, as JSON, with no cookie', async () => {
+    const sent = intercept(() => new Response(JSON.stringify({ seed: 7, token: TOKEN })));
+    await expect(startRun()).resolves.toEqual({ seed: 7, token: TOKEN });
+    expect(sent[0]!.url).toBe('/api/start');
+    expect(sent[0]!.init.method).toBe('POST');
+    expect(sent[0]!.init.credentials).toBe('omit');
+    expect(sent[0]!.init.mode).toBe('same-origin');
+    expect((sent[0]!.init.headers as Record<string, string>)['content-type']).toBe(
+      'application/json',
+    );
+  });
+
+  it('hands back only a seed and a token, whatever else the reply carried', async () => {
+    intercept(() => new Response(JSON.stringify({ seed: 7, token: TOKEN, extra: 'x' })));
+    await expect(startRun()).resolves.toEqual({ seed: 7, token: TOKEN });
+  });
+
+  it('answers null -- play on a local seed -- for anything it cannot believe', async () => {
+    for (const reply of [
+      (): never => {
+        throw new TypeError('Failed to fetch');
+      },
+      (): Response => new Response('', { status: 503 }),
+      (): Response => new Response('', { status: 429 }),
+      (): Response => new Response('<!doctype html>', { status: 404 }),
+      (): Response => new Response('not json', { status: 200 }),
+      (): Response => new Response('null'),
+      (): Response => new Response(JSON.stringify({ seed: -1, token: TOKEN })),
+      (): Response => new Response(JSON.stringify({ seed: 2 ** 32, token: TOKEN })),
+      (): Response => new Response(JSON.stringify({ seed: 1.5, token: TOKEN })),
+      (): Response => new Response(JSON.stringify({ seed: 7 })),
+      (): Response => new Response(JSON.stringify({ seed: 7, token: 'no-dot' })),
+      (): Response => new Response(JSON.stringify({ seed: 7, token: '<b>.x' })),
+      (): Response => new Response(JSON.stringify({ seed: 7, token: `${'a'.repeat(300)}.b` })),
+    ]) {
+      intercept(reply);
+      await expect(startRun()).resolves.toBeNull();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('gives up rather than hanging, so a dead board never holds the title screen', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', neverAnswers);
+    const pending = startRun();
+    await vi.advanceTimersByTimeAsync(10000);
+    await expect(pending).resolves.toBeNull();
+    vi.useRealTimers();
+  });
+});
+
+describe('submit', () => {
+  const STRINGS = {
+    handleAssigned: 'Up as {handle}.',
+    leaderboardAlready: 'Already up.',
+    leaderboardRefused: 'Refused.',
+    leaderboardDown: 'No reply.',
+    leaderboardClosed: 'Closed.',
+  };
+  const v2Body = (sent: Sent): Record<string, unknown> =>
+    JSON.parse(String(sent.init.body)) as Record<string, unknown>;
+
+  it('posts the handle, the log and the token, and no score', async () => {
+    const sent = intercept(() => okScore('brave-lantern-42', 100));
+    await submit('brave-lantern-42', log, TOKEN);
+
+    expect(sent[0]!.url).toBe('/api/score');
+    expect(sent[0]!.init.credentials).toBe('omit');
+    const body = v2Body(sent[0]!);
+    expect(Object.keys(body).sort()).toEqual(['handle', 'log', 'token']);
+    expect(body['token']).toBe(TOKEN);
+  });
+
+  it('sends a body the server accepts, scoring it to the number the screen showed', async () => {
+    /*
+     * The two halves held against each other without a server: the real body off the real
+     * request, through the server's OWN schema (strict -- an extra key is a 400) and then the
+     * replay and `result()` the route runs. A careful run is 100 on both sides.
+     */
+    const sent = intercept(() => okScore('brave-lantern-42', 100));
+    await submit('brave-lantern-42', log, TOKEN);
+
+    const parsed = submitRunSchema.safeParse(v2Body(sent[0]!));
+    expect(parsed.success, 'the server would refuse the body this adapter sends').toBe(true);
+    const replay = v2.checkRunLog(parsed.data!.log, contentV2);
+    expect(replay.legal && replay.ended, 'the server would not replay this run').toBe(true);
+    expect(replay.legal && v2.result(replay.state, contentV2).total).toBe(100);
+    expect(parsed.data!.log.seed).toBe(SEED);
+  });
+
+  it('never sends a handle the game did not mint', async () => {
+    const sent = intercept(() => okScore('quiet-thicket-11', 100));
+    await submit('wolfspotter', log, TOKEN);
+    expect(isMintedHandle(v2Body(sent[0]!)['handle'])).toBe(true);
+  });
+
+  it.each([
+    [409, 'leaderboardAlready'],
+    [410, 'leaderboardClosed'],
+    [400, 'leaderboardRefused'],
+    [404, 'leaderboardDown'],
+    [429, 'leaderboardDown'],
+    [503, 'leaderboardDown'],
+  ] as const)("reads a %i as %s, in the content file's words", async (status, key) => {
+    intercept(() => new Response('{}', { status }));
+    await expect(submit('brave-lantern-42', log, TOKEN, STRINGS)).resolves.toEqual({
+      key,
+      text: STRINGS[key],
+    });
+  });
+
+  it('names the handle that went up, and falls back to a sentence when content has none', async () => {
+    intercept(() => okScore('quiet-thicket-11', 100));
+    await expect(submit('brave-lantern-42', log, TOKEN, STRINGS)).resolves.toEqual({
+      key: 'handleAssigned',
+      text: 'Up as quiet-thicket-11.',
+    });
+    vi.unstubAllGlobals();
+    intercept(() => okScore('quiet-thicket-11', 100));
+    const bare = await submit('brave-lantern-42', log, TOKEN);
+    expect(bare.text).toContain('quiet-thicket-11');
+    expect(bare.text).not.toContain('{handle}');
+  });
+
+  it('never throws and believes nothing it cannot parse', async () => {
+    for (const reply of [
+      (): never => {
+        throw new TypeError('Failed to fetch');
+      },
+      (): Response => new Response('not json at all', { status: 200 }),
+      (): Response => new Response(JSON.stringify({ handle: 'wolfspotter', score: 1 })),
+    ]) {
+      intercept(reply);
+      await expect(submit('brave-lantern-42', log, TOKEN)).resolves.toMatchObject({
+        key: 'leaderboardDown',
+      });
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('says every one of its lines in the words of the content file', async () => {
+    /*
+     * CLAUDE.md rule 3. A key deleted from `ui.chrome` falls through to a backstop in the adapter
+     * and this fails -- and the one template still has its slot to fill.
+     */
+    const keys = [
+      'leaderboardDown',
+      'leaderboardRefused',
+      'leaderboardAlready',
+      'leaderboardClosed',
+      'handleAssigned',
+    ] as const;
+    for (const key of keys) expect(chrome[key], `ui.chrome is missing ${key}`).toBeTruthy();
+    expect(chrome['handleAssigned']).toContain('{handle}');
+
+    intercept(() => okScore('quiet-thicket-11', 100));
+    await expect(submit('brave-lantern-42', log, TOKEN, chrome)).resolves.toEqual({
+      key: 'handleAssigned',
+      text: chrome['handleAssigned']!.replace('{handle}', 'quiet-thicket-11'),
+    });
+  });
+
+  it('gives up rather than hanging on a request that never answers', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', neverAnswers);
+    const pending = submit('brave-lantern-42', log, TOKEN);
+    await vi.advanceTimersByTimeAsync(10000);
+    await expect(pending).resolves.toMatchObject({ key: 'leaderboardDown' });
+    vi.useRealTimers();
+  });
+
+  it('gives up on a reply whose headers arrive and whose body never does', async () => {
+    /*
+     * The one that used to hang. `fetch()` settles when the HEADERS arrive, so a stalled proxy hands
+     * back a good Response over a body that never produces a chunk. If the abort timer is cleared
+     * when fetch resolves, the read is unbounded and `submit()` never settles at all.
+     */
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', stalledBody);
+    const pending = submit('brave-lantern-42', log, TOKEN);
+    await vi.advanceTimersByTimeAsync(10000);
+    await expect(pending).resolves.toMatchObject({ key: 'leaderboardDown' });
+    vi.useRealTimers();
+  });
+});
+
+describe('readBoard', () => {
+  it('is the board read, at the default page size', async () => {
+    const sent = intercept(() => new Response(JSON.stringify({ entries: [] })));
+    await expect(readBoard()).resolves.toEqual({ state: 'empty' });
+    expect(sent[0]!.url).toBe('/api/top?limit=10');
   });
 });

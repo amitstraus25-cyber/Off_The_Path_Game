@@ -13,7 +13,7 @@
  * only exist once a capability is live, which is why a title-screen check saw nothing.
  */
 import { expect, test } from '@playwright/test';
-import { startGame } from './helpers';
+import { answerAllAndArrive, startGame } from './helpers';
 
 /*
  * No fallback. This used to default to '/tmp', so every CI run and every local `pnpm e2e` wrote
@@ -39,7 +39,7 @@ const FIT_SIZES = [
 ];
 
 /** Everything the player should be able to see and reach while walking. */
-const HUD_ROOTS = ['.otp-world-frame__header', '.otp-hud-basket', '.otp-hud-goals'];
+const HUD_ROOTS = ['.otp-world-frame__header', '.otp-hud2__timer', '.otp-hud2__basket'];
 
 for (const size of SCALE_SIZES) {
   test(`pixel art scales cleanly at ${size.name}`, async ({ browser }) => {
@@ -60,28 +60,15 @@ for (const size of SCALE_SIZES) {
     await checkArt(page, `${size.name} inspect`);
 
     /*
-     * And again on Results, which is where the basket panel is actually full. On Inspect the slots
-     * are still empty, so an .otp-slot check there inspects nothing at all -- which is how a 64x64
-     * icon in a 65.5x53 slot survived a guard that already walked every `.otp-slot img`.
+     * And again at the arrival, which carries the one portrait v2 shows (the offers are
+     * portrait-less for all seven): Grandma, or the wolf in her bonnet, in a 10px frame.
      */
-    // ENTER_COTTAGE is refused until every skill has a verdict, so all three are decided here.
-    await page.evaluate(() => {
-      const { store } = window.__otp!;
-      store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'allow' });
-      for (const [c, s] of [
-        ['owl', 'word-weaver'],
-        ['lantern-keeper', 'night-light'],
-      ]) {
-        store.dispatch({ type: 'MEET', c });
-        store.dispatch({ type: 'INSPECT', s });
-        store.dispatch({ type: 'VERDICT', s, v: 'allow' });
-      }
-      store.dispatch({ type: 'ENTER_COTTAGE' });
-      store.dispatch({ type: 'FINISH' });
-    });
-    await expect(page.locator('.otp-basket')).toBeVisible();
+    await page.locator('[data-card] [data-action="back"]').click();
+    await page.locator('[data-offer] [data-action="walk-on"]').click();
+    await answerAllAndArrive(page, 'leave');
+    await expect(page.locator('.otp-portrait')).toBeVisible();
     await page.waitForTimeout(250);
-    await checkArt(page, `${size.name} results`);
+    await checkArt(page, `${size.name} arrive`);
 
     await context.close();
   });
@@ -164,7 +151,7 @@ for (const size of FIT_SIZES) {
       ]) {
         store.dispatch({ type: 'MEET', c });
         store.dispatch({ type: 'INSPECT', s });
-        store.dispatch({ type: 'VERDICT', s, v: 'allow' });
+        store.dispatch({ type: 'VERDICT', s, v: 'take' });
       }
     });
     await expect(page.locator('.otp-world-frame__header')).toBeVisible();

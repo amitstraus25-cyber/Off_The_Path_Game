@@ -1,28 +1,85 @@
-import { checkLog, score, submitRequestSchema, topLimit } from '@otp/core';
-import type { Content } from '@otp/core';
+import { topLimit, v2 } from '@otp/core';
 import { fail, json, note } from './http.ts';
-import { fingerprint } from './limit.ts';
 import type { RecentRuns, WriteBudget } from './limit.ts';
+import { submitRunSchema } from './schema.ts';
 import type { LeaderboardStore } from './store.ts';
+import type { RunTokens } from './token.ts';
 
 /*
- * The two routes, as pure functions of a Request and their dependencies. The files in api/ do
+ * The three routes, as pure functions of a Request and their dependencies. The files in api/ do
  * nothing but read the environment once and call these, so every path below is reachable from a
  * test with a fake fetch and no database anywhere (see test/).
  */
 
 export interface Deps {
-  content: Content;
+  /** content/game.v2.json, through the same schema, lint and trap the game loads it with. */
+  content: v2.Content;
   /** Null when the environment is not configured; every route then answers 503 and stores nothing. */
   store: LeaderboardStore | null;
-  /** Per instance, shared by every request it serves. See src/limit.ts for what it is not. */
+  /** Null exactly when the store is: the signing key is derived from the store's key. */
+  tokens: RunTokens | null;
+  /** Writes, per instance, shared by every request it serves. See src/limit.ts for what it is not. */
   budget: WriteBudget;
-  /** Per instance, the runs it has already written. */
+  /** Run starts, per instance -- a bucket of its own, so a flood of starts cannot block a post. */
+  starts: WriteBudget;
+  /** Per instance, the run tokens that have already become rows. */
   recent: RecentRuns;
+  /** The server's clock, epoch milliseconds. Injected so the time bounds are testable. */
+  now: () => number;
 }
 
 /**
- * A submission is a handle and a log. 32 KB is about forty times the largest honest body, and the
+ * HOW MUCH WALL TIME AN HONEST RUN SPENDS OFF THE GAME CLOCK, at most: the title and how-to before
+ * the clock starts, and the reveal after the cottage door, before the player presses Post.
+ *
+ * NOT "A SMALL SLACK", and on purpose. The reveal is the product (GAME_DESIGN_V2 section 6), and a
+ * window of seconds would refuse exactly the player who read it. What a tighter window would buy is
+ * small: it bounds how far a late run could be restamped into an in-time one, and a forger has no
+ * reason to do that -- the token hands them the seed and `deal()` is public, so a careful log for
+ * that seed scores 100 without anyone playing.
+ *
+ * THAT IS NOT "A FORGER GAINS NOTHING". Ties rank earliest first (README, migration 0005), so a
+ * scripted 100 posted today outranks every honest 100 posted after it, for good. What a forger pays
+ * per row is `MIN_RUN_MS` of real waiting, below, and one token; what bounds how many rows they
+ * make is the per-instance budgets (src/limit.ts) and the Vercel firewall rate limit on /api/*,
+ * which is the only cross-instance bound and a precondition for exposing the board (README).
+ */
+export const POST_WINDOW_MS = 5 * 60_000;
+
+/**
+ * THE SHORTEST RUN ANYONE CAN PLAY: no finished run is faster than walking from Purple's spawn
+ * straight to the cottage door. Checked against BOTH clocks. `claimed` alone is the log's word and
+ * costs nothing to write; `seen` is the server's, so a forger has to actually wait this long between
+ * /api/start and /api/score for every row.
+ *
+ * Derived from the shipped map in test/floor.test.ts, not from memory: the straight-line gap
+ * between the spawn and the door, less a tile at each end for Purple's body, at `WALK_SPEED`, is
+ * just over 11 s; this sits a little under that so no honest run, however direct, is refused. It is
+ * one floor for every score -- a 100 must also meet the three holding good skills, which takes longer,
+ * but that bound needs the map's distances on the server, and is recorded as not done (PLAN.md).
+ */
+export const MIN_RUN_MS = 10_000;
+
+/** Server clocks across instances and rounding between the browser's clock and ours. */
+export const CLOCK_SKEW_MS = 2_000;
+
+/**
+ * Same origin only. A browser stamps `sec-fetch-site` on every request and a page cannot forge it,
+ * so a cross-site page's request is refused by name; a request without the header is not a browser
+ * and no origin check could stop it anyway -- the edge rate limit is what bounds those. The game in
+ * an iframe on cyera.com is still same-origin here: its document is served from this origin.
+ */
+const crossSite = (request: Request): boolean => {
+  const site = request.headers.get('sec-fetch-site');
+  return site !== null && site !== 'same-origin';
+};
+
+/** JSON-only, so a cross-origin page cannot reach a route without a preflight it will fail. */
+const isJson = (request: Request): boolean =>
+  (request.headers.get('content-type') ?? '').toLowerCase().includes('application/json');
+
+/**
+ * A submission is a handle, a log and a token. 32 KB is about forty times the largest honest body, and the
  * cap binds the READ rather than a buffer that has already been filled: `readCapped` stops pulling
  * at the limit, so a hostile caller cannot buy a bigger budget by omitting `content-length` or by
  * sending characters that take four bytes each.
@@ -72,22 +129,39 @@ async function readCapped(request: Request, max: number): Promise<string | null>
 }
 
 /**
+ * POST /api/start -- issues a run: a seed the server drew, sealed with the moment it drew it.
+ *
+ * Reads no body, stores nothing, sets no cookie and records no address. The token is the whole
+ * state, and it lives in the browser for the length of one run.
+ */
+export function handleStart(request: Request, deps: Deps): Response {
+  if (request.method !== 'POST') return fail(405, 'method not allowed', { allow: 'POST' });
+  if (crossSite(request)) return fail(403, 'same-origin only');
+  if (!isJson(request)) return fail(415, 'expected application/json');
+  if (!deps.tokens) return fail(503, UNAVAILABLE);
+  if (!deps.starts.take()) {
+    note('shed a start: this instance has spent its start budget');
+    return fail(429, UNAVAILABLE, { 'retry-after': '60' });
+  }
+  return json(deps.tokens.issue(deps.now()));
+}
+
+/**
  * POST /api/score -- the security boundary.
  *
- * The body carries NO score. The log is replayed through the real reducer (`checkLog`) and the
- * score is recomputed with the game's own `score()`, and that recomputed number is the only one
- * that is ever stored. CLAUDE.md golden rule 6, as a function.
+ * Takes `{ handle, log, token }` and no score. The token must be one this service issued; the log
+ * must be dealt from the token's seed; its claimed duration must fit the time the server saw pass
+ * since the token was issued; and it is replayed through the real v2 reducer and scored with the
+ * game's own `result()`. That recomputed number is the only one ever stored. CLAUDE.md golden rule
+ * 6, as a function. Only a run that FINISHED is a run for the board: `grandma` or `wolf`, never
+ * `late`.
  */
 export async function handleScore(request: Request, deps: Deps): Promise<Response> {
   // The Allow header is stated rather than implied. A JSON-only POST route that answers 405 to
   // OPTIONS is also the CORS answer -- a cross-origin preflight fails -- and that too is deliberate.
   if (request.method !== 'POST') return fail(405, 'method not allowed', { allow: 'POST' });
-
-  // A JSON-only endpoint cannot be reached by a plain cross-origin form post, which is worth
-  // having even for an API that sets no cookies and reads no credentials.
-  const contentType = request.headers.get('content-type') ?? '';
-  if (!contentType.toLowerCase().includes('application/json'))
-    return fail(415, 'expected application/json');
+  if (crossSite(request)) return fail(403, 'same-origin only');
+  if (!isJson(request)) return fail(415, 'expected application/json');
 
   const declared = Number(request.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES)
@@ -103,36 +177,68 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
     return fail(400, 'that submission could not be read');
   }
 
-  const parsed = submitRequestSchema.safeParse(body);
+  const parsed = submitRunSchema.safeParse(body);
   // The issues are deliberately not returned. A caller who is guessing at the shape of an
   // acceptable log should not be handed the schema one field at a time.
   if (!parsed.success) return fail(400, 'that submission is not valid');
 
-  const replay = checkLog(parsed.data.log, deps.content, 0);
+  if (!deps.store || !deps.tokens) return fail(503, UNAVAILABLE);
+
+  const ticket = deps.tokens.open(parsed.data.token);
+  if (!ticket) {
+    note('refused a token this service did not sign');
+    return fail(400, 'that run could not be verified');
+  }
+
+  // The seed is the server's, not the log's: a log dealt from any other number is not this run.
+  const { log } = parsed.data;
+  if (log.seed !== ticket.seed) {
+    note("refused a log whose seed is not its token's");
+    return fail(400, 'that run could not be verified');
+  }
+
+  const replay = v2.checkRunLog(log, deps.content);
   if (!replay.legal) {
     note(`refused a log that does not replay: ${replay.reason}`);
     return fail(400, 'that run could not be verified');
   }
-  if (!replay.complete) return fail(400, 'that run has not reached the cottage');
+  if (!replay.ended) return fail(400, 'that run has not reached the cottage');
+
+  const run = v2.result(replay.state, deps.content);
+  // A late run ended, but it did not finish: the board reads the ending (core scoring.ts).
+  if (run.ending === 'late') return fail(400, 'a late run is not posted');
 
   /*
-   * Recomputed here, from the replayed log, with the same function the results screen used. Every
-   * `points` field in the content schema is `int().min(0)`, so a legal log cannot produce a
-   * negative total and the table's `score >= 0` check cannot be reached from this route; the store
-   * refuses one anyway.
+   * THE CLOCK, bounded from both sides by the one clock the player does not control.
+   *
+   * `claimed` is the run's own elapsed time at the door; `seen` is how long ago this service
+   * issued the token. An honest run starts after its token and is posted after it ends, so
+   * claimed <= seen always, and the difference is the time spent off the game clock.
+   *
+   *   - claimed > seen: the log says more time passed than had. Not a run anyone played.
+   *   - seen - claimed > POST_WINDOW_MS: too long off the clock. This is the bound on restamping a
+   *     slow run, and it also makes the token short-lived: since claimed < 3:00, no token older
+   *     than 3:00 plus the window can pass it. 410, because the run was real and its window shut.
+   *   - claimed or seen under MIN_RUN_MS: faster than the shortest walk on the map. Not a run.
    */
-  const total = score(replay.state.log, deps.content).total;
-
-  if (!deps.store) return fail(503, UNAVAILABLE);
+  const claimed = replay.state.now;
+  const seen = deps.now() - ticket.issuedAt;
+  if (claimed > seen + CLOCK_SKEW_MS) {
+    note('refused a log that claims more time than its token has existed');
+    return fail(400, 'that run could not be verified');
+  }
+  if (seen - claimed > POST_WINDOW_MS) return fail(410, 'posting has closed for that run');
+  if (claimed < MIN_RUN_MS || seen < MIN_RUN_MS) {
+    note('refused a run faster than the shortest walk to the cottage');
+    return fail(400, 'that run could not be verified');
+  }
 
   /*
-   * A legal log is not a licence to write it repeatedly. One run is one row: the same log posted
-   * again -- under this handle or twenty-five others -- is the same run, and 409 says so. Per
-   * instance only; src/limit.ts is honest about the bound and the README asks for the unique
-   * column that would make it durable.
+   * One token is one row: the same token posted again -- with this log, another log, or under
+   * twenty-five other handles -- is the same run, and 409 says so. Per instance only; src/limit.ts
+   * is honest about the bound and the README says what would make it durable.
    */
-  const print = fingerprint(parsed.data.log);
-  if (deps.recent.has(print)) {
+  if (deps.recent.has(ticket.id)) {
     note('refused a run this instance has already written');
     return fail(409, 'that run is already on the board');
   }
@@ -145,15 +251,15 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
   }
 
   try {
-    await deps.store.add({ handle: parsed.data.handle, score: total });
+    await deps.store.add({ handle: parsed.data.handle, score: run.total });
   } catch (err) {
     note(`could not store a score: ${err instanceof Error ? err.message : 'unknown error'}`);
     return fail(503, UNAVAILABLE);
   }
 
   // Remembered only now that it is a row, so a player whose insert hit a blip can post again.
-  deps.recent.remember(print);
-  return json({ handle: parsed.data.handle, score: total });
+  deps.recent.remember(ticket.id);
+  return json({ handle: parsed.data.handle, score: run.total });
 }
 
 /**

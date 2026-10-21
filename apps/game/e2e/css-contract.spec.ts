@@ -19,7 +19,7 @@ import type { Page } from '@playwright/test';
 // zoom it runs at, asks it instead of restating a rectangle that was wrong for three rounds.
 import { REFERENCE_VIEWPORTS, TILE, TITLE_CARD_W, cameraFor } from '@otp/core';
 import type { Size } from '@otp/core';
-import { startGame } from './helpers';
+import { answerAllAndArrive, startGame, toTheReveal } from './helpers';
 
 const MEASURE = !!process.env['CSS_MEASURE'];
 
@@ -31,28 +31,14 @@ async function openDialogue(page: Page): Promise<void> {
   await startGame(page);
   await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
   await expect(page.locator('.otp-dialogue')).toBeVisible();
-  await expect(page.locator('.otp-dialogue__line')).toContainText('find Grandma.');
+  await expect(page.locator('.otp-dialogue__line')).toBeVisible();
 }
 
 async function openResults(page: Page): Promise<void> {
   await page.goto('/');
   await startGame(page);
-  await page.evaluate(() => {
-    const { store } = window.__otp!;
-    store.dispatch({ type: 'MEET', c: 'rabbit' });
-    store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
-    store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'allow' });
-    for (const [c, s] of [
-      ['owl', 'word-weaver'],
-      ['lantern-keeper', 'night-light'],
-    ]) {
-      store.dispatch({ type: 'MEET', c });
-      store.dispatch({ type: 'INSPECT', s });
-      store.dispatch({ type: 'VERDICT', s, v: 'allow' });
-    }
-    store.dispatch({ type: 'ENTER_COTTAGE' });
-    store.dispatch({ type: 'FINISH' });
-  });
+  await answerAllAndArrive(page, 'take');
+  await toTheReveal(page);
   await expect(page.locator('.otp-hero__score')).toBeVisible();
 }
 
@@ -166,76 +152,6 @@ function typeRole(page: Page, selector: string): Promise<TypeRole | null> {
     };
   }, selector);
 }
-
-/* ------------------------------------------------------------------ finding 6 */
-
-test('the Question footer never wraps its primary action on a phone', async ({ page }) => {
-  test.slow();
-  await page.setViewportSize({ width: PHONE_WIDTHS[0], height: 812 });
-  await openDialogue(page);
-
-  // One boot, then resized: booting the world eight times costs minutes, and everything under
-  // test here is a function of the width the moment it is measured.
-  for (const width of PHONE_WIDTHS) {
-    await resize(page, width, 812);
-
-    const show = (await textBox(page, '.otp-dialogue__show'))!;
-    const trust = (await textBox(page, '.otp-dialogue__trust'))!;
-    const left = (await textBox(page, '.otp-dialogue__left'))!;
-
-    // The control that opens the skill card is the whole mechanic. One line, always.
-    expect(show.lines, `"Show me the skill" at ${width}px`).toBe(1);
-    expect(trust.lines, `"Take it as offered" at ${width}px`).toBe(1);
-    expect(left.lines, `the counter at ${width}px`).toBe(1);
-
-    // And the quiet action stays legible while it is quiet: the floor rule, on the one control
-    // that was absorbing the whole of the footer's squeeze (9.8px at 375).
-    expect(trust.fontSize, `"Take it as offered" font-size at ${width}px`).toBeGreaterThanOrEqual(
-      12,
-    );
-
-    // Relative weight is the design's only device for keeping the unsafe path quiet, so the
-    // primary action must stay the larger of the two.
-    expect(show.fontSize, `primary vs quiet at ${width}px`).toBeGreaterThan(trust.fontSize);
-  }
-});
-
-/* ----------------------------------------------------------------- finding 12 */
-
-test('question options meet the 44px touch minimum, with spacing between them', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 375, height: 812 });
-  await openDialogue(page);
-
-  for (const width of [375, 768, 1280]) {
-    await resize(page, width, 812);
-
-    const rows = await page.evaluate(() => {
-      const boxes = Array.from(document.querySelectorAll<HTMLElement>('.otp-option')).map((e) =>
-        e.getBoundingClientRect(),
-      );
-      return {
-        heights: boxes.map((b) => Math.round(b.height * 10) / 10),
-        gaps: boxes.slice(1).map((b, i) => Math.round((b.top - boxes[i]!.bottom) * 10) / 10),
-        touchMin: parseFloat(
-          getComputedStyle(document.querySelector('.otp-ui')!).getPropertyValue('--otp-touch-min'),
-        ),
-      };
-    });
-
-    expect(rows.touchMin, 'the project names its own minimum').toBe(44);
-    expect(rows.heights.length, `options present at ${width}px`).toBeGreaterThan(1);
-    for (const h of rows.heights) {
-      expect(h, `option height at ${width}px`).toBeGreaterThanOrEqual(44);
-    }
-    // WCAG 2.5.8 is satisfied by size or by spacing; the review asks for both, and the 6px focus
-    // halo needs the gap so it does not land inside the neighbouring option.
-    for (const g of rows.gaps) {
-      expect(g, `gap between options at ${width}px`).toBeGreaterThanOrEqual(4);
-    }
-  }
-});
 
 /* ----------------------------------------------------------------- finding 18 */
 
@@ -550,56 +466,6 @@ function overlaps(page: Page, one: string, many: string): Promise<string[]> {
     [one, many],
   );
 }
-
-/** The three skills, in the order the three characters offer them. */
-const OFFERS: [character: string, skill: string][] = [
-  ['rabbit', 'cottage-finder'],
-  ['owl', 'word-weaver'],
-  ['lantern-keeper', 'night-light'],
-];
-
-test('the verdict toast never covers an errand goal in portrait', async ({ page }) => {
-  test.slow();
-  /*
-   * The toast docks to the bottom of the viewport, 140px up to clear the touch controls, and in
-   * portrait that was exactly where the errand goals are: at 375x812 "Allowed: Night Light" covered
-   * the first two of the three goals outright, 178x19 each, and clipped the third. The player was
-   * told what they had just done by having the thing it affects hidden. panels.css retargets that
-   * layer to the world box in portrait, above the basket pill.
-   *
-   * One verdict per viewport, because main.ts clears the hint after HINT_MS: a sweep that resizes
-   * three times and then measures would be measuring an empty toast, which is a guard that proves
-   * nothing.
-   */
-  await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto('/');
-  await startGame(page);
-
-  const sizes: [number, number][] = [
-    [375, 812],
-    [390, 844],
-    [360, 740],
-  ];
-  for (const [i, [w, h]] of sizes.entries()) {
-    await resize(page, w, h);
-    const [c, s] = OFFERS[i]!;
-    await page.evaluate(
-      ([character, skill]) => {
-        const { store } = window.__otp!;
-        store.dispatch({ type: 'MEET', c: character });
-        store.dispatch({ type: 'INSPECT', s: skill });
-        store.dispatch({ type: 'VERDICT', s: skill, v: 'allow' });
-      },
-      [c, s],
-    );
-    await expect(page.locator('.otp-toast')).toContainText(/\S/);
-    await expect(page.locator('.otp-hud-goal')).not.toHaveCount(0);
-
-    expect(await overlaps(page, '.otp-toast', '.otp-hud-goal'), `at ${w}x${h}`).toEqual([]);
-    // And it must not land on the basket either, which is the corner it was moved next to.
-    expect(await overlaps(page, '.otp-toast', '.otp-hud-basket'), `at ${w}x${h}`).toEqual([]);
-  }
-});
 
 test.describe('on a touch screen', () => {
   test.use({ hasTouch: true, isMobile: true });
@@ -1319,10 +1185,10 @@ test('the focus indicator stays two-tone on both grounds', async ({ page }) => {
   expect(onBlack.shadow, 'halo on the dark header').toContain(purple);
   expect(onBlack.shadow, 'the halo is 6px').toContain('6px');
 
-  // On Shell: a question option inside the dialogue panel.
+  // On Shell: an answer pill inside the offer panel.
   await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
-  await expect(page.locator('.otp-option').first()).toBeVisible();
-  const onShell = await ringAtFocus(page, '.otp-option');
+  await expect(page.locator('.otp-verdict').first()).toBeVisible();
+  const onShell = await ringAtFocus(page, '.otp-verdict');
   expect(onShell.outlineColour, 'outline on a Shell panel').toBe(purple);
   expect(onShell.outlineWidth, 'outline width on a Shell panel').toBe('3px');
   expect(onShell.shadow, 'halo on a Shell panel').toContain(lilac);

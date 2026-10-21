@@ -16,78 +16,12 @@
  * spawn and walking there takes most of a minute, and none of these four is a test of walking.
  */
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
 import { startGame } from './helpers';
 import { TILE } from '../src/world/logic';
-
-/** Puts Purple at an offset inside a named map object, and snaps the camera to her. */
-async function standOn(page: Page, object: string, dx: number, dy: number): Promise<void> {
-  await page.evaluate(
-    ({ object, dx, dy }) => {
-      const scene = window.__otp!.scene as unknown as {
-        position: { x: number; y: number };
-        camera: { x: number; y: number };
-        purple: { setPosition(x: number, y: number): void; setDepth(d: number): void; y: number };
-        focus(): { x: number; y: number };
-        syncCamera(): void;
-      };
-      const o = window.__otp!.mapObjects!.find((m) => m.name === object);
-      if (!o) throw new Error(`map has no object "${object}"`);
-      const x = o.x + dx;
-      const y = o.y + dy;
-      scene.position = { x, y };
-      scene.purple.setPosition(Math.round(x), Math.round(y));
-      scene.purple.setDepth(scene.purple.y);
-      scene.camera = scene.focus();
-      scene.syncCamera();
-    },
-    { object, dx, dy },
-  );
-}
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await startGame(page);
-});
-
-/*
- * 1. THE LOCKED DOOR SAYS ITS PIECE ONCE.
- *
- * `checkCottage` tested `overlaps` and emitted every frame Purple stood on the step -- 181 emissions
- * in 181 frames -- and `main.ts` only suppresses a second toast while one is still up. So the line
- * "I should hear all three travellers first." timed out after a couple of seconds, was re-emitted
- * on the very next frame and came straight back: a caption flashing on and off for as long as the
- * player stood at the door working out what to do, which is the only time they ever read it.
- *
- * Counted as RISING EDGES of the caption, so the assertion does not depend on how long main.ts
- * leaves a toast up, only on how many times the door spoke. One arrival, one line.
- */
-test('the locked-cottage line is said once, not every two and a half seconds', async ({ page }) => {
-  // Watch the caption before she arrives, or the first showing is over before counting starts.
-  await page.evaluate(() => {
-    const w = window as unknown as { __otpRises?: number };
-    const text = (): string => document.querySelector('.otp-toast')?.textContent ?? '';
-    w.__otpRises = 0;
-    let was = text() !== '';
-    setInterval(() => {
-      const shown = text() !== '';
-      if (shown && !was) w.__otpRises = (w.__otpRises ?? 0) + 1;
-      was = shown;
-    }, 50);
-  });
-
-  // The middle of the doorstep lane: inside trigger-cottage, clear of the notice beside it.
-  await standOn(page, 'trigger-cottage', TILE, TILE * 1.5);
-  await expect(page.locator('.otp-toast')).toHaveText(/all three travellers first/i);
-  // Nothing was unlocked, so she is still in the forest and still standing on the step.
-  expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('explore');
-
-  // Long enough for the caption to time out and be said again several times over.
-  await page.waitForTimeout(9000);
-  const rises = await page.evaluate(
-    () => (window as unknown as { __otpRises?: number }).__otpRises ?? -1,
-  );
-  expect(rises, 'the door re-announced itself while Purple stood on the step').toBe(1);
 });
 
 /*

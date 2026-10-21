@@ -10,7 +10,7 @@
  */
 import { test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { startGame } from './helpers';
+import { startGame, toTheReveal } from './helpers';
 
 const OUT = process.env['SHOT_DIR'];
 
@@ -120,14 +120,14 @@ test.describe('capture', () => {
        */
       await page.evaluate(() => {
         const { store } = window.__otp!;
-        store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'allow' });
+        store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'take' });
         for (const [c, s] of [
           ['owl', 'word-weaver'],
           ['lantern-keeper', 'night-light'],
         ]) {
           store.dispatch({ type: 'MEET', c });
           store.dispatch({ type: 'INSPECT', s });
-          store.dispatch({ type: 'VERDICT', s, v: 'allow' });
+          store.dispatch({ type: 'VERDICT', s, v: 'take' });
         }
       });
       await shot('04-all-three-live');
@@ -135,7 +135,7 @@ test.describe('capture', () => {
       await page.evaluate(() => window.__otp!.store.dispatch({ type: 'ENTER_COTTAGE' }));
       await shot('05-arrive', 1200);
 
-      await page.evaluate(() => window.__otp!.store.dispatch({ type: 'FINISH' }));
+      await toTheReveal(page);
       await shot('06-results', 600);
 
       /*

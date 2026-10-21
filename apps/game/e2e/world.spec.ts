@@ -47,7 +47,7 @@ test.beforeEach(async ({ page }) => {
 test('the run starts in explore with Purple at the spawn', async ({ page }) => {
   const spawn = await mapObject(page, 'spawn-purple');
   const start = await probe(page);
-  expect(start.phase).toBe('explore');
+  expect(start.phase).toBe('forest');
   expect(Math.abs(start.position.x - spawn.x)).toBeLessThan(64);
 });
 
@@ -113,9 +113,9 @@ test('the interact prompt leads to a dialogue, which swallows the walk keys, and
   await page.keyboard.press('Space');
   await page.waitForTimeout(120);
   const talking = await probe(page);
-  expect(talking.phase).toBe('dialogue');
+  expect(talking.phase).toBe('talk');
   expect(talking.activeCharacter).toBe('rabbit');
-  expect(talking.log.map((e) => e.t)).toContain('met');
+  expect(talking.log.map((e) => e.e)).toContain('met');
 
   // The world stops listening while a panel owns the screen: Purple must not walk out from under it.
   await hold(page, 'ArrowRight', 600);
@@ -123,55 +123,7 @@ test('the interact prompt leads to a dialogue, which swallows the walk keys, and
 
   await page.keyboard.press('Escape');
   await page.waitForTimeout(120);
-  expect((await probe(page)).phase).toBe('explore');
-});
-
-test('the cottage door stays shut until all three skills have a verdict', async ({ page }) => {
-  // Walking the whole map takes a while, and the hint toast hides itself after a few seconds.
-  test.slow();
-  // trigger-cottage is the doorstep, not the garden gate: the walk ends at Grandma's door.
-  const door = await mapObject(page, 'trigger-cottage');
-  await walkTo(page, { x: door.x + 16, y: door.y + door.height / 2 }, 24, 40_000);
-
-  const blocked = await probe(page);
-  expect(blocked.phase).toBe('explore');
-  // Nudge in and out of the trigger until the hint shows, rather than racing its timeout.
-  await expect
-    .poll(
-      async () => {
-        await hold(page, 'ArrowRight', 250);
-        await hold(page, 'ArrowLeft', 250);
-        return page.locator('.otp-toast').textContent();
-      },
-      { timeout: 15_000 },
-    )
-    .toMatch(/all three travellers first/i);
-
-  await page.evaluate(() => {
-    const { store } = window.__otp!;
-    for (const [c, s, v] of [
-      ['rabbit', 'cottage-finder', 'restrict'],
-      ['owl', 'word-weaver', 'reject'],
-      ['lantern-keeper', 'night-light', 'allow'],
-    ] as const) {
-      store.dispatch({ type: 'MEET', c });
-      store.dispatch({ type: 'INSPECT', s });
-      store.dispatch({ type: 'VERDICT', s, v });
-    }
-  });
-
-  // Purple is beside the trigger; nudge back and forth until she steps on it.
-  await expect
-    .poll(
-      async () => {
-        await hold(page, 'ArrowRight', 250);
-        await hold(page, 'ArrowLeft', 250);
-        return (await probe(page)).phase;
-      },
-      { timeout: 15_000 },
-    )
-    .toBe('cottage');
-  expect((await probe(page)).log.map((e) => e.t)).toContain('arrived');
+  expect((await probe(page)).phase).toBe('forest');
 });
 
 test('touch controls move Purple and stop her on release', async ({ browser }) => {

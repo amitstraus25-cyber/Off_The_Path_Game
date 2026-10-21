@@ -147,7 +147,7 @@ test.describe('every file the game loads', () => {
       await ready(page);
       await startGame(page);
       expect((await page.evaluate(() => window.__otp!.store.getState().phase)) as string).toBe(
-        'explore',
+        'forest',
       );
     });
   }

@@ -14,16 +14,19 @@
  * run its source directly; Vercel's zero-config compiler is the one thing that cannot.
  *
  * So nothing is left for Vercel to compile. Each route is bundled here into ONE self-contained
- * CommonJS file -- packages/core, the handlers and content/game.json inlined, only `node:`
+ * CommonJS file -- packages/core, the handlers and content/game.v2.json inlined, only `node:`
  * builtins external -- and handed over in the documented Build Output layout:
  *
  *   .vercel/output/config.json                  routes: the security headers, then the filesystem
  *   .vercel/output/static/                      apps/game/dist, copied
  *   .vercel/output/functions/api/<name>.func/   index.js + .vc-config.json + package.json
  *
- * THE ROUTES ARE `apps/api/api/*.ts`, the single copy. They export `default { fetch }`; Vercel's
- * Node launcher calls a classic `(req, res)` handler (its own example reads `req.query`), so the
- * small adapter below turns the Node request into a web `Request` and the `Response` back.
+ * THE ROUTES ARE `apps/api/api/*.ts`, the single copy, READ FROM THE DIRECTORY rather than listed
+ * here: Phase E added `start`, and a route file this script did not know about would be a function
+ * that does not exist on the deployment -- a 404 on a route every test had passed. They export
+ * `default { fetch }`; Vercel's Node launcher calls a classic `(req, res)` handler (its own example
+ * reads `req.query`), so the small adapter below turns the Node request into a web `Request` and
+ * the `Response` back.
  *
  * THE HEADERS COME FROM vercel.json, which stays the one source of truth that test/csp.test.ts
  * and every reviewer already read. Nothing here restates the CSP: it is copied, and the build
@@ -33,7 +36,15 @@
  * ESBUILD IS NOT A NEW DEPENDENCY. It is resolved through Vite, which already ships it, so this
  * script uses the exact esbuild the game's own build uses and package.json gains nothing.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -41,7 +52,9 @@ const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const at = (path) => `${ROOT}${path}`;
 const OUT = at('.vercel/output');
 const DIST = at('apps/game/dist');
-const ROUTES = ['top', 'score'];
+const ROUTES = readdirSync(at('apps/api/api'))
+  .filter((file) => file.endsWith('.ts'))
+  .map((file) => file.replace(/\.ts$/, ''));
 
 const require = createRequire(import.meta.url);
 const esbuild = createRequire(require.resolve('vite'))('esbuild');
@@ -50,6 +63,8 @@ const fail = (message) => {
   console.error(`vercel-output: ${message}`);
   process.exit(1);
 };
+
+if (ROUTES.length === 0) fail('apps/api/api has no route files -- is this the right checkout?');
 
 if (!existsSync(`${DIST}/index.html`))
   fail('apps/game/dist has no index.html -- run the game build first.');

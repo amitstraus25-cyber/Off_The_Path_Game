@@ -12,9 +12,14 @@
  *   leave everything                   40              exactly the rote line (40% of 100)
  *   anything with a bad skill          0               the wolf ending
  *
- * The bad cards show both shapes the lint allows: the lantern's and the locksmith's REPLACE a line,
- * the courier's ADDS one. Those numbers are written here for the reader; the tests recompute them.
+ * Every bad card SWAPS one line, the only shape the lint allows: the lantern's and the courier's
+ * their second line, the locksmith's its only one. Those numbers are written here for the reader;
+ * the tests recompute them.
  */
+const realWorld = (term: string) => ({
+  term: `Fixture ${term}`,
+  note: `Fixture: what ${term} stands for.`,
+});
 const leave = (what: string) => `Fixture card: ${what}.`;
 
 export const raw = {
@@ -52,6 +57,7 @@ export const raw = {
       name: 'Fixture Lantern',
       icon: 'item-lantern',
       promise: 'Fixture promise: lights a path.',
+      realWorld: realWorld('signal'),
       good: {
         card: {
           take: ['Fixture: lights your path.', 'Fixture: for you only.'],
@@ -72,8 +78,12 @@ export const raw = {
       name: 'Fixture Courier',
       icon: 'item-letter',
       promise: 'Fixture promise: sends word ahead.',
+      realWorld: realWorld('copy'),
       good: {
-        card: { take: ['Fixture: sends your word.'], leave: leave('unannounced') },
+        card: {
+          take: ['Fixture: sends your word.', 'Fixture: to her alone.'],
+          leave: leave('unannounced'),
+        },
         reveal: 'Fixture: sent word ahead.',
       },
       bad: {
@@ -89,6 +99,7 @@ export const raw = {
       name: 'Fixture Locksmith',
       icon: 'item-key',
       promise: 'Fixture promise: opens the door.',
+      realWorld: realWorld('access'),
       good: {
         card: { take: ['Fixture: opens her door.'], leave: leave('knock') },
         reveal: 'Fixture: opened the door.',
@@ -104,7 +115,43 @@ export const raw = {
     wolf: { title: 'Fixture: wolf', lines: ['Fixture: the wolf knew you were coming.'] },
     late: { title: 'Fixture: late', lines: ['Fixture: you never made it.'] },
   },
-  strings: {},
+  ui: {
+    landing: {
+      title: 'Fixture title',
+      titleHighlight: 'title',
+      subtitle: 'Fixture subtitle.',
+      start: 'Fixture start',
+    },
+    howTo: {
+      title: 'Fixture how',
+      steps: ['Fixture: walk.', 'Fixture: read.', 'Fixture: decide.'],
+    },
+    hud: {
+      time: 'Fixture time',
+      basket: 'Fixture basket',
+      twoMinutes: 'Fixture two',
+      oneMinute: 'Fixture one',
+      thirtySeconds: 'Fixture thirty',
+      timeUp: 'Fixture up',
+    },
+    reveal: {
+      title: 'Fixture reveal',
+      titleHighlight: 'reveal',
+      took: 'Fixture took',
+      left: 'Fixture left',
+      good: 'Fixture good',
+      bad: 'Fixture bad',
+      promised: 'Fixture promised',
+      did: 'Fixture did',
+      giveaway: 'Fixture giveaway',
+      realWorld: 'Fixture real world',
+      score: 'Fixture score',
+      question: 'Fixture question?',
+      cta: 'Fixture cta',
+      again: 'Fixture again',
+    },
+    chrome: { post: 'Fixture post' },
+  },
 };
 
 /** A deep copy to mutate, typed loosely enough to break on purpose. */

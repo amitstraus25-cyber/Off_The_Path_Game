@@ -85,7 +85,7 @@ test('a traveller who comes within reach is announced, politely', async ({ page 
     const { store } = window.__otp!;
     store.dispatch({ type: 'MEET', c: 'rabbit' });
     store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
-    store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'restrict' });
+    store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'leave' });
   });
   await expect(page.locator(NEAR)).toHaveText('');
 });
@@ -202,7 +202,7 @@ test('one activation of the A button talks to whoever is within reach', async ({
 
   await activate(touch, 'Talk or interact');
   await expect(touch.locator('.otp-dialogue')).toBeVisible();
-  expect(await touch.evaluate(() => window.__otp!.store.getState().activeCharacter)).toBe('rabbit');
+  expect(await touch.evaluate(() => window.__otp!.store.getState().active)).toBe('rabbit');
 
   await touch.context().close();
 });

@@ -1,6 +1,3 @@
-import { createHash } from 'node:crypto';
-import type { RunEvent } from '@otp/core';
-
 /*
  * Two small defences against a caller with a for-loop, and an honest account of what they are not.
  *
@@ -9,17 +6,21 @@ import type { RunEvent } from '@otp/core';
  * produced by driving the reducer offline, and before this file the same legal log could be posted
  * under twenty-five minted handles and fill the whole served page in twenty-five requests.
  *
- * What these do: per instance, they cap how many rows a minute can be written and refuse a run log
- * that this instance has already written. What they do NOT do: span instances. Vercel runs several
+ * What these do: per instance, they cap how many rows (and run starts) a minute can be written and
+ * refuse a run token that this instance has already turned into a row. What they do NOT do: span instances. Vercel runs several
  * and each gets its own module scope, so a caller who spreads a flood across cold starts is bounded
  * by the edge and not by this. That is not a reason to leave the near case open; it IS a reason the
- * README still asks for Vercel's rate limiting on /api/*, and for the `log_hash unique` column that
- * would make dedupe durable. Both of those need someone with the project console open.
+ * README still asks for Vercel's rate limiting on /api/*. Durable single use would need a column the
+ * table deliberately does not have (docs/DATABASE.md, Decision 1).
  *
  * Neither holds an identifier. There is no IP here, raw or hashed, no cookie and no account --
- * the budget is a single number per instance and the fingerprint is a hash of gameplay events.
+ * the budget is a single number per instance and the recent set holds random token ids.
  * Nothing in this file is ever written to the table, which is how "a handle and a score only"
  * stays literally true (CLAUDE.md) while duplicates still get refused.
+ *
+ * v2 changed the dedupe KEY from a hash of the run log to the run token's id (src/token.ts). The log
+ * hash only stopped the same log twice; one token could still have carried as many different legal
+ * logs for its seed as a forger cared to build. One token is one row covers both.
  */
 
 export interface WriteBudget {
@@ -56,22 +57,22 @@ export function createWriteBudget(
 
 export interface RecentRuns {
   /** True when this instance has already WRITTEN that run. */
-  has(fingerprint: string): boolean;
+  has(id: string): boolean;
   /**
    * Records a run that reached the table. Asking and recording are separate on purpose: a run
    * remembered before the insert would be refused as a duplicate on the retry after a transient
    * failure, which is a player losing a score to a blip in the database.
    */
-  remember(fingerprint: string): void;
+  remember(id: string): void;
 }
 
 /** The last `max` runs this instance wrote, oldest dropped first. A Set iterates in insertion order. */
 export function createRecentRuns(max = 500): RecentRuns {
   const keys = new Set<string>();
   return {
-    has: (fingerprint) => keys.has(fingerprint),
-    remember(fingerprint) {
-      keys.add(fingerprint);
+    has: (id) => keys.has(id),
+    remember(id) {
+      keys.add(id);
       if (keys.size > max) {
         // Past the cap the set holds at least `max + 1`, so there is always a first one to drop.
         const [oldest] = keys;
@@ -80,12 +81,3 @@ export function createRecentRuns(max = 500): RecentRuns {
     },
   };
 }
-
-/**
- * A run, as a fixed-length string. The log comes out of zod, so its keys are in schema order and
- * two posts of the same run produce the same hash whatever order the caller sent the fields in.
- * Timestamps are part of it: two players producing a byte-identical log would have to have played
- * every beat on the same millisecond.
- */
-export const fingerprint = (log: readonly RunEvent[]): string =>
-  createHash('sha256').update(JSON.stringify(log)).digest('hex');

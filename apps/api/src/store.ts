@@ -22,6 +22,14 @@ const TIMEOUT_MS = 4000;
 const MAX_ROWS_READ = 100;
 
 /**
+ * The v2 launch. Rows written before it are v1 runs, scored out of 1,000, and would outrank every
+ * v2 run (out of 100); the client chose on 2026-10-22 to clear them at launch. The board reads only
+ * rows from this instant on, which clears them from every visitor's view without this service
+ * holding a delete; removing the rows themselves is the human step in docs/DATABASE.md.
+ */
+export const V2_LAUNCH = '2026-10-21T23:45:00Z';
+
+/**
  * The status PostgREST answers to an insert on a table.
  *
  * Taken from PostgREST's own documentation for the request THIS adapter sends, not from a memory
@@ -284,6 +292,7 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike): Leaderbo
       const window = Math.min(limit * 4, MAX_ROWS_READ);
       const query = new URLSearchParams({
         select: 'handle,score',
+        created_at: `gte.${V2_LAUNCH}`,
         order: 'score.desc,created_at.asc',
         limit: String(window),
       });

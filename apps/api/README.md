@@ -1,28 +1,79 @@
 # `@otp/api` — the leaderboard service
 
-> **Current state, 2026-10-21.** The routes are `api/score.ts` and `api/top.ts` in THIS package, the
-> single copy. They are deployed through Vercel's Build Output API by
-> `apps/game/scripts/vercel-output.mjs`, which bundles them with packages/core and
-> content/game.json into self-contained CommonJS -- Vercel compiles none of our TypeScript. The
-> sections below record the arrangements that failed first (two services, routes in the game
-> service, routes in a repo-root `api/`); keep them, do not re-run them. Post-deploy check:
-> `GET /api/score` must answer **405** with `Allow: POST`; `GET /api/top` answers JSON when
-> the environment is set and **503** when it is not.
+> **Current state, 2026-10-22 (Phase E, leaderboard v2).** Three routes: `api/start.ts`,
+> `api/score.ts` and `api/top.ts` in THIS package, the single copy. The service scores **v2**
+> runs against `content/game.v2.json`; a v1 log is a 400. They are deployed through Vercel's Build
+> Output API by `apps/game/scripts/vercel-output.mjs`, which reads the route list off `api/` and
+> bundles each route with packages/core and the content file into self-contained CommonJS --
+> Vercel compiles none of our TypeScript. The sections further down record the arrangements that
+> failed first (two services, routes in the game service, routes in a repo-root `api/`); keep
+> them, do not re-run them.
+>
+> **Post-deploy discriminators** (a GET on each route, no body, no credentials):
+>
+> | Request          | Mounted and loaded                  | Not mounted | Mounted, crashed on load           |
+> | ---------------- | ----------------------------------- | ----------- | ---------------------------------- |
+> | `GET /api/start` | **405**, `Allow: POST`              | 404         | 500 `FUNCTION_INVOCATION_FAILED`   |
+> | `GET /api/score` | **405**, `Allow: POST`              | 404         | 500 `FUNCTION_INVOCATION_FAILED`   |
+> | `GET /api/top`   | 200 JSON, or **503** when env unset | 404         | 500 (cannot tell env from a crash) |
+>
+> Then `POST /api/start` with `content-type: application/json` and body `{}`: **200**
+> `{seed, token}` means the environment is set (the signing key is derived from it); **503** means
+> it is not, and the game will play on its own seed with posting switched off.
 
-Two routes behind the game, on the same origin, with no new dependencies.
+Three routes behind the game, on the same origin, with no new dependencies.
 
 **The database as an operational thing is `docs/DATABASE.md`** — the schema and why, the RLS
 posture, the migrations in `supabase/migrations/`, how to rotate a key without downtime, what
 happens when the free tier pauses, how to tell whether the board is actually working and what to do
 when it is not. This file is the service; that one is the database.
 
-| Route             | What it does                                                                                                                                           |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /api/score` | Takes `{ handle, log }`. Replays the log through `packages/core`, **recomputes the score**, stores the recomputed number. Answers `{ handle, score }`. |
-| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie. Cached at the edge for 60 s.                        |
+| Route             | What it does                                                                                                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/start` | Draws a seed and answers `{ seed, token }`: the seed sealed with the issue time in an HMAC-signed token. Stores nothing.                                                                        |
+| `POST /api/score` | Takes `{ handle, log, token }`. Checks the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100), stores it. Answers `{ handle, score }`. |
+| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie. Cached at the edge for 60 s.                                                                 |
 
-The body carries no score, and could not: `submitRequestSchema` is strict and rejects any key it
-does not name. That is CLAUDE.md golden rule 6 — "never trust the client for leaderboard scores" —
+## The run token (Phase E)
+
+A v2 run log carries its own seed and its own timestamps, and both are client-reported: without
+the token a forger could post the one seed whose deal makes their basket careful, or restamp a late
+run to finish in time. So the run starts on the server.
+
+- **`POST /api/start`** draws a 32-bit seed (`node:crypto`) and returns it with a token,
+  `base64url({id, seed, issuedAt}).base64url(HMAC-SHA256)`. The id is 16 random bytes. Nothing
+  about the visitor is in it, nothing is stored, no cookie is set. Same-origin only: a request a
+  browser marks `sec-fetch-site` other than `same-origin` is a 403, and JSON only (415), so a
+  cross-origin page cannot start a run without a preflight it fails. Its own per-instance budget,
+  120 a minute, separate from the 30 writes a minute.
+- **The signing key is derived**, HKDF-SHA256 over `SUPABASE_SERVICE_ROLE_KEY` with the fixed label
+  `otp/run-token/v1` (`src/token.ts`). No new environment variable. Never logged, never returned.
+  **Rotating the service role key invalidates every outstanding token** — at most eight minutes of
+  runs, whose players see "Posting has closed" or "could not be posted".
+- **`POST /api/score`** then requires, in order: a token this service signed (else 400); the log's
+  seed equal to the token's (else 400); a legal v2 replay that ended (else 400); an ending of
+  `grandma` or `wolf` — **a late run is not posted** (400); a claimed duration no longer than the
+  time since the token was issued, plus 2 s of clock skew (else 400); and no more than **five
+  minutes** off the game clock between issue and post — the title, the how-to and the reveal
+  (else **410**, "posting has closed for that run"). Since a run's clock stops before 3:00, no token
+  older than 8:00 can post. Finally, **neither the claimed run time nor the time since the token
+  was issued may be under `MIN_RUN_MS`** (10 s, the straight walk from Purple's spawn to the door,
+  derived from the map in `test/floor.test.ts`), else 400.
+- **One token is one row**, per instance (409 on reuse, with this log or any other). Durable
+  single use would need a column — see `docs/DATABASE.md`, Decision 1. No schema change was made.
+
+**Why the window is five minutes and not seconds.** The reveal is the product; a tight window would
+refuse exactly the player who read it. What a tight window would buy is a bound on restamping a late
+run, and a forger has no reason to restamp: the token hands them the seed, `deal()` is public, and
+the careful log for that seed scores 100. **The token does not stop a bot, and a bot's rows are not
+harmless:** ties rank earliest first (migration 0005), so scripted 100s posted early outrank every
+honest 100 posted after them, permanently. The token makes every row cost one start, at least
+`MIN_RUN_MS` of real waiting, and one post inside eight minutes; makes the seed the server's; and
+makes one token one row. The edge rate limit below is what bounds volume, which is why it is a
+precondition for exposing the board, not a nice-to-have.
+
+The body carries no score, and could not: `submitRunSchema` (`src/schema.ts`) is strict and
+rejects any key it does not name. That is CLAUDE.md golden rule 6 — "never trust the client for leaderboard scores" —
 expressed as a schema rather than as a check that can be forgotten. `test/score.test.ts` is the
 proof: a submission carrying `score: 999999` is a 400 with nothing written, and the same run without
 the claim stores the figure `score()` computes from the replayed log.
@@ -362,11 +413,14 @@ deps) }` suits these handlers exactly, since they already branch on `request.met
 ```
 api/score.ts     POST /api/score   -- thin: reads the environment once, calls the handler
 api/top.ts       GET  /api/top
-src/handlers.ts  both routes as pure functions of (Request, Deps)
+api/start.ts     POST /api/start
+src/handlers.ts  the three routes as pure functions of (Request, Deps)
+src/token.ts     the run token: HKDF key, HMAC seal, open
+src/schema.ts    the v2 submit body; no node: imports, so the game's tests can hold it
 src/store.ts     the table, over fetch against PostgREST
 src/env.ts       the two variables, and what to do when they are not there
 src/deps.ts      the only place that touches process.env
-src/content.ts   the shipped content/game.json, through the same schema the game loads it with
+src/content.ts   the shipped content/game.v2.json, through the same schema the game loads it with
 src/http.ts      the response shapes and the one place headers are written
 ```
 
@@ -425,10 +479,14 @@ of the board are wired, and both are waiting on the same thing: a function at `/
 | A claimed score                                | Refused. The body schema is strict; `score` is not one of its two keys. The stored number always comes from `score()` over the replayed log.                                                                |
 | A log that replays to a huge score             | Refused unless it is a run a player could have played. `checkLog` replays every event through the real reducer and requires the replay to reproduce the submitted log exactly.                              |
 | A verdict the player never read the card for   | Replays as `must-open-the-card` and is refused. The points for a careful verdict cannot be awarded to a log that never opened the card.                                                                     |
-| A run that never reached the cottage           | Refused. `checkLog` reports `complete` and this route requires it.                                                                                                                                          |
+| A run that never reached the cottage           | Refused. `checkRunLog` reports `ended` and this route requires it; a `late` ending is refused too.                                                                                                          |
+| A seed of the caller's choosing                | Refused. The log's seed must be the one sealed in a token this service signed.                                                                                                                              |
+| A log claiming more time than really passed    | Refused: the claimed duration may not exceed the time since the token was issued (plus 2 s).                                                                                                                |
+| A slow run restamped, or a stale token         | Refused with 410 once more than five minutes have passed off the game clock since the token was issued.                                                                                                     |
+| A run faster than anyone could walk it         | Refused: the claimed run time and the time since the token was issued must both reach `MIN_RUN_MS` (10 s), so every forged row costs real waiting.                                                          |
 | A thousand events                              | Refused before replay: `MAX_LOG_EVENTS` is 256 against an honest run of about twenty.                                                                                                                       |
 | A megabyte of JSON                             | Refused at 32 KB **as it arrives**. `content-length` is a cheap first check; the gate is a metered read, so a body that declares no length or is made of four-byte characters is cut off at the same 32 KB. |
-| The same legal run, posted again               | `409 {"error":"that run is already on the board"}` with nothing written. One run is one row, under any handle. Per instance — see below.                                                                    |
+| The same token, posted again                   | `409 {"error":"that run is already on the board"}` with nothing written, whatever log or handle comes with it. One token is one row. Per instance — see below.                                              |
 | A loop writing rows as fast as it can          | Thirty writes a minute per instance, then `429` with `retry-after`. The budget is spent only on a row that is about to exist, so nonsense cannot exhaust it. Per instance — see below.                      |
 | A handle that is not one of ours               | Refused by `handleSchema`, and refused again by the store immediately before the insert. Only a word pair from `packages/core`'s lists plus a two-digit number parses.                                      |
 | A handle designed to break a page              | Cannot exist. The grammar is `[a-z]+-[a-z]+-[1-9][0-9]`, the game renders through Preact text nodes, and `GET /api/top` drops any row whose handle is not one the game could mint.                          |
@@ -492,10 +550,11 @@ write, or prove that a player played. A maximal run log can be built offline by 
 write-what-you-like list that happens to contain honest scores. `src/limit.ts` closes the cheap case
 — one row per run, thirty writes a minute — but only within one instance, and Vercel runs several.
 
-1. **Turn on rate limiting for `/api/*` in the Vercel project, and prove it on a preview.** Firewall
-   → rate limiting, scoped to the `/api/` path. This is the control that spans instances, and it is
-   the one thing here that cannot be done from the repository. Until it is on, treat the per-instance
-   budget as a speed bump and nothing more.
+1. **Turn on rate limiting for `/api/*` in the Vercel project, and prove it on a preview. A hard
+   precondition for exposing the board to the public.** Firewall → rate limiting, scoped to the
+   `/api/` path. This is the control that spans instances, and it is the one thing here that cannot
+   be done from the repository. Until it is on, treat the per-instance budget as a speed bump and
+   nothing more. Tracked as an unticked box under Phase 9 E in `docs/PLAN.md`.
 2. **Make dedupe durable.** `supabase/migrations/0002_leaderboard_log_hash.sql` adds the column the
    code cannot add, with the unique index over it, and is safe to run before the code that writes
    it. It **reopens D10** rather than being a quiet migration — the column is a third one on a table
@@ -530,13 +589,21 @@ write-what-you-like list that happens to contain honest scores. `src/limit.ts` c
    game could not mint, so a word taken out of `packages/core/src/leaderboard.ts` retires every row
    already posted under it. The store over-fetches four pages so the filter falls through to real
    rows rather than serving a short page, but the rows themselves are gone from the board.
-4. **The clock is the player's.** Durations come from the browser, so there is no "too fast to be
-   real" floor. The table has no duration column and ranking is by score alone, so a forged clock
-   buys nothing; the reducer still refuses a log whose timestamps go backwards.
-5. **Content drift.** Scores are recomputed against whatever `content/game.json` the deployment
+4. **The clock is half the player's.** Since Phase E a run cannot claim more time than the server
+   saw, nor sit more than five minutes off the game clock, nor be faster than `MIN_RUN_MS` on
+   either clock. That floor is one number for every score -- the straight walk to the door -- so a
+   scripted 100 still costs only ten seconds of waiting per token, though an honest 100 must also
+   meet the three holding good skills on the way. A per-score floor needs the map's distances on the server and
+   is not done. Requiring a card to be opened per take is out of scope: reading is optional by
+   design (GAME_DESIGN_V2), so it would refuse an honest lucky guess.
+5. **Content drift.** Scores are recomputed against whatever `content/game.v2.json` the deployment
    carries. Change the scoring weights and old rows are no longer comparable to new ones, with
    nothing in the table recording which version produced them.
 6. **Nothing here has been run against the live service.** There are no credentials in this
    checkout. The PostgREST request shapes (headers, `order=score.desc,created_at.asc`,
    `Prefer: return=minimal`) are asserted in tests against a fake fetch, not against Supabase. The
    first real deploy is the first real test of those.
+7. **v1 rows are not comparable with v2's.** v1 scored out of 1,000, v2 out of 100. PLAN.md recorded
+   the table as empty before Phase E; if any v1 rows are there, they outrank every v2 run. **This
+   service deletes nothing.** Whether old rows are cleared is the client's data decision, made by
+   hand in the SQL editor (`docs/DATABASE.md`, Decision 3's delete path), not by a deploy.

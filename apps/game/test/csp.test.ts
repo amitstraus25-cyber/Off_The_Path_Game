@@ -187,10 +187,18 @@ describe.runIf(existsSync(DIST_INDEX))('the page that policy applies to', () => 
 
     const bundle = readFileSync(fileURLToPath(new URL(`apps/game/dist${script!}`, ROOT)), 'utf8');
     expect(bundle.length, 'the bundle is empty').toBeGreaterThan(1000);
-    // `otp-v2` is the switch that turns v2 Phase C on, `otp-v2-seed` the e2e pin on the run's
-    // deal and `v2Clock` its test clock override (world/v2-wiring.tsx); all dev/e2e only, gated
-    // the same way as the handle.
-    for (const hook of ['__otp', 'isSolidAt', 'mapObjects', 'otp-v2', 'otp-v2-seed', 'v2Clock'])
+    // `testClock` is the run clock's e2e override (main.ts), the one test switch the game keeps,
+    // gated the same way as the handle. `otp-v2`, `otp-v2-seed` and `v2Clock` are the Phase C
+    // switch, seed pin and clock that Phase D removed; they stay listed so none can come back.
+    for (const hook of [
+      '__otp',
+      'isSolidAt',
+      'mapObjects',
+      'testClock',
+      'otp-v2',
+      'otp-v2-seed',
+      'v2Clock',
+    ])
       expect(
         bundle.includes(hook),
         `"${hook}" is in a plain production bundle, so an e2e gate is not being eliminated -- ` +

@@ -16,7 +16,11 @@ pool to exhaust, no migration tool wired up, and no ORM. Migrations are SQL file
 
 The table holds **a handle and a score**. No account, no email, no cookie, no IP address raw or
 hashed, no run id. That is decision D10 and it is the reason most of the questions you might
-expect to have answers here do not arise.
+expect to have answers here do not arise. **Phase E (v2, 2026-10-22) did not change it**: the run
+token `POST /api/start` issues lives in the browser and the instance's memory, never in the table,
+and no migration was written. Scores are now 0 to 100 (v1's were out of 1,000), so any v1 row
+left in the table outranks every v2 run; **whether old rows are cleared is the client's data
+decision**, made by hand through Decision 3's delete path. No deploy deletes anything.
 
 **Nothing in this repository has ever run against the live database.** There are no credentials in
 the checkout, by design. Every request shape is asserted in tests against a fake `fetch`. The first
@@ -43,9 +47,14 @@ anything else, so the status alone separates four entirely different problems:
 | `500`                    | Routed, and it threw at cold start — an import failed.  | [Cold start](#when-it-is-not-working)   |
 | `503`                    | Routed and running, environment not wired.              | [Environment](#environment-variables)   |
 
-A `404` here is positive proof of absence: our code cannot produce one. `handleScore` and
-`handleTop` between them return `200`, `400`, `405`, `409`, `413`, `415`, `429` and `503`, and
-nothing else. If you are looking at a `404`, the request never reached a line we wrote, and no
+`GET /api/start` is the same discriminator for the third route: `405` with `Allow: POST` when
+mounted. Then `POST /api/start` with `content-type: application/json` and `{}` answers `200
+{seed, token}` when the environment is set — the token's key is derived from the service role key,
+so a `200` here proves that variable is present (not that it is right; `/api/top` proves that).
+
+A `404` here is positive proof of absence: our code cannot produce one. `handleStart`,
+`handleScore` and `handleTop` between them return `200`, `400`, `403`, `405`, `409`, `410`, `413`,
+`415`, `429` and `503`, and nothing else. If you are looking at a `404`, the request never reached a line we wrote, and no
 amount of database investigation will help.
 
 Once that is `405`, ask the read route:
@@ -192,6 +201,10 @@ invalidates the old one. There is no "two valid keys" state to roll through. So:
    intermittent "Leaderboard unavailable right now" that nobody can reproduce.
 4. **Verify**, with the ladder at the top of this document. `405` then `200 {"entries":…}`.
 
+**Rotating also invalidates every run token outstanding at that moment**, because the signing key
+is derived from this one (`apps/api/src/token.ts`). Tokens live at most eight minutes, so the cost is
+the runs in flight: their posts answer 400 and the player reads "That run could not be posted."
+
 Between step 2 and the end of step 3 every write fails, every player sees "Leaderboard unavailable
 right now", and the only signal anywhere is one line in the Vercel log. Results and the call to
 action are untouched, so the damage is bounded — but do it at a quiet hour, not at launch.
@@ -221,6 +234,14 @@ Run them in order. `0001` first, always — it is also the drift check.
 ---
 
 ## Decision 1 — dedupe
+
+> **Updated 2026-10-22, Phase E.** The in-memory dedupe key is now the **run token's id**, not a
+> hash of the log: one token is one row (`409` on reuse), which also stops one token carrying many
+> different legal logs for its seed. It is still per instance. If durable single use is ever
+> wanted, the column `0002` proposes should hold a hash of the token id rather than of the log —
+> the token id is random and says even less than gameplay does — and the same D10 argument below
+> applies unchanged. **No migration was written for it this round and none is needed to ship.**
+> The text below predates v2 and is kept as the argument.
 
 **The question:** nothing stops the same run being posted twice, or a script posting a thousand
 rows. The proposal on file is a `log_hash` column with a unique index. D10 reads "handle and score

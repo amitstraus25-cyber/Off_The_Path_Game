@@ -17,7 +17,7 @@ import { startGame, tag, tagOf } from './helpers';
  * reading the card that decides whether another leg lights.
  */
 
-type Verdict = 'allow' | 'restrict' | 'reject';
+type Verdict = 'take' | 'leave';
 
 const SKILL_OF: Record<string, string> = {
   rabbit: 'cottage-finder',
@@ -31,8 +31,8 @@ const HEADER = '.otp-world-frame__header';
 const MARK = `${HEADER} .otp-mark`;
 const DISCS = '.otp-hud .otp-leg';
 const MUSIC = '.otp-music';
-/** The verdict's live region: it must be mutated in place, never replaced. */
-const ANNOUNCE = '[data-announce="world"]';
+/** The world's live region: it must be mutated in place, never replaced. */
+const ANNOUNCE = '[data-announce="near"]';
 
 async function decide(page: Page, character: string, verdict: Verdict): Promise<void> {
   await page.evaluate(
@@ -44,7 +44,7 @@ async function decide(page: Page, character: string, verdict: Verdict): Promise<
     },
     { character, verdict, skill: SKILL_OF[character]! },
   );
-  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'explore');
+  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
 }
 
 async function step(page: Page, action: Record<string, unknown>, phase: string): Promise<void> {
@@ -92,9 +92,7 @@ test.beforeEach(async ({ page }) => {
   await startGame(page);
 });
 
-test('the frame, the wordmark and the discs stay put through a whole encounter', async ({
-  page,
-}) => {
+test('the frame and the wordmark stay put through a whole encounter', async ({ page }) => {
   /*
    * One verdict first, so the discs are already lit when the measured encounter starts. The
    * header's width changes when the first leg appears -- the aside gains three discs and the
@@ -102,14 +100,12 @@ test('the frame, the wordmark and the discs stay put through a whole encounter',
    * whoever next opens panels.css. Measuring the SECOND encounter holds the header's contents
    * constant, so a position that moves here moved because something unmounted.
    */
-  await decide(page, 'rabbit', 'allow');
+  await decide(page, 'rabbit', 'take');
 
   const before = await furniture(page);
   expect(before.frame, 'the frame is up on Explore').toBe(true);
   expect(before.header, 'so is its header band').toBe(true);
   expect(before.marks, 'and the one Cyera wordmark').toBe(1);
-  expect(before.discs, 'three capability discs, one of them lit').toBe(3);
-  expect(before.lit).toBe(1);
   expect(before.music, 'the music control has a box to travel from').not.toBeNull();
 
   await tag(page, FRAME, 'frame');
@@ -128,16 +124,14 @@ test('the frame, the wordmark and the discs stay put through a whole encounter',
   await tag(page, ANNOUNCE, 'announce');
 
   for (const [label, action, phase] of [
-    ['02 Question', { type: 'MEET', c: 'owl' }, 'dialogue'],
-    ['03 Inspect', { type: 'INSPECT', s: SKILL_OF['owl']! }, 'inspect'],
+    ['02 Question', { type: 'MEET', c: 'owl' }, 'talk'],
+    ['03 Inspect', { type: 'INSPECT', s: SKILL_OF['owl']! }, 'card'],
   ] as const) {
     await step(page, action, phase);
     const now = await furniture(page);
     expect(now.frame, `the frame is still up on ${label}`).toBe(true);
     expect(now.header, `the header band is still up on ${label}`).toBe(true);
     expect(now.marks, `the wordmark has not left on ${label}`).toBe(1);
-    expect(now.discs, `all three discs are still on screen on ${label}`).toBe(3);
-    expect(now.lit, `and the lit one is still lit on ${label}`).toBe(1);
     expect(now.frameTag, `the frame was re-rendered, not remounted, on ${label}`).toBe('frame');
     expect(now.musicTag, `the music control was not remounted on ${label}`).toBe('music');
     /*
@@ -166,51 +160,14 @@ test('the frame, the wordmark and the discs stay put through a whole encounter',
   }
 
   // And out the other side: one continuous frame across the whole encounter, not three.
-  await step(page, { type: 'VERDICT', s: SKILL_OF['owl']!, v: 'reject' }, 'explore');
+  await step(page, { type: 'VERDICT', s: SKILL_OF['owl']!, v: 'leave' }, 'forest');
   const after = await furniture(page);
   expect(after.frameTag, 'the same frame node the encounter started with').toBe('frame');
   expect(after.musicTag, 'and the same music control').toBe('music');
-  expect(after.announceTag, 'the verdict is announced into the region that was already there').toBe(
+  expect(after.announceTag, 'the world speaks into the region that was already there').toBe(
     'announce',
   );
   expect(after.marks).toBe(1);
-  expect(after.discs).toBe(3);
-});
-
-test('lighting the first leg does not rebuild the frame or move the wordmark', async ({ page }) => {
-  /*
-   * The one encounter the test above deliberately skips: the FIRST verdict, where the three discs
-   * appear in the header for the first time and the aside gets wider.
-   *
-   * What that growth is allowed to move, and what it is not, is the point here. The wordmark is
-   * `margin-left: auto` and so is pinned to the header's right edge: it must not move, and
-   * measured over seven samples it does not -- 1198.25 throughout. The music control sits between
-   * the aside and the mark and takes the whole of the growth: 747.72 to 811.44, 63.72px. That is a
-   * real shift that no CLS guard on this project can see (e2e/cls.spec.ts measures the title
-   * screen only), and it is not fixable from these three files -- the cure is to move the discs
-   * out of the 44px header strip and into `.otp-world-anchor` beside the basket, which needs a
-   * positioning rule in panels.css. So it is recorded here rather than asserted, and the two
-   * things that CAN be held are held.
-   */
-  await tag(page, FRAME, 'frame');
-  await tag(page, MARK, 'mark');
-  const before = await furniture(page);
-  const markBefore = (await page.locator(MARK).boundingBox())!;
-  expect(before.discs, 'no discs before the first verdict').toBe(0);
-
-  await decide(page, 'rabbit', 'allow');
-
-  const after = await furniture(page);
-  const markAfter = (await page.locator(MARK).boundingBox())!;
-  expect(after.discs, 'the three discs are now in the header').toBe(3);
-  expect(after.lit, 'one of them lit').toBe(1);
-  expect(after.frameTag, 'the frame was not rebuilt to make room for them').toBe('frame');
-  expect(await markOf(page, MARK), 'nor was the wordmark').toBe('mark');
-  expect(
-    Math.abs(markAfter.x - markBefore.x),
-    'the wordmark is pinned to the header edge and does not move',
-  ).toBeLessThan(0.5);
-  expect(Math.abs(markAfter.y - markBefore.y), 'nor does it change row').toBeLessThan(0.5);
 });
 
 /**
@@ -270,8 +227,8 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
   const undimmed = await maxLuma(page, MARK);
   expect(undimmed, 'the wordmark is at full white with nothing over it').toBeGreaterThan(200);
 
-  await step(page, { type: 'MEET', c: 'rabbit' }, 'dialogue');
-  await step(page, { type: 'INSPECT', s: SKILL_OF['rabbit']! }, 'inspect');
+  await step(page, { type: 'MEET', c: 'rabbit' }, 'talk');
+  await step(page, { type: 'INSPECT', s: SKILL_OF['rabbit']! }, 'card');
 
   const card = page.locator('.otp-card');
   await expect(card).toBeVisible();
@@ -288,31 +245,8 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
   );
   expect(inCard, 'the card takes the pointer at its own centre').toBe(true);
   await page
-    .getByRole('button', { name: /Reject/ })
+    .getByRole('button', { name: /Leave it/ })
     .first()
     .click();
-  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'explore');
-});
-
-test('the card is numbered by the cards the player opened, not by the content file', async ({
-  page,
-}) => {
-  /*
-   * `index` used to be the skill's position in content/game.json, which is Rabbit 1, Owl 2,
-   * Keeper 3 -- an order no player walks. Meeting the Keeper first opened a card headed
-   * "Skill 3 of 3": the first card of the run told the player they were finished.
-   */
-  await step(page, { type: 'MEET', c: 'lantern-keeper' }, 'dialogue');
-  await step(page, { type: 'INSPECT', s: SKILL_OF['lantern-keeper']! }, 'inspect');
-  // The card's own header chip: `.otp-panel` is the modal panel, never the world frame's header.
-  await expect(page.locator('.otp-panel .otp-panel__aside .otp-chip__label')).toHaveText(
-    'Skill 1 of 3',
-  );
-
-  await step(page, { type: 'VERDICT', s: SKILL_OF['lantern-keeper']!, v: 'reject' }, 'explore');
-  await step(page, { type: 'MEET', c: 'rabbit' }, 'dialogue');
-  await step(page, { type: 'INSPECT', s: SKILL_OF['rabbit']! }, 'inspect');
-  await expect(page.locator('.otp-panel .otp-panel__aside .otp-chip__label')).toHaveText(
-    'Skill 2 of 3',
-  );
+  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
 });

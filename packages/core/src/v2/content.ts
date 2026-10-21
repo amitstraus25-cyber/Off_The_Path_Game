@@ -32,6 +32,13 @@ export const LAUNCH_CAST = { skills: 7, good: 3 } as const;
  */
 export const GIVEAWAY_WORDS = 10;
 
+/**
+ * The most words a skill's real-world note may have, and the most sentences: the user's limits
+ * (2026-10-22), "one or two plain sentences, 25 words max", for the reveal screen.
+ */
+export const REAL_WORLD_WORDS = 25;
+export const REAL_WORLD_SENTENCES = 2;
+
 const text = z.string().trim().min(1);
 const slug = z.string().regex(/^[a-z][a-z0-9-]*$/);
 
@@ -44,7 +51,7 @@ const slug = z.string().regex(/^[a-z][a-z0-9-]*$/);
 const variant = z.strictObject({
   /**
    * The inspect card. `take` is what taking it does, one short line each; `leave` is what leaving
-   * it costs. The lint holds the bad card to the good card plus or instead of ONE line.
+   * it costs. The lint holds the bad card to the good card with ONE line swapped, same line count.
    */
   card: z.strictObject({ take: z.array(text).min(1), leave: text }),
   /** What it did on the way, as the end of the run says it. */
@@ -57,6 +64,12 @@ const skill = z.strictObject({
   icon: slug,
   /** One line, in the character's voice. True in both variants: a bad skill keeps it too. */
   promise: text,
+  /**
+   * The real cybersecurity idea the forest story stands for, for the reveal: `term` names it and
+   * `note` links the two in one or two plain sentences. One per skill, shared by both variants,
+   * because it explains the bad card's giveaway line whichever variant the deal showed.
+   */
+  realWorld: z.strictObject({ term: text, note: text }),
   good: variant,
   bad: variant,
 });
@@ -72,6 +85,53 @@ const character = z.strictObject({
 });
 
 const ending = z.strictObject({ title: text, lines: z.array(text).min(1) });
+
+/**
+ * EVERY OTHER WORD THE v2 SCREENS SAY, strictly keyed so a screen cannot ask for a string that is
+ * not here and a typo in the file cannot pass as a new key. `hud` is exactly `HudLabels` in
+ * apps/game/src/ui/Hud.tsx, so it is passed through as the HUD's `labels`. A `titleHighlight` is
+ * the one word of its title set in Season Mix (CLAUDE.md brand rules); the lint holds it to a word
+ * the title actually has.
+ */
+const ui = z.strictObject({
+  landing: z.strictObject({ title: text, titleHighlight: text, subtitle: text, start: text }),
+  /** The user's ask: three or four short lines, read before the clock starts. */
+  howTo: z.strictObject({ title: text, steps: z.array(text).min(3).max(4) }),
+  hud: z.strictObject({
+    time: text,
+    basket: text,
+    twoMinutes: text,
+    oneMinute: text,
+    thirtySeconds: text,
+    timeUp: text,
+  }),
+  reveal: z.strictObject({
+    title: text,
+    titleHighlight: text,
+    /** Section headings: the skills in the basket, then the ones walked past. */
+    took: text,
+    left: text,
+    /** What the dealt variant was, as words beside its shape (no red or green). */
+    good: text,
+    bad: text,
+    /** Row labels: the promise, the variant's reveal line, the giveaway, the real-world note. */
+    promised: text,
+    did: text,
+    giveaway: text,
+    realWorld: text,
+    score: text,
+    /** The question the player should leave with, and the research link's label. */
+    question: text,
+    cta: text,
+    again: text,
+  }),
+  /**
+   * The words of the chrome the rules do not touch: the touch pad, the music switch, the problem
+   * screens, the post form, the board, the forest's summary for a screen reader. Free-keyed because
+   * there are dozens; `apps/game/test/strings.test.ts` fails on a key the UI reads and this lacks.
+   */
+  chrome: z.record(z.string(), text),
+});
 
 export const contentSchema = z.strictObject({
   /**
@@ -96,7 +156,7 @@ export const contentSchema = z.strictObject({
   skills: z.array(skill).min(1),
   /** The copy for each ending. WHICH ending a run reaches is a rule (scoring.ts `ending`). */
   endings: z.strictObject({ grandma: ending, wolf: ending, late: ending }),
-  strings: z.record(z.string(), text),
+  ui,
 });
 
 export type Content = z.infer<typeof contentSchema>;
@@ -118,21 +178,26 @@ export const ceiling = (content: Content): number =>
 
 export const countWords = (line: string): number => line.split(/\s+/).filter(Boolean).length;
 
+export const countSentences = (line: string): number =>
+  line.split(/[.!?](?:\s|$)/).filter((x) => x.trim() !== '').length;
+
 /**
  * THE LINE THAT GIVES A BAD SKILL AWAY: the one line of its bad card's `take` list that is not on
- * its good card, when the bad card is the good card with exactly that one line added or put in
- * place of another. Null when the two cards differ in any other way -- which the lint refuses.
+ * its good card, when the bad card is the good card with exactly that one line swapped for a new
+ * one. Null when the two cards differ in any other way -- which the lint refuses.
+ *
+ * SWAPPED, NEVER ADDED (2026-10-22). Draft 6 let a bad card add its line, and two of seven did, so
+ * a three-line card was a bad card and the line count gave the verdict away on replay without a
+ * word being read. Every bad card is now the same length as its good card.
  */
 export function giveaway(s: Skill): string | null {
   const good = s.good.card.take;
   const bad = s.bad.card.take;
-  for (const [i, line] of bad.entries()) {
-    const replaced = bad.length === good.length && bad.every((l, j) => j === i || l === good[j]);
-    const rest = bad.filter((_l, j) => j !== i);
-    const added = bad.length === good.length + 1 && rest.every((l, j) => l === good[j]);
-    if ((replaced || added) && !good.includes(line)) return line;
-  }
-  return null;
+  if (bad.length !== good.length) return null;
+  const changed = bad.filter((line, i) => line !== good[i]);
+  if (changed.length !== 1) return null;
+  const [line] = changed as [string];
+  return good.includes(line) ? null : line;
 }
 
 /**
@@ -197,7 +262,7 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
   /*
    * THE TWO VARIANTS, ONE LINE APART. What is shared before the card is shared by construction
    * (the schema has one copy of it). On the card, the leave line is the same and the take list is
-   * the same but for one line -- added, or in place of another -- and that line is short.
+   * the same length and the same but for one swapped line, and that line is short.
    */
   for (const s of content.skills) {
     if (s.bad.card.leave !== s.good.card.leave)
@@ -205,7 +270,7 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
     const line = giveaway(s);
     if (line === null)
       add(
-        `skill "${s.id}": the bad card must be the good card with exactly one new line, added or in place of one`,
+        `skill "${s.id}": the bad card must be the good card with exactly one line swapped for a new one, same line count`,
       );
     else if (countWords(line) > GIVEAWAY_WORDS)
       add(
@@ -213,7 +278,20 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
       );
     if (s.bad.reveal === s.good.reveal)
       add(`skill "${s.id}": the two variants need their own reveal lines`);
+    const note = s.realWorld.note;
+    if (countWords(note) > REAL_WORLD_WORDS || countSentences(note) > REAL_WORLD_SENTENCES)
+      add(
+        `skill "${s.id}": the real-world note is ${countWords(note)} words in ${countSentences(note)} sentences, at most ${REAL_WORLD_WORDS} in ${REAL_WORLD_SENTENCES}`,
+      );
   }
+
+  // A highlighted word that is not in its heading would be set on nothing.
+  for (const [where, { title, titleHighlight }] of [
+    ['landing', content.ui.landing],
+    ['reveal', content.ui.reveal],
+  ] as const)
+    if (!title.split(/[\s.,!?]+/).includes(titleHighlight))
+      add(`ui.${where}: the highlight "${titleHighlight}" is not a word of "${title}"`);
 
   // Every deal must hold both kinds, or there is nothing to tell apart.
   const n = content.skills.length;

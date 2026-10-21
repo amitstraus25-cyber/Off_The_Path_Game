@@ -54,11 +54,12 @@ off-the-path/
   docs/                       # this folder
   reference/                  # concept, mocks, brand assets (read-only reference)
   content/
-    game.json                 # ALL game content. The schema and the content lint live in
-    game.seed.json            #   packages/core/src/content.ts -- there is no schema file here
+    game.v2.json              # ALL game content. The schema and the content lint live in
+                              #   packages/core/src/v2/content.ts -- there is no schema file here
   packages/
-    core/                     # pure TS: state machine, scoring, outcomes, run log, camera, content
-      src/ (camera.ts, content.ts, outcomes.ts, reducer.ts, runlog.ts, scoring.ts, state.ts, index.ts)
+    core/                     # pure TS: camera, the leaderboard contract, and the v2 rules
+      src/ (camera.ts, leaderboard.ts, index.ts, v2/: content, deal, state, reducer, scoring,
+            runlog, sim, load)
       test/
   apps/
     game/                     # Vite app -- the only deployed service
@@ -67,11 +68,11 @@ off-the-path/
                               #   string from playwright.config.ts)
       src/
         main.ts               # boot: load content, create store, mount UI + Phaser
-        bus.ts, store.ts      # typed event bus; the single store over `reduce`
+        bus.ts, store.ts      # typed event bus; the single store over the v2 `reduce`
         world/                # Phaser: scenes, map, assets, input, and the pure logic barrel
         ui/                   # Preact components + CSS (tokens.css imports the brand theme)
         audio/                # music generated from bar numbers; no audio files in the repo
-        net/leaderboard.ts    # LeaderboardClient interface + the real Phase 6 adapter
+        net/leaderboard.ts    # startRun, submit and readBoard: the same-origin calls to apps/api
         embed/postMessage.ts  # the OUTBOUND embed contract (section 9)
         assets/               # generated tileset, map, sprites, portraits, items + manifest.json
       public/fonts/           # self-hosted Haffer and Season Mix
@@ -79,14 +80,15 @@ off-the-path/
       test/                   # Vitest: map, assets, strings, title, results, score, logic
       e2e/                    # Playwright
     api/                      # the leaderboard service -- the second deployed service
-      api/score.ts            #   POST /api/score, GET /api/top: thin, read the environment once
-      api/top.ts              #   and call the handler
+      api/start.ts            #   POST /api/start, POST /api/score, GET /api/top: thin, read the
+      api/score.ts            #   environment once and call the handler
+      api/top.ts
       src/                    #   handlers, store (PostgREST over fetch), env, deps, content, http, limit
       test/                   #   every decision is a pure function, so this runs on a fake fetch
       README.md               #   SOURCE OF TRUTH for this service; read it before changing it
   tools/
     graybox/                  # procedural placeholder art + the map generator
-    sim/                      # plays strategies through the real reducer
+    sim/                      # plays the v2 strategies through the real reducer (`pnpm sim`)
   .github/workflows/ci.yml
 ```
 
@@ -94,36 +96,48 @@ off-the-path/
 
 **The types are the documentation. Read them, do not read a copy of them.**
 
-| What                                             | Where it is declared                                                                  |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `Content` and every type inside it               | `contentSchema` in `packages/core/src/content.ts` (zod; `Content` is `z.infer` of it) |
-| The content lint (the rules a schema cannot say) | `loadContent` in the same file                                                        |
-| `GameState`, `Action`, `Phase`, `RejectReason`   | `packages/core/src/state.ts`                                                          |
-| `RunEvent`                                       | `runEventSchema` in `packages/core/src/state.ts`                                      |
+| What                                             | Where it is declared                                                               |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `Content` and every type inside it               | `contentSchema` in `packages/core/src/v2/content.ts` (zod; `Content` is `z.infer`) |
+| The content lint (the rules a schema cannot say) | `lintContent` in the same file; `loadContent` in `v2/load.ts` runs it and the sim  |
+| `State`, `Action`, `Phase`, `RejectReason`       | `packages/core/src/v2/state.ts`                                                    |
+| `RunEvent`, `RunLog`                             | `runEventSchema` and `runLogSchema` in `v2/state.ts` and `v2/runlog.ts`            |
 
-This table replaces the hand-written interface blocks that used to sit here. They had drifted badly:
-they named six of the twelve top-level content keys and omitted the whole `read` run event, which is
-how a notice is recorded and therefore how two of the three errand goals are earned. A copy of a type
-is a second place for the type to be wrong, and in a repo whose scoring is replayed server-side from
-the run log, a run event missing from the documented union is the most expensive possible omission.
+Everything above is exported from `@otp/core` as the `v2` namespace. The number is the rules version
+every run log and content file carries (`rules: 2`), so a file written for another rulebook is
+refused. **v1 (three judged travellers, Allow / Restrict / Reject, the trifecta, the errand) was
+removed on 2026-10-22**; `docs/GAME_DESIGN.md` is its design, kept as history and marked superseded.
 
-Pure functions: `reduce(state, action, content)` and `tryReduce` (which returns a typed
-`RejectReason` instead of silently returning the same state), `score(log, content)`,
-`ending(state, content)`, `canEnterCottage(state, content)`, `checkLog` / `isLegalLog` and `derive`
-for the server replay path, and `cameraFor` (section 7).
+This table replaces hand-written interface blocks that had drifted badly. A copy of a type is a
+second place for the type to be wrong, and in a repo whose scoring is replayed server-side from the
+run log, a run event missing from the documented union is the most expensive possible omission.
+
+Pure functions: `v2.reduce(state, action, content)` and `tryReduce` (which returns a typed
+`RejectReason` instead of silently returning the same state), `deal(content, seed)`,
+`result(state, content)` and `ending`, `checkRunLog` for the server replay path, and `cameraFor`
+(section 7).
 **Time is injected** (`at` comes from a clock passed in), never read inside core.
 
 ## 5. Flow / state machine
 
+**v2, as built** (`Phase` in `packages/core/src/v2/state.ts`; the spec is `docs/GAME_DESIGN_V2.md`):
+
 ```
-title -> intro -> explore <-> dialogue -> inspect -> (verdict) -> explore
-                     \________ after 3 verdicts: cottage gate opens ________/
-explore -> cottage -> results -> leaderboard -> (replay -> title)
+title -> howto -> forest <-> talk -> card -> (take | leave) -> forest
+forest -> cottage (arrived) -> reveal -> leaderboard -> (replay -> forest)
+forest, talk or card -> late (the 3:00 timer ran out) -> reveal
 ```
 
-- `explore`: Phaser has input. UI shows the HUD only.
-- `dialogue` / `inspect`: Phaser input is paused; UI has focus (focus trap, Esc backs out one level, never skips a verdict).
-- Verdicts are final for a run (replay to retry).
+- `forest`: Phaser has input. UI shows the HUD (timer and basket) only.
+- `talk` / `card`: Phaser input is paused; UI has focus (focus trap, Esc backs out one level).
+- A skill is taken or left, once. Replay deals a fresh run from a new server seed.
+
+**The v1 flow below is superseded** and kept only so nobody re-proposes it: it had three judged
+travellers and a verdict of Allow, Restrict or Reject.
+
+- (v1) `explore`: Phaser has input. UI shows the HUD only.
+- (v1) `dialogue` / `inspect`: Phaser input is paused; UI has focus (focus trap, Esc backs out one level, never skips a verdict).
+- (v1) Verdicts are final for a run (replay to retry).
 - Cottage door: an NPC-free `trigger-cottage` object on the **doorstep**, NOT at the garden gate; if not
   all verdicts are in, Purple says a hint line ("I should hear all three travellers first"). It moved off
   the gate because the gate sat in front of the note on Grandma's door and made the `sign` errand goal
@@ -137,7 +151,7 @@ explore -> cottage -> results -> leaderboard -> (replay -> title)
 ## 6. World <-> UI wiring
 
 - A tiny typed event bus (`mitt`-style, ~20 lines, hand-written) connects layers. Phaser emits `interact(characterId)`, `enteredCottage`; UI emits `choose(question|verdict)`, `closePanel`.
-- A single store (`createStore(reduce)`) owns `GameState`. Phaser reads `phase` to pause/resume input. UI components subscribe to slices.
+- A single store over the v2 `reduce` owns the run `State`. Phaser reads `phase` to pause/resume input. UI components subscribe to slices.
 - Phaser never imports UI; UI never imports Phaser. Both import `core`.
 
 ## 7. Input and layout
@@ -176,16 +190,18 @@ specified a base of `/v1`, a `POST /runs` handshake returning an **HMAC-signed t
 free-text handle grammar with a profanity blocklist, and rate limiting per hashed IP. None of it
 exists. Two routes shipped instead:
 
-| Method + path     | Purpose                                                                                                                                                                                                                                                     |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/score` | Body `{ handle, log }` — **and nothing else**; the schema is strict and rejects any other key, so a claimed `score` is a 400. Replays the log through `packages/core`, **recomputes the score**, stores the recomputed number. Answers `{ handle, score }`. |
-| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest first, earliest first on a tie. Drops any row whose handle the game could not have minted.                                                                                                        |
+| Method + path     | Purpose                                                                                                                                                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/start` | Draws a seed on the server and answers `{ seed, token }`: the token is the seed and the start time sealed with an HMAC, nothing about the visitor, nothing stored. The run is dealt from that seed.                                                                                  |
+| `POST /api/score` | Body `{ handle, log, token }` — **and nothing else**; the schema is strict, so a claimed `score` is a 400. Checks the token, replays the v2 log through `packages/core`, **recomputes the score**, stores the recomputed number. A late run is refused. Answers `{ handle, score }`. |
+| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest first, earliest first on a tie. Drops any row whose handle the game could not have minted.                                                                                                                                 |
 
 Why the shape changed, so it is not "restored" as a fix:
 
-- **No token handshake, so no HMAC and no secret to rotate.** The token existed to bind a run to a
-  start time. Ranking is by score alone and the table has no duration column, so there is nothing a
-  forged clock could buy and nothing the token would have protected. One round trip instead of two.
+- **The token handshake IS built now (v2, Phase E), in a smaller shape than first specified:**
+  `POST /api/start` only, with no run id and nothing stored. v2's log times are client-reported, so
+  the server needs its own start time to bound them; the key is derived from the service key, so
+  there is no new secret to rotate. `apps/api/README.md` has the checks and the posting window.
 - **No week window.** One board, ranked by score. `created_at` exists only for the tie-break and
   retention.
 - **The handle is minted, not typed.** `packages/core` mints `[a-z]+-[a-z]+-[1-9][0-9]`, which is
@@ -204,7 +220,7 @@ board rather than a crash.
 **Client behaviour is unchanged and is the part that matters:** the game never blocks on the
 network. Every failure — timeout, 4xx, 5xx, an unrecognised body shape — comes back as a message to
 show, never as a throw and never as a hang; results and the **Read the Research** call to action are
-untouched, and the player sees "Leaderboard unavailable right now."
+untouched, and the player is told no reply came back for the post (`ui.chrome.leaderboardDown`).
 
 No cookies, no accounts, no email, no run id and no IP address in the table. A handle and a score,
 which is D10's decision expressed as the schema.
@@ -329,7 +345,7 @@ page works with browser zoom to 200% (UI is DOM, so it reflows).
 
 - **core**: 100% of rules covered; table-driven tests for every skill x verdict; property test that `score(log)` equals the incremental score; ending selection tests.
 - **content**: schema validation + lint rules (every skill has all three outcomes, a best verdict exists, at least one safe skill exists, strings non-empty, no banned vendor names).
-- **e2e (Playwright)**: scripted playthroughs (perfect run = 1000, reject-all run, allow-all run), keyboard-only run, mobile viewport run, leaderboard-down run; axe a11y scan on every screen; screenshot diffs of DOM panels against the mocks with a tolerance.
+- **e2e (Playwright)**: scripted playthroughs (the careful run = 100, a greedy wolf run = 0, a late run, a replay), keyboard-only run, mobile viewport run, leaderboard-down run; axe a11y scan on every screen; screenshot diffs of DOM panels against the mocks with a tolerance.
 - **api**: built and green — 53 tests across 5 files, all in-process against a fake `fetch`, because
   every decision in the service is a pure function of its dependencies. They cover validation,
   recompute, the per-instance limiter, the store's request shapes, and the forged-log suite: a body

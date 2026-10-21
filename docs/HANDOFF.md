@@ -84,7 +84,7 @@ The deploy is **Vercel's Build Output API, written by this repository.** `vercel
 `apps/game/scripts/vercel-output.mjs`, which writes `.vercel/output`: `static/` is
 `apps/game/dist`; `functions/api/top.func` and `score.func` are the two routes from
 `apps/api/api/` bundled by esbuild into one self-contained CommonJS file each, with
-packages/core and content/game.json inlined; and `config.json` carries the headers, copied from
+packages/core and content/game.v2.json inlined; and `config.json` carries the headers, copied from
 `vercel.json` rather than restated. **Vercel compiles none of our TypeScript.** No rewrites: there
 is no SPA fallback and unknown paths 404, as in every arrangement before.
 
@@ -157,7 +157,7 @@ the score **it** computes; **`GET /api/top`** returns the ranked rows. The body 
 could not — `submitRequestSchema` is strict — which is golden rule 6 expressed as a schema rather
 than as a check someone can forget. Storage is Supabase over PostgREST through `fetch`, reached with
 two environment variables and nothing else; a missing one is a `503` and a quietly absent board, not
-a crash. `createLeaderboardClient` in `apps/game/src/net/leaderboard.ts` is **the real adapter now,
+a crash. `startRun`, `submit` and `readBoard` in `apps/game/src/net/leaderboard.ts` are **the real adapter now,
 not the Phase 5 stub**, and still never blocks results or the call to action.
 
 `apps/api/README.md` is the source of truth: the table, the environment, the hostile-caller table,
@@ -165,12 +165,12 @@ and the three manual steps under "What is NOT done". Read it before changing any
 
 ## The cast
 
-Three **characters** offer skills and are judged: Rabbit, Owl, Lantern Keeper. **Four**
-**bystanders** offer nothing and are never scored: Toadstool, Magpie, Snail and Cat — four in
-`content/game.json`, which is what this line counted wrongly as three while listing all four. The split is
-load-bearing, not decoration, and `docs/GAME_DESIGN.md` section 5a has the rules for adding to it.
-A bystander that could be mistaken for a decision is a bug, and four lint rules in
-`packages/core/src/content.ts` exist to catch the ways that happens.
+**Seven characters** each offer one skill, in walking order: Rabbit, Toadstool, Owl, Magpie, Snail,
+Lantern Keeper, Cat, all in `content/game.v2.json`; every run deals 3 good and 4 bad from a seed
+(`docs/GAME_DESIGN_V2.md`). The v1 split no longer exists: three judged travellers and four
+unscored bystanders was superseded when v1 was removed on 2026-10-22, and the lint rules that
+policed it went with it. The map still names the Toadstool, Magpie, Snail and Cat spawns
+`bystander-<id>` because the art was drawn that way; they are ordinary offers now.
 
 ## The walk ends at the door
 

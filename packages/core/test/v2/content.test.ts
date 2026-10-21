@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ContentError } from '../../src/content.ts';
+import { ContentError } from '../../src/v2/load.ts';
 import {
   BANNED_WORDS,
   GIVEAWAY_WORDS,
   LAUNCH_CAST,
+  REAL_WORLD_SENTENCES,
+  REAL_WORLD_WORDS,
   VERDICTS,
   ceiling,
   contentSchema,
@@ -79,6 +81,29 @@ describe('schema', () => {
     }
   });
 
+  it('needs a real-world note on every skill, and only the ui keys the screens ask for', () => {
+    const bare = variant() as { skills: Record<string, unknown>[] };
+    delete bare.skills[0]!['realWorld'];
+    expect(() => loadContent(bare)).toThrow(/realWorld/);
+    const stray = variant();
+    (stray.ui.reveal as Record<string, unknown>)['subtitle'] = 'Fixture: a key nobody asked for.';
+    expect(() => loadContent(stray)).toThrow(ContentError);
+    const noHud = variant() as Record<string, unknown>;
+    delete (noHud['ui'] as Record<string, unknown>)['hud'];
+    expect(() => loadContent(noHud)).toThrow(/ui\.hud/);
+  });
+
+  it('holds the how-to to three or four lines', () => {
+    for (const n of [2, 5]) {
+      const v = variant();
+      v.ui.howTo.steps = Array.from({ length: n }, (_x, i) => `Fixture: step ${i}.`);
+      expect(() => loadContent(v), `${n} steps`).toThrow(/ui\.howTo\.steps/);
+    }
+    const four = variant();
+    four.ui.howTo.steps.push('Fixture: arrive.');
+    expect(() => loadContent(four)).not.toThrow();
+  });
+
   it('lists every issue on the error', () => {
     try {
       loadContent({});
@@ -137,25 +162,36 @@ describe('the deal', () => {
   });
 });
 
-describe('the giveaway: the bad card is the good card and one line', () => {
-  it('finds the replaced line and the added line', () => {
+describe('the giveaway: the bad card is the good card with one line swapped', () => {
+  it('finds the swapped line', () => {
     const c = parsed();
     expect(giveaway(skill(c, 'lantern'))).toBe('Fixture: signals a stranger.');
     expect(giveaway(skill(c, 'courier'))).toBe('Fixture: and a copy elsewhere.');
     expect(giveaway(skill(c, 'locksmith'))).toBe('Fixture: opens any door.');
   });
 
-  it('finds an added line wherever it stands, first, middle or last', () => {
+  /*
+   * SWAPPED, NEVER ADDED: an added line makes the bad card the longer one, and then the line count
+   * is the verdict without a word read. Refused wherever the extra line stands.
+   */
+  it('finds a swapped line in either place, and refuses an added line wherever it stands', () => {
     const c = parsed();
     const s = skill(c, 'lantern');
     const [a, b] = s.good.card.take as [string, string];
+    for (const take of [
+      ['x.', b],
+      [a, 'x.'],
+    ]) {
+      s.bad.card.take = take;
+      expect(giveaway(s), take.join(' | ')).toBe('x.');
+    }
     for (const take of [
       ['x.', a, b],
       [a, 'x.', b],
       [a, b, 'x.'],
     ]) {
       s.bad.card.take = take;
-      expect(giveaway(s), take.join(' | ')).toBe('x.');
+      expect(giveaway(s), take.join(' | ')).toBeNull();
     }
   });
 
@@ -163,31 +199,31 @@ describe('the giveaway: the bad card is the good card and one line', () => {
     [
       'identical cards',
       (c) => void (skill(c, 'lantern').bad.card.take = [...skill(c, 'lantern').good.card.take]),
-      /skill "lantern": the bad card must be the good card with exactly one new line/,
+      /skill "lantern": the bad card must be the good card with exactly one line swapped/,
     ],
     [
       'two lines changed',
       (c) => void (skill(c, 'lantern').bad.card.take = ['Fixture: one.', 'Fixture: two.']),
-      /skill "lantern": the bad card must be the good card with exactly one new line/,
+      /skill "lantern": the bad card must be the good card with exactly one line swapped/,
     ],
     [
-      'two lines added',
+      'a line added',
       (c) => void skill(c, 'courier').bad.card.take.push('Fixture: another.'),
-      /skill "courier": the bad card must be the good card with exactly one new line/,
+      /skill "courier": the bad card must be the good card with exactly one line swapped/,
     ],
     [
       'a line taken away',
       (c) => void skill(c, 'lantern').bad.card.take.pop(),
-      /skill "lantern": the bad card must be the good card with exactly one new line/,
+      /skill "lantern": the bad card must be the good card with exactly one line swapped/,
     ],
     [
-      'an "added" line that is a copy of one already there',
+      'a swapped-in line that is a copy of one already there',
       (c) =>
         void (skill(c, 'courier').bad.card.take = [
           'Fixture: sends your word.',
           'Fixture: sends your word.',
         ]),
-      /skill "courier": the bad card must be the good card with exactly one new line/,
+      /skill "courier": the bad card must be the good card with exactly one line swapped/,
     ],
     [
       'a different leave line',
@@ -203,6 +239,31 @@ describe('the giveaway: the bad card is the good card and one line', () => {
       new RegExp(`skill "locksmith": the giveaway line is 13 words, at most ${GIVEAWAY_WORDS}`),
     ],
     [
+      'a real-world note over the word limit',
+      (c) =>
+        void (skill(c, 'courier').realWorld.note = Array(REAL_WORLD_WORDS + 1)
+          .fill('word')
+          .join(' ')),
+      new RegExp(
+        `skill "courier": the real-world note is ${REAL_WORLD_WORDS + 1} words in 1 sentences, at most ${REAL_WORLD_WORDS} in ${REAL_WORLD_SENTENCES}`,
+      ),
+    ],
+    [
+      'a real-world note of three sentences',
+      (c) => void (skill(c, 'courier').realWorld.note = 'Fixture one. Fixture two! Fixture three?'),
+      /skill "courier": the real-world note is 6 words in 3 sentences/,
+    ],
+    [
+      'a landing highlight that is not a word of its title',
+      (c) => void (c.ui.landing.titleHighlight = 'tit'),
+      /ui\.landing: the highlight "tit" is not a word of "Fixture title"/,
+    ],
+    [
+      'a reveal highlight that is not in its title',
+      (c) => void (c.ui.reveal.titleHighlight = 'wolf'),
+      /ui\.reveal: the highlight "wolf" is not a word of "Fixture reveal"/,
+    ],
+    [
       'one reveal line for both variants',
       (c) => void (skill(c, 'courier').bad.reveal = skill(c, 'courier').good.reveal),
       /skill "courier": the two variants need their own reveal lines/,
@@ -215,9 +276,11 @@ describe('the giveaway: the bad card is the good card and one line', () => {
       expect(lintContent(c).join('\n')).toMatch(expected);
     });
 
-  it('ten words is on the line and passes', () => {
+  it('ten words is on the line and passes; so is a two-sentence note of twenty-five', () => {
     const c = parsed();
     skill(c, 'locksmith').bad.card.take = ['one two three four five six seven eight nine ten.'];
+    skill(c, 'courier').realWorld.note =
+      `${Array(12).fill('word').join(' ')}. ${Array(13).fill('word').join(' ')}.`;
     expect(lintContent(c)).toEqual([]);
   });
 });
@@ -271,11 +334,11 @@ describe('lint rules', () => {
   it('bans every word on the list, whole words only', () => {
     for (const word of BANNED_WORDS) {
       const c = parsed();
-      c.strings['x'] = `Fixture mentions ${word.toUpperCase()} here.`;
+      c.ui.landing.subtitle = `Fixture mentions ${word.toUpperCase()} here.`;
       expect(lintContent(c), word).toHaveLength(1);
     }
     const c = parsed();
-    c.strings['x'] = 'Slackline and awsome are not vendors.';
+    c.ui.landing.subtitle = 'Slackline and awsome are not vendors.';
     expect(lintContent(c)).toEqual([]);
   });
 
@@ -286,8 +349,10 @@ describe('lint rules', () => {
     expect(lintContent(c, { launch: true }).join('\n')).toMatch(
       /a launch build needs 7 skills, 3 dealt good \(found 3, 1 good\)/,
     );
-    c.strings['x'] = 'PLACEHOLDER copy';
-    expect(lintContent(c, { launch: true }).join('\n')).toMatch(/strings\.x: placeholder text/);
+    c.ui.reveal.again = 'PLACEHOLDER copy';
+    expect(lintContent(c, { launch: true }).join('\n')).toMatch(
+      /ui\.reveal\.again: placeholder text/,
+    );
     expect(lintContent(c)).toEqual([]);
   });
 

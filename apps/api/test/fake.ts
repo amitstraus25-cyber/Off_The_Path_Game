@@ -1,9 +1,12 @@
+import { v2 } from '@otp/core';
 import { createStore } from '../src/store.ts';
 import type { FetchLike, LeaderboardStore } from '../src/store.ts';
 import type { StoreConfig } from '../src/env.ts';
 import { createRecentRuns, createWriteBudget } from '../src/limit.ts';
 import type { RecentRuns, WriteBudget } from '../src/limit.ts';
-import { content } from './helpers.ts';
+import { createRunTokens, signingKey } from '../src/token.ts';
+import type { RunTokens } from '../src/token.ts';
+import { content, runOf } from './helpers.ts';
 import type { Deps } from '../src/handlers.ts';
 
 /*
@@ -27,14 +30,29 @@ export interface Harness {
   calls: Call[];
   store: LeaderboardStore;
   deps: Deps;
+  /** The server clock the deps read. Tests move it. */
+  clock: Clock;
   /** The row that was handed to the table, parsed back out of the request body. */
   written(): { handle: string; score: number } | undefined;
 }
 
+/** The server's clock, as a box a test can move. */
+export interface Clock {
+  now: number;
+}
+
+/** An arbitrary epoch, so `issuedAt` is a realistic number and not zero. */
+export const T0 = 1_761_100_000_000;
+
+/** The signer every harness shares, so a token from one harness opens in another -- as on Vercel. */
+export const TOKENS: RunTokens = createRunTokens(signingKey(CONFIG.serviceRoleKey));
+
 /** The per-instance state, fresh per harness so one test's writes never reach another's. */
 export interface Instance {
   budget?: WriteBudget;
+  starts?: WriteBudget;
   recent?: RecentRuns;
+  clock?: Clock;
 }
 
 /**
@@ -73,14 +91,19 @@ export function harness(
     return Promise.resolve(reply({ url, init }));
   };
   const store = createStore(CONFIG, fetchImpl);
+  const clock = instance.clock ?? { now: T0 };
   return {
     calls,
     store,
+    clock,
     deps: {
       content,
       store,
+      tokens: TOKENS,
       budget: instance.budget ?? createWriteBudget(),
+      starts: instance.starts ?? createWriteBudget(120),
       recent: instance.recent ?? createRecentRuns(),
+      now: () => clock.now,
     },
     written() {
       const body = calls[0]?.init.body;
@@ -94,9 +117,33 @@ export function harness(
 export const noStore: Deps = {
   content,
   store: null,
+  tokens: null,
   budget: createWriteBudget(),
+  starts: createWriteBudget(120),
   recent: createRecentRuns(),
+  now: () => T0,
 };
+
+export interface Ticketed {
+  handle: string;
+  log: v2.RunLog;
+  token: string;
+}
+
+/**
+ * A run as an honest browser makes one: a token issued at the clock's current time, a run played
+ * through the real reducer on the token's seed, and the clock moved on to `postAfterMs` past the
+ * run's own end -- the player reading the reveal before pressing Post.
+ */
+export function ticketed(
+  clock: Clock,
+  { strategy = 'careful', postAfterMs = 10_000, handle = 'brave-lantern-42' } = {},
+): Ticketed {
+  const { seed, token } = TOKENS.issue(clock.now);
+  const log = v2.toRunLog(runOf(strategy, seed));
+  clock.now += (log.events.at(-1)?.at ?? 0) + postAfterMs;
+  return { handle, log, token };
+}
 
 export const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {

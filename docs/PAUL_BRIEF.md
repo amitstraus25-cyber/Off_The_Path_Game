@@ -14,8 +14,9 @@ client reports seeing.
 
 - The game is live at `off-the-path-game.vercel.app`, embedded-ready, `frame-ancestors` locked to
   `cyera.com` and `*.cyera.com`.
-- The suite is **807 tests** — `packages/core` 345 at a 100% gate on statements, branches, functions
-  AND lines; `apps/api` 79 at the same gate; `apps/game` 375; `tools/graybox` 8 — plus **299 e2e**.
+- The suite is **647 tests** (2026-10-22, after v1 was removed) — `packages/core` 179 at a 100% gate on
+  statements, branches, functions AND lines; `apps/api` 107 at the same gate; `apps/game` 353;
+  `tools/graybox` 8 — plus **196 e2e**. The game is v2 only; `pnpm sim` plays the v2 strategies.
 - The art generator is deterministic: `pnpm graybox` regenerates `map-forest.json` byte-identical
   unless a painter changed. That property is the proof standard for every art change.
 - Phase 6 (the leaderboard) exists: `apps/api`, score recomputed server-side from the run log,
@@ -113,6 +114,20 @@ pixel` passed happily while the canvas sat on a half pixel. Same shape as trap 1
   `forest-map.ts`'s 7,548 lines are JSDoc and that is correct.
 
 ## 5. The leaderboard, precisely
+
+**Current state, 2026-10-22 (v2, Phase E landed) -- this supersedes anything below where they
+differ.** Three routes are bundled by `vercel-output.mjs`, which reads them off `apps/api/api/`:
+`start`, `score`, `top`. `POST /api/start` answers `{ seed, token }` (an HMAC over the seed and the
+start time, nothing stored); `POST /api/score` takes `{ handle, log, token }`, replays the **v2** log
+and recomputes the score, and refuses a late run, a log dealt from another seed and a post more than
+five minutes off the game clock. A v1 log is a 400, and v1 itself is gone from the repo. The
+discriminators: `GET /api/start` and `GET /api/score` answer **405 `Allow: POST`** when mounted, 404
+when no function exists, 500 `FUNCTION_INVOCATION_FAILED` when it crashed on load; `POST /api/start`
+with `{}` as JSON is **200 `{seed, token}`** with the environment set and 503 without it.
+**Nothing here has been measured against production since the v2 deploy. Do that first.**
+`apps/api/README.md` lists what only a human can do (the Vercel firewall rate limit; whether any v1
+rows, scored out of 1,000, are cleared). The measurements below are 2026-10-21 and v1-era; keep them
+for the history of the Vercel arrangements, not as the state of the world.
 
 **Current state, 2026-10-21 -- read this before the history below it.** The deploy is the Build
 Output API written by `apps/game/scripts/vercel-output.mjs`: the routes in `apps/api/api/` are

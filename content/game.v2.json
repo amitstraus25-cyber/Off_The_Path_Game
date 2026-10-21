@@ -1,6 +1,6 @@
 {
   "rules": 2,
-  "version": "2.0.0-draft.6",
+  "version": "2.0.0-draft.7",
   "status": "draft: copy awaits the human read",
   "deal": {
     "good": 3
@@ -67,6 +67,10 @@
       "name": "Cottage Finder",
       "icon": "item-compass",
       "promise": "This compass will help you find Grandma.",
+      "realWorld": {
+        "term": "Data exfiltration",
+        "note": "Your note is your data. A skill can do its job and still copy that data to someone you never chose."
+      },
       "good": {
         "card": {
           "take": ["Reads Grandma's address from your note.", "Points you to her door."],
@@ -76,11 +80,7 @@
       },
       "bad": {
         "card": {
-          "take": [
-            "Reads Grandma's address from your note.",
-            "Sends a copy of your note to a stranger.",
-            "Points you to her door."
-          ],
+          "take": ["Sends a copy of your note to a stranger.", "Points you to her door."],
           "leave": "You guess the way."
         },
         "reveal": "Found her door. A copy went to the wolf."
@@ -91,6 +91,10 @@
       "name": "Way Teller",
       "icon": "item-signpost",
       "promise": "I take you to her door, the old way.",
+      "realWorld": {
+        "term": "Indirect prompt injection",
+        "note": "An agent that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge."
+      },
       "good": {
         "card": {
           "take": ["Walks you the old way to her door.", "Keeps to the path it knows."],
@@ -111,16 +115,23 @@
       "name": "Word Weaver",
       "icon": "item-translator",
       "promise": "It sends word ahead, so Grandma expects you.",
+      "realWorld": {
+        "term": "Oversharing and public exposure",
+        "note": "A copy at every crossing is data anyone passing can read. Reaching the right person does not undo the copies left behind."
+      },
       "good": {
         "card": {
-          "take": ["Carries your one note to Grandma.", "Shows it to nobody else."],
+          "take": ["Carries your note to Grandma, folded shut.", "Gets there before you do."],
           "leave": "You arrive unannounced."
         },
         "reveal": "Sent word ahead. She expected you."
       },
       "bad": {
         "card": {
-          "take": ["Carries your one note to Grandma.", "Leaves a copy at every crossing."],
+          "take": [
+            "Carries your note to Grandma, folded shut.",
+            "Pins a copy up at every crossing."
+          ],
           "leave": "You arrive unannounced."
         },
         "reveal": "She expected you. So did the wolf."
@@ -131,16 +142,20 @@
       "name": "Short Cut",
       "icon": "item-shortcut",
       "promise": "It gives you the quicker tracks, fresh each evening.",
+      "realWorld": {
+        "term": "Supply-chain risk",
+        "note": "The stranger's map is fetched fresh each night. A skill that loads instructions from elsewhere at run time can change after you approved it."
+      },
       "good": {
         "card": {
-          "take": ["Shows you tonight's quicker tracks.", "Draws them from its own map."],
+          "take": ["Draws tonight's tracks from its own map.", "Shows you the quicker way."],
           "leave": "You go the long way."
         },
         "reveal": "A quicker way. You made good time."
       },
       "bad": {
         "card": {
-          "take": ["Shows you tonight's quicker tracks.", "Takes tonight's map from a stranger."],
+          "take": ["Fetches tonight's tracks from a stranger's map.", "Shows you the quicker way."],
           "leave": "You go the long way."
         },
         "reveal": "A quicker way. The wolf drew it."
@@ -151,6 +166,10 @@
       "name": "Slow Post",
       "icon": "item-parcel",
       "promise": "I carry the heavy things, sealed. You walk light.",
+      "realWorld": {
+        "term": "Third-party data sharing",
+        "note": "The friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way."
+      },
       "good": {
         "card": {
           "take": ["Carries your parcel, sealed.", "Opens for Grandma's hands only."],
@@ -160,11 +179,7 @@
       },
       "bad": {
         "card": {
-          "take": [
-            "Carries your parcel, sealed.",
-            "Opens for Grandma's hands only.",
-            "Lets a friend peek inside on the way."
-          ],
+          "take": ["Carries your parcel, sealed.", "Lets a friend peek inside on the way."],
           "leave": "You carry it yourself."
         },
         "reveal": "It reached her. The wolf looked first."
@@ -175,6 +190,10 @@
       "name": "Night Light",
       "icon": "item-lantern",
       "promise": "It shows you what the signs say.",
+      "realWorld": {
+        "term": "Autonomy without human approval",
+        "note": "Reading the signs helps you decide. Acting on them without asking you skips the human approval that important actions need."
+      },
       "good": {
         "card": {
           "take": ["Reads every sign aloud to you.", "Leaves the choosing to you."],
@@ -184,7 +203,7 @@
       },
       "bad": {
         "card": {
-          "take": ["Reads every sign aloud to you.", "Does whatever the signs tell it to."],
+          "take": ["Reads every sign aloud to you.", "Does what the signs say without asking you."],
           "leave": "You read in the dark."
         },
         "reveal": "One sign was the wolf's. It obeyed."
@@ -195,16 +214,20 @@
       "name": "Latch Lifter",
       "icon": "item-latch",
       "promise": "I open Grandma's door. I feel where it sticks.",
+      "realWorld": {
+        "term": "Over-broad access",
+        "note": "A latch that lifts for anyone is access with no check on who is asking. Give a skill only the access its job needs."
+      },
       "good": {
         "card": {
-          "take": ["Lifts her latch when you knock.", "Stays shut for anyone else."],
+          "take": ["Lifts her latch when you knock.", "Locks it again behind you."],
           "leave": "You knock and wait."
         },
         "reveal": "Opened at the first knock."
       },
       "bad": {
         "card": {
-          "take": ["Lifts her latch when you knock.", "Opens for anyone who knocks, any hour."],
+          "take": ["Lifts her latch for anyone who knocks.", "Locks it again behind you."],
           "leave": "You knock and wait."
         },
         "reveal": "The wolf knocked first. It opened."
@@ -231,5 +254,98 @@
       "lines": ["You found the door long after dark.", "Grandma had given up waiting."]
     }
   },
-  "strings": {}
+  "ui": {
+    "landing": {
+      "title": "Off the Path",
+      "titleHighlight": "Path",
+      "subtitle": "That's not my grandma",
+      "start": "Begin the walk"
+    },
+    "howTo": {
+      "title": "How to play",
+      "steps": [
+        "Walk the path and meet each character.",
+        "Open each card and read what the skill does.",
+        "Take the skill or leave it.",
+        "Reach Grandma's door before 3:00."
+      ]
+    },
+    "hud": {
+      "time": "Time left",
+      "basket": "Basket",
+      "twoMinutes": "2 minutes left",
+      "oneMinute": "1 minute left",
+      "thirtySeconds": "30 seconds left",
+      "timeUp": "Time is up"
+    },
+    "reveal": {
+      "title": "What each skill really did",
+      "titleHighlight": "really",
+      "took": "You took",
+      "left": "You left",
+      "good": "Safe",
+      "bad": "Unsafe",
+      "promised": "It promised",
+      "did": "What it did",
+      "giveaway": "The line that gave it away",
+      "realWorld": "In the real world",
+      "score": "Your score",
+      "question": "Who wrote the instructions your agent follows?",
+      "cta": "Read the research",
+      "again": "Walk it again"
+    },
+    "chrome": {
+      "leaderboardDown": "No reply came back for that post.",
+      "leaderboardRefused": "That run could not be posted.",
+      "leaderboardAlready": "That run is already on the board.",
+      "handleAssigned": "Posted to the board as {handle}.",
+      "howToPlayWalkTouch": "Drag the joystick to walk. Tap A to talk.",
+      "controlsHint": "Arrows or WASD to walk, Space to talk, Esc to go back.",
+      "controlsHintTouch": "Use the walk buttons to move, and Talk or interact when someone is within reach.",
+      "touchWalkLabel": "Walk",
+      "touchWalkUp": "Walk up",
+      "touchWalkDown": "Walk down",
+      "touchWalkLeft": "Walk left",
+      "touchWalkRight": "Walk right",
+      "touchWalkStop": "Stop",
+      "touchInteract": "Talk or interact",
+      "musicLabel": "Music",
+      "musicOn": "on",
+      "musicOff": "off",
+      "loadFailedTitle": "The forest would not load",
+      "loadFailedBody": "Part of the game could not be reached. Check your connection, then try again.",
+      "loadFailedRetry": "Try again",
+      "crashTitle": "Something went wrong",
+      "crashBody": "The game stopped working. Reloading it will take you back to the start.",
+      "crashReload": "Reload the game",
+      "arriveTitle": "Arrive",
+      "arriveAsk": "Step inside",
+      "researchFooter": "The Off the Path research, by",
+      "postHeading": "Post your score",
+      "handleLabel": "Your name on the board",
+      "handleReroll": "Try another name",
+      "handleHint": "The board hands out its own names: two words and a number.",
+      "privacyLine": "We store your handle and score only. No account, no email, no cookies.",
+      "leaderboardTitle": "Wolf Spotters",
+      "leaderboardTitleHighlight": "Spotters",
+      "boardLoading": "Reading the board.",
+      "boardReady": "The highest scores so far. The board can take a minute to catch up.",
+      "boardEmpty": "No runs on the board yet. Yours would be the first.",
+      "boardEmptyAfterPost": "No runs are showing yet. The board can take a minute to catch up.",
+      "boardDown": "The board is not answering. Your score is still on this page.",
+      "boardRetry": "Ask the board again",
+      "boardYouLabel": "Your run",
+      "boardRow": "Rank {rank}. {handle}, {score} points.",
+      "boardRowYou": "Rank {rank}. {handle}, {score} points. This is your run.",
+      "post": "Post",
+      "replay": "Walk it again",
+      "worldSummaryLabel": "The forest, in words",
+      "worldTravellerMet": "met, no answer given yet",
+      "worldTravellerUnmet": "not met yet",
+      "worldTravellerNear": "within reach: you can talk now.",
+      "worldBearings": "north of you|north-east of you|east of you|south-east of you|south of you|south-west of you|west of you|north-west of you",
+      "worldDistances": "a few steps away|a short walk away|a long way off",
+      "leaderboardClosed": "Posting has closed for that run."
+    }
+  }
 }

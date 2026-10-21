@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
-import { ready } from './helpers';
+import { answerAllAndArrive, ready, toTheReveal } from './helpers';
 
 /*
  * THE PRIVACY LINE IS TRUE: after a whole run the visitor's browser holds nothing of ours.
@@ -25,8 +25,8 @@ import { ready } from './helpers';
  */
 
 const content = JSON.parse(
-  readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
-) as { strings: Record<string, string> };
+  readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
+) as { ui: { chrome: Record<string, string> } };
 
 interface StorageContents {
   localStorage: string[];
@@ -62,10 +62,19 @@ const browserCookies = (context: BrowserContext) => context.cookies();
 
 /** Plays the whole way from the title to the Results screen, the way a player does. */
 async function playWholeRun(page: Page): Promise<void> {
+  // A run the server started, so the reveal carries the post form and its privacy line.
+  await page.route('**/api/start', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ seed: 0, token: 'dGVzdA.c2ln' }),
+    }),
+  );
   await page.goto('/');
   await ready(page);
   await page.getByRole('button', { name: /Begin the walk/ }).click();
-  await page.waitForFunction(() => window.__otp?.store.getState().phase === 'explore');
+  await page.getByRole('button', { name: /Start walking/ }).click();
+  await page.waitForFunction(() => window.__otp?.store.getState().phase === 'forest');
 
   // The music, turned on and off and on again: the only control in the game that ever kept a setting.
   const music = page.getByRole('switch', { name: /music/i });
@@ -76,29 +85,8 @@ async function playWholeRun(page: Page): Promise<void> {
   await music.click();
   await expect(music).toHaveAttribute('aria-checked', 'true');
 
-  await page.evaluate(() => {
-    const { store } = window.__otp!;
-    const verdicts: [string, string, string][] = [
-      ['rabbit', 'cottage-finder', 'restrict'],
-      ['owl', 'word-weaver', 'reject'],
-      ['lantern-keeper', 'night-light', 'restrict'],
-    ];
-    for (const [character, skill, verdict] of verdicts) {
-      store.dispatch({ type: 'MEET', c: character });
-      store.dispatch({ type: 'ASK', c: character, q: 'needs' });
-      store.dispatch({ type: 'INSPECT', s: skill });
-      store.dispatch({ type: 'VERDICT', s: skill, v: verdict });
-    }
-    store.dispatch({ type: 'ENTER_COTTAGE' });
-  });
-
-  await expect(page.locator('.otp-arrive')).toBeVisible();
-  for (let i = 0; i < 8; i++) {
-    const go = page.getByRole('button', { name: 'Go on' });
-    if ((await go.count()) === 0) break;
-    await go.click();
-  }
-  await page.getByRole('button', { name: /Step inside/ }).click();
+  await answerAllAndArrive(page, 'leave');
+  await toTheReveal(page);
   await expect(page.locator('.otp-hero__score')).toBeVisible();
 }
 
@@ -109,8 +97,8 @@ test('a whole run, with the music toggled, leaves every kind of browser storage 
   await playWholeRun(page);
 
   // The sentence under test is on the screen the run ends on, in the words Legal approved.
-  const line = content.strings['privacyLine'];
-  expect(line, 'content/game.json has no privacyLine').toBeTruthy();
+  const line = content.ui.chrome['privacyLine'];
+  expect(line, 'content/game.v2.json has no privacyLine').toBeTruthy();
   await expect(page.locator('body')).toContainText(line!);
   expect(line).toMatch(/no cookies/i);
 

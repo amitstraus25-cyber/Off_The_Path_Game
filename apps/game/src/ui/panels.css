@@ -1320,7 +1320,11 @@
   justify-self: start;
   background: none;
   border: none;
-  padding: 0;
+  /* It is the only way out of a conversation without answering, so it carries the touch floor
+     .otp-dialogue__show does; 14px of type alone measured 43 x 14 at 375. */
+  padding: 4px 0;
+  min-height: var(--otp-touch-min);
+  min-width: var(--otp-touch-min);
   color: var(--cyera-ash);
   font: 400 max(12px, calc(14px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
   text-decoration: underline;

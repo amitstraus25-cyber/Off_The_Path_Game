@@ -1,51 +1,18 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import {
-  DEFAULT_TOP_LIMIT,
-  VERDICTS,
-  exposedNotices,
-  liveCapabilities,
-  recap,
-  score,
-} from '@otp/core';
-import type { Content, GameState, GoalResult, RecapRow, SkillId, Verdict } from '@otp/core';
+import { DEFAULT_TOP_LIMIT } from '@otp/core';
+import type { v2 } from '@otp/core';
 import { RESEARCH_URL } from '../embed/postMessage';
 /*
  * TWO STATEMENTS FROM ONE MODULE, DELIBERATELY. `test/handle-field.test.ts` matches this exact
  * line -- `import { newHandle } from '../net/leaderboard'` -- to hold the screen and the wire to a
- * single mint function, which is the guard that caught the round where the name on the screen and
- * the name in the request body were different. Merging these into `{ newHandle, readTop }` reddens
- * it. That file belongs to another owner, so the import stays split and this note is why.
+ * single mint function. Merging these reddens it.
  */
 import { newHandle } from '../net/leaderboard';
-import { readTop } from '../net/leaderboard';
+import { readBoard as readTheBoard } from '../net/leaderboard';
 import type { BoardRead, PostOutcome } from '../net/leaderboard';
 import { CyeraMark, Highlighted, Panel } from './components';
-import { Basket } from './SkillCard';
-import { Trifecta } from './Trifecta';
+import { PENDING, strings } from './copy';
 
-/*
- * THE RECAP BADGES WERE TYPED, AND TWO OF THE THREE WERE NOT IN THE FONT. Measured, not asserted:
- * `public/fonts/HafferUprightsVF.ttf` carries 789 codepoints, and U+2713 CHECK MARK and U+2296
- * CIRCLED MINUS are both outside them, while "!" is inside. So this column -- whose whole job is to
- * read as one vocabulary down the page -- rendered two of its three marks from whatever the next
- * family in the stack is, at that family's weight and on its baseline, beside one real Haffer
- * glyph. It is precisely the defect SkillCard.tsx describes over its verdict glyphs, which is why
- * those are drawn.
- *
- * Both are now drawn, on the handover the previous round left here: the two marks as SVG, and the
- * specs that used to read them asserting on `data-glyph` instead of `textContent`
- * (`e2e/trifecta.spec.ts`, `e2e/results-payoff.spec.ts`). `data-glyph` is on the badge for every
- * state including "!", so a spec never has to know which of the three is drawn and which is typed.
- *
- * "!" stays as text -- it is Haffer's own, and it is what both UI_FOUNDATIONS section 5 and the
- * board's Inspect disc show.
- *
- * The paths are copied from SkillCard.tsx rather than imported, deliberately and with a cost: the
- * errand row's comment below claims its mark is "the Restrict glyph from the verdict pills", and
- * before this it was a lookalike character on a different baseline. Now it is the same two shapes,
- * to the coordinate. SkillCard.tsx belongs to another owner this round, so exporting them from
- * there is the next person's one-line tidy, not a cross-task edit today.
- */
 const CheckGlyph = () => (
   <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
     <path
@@ -59,18 +26,15 @@ const CheckGlyph = () => (
   </svg>
 );
 
-const TradedGlyph = () => (
-  <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
-    <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="2" />
-    <path d="M6.5 10h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-  </svg>
-);
-
-/** The badge, named by what it means. `data-glyph` is what the specs read; the mark is what a player sees. */
-function Badge({ glyph }: { glyph: 'check' | 'traded' | 'missed' }) {
+/**
+ * The reveal's mark: a drawn check for a skill dealt safe, Haffer's own "!" for one dealt unsafe.
+ * A SHAPE, beside a WORD (`Safe` / `Unsafe`), on a ground -- never a colour alone, and no red or
+ * green anywhere (UI_FOUNDATIONS section 5). `data-glyph` is what the specs read.
+ */
+function Badge({ glyph }: { glyph: 'check' | 'missed' }) {
   return (
     <span class="otp-recap__badge" data-glyph={glyph} aria-hidden="true">
-      {glyph === 'check' ? <CheckGlyph /> : glyph === 'traded' ? <TradedGlyph /> : '!'}
+      {glyph === 'check' ? <CheckGlyph /> : '!'}
     </span>
   );
 }
@@ -96,214 +60,6 @@ export function validateHandle(raw: string): string | null {
   if (BLOCKED.some((word) => handle.toLowerCase().includes(word)))
     return 'Please pick a different handle.';
   return null;
-}
-
-const VERDICT_WORD: Record<Verdict, string> = {
-  allow: 'verdictAllowed',
-  restrict: 'verdictRestricted',
-  reject: 'verdictRejected',
-};
-
-/**
- * How an errand row should read. Three states, not two.
- *
- * Two of Grandma's three errands need a capability that the best verdict withholds: "Leave word at
- * the post" needs the Word Weaver's sending, whose best verdict is Reject, and "Read the note she
- * pinned to her door" needs Night Light left listening to strangers, whose best verdict is Restrict.
- * A player who gets all three skills right therefore arrives with one errand done and two given up
- * -- and the screen marked both of those with the Haze ground and the Black "!" disc that
- * UI_FOUNDATIONS section 5 reserves for "Missed it". The one run that understands the lesson was
- * told twice that it had failed, on the screen that carries the argument (docs/UX_REVIEW.md 15).
- *
- * `recap()` is right about the skills themselves -- content lint pins the best verdict to
- * `maxPerSkill`, so a correct Reject already scores full marks and renders as "Caught it" -- so
- * this is a view question about the errand rows, not a scoring one, and nothing here changes a
- * number the server recomputes.
- */
-export type ErrandState = 'met' | 'traded' | 'missed';
-
-/** Every verdict actually given on a skill that could have granted what this errand needed. */
-function playedFor(
-  goal: GoalResult,
-  verdicts: Readonly<Record<SkillId, Verdict>>,
-  content: Content,
-): { outcome: Content['skills'][number]['outcomes'][Verdict]; best: boolean }[] {
-  return content.skills.flatMap((skill) => {
-    if (!VERDICTS.some((v) => skill.outcomes[v].grants.includes(goal.needs))) return [];
-    const given = verdicts[skill.id];
-    return given === undefined
-      ? []
-      : [{ outcome: skill.outcomes[given], best: given === skill.bestVerdict }];
-  });
-}
-
-export function errandState(
-  goal: GoalResult,
-  verdicts: Readonly<Record<SkillId, Verdict>>,
-  content: Content,
-): ErrandState {
-  if (goal.met) return 'met';
-  const chosen = playedFor(goal, verdicts, content);
-  /*
-   * The capability was handed over cleanly and the errand still went undone, so what was missing
-   * was the walk, not the verdict: holding the Word Weaver on Restrict and never going to the post
-   * is a miss, and saying "traded for the boundary" there would be the same kind of lie as finding
-   * 1. A grant that comes with a flag is not clean -- that errand was run for the wolf.
-   */
-  if (chosen.some((c) => c.outcome.grants.includes(goal.needs) && c.outcome.flagsSet.length === 0))
-    return 'missed';
-  // Given up because every skill that could have granted it was played the way the game says is
-  // right. Refusing Cottage Finder outright loses the same errand for nothing, and stays a miss.
-  return chosen.length > 0 && chosen.every((c) => c.best) ? 'traded' : 'missed';
-}
-
-/**
- * WHY A MISS NEEDS THREE SENTENCES AND HAD ONE.
- *
- * `errandState` already knows the difference between a trade and a miss, and the screen renders
- * both. What it did not do is say WHICH KIND of miss, so all three printed `errandNeeded` --
- * "Needed a skill that reaches into your basket" -- including the two where the player was holding
- * exactly that skill. On an allow/allow/allow run all three errand rows made that claim with the
- * route, the translator and the lantern sitting in the basket eight lines below them, on the one
- * screen whose argument is "read what the thing actually does". A screen that misreports the
- * player's own run is the same defect as findings 1, 13 and 15, and this is its fourth instance.
- *
- *  - `refused`: no verdict the player gave grants it. The capability is genuinely not in hand, and
- *    "needed a skill that..." is true. This is the only case the old copy was right about.
- *  - `unused`: granted, cleanly, and the errand was never run. Night Light allowed grants the
- *    listening with no flag; not walking to the notice is the player's omission on the walk.
- *  - `flagged`: granted, and something came with it. Cottage Finder allowed hands over the basket
- *    and takes the key, so the errand did not go undone for want of a capability -- it ran, and it
- *    ran for the wolf.
- *
- * Split out from `errandState` rather than folded into it so the badge, the Haze ground and the
- * three unit cases that pin them keep their three states: this is which sentence to print, not
- * which mark to draw. Nothing here touches a number the server recomputes.
- */
-export type ErrandMiss = 'refused' | 'unused' | 'flagged';
-
-export function errandMiss(
-  goal: GoalResult,
-  verdicts: Readonly<Record<SkillId, Verdict>>,
-  content: Content,
-): ErrandMiss {
-  const granted = playedFor(goal, verdicts, content).filter((c) =>
-    c.outcome.grants.includes(goal.needs),
-  );
-  if (granted.length === 0) return 'refused';
-  return granted.some((c) => c.outcome.flagsSet.length === 0) ? 'unused' : 'flagged';
-}
-
-/**
- * How a SKILL row should read. Three states, for the same reason the errand rows have three.
- *
- * `recap()` reports two booleans and this screen used only one of them: `success`, which is
- * `points === maxPerSkill`. So every verdict that was not the best one drew the Black "!" disc and
- * the Haze ground that UI_FOUNDATIONS section 5 reserves for "Missed it" -- the mark that means the
- * hidden action ran. Measured on the shipped content, over all 27 verdict combinations x 4 notice
- * readings: the game has SIX lines that reach the ceiling, and two of them (Cottage Finder
- * restricted, Word Weaver rejected, Night Light ALLOWED, with the door note read) printed "Missed
- * it" on Night Light under a headline reading the full score. A screen that tells a player who
- * scored everything that they failed is the same defect as findings 1, 13 and 15, on the row the
- * section heading promises is about what was hiding.
- *
- * The third state is the one `recap()` already measures and nothing read: `compromised`, which is
- * "this verdict set a flag", which is "something was taken". That is what separates allowing the
- * compass (the key goes) from rejecting it (you walk without a map): both score below the maximum,
- * only one of them was taken from.
- *
- *  - `caught`   full marks. Check mark, Natural ground.
- *  - `costly`   below full marks and nothing taken. The circled minus and Natural ground, exactly
- *               as an errand given up on purpose -- it is the same claim, that the player paid for
- *               something rather than failed to notice it. The chip says `nothingTaken`, which is
- *               the mechanical truth in every case: there is no run on which a flagless verdict
- *               took something, so unlike a judgement about the verdict's quality it cannot go
- *               wrong on the tied-optimal line above.
- *  - `missed`   a flag was set. The "!" disc and the Haze ground, unchanged.
- *
- * `compromised` is read FIRST so the failure mark always wins. Content lint does not forbid a
- * maximum-scoring verdict that also sets a flag (it only forbids it on the declared best verdict),
- * and a row that both lost the key and wore a check mark would be the worst of the three.
- *
- * This lives in the component, beside `errandState`, for the reason that one states: it is the
- * component's question. `recap()` is unchanged, so no number the server recomputes moves
- * (CLAUDE.md golden rule 6) and `tools/sim` keeps reading the field it reads today.
- */
-export type SkillState = 'caught' | 'costly' | 'missed';
-
-export const skillState = (row: Pick<RecapRow, 'success' | 'compromised'>): SkillState =>
-  row.compromised ? 'missed' : row.success ? 'caught' : 'costly';
-
-/*
- * Each of the four lines reads "<prefix> <the capability's own label>.", which is the shape
- * `errandTradedDetail` already uses, so the capability is named in every state and only the claim
- * about it changes.
- *
- * `errandUnusedDetail` and `errandFlaggedDetail` are the two strings this needed from the content
- * file, and they landed in content/game.json while this was being written, so there is no code-side
- * literal behind either -- which is what `test/strings.test.ts` wants, and why PENDING stays empty.
- */
-
-export interface ResultsProps {
-  content: Content;
-  state: GameState;
-  onReplay(): void;
-  onReadResearch(): void;
-  /**
-   * Posts the run and answers with the sentence to show AND which of the four it is.
-   *
-   * The key is what lets `boardRowKey` decline the row's claim when the notice denies it, without
-   * matching the sentence against the content file -- the coupling `submit()` refuses, and the
-   * same bound-against-a-spelling trap the board note already walked into once.
-   */
-  onPost(handle: string): Promise<PostOutcome | null>;
-  /**
-   * Reads the board. Resolves to one of three answers; never throws, never hangs.
-   *
-   * OPTIONAL, and that is a deliberate deviation from the build spec, which wires this through
-   * `App.tsx` and `main.ts` beside `onPost`. Both of those files belong to another owner this
-   * round and two owners never share a file, so the default is the adapter itself and the seam
-   * stays here for the moment they can be edited: pass `onTop` and nothing else changes. It is
-   * also what `test/board.test.ts` and the e2e board specs inject.
-   */
-  onTop?(limit: number): Promise<BoardRead>;
-}
-
-/**
- * "600 from your three verdicts · 100 for asking · 200 for never running all three at once"
- *
- * Every bonus `score()` adds into `total` must have a clause here, or the parts do not sum to the
- * headline and the screen that carries the argument is wrong about the player's own run -- the
- * same failure as finding 1, in arithmetic. `trustBonus` had no clause, so a clean
- * take-one-on-trust run showed parts totalling 800 under a headline of 900 (UX_REVIEW finding 13).
- * `trustBreakdown` is the copy that was written for it, and it IS wired -- sixteen lines below, in
- * the `result.trustBonus > 0` clause. This sentence used to end "and never wired", which was true
- * when the copy was first written and false from the moment the clause landed; it survived a round
- * and was repeated in `test/strings.test.ts`'s docstring, which has since corrected itself.
- *
- * Exported for `test/results.test.ts`, which adds the clauses up and holds them against
- * `score().total` on every run shape, so the next bonus cannot be added without one.
- */
-export function breakdown(result: ReturnType<typeof score>, content: Content): string {
-  const verdictPoints = result.perSkill.reduce((sum, p) => sum + p.points, 0);
-  const decided = result.perSkill.filter((p) => p.verdict !== null).length;
-  const parts = [`${verdictPoints} from your ${decided === 1 ? 'verdict' : `${decided} verdicts`}`];
-  if (result.bonus > 0) parts.push(`${result.bonus} for asking before you decided`);
-  if (result.boundaryBonus > 0)
-    parts.push(`${result.boundaryBonus} for never running all three at once`);
-  const met = result.goals.filter((g) => g.met).length;
-  /*
-   * "for 1 of 3 of what Grandma asked" put two `of`s in the one sentence that explains the score,
-   * and the second one governed nothing: the reader parses "3 of what Grandma asked" and finds no
-   * noun. The count needs a thing to count, so it has one.
-   */
-  if (result.errandBonus > 0)
-    parts.push(
-      `${result.errandBonus} for ${met} of the ${result.goals.length} things Grandma asked for`,
-    );
-  if (result.trustBonus > 0)
-    parts.push(`${result.trustBonus} ${content.strings['trustBreakdown'] ?? ''}`.trim());
-  return parts.join(' · ');
 }
 
 /**
@@ -438,6 +194,8 @@ export const NOTICE_CLAIMS: Record<string, readonly Claim[]> = {
   leaderboardAlready: ['readerRunIsOnBoard'],
   leaderboardRefused: ['readerRunDidNotGoUp'],
   leaderboardDown: ['postNotAnswered'],
+  // v2's 410: the run was real and its posting window shut, so it did not go up.
+  leaderboardClosed: ['readerRunDidNotGoUp'],
 };
 
 /**
@@ -621,95 +379,67 @@ export function boardReads(): BoardReads {
   };
 }
 
-export function Results({ content, state, onReplay, onReadResearch, onPost, onTop }: ResultsProps) {
-  const s = (key: string): string => content.strings[key] ?? '';
-  const result = score(state.log, content);
-  const rows = recap(state.log, content);
-  const fired = exposedNotices(state.log, content);
+export interface ResultsProps {
+  content: v2.Content;
+  /** What the run came to: the score, the ending and the reveal, from core (golden rule 6). */
+  run: v2.RunResult;
+  onReplay(): void;
+  onReadResearch(): void;
+  /**
+   * Why this run cannot be posted, or null when it can. A run the server did not start has no
+   * token, and a late run is refused by rule (apps/api): both are said, never a dead button.
+   */
+  cannotPost: string | null;
+  /** Posts the run; answers the sentence to show AND which one it is (see `PostOutcome`). */
+  onPost(handle: string): Promise<PostOutcome>;
+  /** Reads the board. Optional: the default is the adapter itself; specs and tests inject. */
+  onTop?(limit: number): Promise<BoardRead>;
+}
+
+/**
+ * 05 Reveal. THE PRODUCT (GAME_DESIGN_V2 section 6): one row per offer, in walking order -- what
+ * it was dealt, what the player did with it, what it did, and for a bad one the card line that
+ * said so -- then the score, the ending, the question and the one Lime, the post and the board.
+ *
+ * Every offer is shown, taken or left, because the lesson is in both directions: a bad skill left
+ * is the player reading the line, and a good one left is caution that brought Grandma nothing.
+ */
+export function Results({
+  content,
+  run,
+  onReplay,
+  onReadResearch,
+  cannotPost,
+  onPost,
+  onTop,
+}: ResultsProps) {
+  const s = (key: string): string => strings[key] ?? '';
+  const r = content.ui.reveal;
+  const ending = run.ending ? content.endings[run.ending] : null;
 
   /*
-   * Results is the only long panel that skipped the project's own fix for this. `Dialogue`,
-   * `SkillCard` and `Notice` all focus their body on mount; Results did not, so on arrival
-   * `activeElement` was BODY -- and because `.otp-screen` is a `position: fixed` scroller, the
-   * document itself has zero overflow, which left PageDown, End, Space and the arrows all no-ops
-   * over a panel 1,680px long in an 860px viewport. The keyboard could reach the call to action by
-   * tabbing and no other way (docs/UX_REVIEW.md 9).
-   *
-   * No focus trap here: Results is a whole screen, not a modal, and there is nothing behind it to
-   * tab into. `preventScroll` because the body starts at the top of its own scroller and a focus
-   * jump would be the player's first frame of the screen.
+   * The body takes focus on arrival, so PageDown, End and the arrows scroll the screen from the
+   * first key (docs/UX_REVIEW.md 9). No trap: Results is a whole screen, not a modal.
    */
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
     body.current?.focus({ preventScroll: true });
   }, []);
 
-  /** The one sentence under an errand row, chosen by what actually happened to the capability. */
-  const errandDetail = (errand: ErrandState, goal: GoalResult): string => {
-    if (errand === 'traded') return s('errandTradedDetail');
-    switch (errandMiss(goal, state.verdicts, content)) {
-      case 'unused':
-        return s('errandUnusedDetail');
-      case 'flagged':
-        return s('errandFlaggedDetail');
-      default:
-        return s('errandNeeded');
-    }
-  };
-
-  /*
-   * Minted once per mount, not once per render: `useState(newHandle)` passes the FUNCTION, so
-   * Preact calls it for the initial state only. `useState(newHandle())` would mint a fresh name on
-   * every render -- and this component re-renders on every post -- so the name under the player's
-   * eyes would change between reading it and pressing the button.
-   */
+  /* Minted once per mount: `useState(newHandle)` passes the function (test/handle-field.test.ts). */
   const [handle, setHandle] = useState(newHandle);
   const [notice, setNotice] = useState<PostOutcome | null>(null);
   const [posting, setPosting] = useState(false);
-  /*
-   * Whether a post is out, as a ref, so the two buttons can refuse a press that arrives before the
-   * render that says `posting`. They are `aria-disabled` while it is true, not `disabled` (see the
-   * form below for why), and `aria-disabled` does not stop a click -- this does.
-   */
   const inFlight = useRef(false);
   const [board, setBoard] = useState<BoardState>({ state: 'loading' });
-  /*
-   * Whether this visit has pressed Post. ATTEMPTED, never "posted": the old name claimed an
-   * outcome this screen has no way to learn, and a name that asserts more than the code knows is
-   * how a comment becomes the only place a fact lives. It only ever goes true, and it is what
-   * `boardNoteKey` turns on -- see the long note over that function.
-   */
+  /* Whether this visit has pressed Post. Only ever goes true; see `boardNoteKey`. */
   const [attempted, setAttempted] = useState(false);
-
-  /*
-   * One read on mount, and one more after any post attempt.
-   *
-   * Unconditional after a post, not "on success": `onPost` resolves to a SENTENCE, and deciding
-   * success by matching that sentence would couple this screen to copy a human owns. A wasted read
-   * of a same-origin, edge-cached GET costs nothing; misreading the copy costs the player their row.
-   *
-   * THE GATE, NOT A FLAG PER CALL. `boardReads()` above carries the whole argument: reads used to
-   * settle by arrival order rather than issue order, and the disposer that was supposed to stop a
-   * setState after unmount was dropped on two of the three call paths. Every read now asks the gate
-   * before it writes, so "no read answers after this screen is gone" holds on all three -- the
-   * mount effect, the retry button and `submit()` -- rather than on whoever remembered the return
-   * value. The disposer is still returned, and it still means something: it abandons THIS read
-   * without starting another.
-   *
-   * `useRef(boardReads())` evaluates the factory every render and keeps the first result, which is
-   * the documented shape `useFocusTrap`'s `mountedAt` uses. The object it allocates and throws away
-   * is two closures over two numbers.
-   *
-   * `DEFAULT_TOP_LIMIT` is imported, never written as `10`. A page size typed into a component is
-   * the comment-instead-of-derivation trap in miniature: the number would then exist in two places
-   * and only one of them is the one the server clamps against.
-   */
   const reads = useRef(boardReads()).current;
 
   const readBoard = (): (() => void) => {
     const ticket = reads.begin();
     setBoard({ state: 'loading' });
-    void (onTop ?? readTop)(DEFAULT_TOP_LIMIT).then((read) => {
+    void (onTop ?? readTheBoard)(DEFAULT_TOP_LIMIT).then((read) => {
       if (reads.mayAnswer(ticket)) setBoard(read);
     });
     return () => reads.abandon(ticket);
@@ -723,7 +453,6 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
     };
   }, []);
 
-  /** A different name, and the stale "Posted as ..." line cleared with it. */
   const reroll = (): void => {
     if (inFlight.current) return;
     setHandle(newHandle());
@@ -736,264 +465,105 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
     inFlight.current = true;
     setNotice(null);
     setPosting(true);
-    /*
-     * Set AT THE PRESS, not after the reply, and that is the point rather than an optimisation.
-     * `attempted` only chooses which of two true sentences the empty board shows, so there is no
-     * reason to wait -- and waiting is what leaves a window, however many ticks wide, in which
-     * "Posted to the board as ..." can be painted above "Yours would be the first". The defect
-     * being closed is two sentences on one screen, so the flag moves before either can be.
-     *
-     * IT IS ALSO WHAT MAKES `boardEmpty`'S INVITATION SAFE. This line runs before `setNotice`
-     * below can put anything in `.otp-error`, and nothing ever sets it back, so a render with a
-     * post notice in it always has this flag true -- which is the whole proof that the one line
-     * claiming the board holds nothing can never meet a notice at all.
-     */
+    // At the press, before any notice can exist: see `boardNoteKey`.
     setAttempted(true);
     try {
       setNotice(await onPost(handle));
     } catch {
-      /*
-       * `onPost` promises an outcome or null and the shipped one cannot throw -- `ask()` swallows
-       * every network failure -- so this is for the day a caller's promise breaks, or for something
-       * outside `ask()`: `submit()` builds its body before it reaches it. Without a catch that
-       * rejection left the handler unhandled, the player was told nothing, and the board read ran
-       * on as if a post had been answered.
-       *
-       * What the player is told is the one sentence that claims least: THIS POST DID NOT COME
-       * BACK (`postNotAnswered`), scoped to the post and silent about the run, which is true
-       * whether or not the server took it. It is the same line a lost reply gets, and it is already
-       * declared in NOTICE_CLAIMS, so the row and the board note stay inside the pairing property.
-       */
+      // `onPost` never throws; if a caller's promise ever does, say the claim that claims least.
       setNotice({ key: 'leaderboardDown', text: s('leaderboardDown') });
     } finally {
-      // A post that throws must not leave both buttons refusing every press for the rest of the visit.
       inFlight.current = false;
       setPosting(false);
     }
     void readBoard();
   };
 
+  /** What the player said to it, in the reveal's words. Unanswered counts as left (core). */
+  const chose = (verdict: v2.Verdict | null): string =>
+    verdict === 'take' ? r.took : verdict === 'leave' ? r.left : PENDING.unanswered;
+
   return (
     <div class="otp-screen">
       <div class="otp-screen__inner">
-        {/*
-          NO HEADER ASIDE. The mark used to sit here AND in the footer thirty lines down, so the
-          payoff screen carried the Cyera wordmark twice -- two marks on the one screen whose job is
-          to carry a single mark and a single Lime (UI_FOUNDATIONS section 8, which puts the mark in
-          the footer under the sentence that names the research). The footer one is the one that
-          means something, because it is attached to "The Off the Path research, by".
-        */}
-        <Panel number="05" title={s('resultsTitle')}>
+        <Panel number="05" title={PENDING.revealTitle}>
           <div class="otp-screen__body" ref={body} tabIndex={-1} data-autofocus>
-            <div class="otp-hero">
-              <div>
-                <p class="otp-section-label">{s('scoreLabel')}</p>
-                {/* The score is the subject of this page, so it is the page's one h1. */}
-                {/*
-                  The explicit space is load-bearing: JSX drops whitespace that spans a line
-                  break, so the number and the <small> ran together and the page's one h1
-                  announced as "900out of 1,000" (docs/UX_REVIEW.md 21). It is a space, not copy.
-                */}
-                <h1 class="otp-hero__score">
-                  {result.total.toLocaleString('en')} <small>{s('scoreOutOf')}</small>
-                </h1>
-                {/* Say where the points came from, in words, as the deck does. */}
-                <p class="otp-hero__breakdown">{breakdown(result, content)}</p>
-              </div>
-            </div>
-
-            {/* The boundary is the headline result, above the per-skill rows. */}
-            <h2 class="otp-section-label">{s('trifectaLabel')}</h2>
-            {/*
-             * The three things a skill can be given, in the words the HUD discs are marked with.
-             * This is the ONLY place `content.capabilities[*].detail` renders: it came off the
-             * inspect card, where the client asked for three verbs and nothing else, and the
-             * non-compact Trifecta that draws these sentences was mounted nowhere at all, so for
-             * the whole project so far this lesson reached no one. It belongs here, beside the
-             * discs it explains and directly under the heading that already names it.
-             *
-             * `hideLabel` because that heading IS the label -- the component draws its own
-             * otherwise, and the first cut of this shipped "WHAT YOUR SKILLS CAN DO" twice, once
-             * as the <h2> and again inside the component, two lines apart.
-             */}
-            <Trifecta
-              content={content}
-              live={liveCapabilities(state.verdicts, content)}
-              hideLabel
-            />
-            <div
-              class={`otp-recap__row otp-recap__row--boundary${result.boundaryHeld ? '' : ' otp-recap__row--missed'}`}
-            >
-              <Badge glyph={result.boundaryHeld ? 'check' : 'missed'} />
-              <div class="otp-recap__body">
-                {/*
-                  Three states, not two. `boundaryHeld` is `!trifectaLive` and says nothing about
-                  notices, so choosing between two strings on it alone asserted "a notice on a post
-                  did the rest" for every run that let all three run -- including the runs where no
-                  notice was ever read, which then rendered that claim above an empty explanation,
-                  because the paragraphs below are a map over `fired`. An asset about checking what
-                  systems really do cannot misreport the player's own run on the screen that carries
-                  its argument (docs/UX_REVIEW.md blocker 1).
-                */}
-                <p class="otp-recap__heading">
-                  {result.boundaryHeld
-                    ? s('boundaryHeld')
-                    : fired.length > 0
-                      ? s('boundaryBroken')
-                      : s('boundaryOpen')}{' '}
-                  <span>{result.boundaryBonus > 0 ? `+${result.boundaryBonus}` : 'no bonus'}</span>
-                </p>
-                {fired.map((notice) => (
-                  <p class="otp-recap__detail" key={notice.id}>
-                    {notice.whenExposed?.recap}
-                  </p>
-                ))}
-              </div>
-            </div>
-
-            <h2 class="otp-section-label">
-              <Highlighted text={s('recapHeading')} word={s('recapHeadingHighlight')} />
-            </h2>
-            <ul class="otp-recap">
-              {rows.map((row) => {
-                const skill = skillState(row);
+            {/* The reveal is the subject of this page, so its title is the page's one h1. */}
+            <h1 class="otp-reveal__title">
+              <Highlighted text={r.title} word={r.titleHighlight} />
+            </h1>
+            <ol class="otp-recap otp-reveal">
+              {run.entries.map((row) => {
+                const skill = content.skills.find((k) => k.id === row.skillId)!;
                 return (
                   <li
                     key={row.skillId}
-                    class={`otp-recap__row otp-recap__row--skill${skill === 'missed' ? ' otp-recap__row--missed' : ''}`}
+                    class={`otp-recap__row${row.good ? '' : ' otp-recap__row--missed'}`}
+                    data-reveal={row.skillId}
+                    data-kind={row.good ? 'good' : 'bad'}
+                    data-verdict={row.verdict ?? 'none'}
                   >
-                    <Badge
-                      glyph={
-                        skill === 'caught' ? 'check' : skill === 'costly' ? 'traded' : 'missed'
-                      }
-                    />
-                    <div>
+                    <Badge glyph={row.good ? 'check' : 'missed'} />
+                    <div class="otp-recap__body">
                       <p class="otp-recap__heading">
-                        {row.skillName}{' '}
-                        <span>you {s(VERDICT_WORD[row.verdict]).toLowerCase()} it</span>{' '}
-                        {/* Status in words, never by glyph or colour alone. */}
-                        <span class="otp-recap__status">
-                          {skill === 'caught'
-                            ? s('caughtIt')
-                            : skill === 'costly'
-                              ? s('nothingTaken')
-                              : s('missedIt')}
-                        </span>
+                        {row.name}{' '}
+                        <span class="otp-recap__status">{row.good ? r.good : r.bad}</span>
                       </p>
-                      {/*
-                        The payoff for a gamble that did not come off, and the only place the game
-                        says anything about it. The fine print below is shown either way, so a
-                        player who never opened the card reads here what was in it.
-                      */}
-                      {row.onTrust && <p class="otp-recap__trust">{s('cardNotOpened')}</p>}
-                      <p class="otp-recap__detail">{row.recap}</p>
-                      {/*
-                        The section is headed "What was hiding" and never showed it: outcomes.ts
-                        computes hiddenAction for every row and this screen discarded it. The fine
-                        print is the one piece of text the whole game teaches you to find.
-                      */}
-                      {row.hiddenAction && (
-                        <p class="otp-recap__hidden">
-                          <span class="otp-recap__hidden-title">{row.hiddenAction.title}</span>
-                          {row.hiddenAction.detail}
+                      <p class="otp-reveal__chose">{chose(row.verdict)}</p>
+                      <dl class="otp-reveal__pairs">
+                        <dt>{r.promised}</dt>
+                        <dd>{row.promise}</dd>
+                        <dt>{r.did}</dt>
+                        <dd data-reveal-line="">{row.line}</dd>
+                      </dl>
+                      {row.giveaway !== null && (
+                        <p class="otp-recap__hidden" data-giveaway="">
+                          <span class="otp-recap__hidden-title">{r.giveaway}</span>
+                          {row.giveaway}
                         </p>
                       )}
+                      <p class="otp-reveal__real" data-real-world="">
+                        <span class="otp-reveal__term">
+                          {r.realWorld}: {skill.realWorld.term}.
+                        </span>{' '}
+                        {skill.realWorld.note}
+                      </p>
                     </div>
                   </li>
                 );
               })}
-            </ul>
+            </ol>
+
+            <div class="otp-hero" data-score={run.total}>
+              <div>
+                <h2 class="otp-section-label">{r.score}</h2>
+                {/* The explicit space keeps "100 out of 100" from reading as "100out of 100". */}
+                <p class="otp-hero__score">
+                  {run.total} <small>{PENDING.outOf}</small>
+                </p>
+              </div>
+            </div>
+            {ending && (
+              <div class="otp-reveal__ending" data-ending={run.ending}>
+                <h2 class="otp-ending__title">{ending.title}</h2>
+                {ending.lines.map((line) => (
+                  <p class="otp-body-text" key={line}>
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {/*
-              One row per goal rather than a single errand verdict. A careful run carries out one
-              of the three on purpose -- the other two need capabilities it refused -- so a lone
-              "errand failed" line read as a mistake when it was the trade the game is about.
-            */}
-            <p class="otp-section-label">{s('errandHeading')}</p>
-            {result.goals.map((goal) => {
-              const errand = errandState(goal, state.verdicts, content);
-              return (
-                <div
-                  key={goal.id}
-                  class={`otp-recap__row otp-recap__row--errand${errand === 'missed' ? ' otp-recap__row--missed' : ''}`}
-                >
-                  {/*
-                    A goal forgone to keep the boundary takes the Restrict glyph from the verdict
-                    pills -- the one mark in this product's vocabulary that means "withheld on
-                    purpose" -- on the Natural ground, not Haze. The "!" disc stays for a goal
-                    genuinely dropped.
-                  */}
-                  <Badge
-                    glyph={errand === 'met' ? 'check' : errand === 'traded' ? 'traded' : 'missed'}
-                  />
-                  <div>
-                    <p class="otp-recap__heading">
-                      {goal.label}{' '}
-                      <span>
-                        {errand === 'met'
-                          ? `+${goal.points}`
-                          : errand === 'traded'
-                            ? s('errandTraded')
-                            : 'not met'}
-                      </span>
-                    </p>
-                    {/*
-                      On its own line, and as a sentence. Gluing "needed" to a capability label built
-                      "Find the cottage before dark needed reaches into your basket" -- a run-on at
-                      every width, because the labels are verb phrases ("Reaches into your basket").
-                    */}
-                    {errand !== 'met' && (
-                      <p class="otp-recap__detail">
-                        {errandDetail(errand, goal)}{' '}
-                        {content.capabilities[goal.needs]?.label.toLowerCase() ?? goal.needs}.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* The Basket component carries its own label. */}
-            <Basket basket={state.basket} items={content.items} />
-
-            {/*
-              The screen's one Lime lives on this button, and it comes before the score form.
-              "Who wrote the instructions your agent follows?" is the sentence this whole asset
-              exists to ask, and it sat below a form that cannot work until the Phase 6 API exists
-              and says so when you press it -- 1,412px down a panel in an 860px viewport, past the
-              only dead control on the screen. Band first, so the first thing the keyboard reaches
-              and the first thing a scroll finds is the question (docs/UX_REVIEW.md 9).
+              The question and the screen's one Lime, BEFORE the post form: the sentence this asset
+              exists to ask must not sit below a form the visitor may not use (docs/UX_REVIEW.md 9).
+              An <a> with an href, so it works standalone, with no .env, and on a middle-click;
+              `onReadResearch` is the side channel to a parent page.
             */}
             <div class="otp-band">
               <p class="otp-band__question">
-                <Highlighted text={s('ctaPrompt')} word="agent" />
+                <Highlighted text={r.question} word="agent" />
               </p>
-              {/*
-                AN <a> WITH AN href, NOT A <button> WITH A HANDLER. This is the asset's single
-                conversion action and it did nothing in any build this repo could produce: the
-                handler behind it is `() => emit('otp:cta', {})`, and `emit` returned early whenever
-                the embed origin was unset -- which was every build, because `VITE_EMBED_ORIGIN` had
-                exactly one occurrence repo-wide and that occurrence was the line that read it.
-
-                So the destination is the element's own href now, resolved once in
-                `src/embed/postMessage.ts` from `VITE_RESEARCH_URL` with a default written down
-                beside it. That makes the press work standalone, work with no .env file at all, and
-                work for a middle-click or a "copy link address" -- none of which a click handler
-                can do. `onReadResearch` stays exactly as it was, as the side channel: the parent
-                page still gets `otp:cta` when it is listening, and the navigation no longer depends
-                on it.
-
-                `target="_blank"` because embedded this would otherwise navigate the iframe and take
-                the game off the page with it; `rel="noopener noreferrer"` because nothing here needs
-                a handle on the opener, and the project ships no analytics that wants the referrer.
-              */}
-              {/*
-                `.otp-cta` was written for a <button>, so it set no `text-decoration`, and the
-                user-agent default underlines an <a> whatever its specificity -- an underlined Lime
-                pill is a brand break a screenshot review would catch. That lived here as an inline
-                style for one round, because `screens.css` had a different owner and two owners
-                never share a file. It is in `.otp-cta` now, where the brand rules can reach it.
-              */}
               <a
                 class="otp-cta"
                 href={RESEARCH_URL}
@@ -1001,7 +571,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
                 rel="noopener noreferrer"
                 onClick={onReadResearch}
               >
-                {s('cta')}
+                {r.cta}
                 <span class="otp-cta__disc" aria-hidden="true">
                   →
                 </span>
@@ -1009,143 +579,52 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
             </div>
 
             <p class="otp-section-label">{s('postHeading')}</p>
-            {/*
-              THE NAME IS SHOWN, NOT TYPED, and this is the half of decision D4 that was missing.
-
-              The board has minted its own handles since Phase 6: `submit()` in
-              src/net/leaderboard.ts sends `mintHandle()` and discards whatever string it was
-              handed, because a free-text name on a Cyera-branded public page is a moderation
-              problem and a player-supplied string is one more thing to sanitise on the way to a
-              table. The screen did not know that. A player typed `wolfspotter`, pressed Post, and
-              was told "Posted to the board as deft-cloak-81" -- the field had taken their input and
-              the product had quietly thrown it away. Two things were true at once and only one of
-              them was on the screen.
-
-              So the input is gone and the minted handle is the control: it is rendered as text,
-              it is what `onPost` receives, and the reroll button mints another. There is nothing
-              left to validate -- every one of the 3,072 handles `mintHandle` can produce is legal
-              by construction, which `test/leaderboard.test.ts` checks against `validateHandle`
-              directly -- so the error row goes with the input it belonged to. `validateHandle`
-              stays exported as the mirror of the server's rule; it is the thing that test holds
-              the wordlists against, and it is what a future typed name would have to pass.
-
-              `role="group"` rather than `<output>`: `<output>` carries an implicit `role="status"`,
-              and the post notice twenty lines down is the one status on this screen.
-            */}
-            <form class="otp-post" onSubmit={submit} noValidate>
-              <span
-                class="otp-handle"
-                role="group"
-                aria-label={s('handleLabel')}
-                aria-describedby="otp-handle-hint"
-              >
-                <span data-handle={handle}>{handle}</span>
-              </span>
-              {/*
-                `aria-disabled`, NOT `disabled`, while a post is out -- and that is the whole fix for
-                focus dropping to <body> after every post, whatever the outcome. A `disabled` button
-                cannot hold focus: the browser blurs it the moment the attribute lands, which is
-                the instant the player presses Post, so a keyboard or screen-reader player who had
-                just pressed the button found their position reset to the top of the page before the
-                reply came back and was spoken. `aria-disabled` keeps the button focusable and keeps
-                it announced as unavailable; the `inFlight` guard in `submit` and `reroll` is what
-                makes the press itself do nothing. Playwright's `toBeEnabled()` reads either.
-              */}
-              <button
-                type="button"
-                class="otp-button otp-button--quiet"
-                onClick={reroll}
-                aria-disabled={posting ? 'true' : undefined}
-              >
-                {s('handleReroll')}
-              </button>
-              <button type="submit" class="otp-button" aria-disabled={posting ? 'true' : undefined}>
-                {s('post')}
-              </button>
-            </form>
-            <p class="otp-fine" id="otp-handle-hint">
-              {s('handleHint')} {s('privacyLine')}
-            </p>
-            {/*
-              MOUNTED IN EVERY STATE, text swapped, never conditionally rendered -- the shape
-              App.tsx records over the world announcements and the board note below uses. This was
-              `{notice && <p role="status">}`, so pressing Post INSERTED the element already
-              holding its sentence, and a live region inserted with its text is announced by no
-              screen reader: only mutations to a region that was already there are. The one line
-              that says whether the score went up reached nobody, and e2e/a11y-structure.spec.ts
-              reproduced it as a status region that did not exist until the reply landed.
-
-              `data-notice` is absent until there is an outcome, exactly as the element was.
-              `:empty` takes the margin off in screens.css, so a region that has to stay rendered
-              does not stay visible: an empty paragraph with the sentence's top margin would open a
-              gap between the fine print and the board before anything has been posted.
-            */}
+            {cannotPost !== null ? (
+              <p class="otp-fine" data-post="unavailable">
+                {cannotPost}
+              </p>
+            ) : (
+              <>
+                {/* The name is shown, not typed: minted handles only (decision D4). */}
+                <form class="otp-post" onSubmit={submit} noValidate>
+                  <span
+                    class="otp-handle"
+                    role="group"
+                    aria-label={s('handleLabel')}
+                    aria-describedby="otp-handle-hint"
+                  >
+                    <span data-handle={handle}>{handle}</span>
+                  </span>
+                  <button
+                    type="button"
+                    class="otp-button otp-button--quiet"
+                    onClick={reroll}
+                    aria-disabled={posting ? 'true' : undefined}
+                  >
+                    {s('handleReroll')}
+                  </button>
+                  <button
+                    type="submit"
+                    class="otp-button"
+                    aria-disabled={posting ? 'true' : undefined}
+                  >
+                    {s('post')}
+                  </button>
+                </form>
+                <p class="otp-fine" id="otp-handle-hint">
+                  {s('handleHint')} {s('privacyLine')}
+                </p>
+              </>
+            )}
+            {/* Mounted in every state, text swapped: a live region inserted with its text is silent. */}
             <p class="otp-error" role="status" data-announce="post" data-notice={notice?.key}>
               {notice?.text ?? ''}
             </p>
 
-            {/*
-              06 Leaderboard, mounted where a run actually ends. docs/UI_FOUNDATIONS.md section 8
-              draws this as its own screen; `phase: 'leaderboard'` exists in the reducer and is
-              one-way -- LEADERBOARD only from results, no action back, RESET the only exit -- so a
-              link to it would discard the recap, the trifecta and the Lime band to show ten rows.
-              It lives here until that branch and its core test can be written.
-
-              THE DEFECT THIS CLOSES: the post form is the only thing on the page that mentions a
-              board, and "Posted to the board as deft-cloak-81" has had no board under it since
-              Phase 6 shipped. `top()` was written, tested, and called by nothing.
-
-              NO LIME. This screen spends its one on `.otp-cta` above (UI_FOUNDATIONS section 2),
-              and a board that tinted its top row Lime would be a second call to action on a page
-              that already has a hierarchy problem.
-            */}
             <section class="otp-board" aria-labelledby="otp-board-heading">
-              {/*
-                THE HEADING IS INSIDE THE SECTION, and it was outside until 2026-10-21.
-
-                Measured on the built preview at 375, 768 and 1280: the gap above this heading was
-                0.0px at every one of the three reviewed widths. `h2.otp-section-label` zeroes the
-                24px top margin `.otp-section-label` carries (it has to -- it is undoing the UA's h2
-                margins), and `.otp-fine` and `.otp-error`, the two paragraphs that can precede the
-                board, both end with `margin-bottom: 0`. So the only separation in play was
-                `.otp-board`'s own `margin-top`, and with the heading OUTSIDE the section that margin
-                landed between the heading and the board instead of above the heading: the title sat
-                flush against the privacy line, and the air it should have had was spent inside its
-                own section.
-
-                Moving it in puts the board's margin and padding above the heading, where they were
-                always meant to be, and makes the `aria-labelledby` relationship structural as well
-                as declared. `e2e/leaderboard.spec.ts` measures the gap at the three widths now --
-                nothing in the suite measured vertical rhythm at all, which is how 0px at every
-                reviewed width shipped past a width review.
-              */}
               <h2 class="otp-section-label otp-board__title" id="otp-board-heading">
-                {/*
-                  Season Mix on "Spotters", which UI_FOUNDATIONS section 8 and BRAND_AND_UI
-                  section 3 both name outright -- BRAND_AND_UI uses this exact title as its worked
-                  example of a correct highlight. It is the screen's third Season Mix word, after
-                  "actually" in the recap heading and "agent" in the CTA band; the brand rule is one
-                  per HEADING and there is no per-screen cap on it (that rule is Lime's). The
-                  tension is real and is in the handover for the human to settle.
-                */}
                 <Highlighted text={s('leaderboardTitle')} word={s('leaderboardTitleHighlight')} />
               </h2>
-              {/*
-                MOUNTED IN EVERY STATE, text swapped, never conditionally rendered. App.tsx records
-                why over the world announcements: a live region inserted into the DOM already
-                holding its text announces nothing, because screen readers announce MUTATIONS to a
-                region that was already there. The naive `{loading && <p …>}` announces nothing at
-                all. This is also the deck's subtitle slot, so one element carries both jobs and
-                they cannot drift apart.
-
-                `aria-live` WITHOUT `role="status"`, which is the one place this markup departs from
-                the build spec. The behaviour is the same -- `role="status"` is a polite, atomic
-                live region and this says so directly -- but the role would put a SECOND status on
-                Results, and `e2e/game.spec.ts:204` and four tests in `e2e/leaderboard.spec.ts`
-                resolve the post notice with `getByRole('status')`. A second one turns every one of
-                them into a strict-mode violation, and `game.spec.ts` belongs to another owner.
-                The post notice keeps the role; the board speaks through aria-live.
-              */}
               <p
                 class="otp-board__note"
                 data-board={board.state}
@@ -1158,18 +637,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
               {board.state === 'rows' && (
                 <ol class="otp-board__rows">
                   {board.entries.map((entry) => {
-                    /*
-                     * Your row is matched LOCALLY, against the name already in state above.
-                     * Nothing extra goes over the wire to find it, and the board still stores a
-                     * handle and a score only -- which is what `privacyLine` on this same screen
-                     * promises eight lines up.
-                     *
-                     * The match is the INPUT to the decision, not the decision. `boardRowKey`
-                     * owns the two further conditions -- that this page has posted at all, and
-                     * that the notice above does not deny the run -- and its docstring is where
-                     * the reasoning lives. Reading the ternary back out here is how the third
-                     * node drifted out of the model the first time.
-                     */
+                    // Matched locally; `boardRowKey` owns the two further conditions.
                     const rowKey = boardRowKey(
                       entry.handle === handle,
                       attempted,
@@ -1185,19 +653,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
                         key={`${entry.rank}-${entry.handle}`}
                         class={`otp-board__row${yours ? ' otp-board__row--you' : ''}`}
                       >
-                        {/*
-                          The visible row is one composed line to a screen reader and three columns
-                          to an eye, so the eye's version is hidden from AT and the sentence below
-                          is what is read. Same split App.tsx uses for the world announcements, and
-                          for the same reason: "3 merry-kettle-73 450" is not a sentence.
-                        */}
                         <span class="otp-board__visible" aria-hidden="true">
-                          {/*
-                            `data-rank` rather than a class per rank or a style prop.
-                            test/inline-style.test.ts bans a static `style={{ background }}`, and an
-                            attribute selector keeps the four tints in the stylesheet where a brand
-                            reviewer reads them. Same shape as the `data-glyph` on the recap badge.
-                          */}
                           <span
                             class="otp-board__rank"
                             data-rank={entry.rank < 4 ? entry.rank : 'plain'}
@@ -1205,7 +661,6 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
                             {entry.rank}
                           </span>
                           <span class="otp-board__handle">{entry.handle}</span>
-                          {/* Status in words, never by fill alone (UI_FOUNDATIONS section 5). */}
                           {yours && <span class="otp-board__you">{s('boardYouLabel')}</span>}
                           <span class="otp-board__score">{entry.score.toLocaleString('en')}</span>
                         </span>
@@ -1218,13 +673,6 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
 
               {board.state === 'unavailable' && (
                 <div class="otp-board__retry">
-                  {/*
-                    `() => void readBoard()` rather than `onClick={readBoard}`. Two things were
-                    wrong with the bare form: it handed the click event to a function that takes no
-                    arguments, and it threw away the disposer `readBoard` returns -- which is half
-                    of the defect `boardReads()` documents. The gate makes the unmount guarantee
-                    hold either way; this makes the call site say what it is doing.
-                  */}
                   <button
                     type="button"
                     class="otp-button otp-button--on-dark"
@@ -1236,38 +684,13 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
               )}
             </section>
 
-            {/*
-              TWO CONTROLS THAT DO COMPLETELY DIFFERENT THINGS MUST NOT LOOK THE SAME.
-
-              With /api/top still 404ing in production, `unavailable` is the state every visitor
-              sees, and in it "Ask the board again" and "Walk it again" rendered with the SAME class
-              string, the same height and the same Deep Purple outline on no fill, 15.4px apart. One
-              re-reads a list; the other throws the finished run away and restarts the game. A
-              player reaching for the first and hitting the second loses the score they are looking
-              at.
-
-              They are now different in kind, not in shade. The retry is a pill INSIDE the board's
-              own Deep Purple body, outlined in Offwhite, sitting with the thing it acts on. This is
-              an underlined text action on the Shell panel below, which is what UI_FOUNDATIONS
-              section 8 draws for `Play again` in the first place -- "a footer link", not a pill.
-              Lime is spent on the research call to action and is not available to either of them.
-
-              Still a <button>: it does something to this page rather than going anywhere, and four
-              specs in another owner's files reach it by `getByRole('button', { name: /Walk it
-              again/ })`.
-            */}
+            {/* Different in kind from the board's retry: an underlined text action, not a pill. */}
             <div class="otp-actions">
-              <button type="button" class="otp-link-action" onClick={onReplay}>
-                {s('replay')}
+              <button type="button" class="otp-link-action" data-action="replay" onClick={onReplay}>
+                {r.again}
               </button>
             </div>
 
-            {/*
-              docs/UI_FOUNDATIONS.md section 8 puts this footer under 06 Leaderboard, whose rows
-              are Black -- hence "white Cyera logo" there. That screen does not exist yet, and
-              Results is where a run actually ends, so it lives here for now. Results' body is
-              Shell, so the mark is the black one: a white mark would be invisible on it.
-            */}
             <p class="otp-foot">
               {s('researchFooter')}
               <CyeraMark on="light" />

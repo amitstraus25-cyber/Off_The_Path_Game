@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { checkLog as checkV1Log } from '../../src/runlog.ts';
-import { runEventSchema as v1EventSchema } from '../../src/state.ts';
 import { MAX_LOG_EVENTS } from '../../src/leaderboard.ts';
 import { RULES, checkRunLog, runLogSchema, toRunLog } from '../../src/v2/runlog.ts';
 import { TIME_LIMIT_MS, runEventSchema } from '../../src/v2/state.ts';
 import type { RunEvent } from '../../src/v2/state.ts';
 import { score } from '../../src/v2/scoring.ts';
-import { content as v1Content, fullRun as v1FullRun } from '../helpers.ts';
 import { begin, content, encounter, fullRun, run } from './helpers.ts';
 
 const careful = { lantern: 'take', courier: 'leave', locksmith: 'leave' } as const;
@@ -198,34 +195,33 @@ describe('forged logs', () => {
 });
 
 /*
- * A v1 log must never score as a v2 run, and a v2 log must never score as a v1 run. Two layers keep
- * them apart and BOTH are tested, because either alone has a hole:
+ * A log written for another rulebook must never score as a v2 run. Two layers keep them apart and
+ * BOTH are tested, because either alone has a hole:
  *
- *  1. The ENVELOPE. A v1 log is a bare array; a v2 log is an object tagged `rules: 2`. Neither
- *     parser accepts the other's outer shape.
- *  2. The EVENTS. Stripping the envelope must not help: v2 events are keyed `e` where v1's are keyed
- *     `t`, and both schemas are strict, so no single event of one version parses as the other. This
- *     matters because three of v1's six event kinds -- met, inspected, arrived -- have exactly the
- *     same fields as v2's, and a shared key would have let a stripped v2 log parse as v1.
+ *  1. The ENVELOPE. The retired rulebook's log was a bare array; a v2 log is an object tagged
+ *     `rules: 2`. The parser accepts neither a bare array nor another version's tag.
+ *  2. The EVENTS. Stripping the envelope must not help: v2 events are keyed `e` where the retired
+ *     ones were keyed `t`, and the schema is strict, so a retired event does not parse.
  */
-describe('a v1 log is never a v2 run, and a v2 log is never a v1 run', () => {
-  const v1Log = v1FullRun({ rabbit: 'restrict', owl: 'reject', 'lantern-keeper': 'allow' }).log;
+describe('only a v2 log is a v2 run', () => {
   const v2Log = toRunLog(fullRun(careful));
+  // The retired rulebook's shape, written out: a bare array of `t`-keyed events.
+  const retiredLog = [
+    { t: 'met', c: 'rabbit', at: 1 },
+    { t: 'verdict', s: 'cottage-finder', v: 'restrict', at: 2 },
+    { t: 'arrived', at: 3 },
+  ];
 
-  it('the v1 log is a real, legal v1 run, so the refusals below are about version alone', () => {
-    expect(checkV1Log(v1Log, v1Content)).toMatchObject({ legal: true, complete: true });
-    expect(checkRunLog(v2Log, content)).toMatchObject({ legal: true, ended: true });
-  });
-
-  it('v2 refuses a v1 log, bare or wrapped in a v2 envelope', () => {
-    expect(checkRunLog(v1Log, content)).toEqual({ legal: false, reason: 'malformed log' });
-    expect(checkRunLog(envelope(v1Log), content)).toEqual({
+  it('refuses a bare array, bare or wrapped in a v2 envelope', () => {
+    expect(checkRunLog(retiredLog, content)).toEqual({ legal: false, reason: 'malformed log' });
+    expect(checkRunLog(envelope(retiredLog), content)).toEqual({
       legal: false,
       reason: 'malformed log',
     });
   });
 
-  it('v2 refuses an envelope that claims any other rules version', () => {
+  it('refuses an envelope that claims any other rules version', () => {
+    expect(checkRunLog(v2Log, content)).toMatchObject({ legal: true, ended: true });
     for (const rules of [1, 3, '2', null])
       expect(checkRunLog({ ...v2Log, rules }, content), String(rules)).toEqual({
         legal: false,
@@ -233,12 +229,7 @@ describe('a v1 log is never a v2 run, and a v2 log is never a v1 run', () => {
       });
   });
 
-  it('v1 refuses a v2 log, in its envelope or stripped out of it', () => {
-    expect(checkV1Log(v2Log, v1Content)).toEqual({ legal: false, reason: 'malformed log' });
-    expect(checkV1Log(v2Log.events, v1Content)).toEqual({ legal: false, reason: 'malformed log' });
-  });
-
-  it('no single event of either version parses as an event of the other', () => {
+  it('accepts every v2 event kind and none of the retired ones', () => {
     const v2Events: RunEvent[] = [
       { e: 'met', c: 'fox', at: 1 },
       { e: 'inspected', s: 'locksmith', at: 1 },
@@ -248,19 +239,8 @@ describe('a v1 log is never a v2 run, and a v2 log is never a v1 run', () => {
     ];
     // Every v2 kind is enumerated, checked against the schema's own option count.
     expect(new Set(v2Events.map((x) => x.e)).size).toBe(runEventSchema.options.length);
-    for (const x of v2Events) {
-      expect(runEventSchema.safeParse(x).success, x.e).toBe(true);
-      expect(v1EventSchema.safeParse(x).success, x.e).toBe(false);
-    }
-    const v1Events = [
-      ...v1Log,
-      { t: 'asked', c: 'owl', q: 'needs', at: 1 },
-      { t: 'read', n: 'forest-post', at: 1 },
-    ];
-    expect(new Set(v1Events.map((x) => x.t)).size).toBe(v1EventSchema.options.length);
-    for (const x of v1Events) {
-      expect(v1EventSchema.safeParse(x).success, x.t).toBe(true);
+    for (const x of v2Events) expect(runEventSchema.safeParse(x).success, x.e).toBe(true);
+    for (const x of [...retiredLog, { t: 'read', n: 'forest-post', at: 1 }])
       expect(runEventSchema.safeParse(x).success, x.t).toBe(false);
-    }
   });
 });

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { score } from '@otp/core';
-import { carefulRun, content } from './helpers.ts';
+import { v2 } from '@otp/core';
+import { claimedMs, runOf } from './helpers.ts';
 
 /*
  * The route entry points, and the wiring behind them.
  *
- * `api/score.ts` and `api/top.ts` are four lines each, and until this file nothing executed either
+ * `api/start.ts`, `api/score.ts` and `api/top.ts` are a few lines each, and until this file nothing executed either
  * of them: every other test calls the handlers directly with a fake Deps, so the Web handler
  * signature, the module-scope read of process.env and the one real `fetch` the store is built with
  * were all unexercised. That is the part of the service a deploy runs first.
@@ -37,15 +37,13 @@ interface Call {
   init: RequestInit;
 }
 
-/** Imports the two routes fresh, after the environment and `fetch` have been replaced. */
+type Route = (request: Request) => Promise<Response>;
+
+/** Imports the three routes fresh, after the environment and `fetch` have been replaced. */
 async function load(
   env: Record<string, string>,
   reply: () => Response,
-): Promise<{
-  calls: Call[];
-  scoreRoute: (request: Request) => Promise<Response>;
-  topRoute: (request: Request) => Promise<Response>;
-}> {
+): Promise<{ calls: Call[]; startRoute: Route; scoreRoute: Route; topRoute: Route }> {
   vi.resetModules();
   for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
   const calls: Call[] = [];
@@ -53,9 +51,10 @@ async function load(
     calls.push({ url, init });
     return Promise.resolve(reply());
   });
+  const startRoute = (await import('../api/start.ts')).default.fetch;
   const scoreRoute = (await import('../api/score.ts')).default.fetch;
   const topRoute = (await import('../api/top.ts')).default.fetch;
-  return { calls, scoreRoute, topRoute };
+  return { calls, startRoute, scoreRoute, topRoute };
 }
 
 const CONFIGURED = {
@@ -69,27 +68,48 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.resetModules();
 });
 
-describe('the routes as Vercel invokes them', () => {
-  it('takes a run on POST /api/score and answers the recomputed score', async () => {
-    const run = carefulRun();
-    const expected = score(run.log, content).total;
-    const { calls, scoreRoute } = await load(CONFIGURED, () => new Response(null, { status: 201 }));
+const post = (path: string, body: unknown): Request =>
+  new Request(`${URL_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
-    const res = await scoreRoute(
-      new Request(`${URL_BASE}/api/score`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ handle: HANDLE, log: run.log }),
-      }),
+describe('the routes as Vercel invokes them', () => {
+  it('answers GET on the two POST routes with our own 405 -- the discriminator', async () => {
+    const { startRoute, scoreRoute } = await load(CONFIGURED, () => new Response(null));
+    for (const route of [startRoute, scoreRoute]) {
+      const res = await route(new Request(`${URL_BASE}/api/x`));
+      expect(res.status).toBe(405);
+      expect(res.headers.get('allow')).toBe('POST');
+    }
+  });
+
+  it('starts a run on POST /api/start, takes it on POST /api/score, answers the recomputed score', async () => {
+    // The server's real clock, faked: the token is stamped by `Date.now()` inside src/deps.ts.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(1_761_100_000_000);
+    const { calls, startRoute, scoreRoute } = await load(
+      CONFIGURED,
+      () => new Response(null, { status: 201 }),
     );
 
+    const started = await startRoute(post('/api/start', {}));
+    expect(started.status).toBe(200);
+    const { seed, token } = (await started.json()) as { seed: number; token: string };
+    const log = v2.toRunLog(runOf('careful', seed));
+    vi.setSystemTime(1_761_100_000_000 + claimedMs(log) + 15_000);
+
+    const res = await scoreRoute(post('/api/score', { handle: HANDLE, log, token }));
+
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ handle: HANDLE, score: expected });
+    await expect(res.json()).resolves.toEqual({ handle: HANDLE, score: 100 });
     // The row went to the table this environment names, with the key in headers and not in the URL.
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe('https://project-ref.supabase.co/rest/v1/leaderboard');
@@ -118,21 +138,19 @@ describe('the routes as Vercel invokes them', () => {
     expect(calls[0]!.url).toContain('order=score.desc%2Ccreated_at.asc');
   });
 
-  it('answers 503 from both routes when the environment is not configured, and calls nothing', async () => {
-    const { calls, scoreRoute, topRoute } = await load(
+  it('answers 503 from every route when the environment is not configured, and calls nothing', async () => {
+    const { calls, startRoute, scoreRoute, topRoute } = await load(
       { SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '' },
       () => new Response(null, { status: 201 }),
     );
 
-    const posted = await scoreRoute(
-      new Request(`${URL_BASE}/api/score`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ handle: HANDLE, log: carefulRun().log }),
-      }),
-    );
+    const started = await startRoute(post('/api/start', {}));
+    const log = v2.toRunLog(runOf('careful', 0));
+    const posted = await scoreRoute(post('/api/score', { handle: HANDLE, log, token: 'a.b' }));
     const read = await topRoute(new Request(`${URL_BASE}/api/top`));
 
+    // The start's 503 is what sends the game to its own seed with posting switched off.
+    expect(started.status).toBe(503);
     expect(posted.status).toBe(503);
     expect(read.status).toBe(503);
     await expect(read.json()).resolves.toEqual({ error: 'the leaderboard is unavailable' });

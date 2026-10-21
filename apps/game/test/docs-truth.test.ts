@@ -10,7 +10,7 @@
  * This file is the check. It is the same trick as csp.test.ts: read two shipped artefacts as text
  * and assert they agree, with no browser and no deploy. Here one side is always a FACT DERIVED FROM
  * THE TREE -- a directory that exists, a route file's name, a count of services in vercel.json, an
- * object in the map, a line in content/game.json -- and the other side is always the PROSE. Neither
+ * object in the map, a line in content/game.v2.json -- and the other side is always the PROSE. Neither
  * side is a constant typed into this file, because a guard that reads the same number twice and
  * compares it to itself passes forever and protects nothing.
  *
@@ -30,13 +30,17 @@ import { describe, expect, it } from 'vitest';
 const ROOT = new URL('../../../', import.meta.url);
 const at = (p: string): string => fileURLToPath(new URL(p, ROOT));
 
-/** The five documents this guard covers, by the name a reader would use for them. */
+/**
+ * The four documents this guard covers, by the name a reader would use for them.
+ *
+ * `GAME_DESIGN.md` is not here any more: it is v1's design, marked SUPERSEDED at the top and kept
+ * as history, so it describes a game that was removed and is not held to the tree.
+ */
 const DOCS = {
   'CLAUDE.md': 'CLAUDE.md',
   'ARCHITECTURE.md': 'docs/ARCHITECTURE.md',
   'HANDOFF.md': 'docs/HANDOFF.md',
   'PLAN.md': 'docs/PLAN.md',
-  'GAME_DESIGN.md': 'docs/GAME_DESIGN.md',
 } as const;
 
 type DocName = keyof typeof DOCS;
@@ -140,8 +144,9 @@ describe('the services vercel.json declares', () => {
    * THE DEPLOY IS THE BUILD OUTPUT, AND IT MUST NOT QUIETLY STOP BEING ONE.
    *
    * vercel.json has no `outputDirectory` and no `functions` any more: the build ends by running
-   * apps/game/scripts/vercel-output.mjs, which writes `.vercel/output` -- the static game, the two
-   * routes bundled into self-contained CommonJS, and the security headers copied from this file.
+   * apps/game/scripts/vercel-output.mjs, which writes `.vercel/output` -- the static game, every
+   * route in apps/api/api bundled into self-contained CommonJS, and the security headers copied
+   * from this file.
    * That is what finally stopped Vercel compiling our TypeScript with its own settings, which
    * crashed every invocation with FUNCTION_INVOCATION_FAILED (TS5097 on every `.ts` specifier).
    *
@@ -159,6 +164,31 @@ describe('the services vercel.json declares', () => {
         'no static game, no functions, and nothing tells you until a visitor does.',
     ).toContain(SCRIPT);
     expect(existsSync(at(SCRIPT)), `${SCRIPT} is gone but buildCommand still runs it`).toBe(true);
+  });
+
+  /*
+   * EVERY ROUTE FILE IS A FUNCTION ON THE DEPLOYMENT, AND THE SERVICE'S README NAMES IT.
+   *
+   * Phase E added `POST /api/start`. The build script reads the route list off the directory, so a
+   * new route cannot be left out of the bundle by a list nobody updated -- this asserts the script
+   * still does that, rather than trusting a comment, and that apps/api/README.md (the service's
+   * source of truth) names each route a GET probe should be run against.
+   */
+  it('bundles every route file, and the service README names each one', () => {
+    const routes = readdirSync(at('apps/api/api'))
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => `/api/${f.replace(/\.ts$/, '')}`);
+    expect(routes.length, 'no route files found').toBeGreaterThan(0);
+    expect(
+      read('apps/game/scripts/vercel-output.mjs'),
+      'vercel-output.mjs no longer reads its routes from apps/api/api -- a new route file would ' +
+        'ship as no function at all',
+    ).toMatch(/readdirSync\(at\('apps\/api\/api'\)\)/);
+    const readme = read('apps/api/README.md');
+    for (const route of routes)
+      expect(readme, `apps/api/README.md does not name the shipped route ${route}`).toContain(
+        route,
+      );
   });
 
   it('is a count the documents do not contradict', () => {
@@ -308,11 +338,11 @@ describe('player-facing lines the documents quote', () => {
     if (typeof node === 'string') strings.push(node);
     else if (Array.isArray(node)) node.forEach(collect);
     else if (node && typeof node === 'object') Object.values(node).forEach(collect);
-  })(JSON.parse(read('content/game.json')));
+  })(JSON.parse(read('content/game.v2.json')));
 
   const shipped = (quote: string): boolean => strings.some((s) => s.includes(quote));
 
-  it('are either still in content/game.json, or marked as cut', () => {
+  it('are either still in content/game.v2.json, or marked as cut', () => {
     expect(strings.length, 'no strings parsed from content').toBeGreaterThan(0);
     // Dialogue is recognisable: addressed to Grandma, ending in a question mark.
     const spoken = /Grandma,[^"”_*`\n]{3,80}\?/g;
@@ -322,32 +352,28 @@ describe('player-facing lines the documents quote', () => {
         if (shipped(quote) || match.index === undefined) continue;
         expect(
           nearbyMarksSuperseded(text, match.index),
-          `${doc} quotes "${quote}", which is not in content/game.json, without saying it was cut or why`,
+          `${doc} quotes "${quote}", which is not in content/game.v2.json, without saying it was cut or why`,
         ).toBe(true);
       }
   });
 });
 
 describe('the cast the documents count', () => {
-  const content = JSON.parse(read('content/game.json')) as {
-    characters?: unknown[];
-    bystanders?: unknown[];
-  };
-  const WORDS = ['zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'];
+  const content = JSON.parse(read('content/game.v2.json')) as { characters?: unknown[] };
+  const WORDS = ['zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
+  const count = content.characters?.length ?? 0;
 
-  it.each([
-    ['bystanders', content.bystanders?.length ?? 0],
-    ['characters', content.characters?.length ?? 0],
-  ])('counts %s the way content/game.json does', (kind, count) => {
-    expect(count, `no ${kind} in content`).toBeGreaterThan(0);
+  it('counts characters the way content/game.v2.json does', () => {
+    expect(count, 'no characters in content').toBeGreaterThan(0);
     for (const [doc, text] of docs())
       for (const word of WORDS.slice(1)) {
         if (WORDS.indexOf(word) === count) continue;
-        const claim = new RegExp(`\\*{0,2}${word}\\*{0,2}\\s+\\*{0,2}${kind}\\*{0,2}\\b`, 'gi');
-        expect(
-          occurrences(text, claim),
-          `${doc} says "${word} ${kind}"; content/game.json has ${count}`,
-        ).toEqual([]);
+        const claim = new RegExp(`\\*{0,2}${word}\\*{0,2}\\s+\\*{0,2}characters\\*{0,2}\\b`, 'gi');
+        for (const index of occurrences(text, claim))
+          expect(
+            nearbyMarksSuperseded(text, index),
+            `${doc} says "${word} characters"; content/game.v2.json has ${count}`,
+          ).toBe(true);
       }
   });
 });

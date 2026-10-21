@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import raw from '../../../content/game.json';
+import raw from '../../../content/game.v2.json';
 import { readTop } from '../src/net/leaderboard';
 import {
   BOARD_NOTE,
@@ -50,7 +50,7 @@ const screens = readFileSync(`${SRC}/ui/screens.css`, 'utf8');
  * reads, and that is a fact about the file.
  */
 const adapter = readFileSync(`${SRC}/net/leaderboard.ts`, 'utf8');
-const shipped = (raw as { strings: Record<string, string> }).strings;
+const shipped: Record<string, string> = raw.ui.chrome;
 
 /** Replaces fetch with one scripted reply, as test/leaderboard.test.ts does. */
 function reply(make: () => Response): void {
@@ -242,16 +242,14 @@ describe('no pairing of the three nodes in the board section can contradict', ()
   /**
    * Every sentence `.otp-error` can carry, DERIVED from the adapter that produces them.
    *
-   * `createLeaderboardClient()` is the only thing that answers `onPost`, and every player-facing
-   * line it can return is a `content.strings['...']` read. Scanning for those is what makes this
-   * set the shipped one rather than a list kept beside a file this round does not own: a fifth
-   * outcome sentence added there arrives here undeclared and reddens the totality check below.
+   * v2's `submit()` is the only thing that answers `onPost`, and every sentence it can return is
+   * keyed by a member of the adapter's `NoticeKey` union. Reading the union out of the source is
+   * what makes this set the shipped one rather than a list kept beside a file this round does not
+   * own: a sixth outcome added there arrives here undeclared and reddens the totality check below.
    */
   const NOTICE_KEYS = [
-    ...new Set(
-      [...adapter.matchAll(/content\.strings\['([A-Za-z0-9_]+)'\]/g)].map((match) => match[1]!),
-    ),
-  ];
+    ...(/export type NoticeKey =([^;]+);/.exec(adapter)?.[1] ?? '').matchAll(/'([A-Za-z0-9_]+)'/g),
+  ].map((match) => match[1]!);
 
   /** Every state the board read can be in, including the screen's own fourth one. */
   const STATES = Object.keys(BOARD_NOTE) as BoardState['state'][];
@@ -283,7 +281,7 @@ describe('no pairing of the three nodes in the board section can contradict', ()
 
   it('declares what every line any of the three nodes can carry asserts, and nothing it cannot', () => {
     expect(NOTICE_KEYS.length, 'no post outcome sentences were found in the adapter at all').toBe(
-      4,
+      5,
     );
     expect(NOTICE_KEYS.filter((key) => !(key in NOTICE_CLAIMS)).sort()).toEqual([]);
     expect(Object.keys(NOTICE_CLAIMS).filter((key) => !NOTICE_KEYS.includes(key))).toEqual([]);
@@ -443,11 +441,11 @@ describe('no pairing of the three nodes in the board section can contradict', ()
       unaccounted,
       'a combination of the three nodes is neither rendered nor ruled out: it has not been thought about',
     ).toEqual([]);
-    // The cross product really is the whole one: 5 x 5 x 3. A fourth node, or a state added to any
-    // of the three, moves this and has to be dealt with rather than quietly skipped.
+    // The cross product really is the whole one: 6 x 5 x 3 (v2 added `leaderboardClosed`). A fourth
+    // node, or a state added to any of the three, moves this and has to be dealt with.
     expect(total).toBe(NOTICE_STATES.length * NOTE_KEYS.length * ROW_STATES.length);
-    expect(total).toBe(75);
-    expect(produced.size, 'the screen renders fewer combinations than this file checked').toBe(25);
+    expect(total).toBe(90);
+    expect(produced.size, 'the screen renders fewer combinations than this file checked').toBe(29);
     // Every rule earns its place. A rule that strikes nothing is a rule nobody can test.
     for (const rule of RULES)
       expect(
@@ -547,8 +545,8 @@ describe('no pairing of the three nodes in the board section can contradict', ()
       (key) => contradictions(ROW_CLAIMS['boardRowYou']!, NOTICE_CLAIMS[key]!).length > 0,
     );
     // The set is derived, not typed: this is the list of outcomes that collide with "your run is
-    // on the board", and it is currently the refusal alone.
-    expect(denied).toEqual(['leaderboardRefused']);
+    // on the board": the refusal, and v2's closed posting window.
+    expect(denied.sort()).toEqual(['leaderboardClosed', 'leaderboardRefused']);
     for (const key of NOTICE_KEYS)
       expect(boardRowKey(true, true, key), `${key} is handled the wrong way round`).toBe(
         denied.includes(key) ? 'boardRow' : 'boardRowYou',

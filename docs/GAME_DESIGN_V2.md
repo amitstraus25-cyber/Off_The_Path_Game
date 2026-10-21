@@ -77,8 +77,8 @@ That is a real stake, and §7 records what it costs us.
 - **Seven characters, in walking order, each offering one skill. Take it or leave it**; there is no
   third verdict.
 - **Every skill has a good and a bad variant.** They share the name, greeting, promise and card
-  word for word, except that the bad card has **one extra or replaced line that plainly gives it
-  away**: it follows a stranger's instructions, or quietly sends your note or basket somewhere
+  word for word, except that the bad card has **one swapped line that plainly gives it away** (the
+  same number of lines as the good card; see section 10 for why never an added one): it follows a stranger's instructions, or quietly sends your note or basket somewhere
   else. Nothing before the card is opened differs. Each variant has its own short reveal line.
 - **Every run is dealt at random**: a seed picks which three of the seven are good (35 deals); the
   other four are bad. Replaying meets the same characters with a different set of malicious ones.
@@ -173,12 +173,22 @@ that is deliberately not the game. Rewritten 2026-10-22 for the random deal.
 
 ### Content shape
 
-A skill is `{ id, name, icon, promise, good, bad }`, and each variant is strictly `{ card: { take:
-string[], leave }, reveal }`. **There is one copy of everything before the card**, so a variant
-cannot differ there: the schema refuses a variant carrying a name, promise, icon or greeting. The
-lint refuses a bad card that is not the good card plus or instead of exactly one line (`giveaway()`
-finds it), a different leave line, a giveaway over `GIVEAWAY_WORDS` (10), and two variants sharing a
-reveal. `deal.good` says how many are good per run; a launch build needs seven skills, three good.
+A skill is `{ id, name, icon, promise, realWorld, good, bad }`, and each variant is strictly
+`{ card: { take: string[], leave }, reveal }`. **There is one copy of everything before the card**,
+so a variant cannot differ there: the schema refuses a variant carrying a name, promise, icon or
+greeting. The lint refuses a bad card that is not the good card with exactly one line swapped, same
+line count (`giveaway()` finds it; an added line is refused), a different leave line, a giveaway
+over `GIVEAWAY_WORDS` (10), two variants sharing a reveal, and a `realWorld.note` over
+`REAL_WORLD_WORDS` (25) or two sentences. `deal.good` says how many are good per run; a launch build
+needs seven skills, three good.
+
+`realWorld` is `{ term, note }`: the real cybersecurity idea the skill's forest story stands for, and
+one or two plain sentences linking them, for the reveal. One per skill, shared by both variants.
+
+`ui` is every other word the v2 screens say, strictly keyed (an unknown or missing key fails the
+schema): `landing`, `howTo` (three or four steps), `hud` (exactly the HUD's `HudLabels`) and
+`reveal`. A `titleHighlight` must be a word of its title. The endings stay in `endings`. The old
+free-form `strings` record is gone, so a screen cannot read a key that was never validated.
 
 ### The deal (`deal.ts`)
 
@@ -227,28 +237,66 @@ the measured pace and reports the tightest one; it reads the card the deal shows
 
 ## 10. Phase B: the content, as written
 
-**Draft 6, 2026-10-22, `content/game.v2.json` (`2.0.0-draft.6`), guarded by
+**Draft 7, 2026-10-22, `content/game.v2.json` (`2.0.0-draft.7`), guarded by
 `packages/core/test/v2/real-content.test.ts`.** Every player-facing string needs the human copy read
 (PAUL_BRIEF section 7).
 
 ### The seven skills, in walking order
 
-Any of them can be good or bad in a given run. The giveaway is the one line the bad card adds or
-swaps in; the good card's line it replaces is in brackets.
+Any of them can be good or bad in a given run. Every card has two take lines, good and bad; the
+giveaway is the one the bad card swaps in, and the good line it replaces is in brackets with its
+place (first or second).
 
-| #   | Character      | Skill          | The bad card's giveaway line                                     |
-| --- | -------------- | -------------- | ---------------------------------------------------------------- |
-| 1   | Rabbit         | Cottage Finder | Sends a copy of your note to a stranger. (added)                 |
-| 2   | Toadstool      | Way Teller     | Follows any note pinned to a tree. (for "Keeps to the path…")    |
-| 3   | Owl            | Word Weaver    | Leaves a copy at every crossing. (for "Shows it to nobody…")     |
-| 4   | Magpie         | Short Cut      | Takes tonight's map from a stranger. (for "Draws them from…")    |
-| 5   | Snail          | Slow Post      | Lets a friend peek inside on the way. (added)                    |
-| 6   | Lantern Keeper | Night Light    | Does whatever the signs tell it to. (for "Leaves the choosing…") |
-| 7   | Cat            | Latch Lifter   | Opens for anyone who knocks, any hour. (for "Stays shut…")       |
+| #   | Character      | Skill          | The bad card's giveaway line                                             |
+| --- | -------------- | -------------- | ------------------------------------------------------------------------ |
+| 1   | Rabbit         | Cottage Finder | Sends a copy of your note to a stranger. (1st, for "Reads Grandma's…")   |
+| 2   | Toadstool      | Way Teller     | Follows any note pinned to a tree. (2nd, for "Keeps to the path…")       |
+| 3   | Owl            | Word Weaver    | Pins a copy up at every crossing. (2nd, for "Gets there before you do.") |
+| 4   | Magpie         | Short Cut      | Fetches tonight's tracks from a stranger's map. (1st, for "Draws…")      |
+| 5   | Snail          | Slow Post      | Lets a friend peek inside on the way. (2nd, for "Opens for Grandma's…")  |
+| 6   | Lantern Keeper | Night Light    | Does what the signs say without asking you. (2nd, for "Leaves the…")     |
+| 7   | Cat            | Latch Lifter   | Lifts her latch for anyone who knocks. (1st, for "…when you knock.")     |
 
-Two attack shapes, both plain on the card: **exfiltration** (the note copied to a stranger, left
-at crossings, the parcel opened for a friend) and **instructions from someone else** (a note on a
-tree, a stranger's map, the signs, anyone who knocks). Each bad reveal names the wolf; no card does.
+**Why draft 7 changed the shape.** In draft 6 five bad cards replaced a reassurance line and two
+added a line, so on replay a three-line card was always bad, and "a card with a reassurance line is
+safe" was nearly always right, without reading what the lines said. Now every bad card is as long as
+its good card (the lint), the swap is on the first line in three skills and the second in four (a
+real-content test fails if every swap stands on one line), and reassurance no longer tracks the
+verdict: three bad cards keep one (Word Weaver's "folded shut", Slow Post's "sealed", Latch Lifter's
+"Locks it again behind you") and two good cards carry none (Cottage Finder, Short Cut).
+
+Each bad reveal names the wolf; no card does.
+
+### What each skill stands for (`realWorld`, for the reveal)
+
+| Skill          | Term                            | Note                                                                                                                                         |
+| -------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cottage Finder | Data exfiltration               | Your note is your data. A skill can do its job and still copy that data to someone you never chose.                                          |
+| Way Teller     | Indirect prompt injection       | An agent that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge.                                      |
+| Word Weaver    | Oversharing and public exposure | A copy at every crossing is data anyone passing can read. Reaching the right person does not undo the copies left behind.                    |
+| Short Cut      | Supply-chain risk               | The stranger's map is fetched fresh each night. A skill that loads instructions from elsewhere at run time can change after you approved it. |
+| Slow Post      | Third-party data sharing        | The friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way.                         |
+| Night Light    | Autonomy without human approval | Reading the signs helps you decide. Acting on them without asking you skips the human approval that important actions need.                  |
+| Latch Lifter   | Over-broad access               | A latch that lifts for anyone is access with no check on who is asking. Give a skill only the access its job needs.                          |
+
+Checked against `docs/RESEARCH_ALIGNMENT.md`. Supported there: exfiltration (section 3, the
+trifecta's external-communication leg), indirect prompt injection (2.1 untrusted content, and Snyk's
+"third-party content exposure"), supply-chain risk (2.2 "unverifiable dependencies": it fetches new
+orders after you approved it), over-broad access (OWASP AST03, section 3) and human approval (2.4,
+boundary layer 4). **For research to confirm:** "oversharing and public exposure" and "third-party
+data sharing" are not named in the research we read; Way Teller and Night Light both involve
+instructions in text, and research may prefer Night Light framed as injection rather than autonomy;
+Latch Lifter does not mention leaked keys, which research may want; and RESEARCH_ALIGNMENT open
+question 3 (name the attack classes on the recap, or stay inside the tale) is answered "name them"
+by this field, which is research's call to confirm.
+
+### The screens' words (`ui`)
+
+`landing`: title, titleHighlight, subtitle, start. `howTo`: title, steps (four lines: walk, open and
+read each card, take or leave, reach Grandma's door before 3:00 -- the time is held to
+`TIME_LIMIT_MS` by a real-content test). `hud`: time, basket, twoMinutes, oneMinute, thirtySeconds,
+timeUp. `reveal`: title, titleHighlight, took, left, good, bad, promised, did, giveaway, realWorld,
+score, question, cta, again. The three endings are `endings.grandma`, `.wolf` and `.late`.
 
 ### The table, as played over all 35 deals
 
@@ -264,8 +312,8 @@ tree, a stranger's map, the signs, anyone who knocks). Each bad reveal names the
 In every deal exactly one of the 128 verdict combinations scores 100, and it is the careful one.
 
 **The clock.** Walking twice the shortest four-connected path on today's map (108 tiles), a reader
-who opens every card arrives at 2:49 in the tightest deal (Rabbit, Snail, Lantern Keeper and Cat bad: the four longest bad cards),
-with **11.0 seconds to spare**. The longest tour that still fits is 128 tiles.
+who opens every card arrives at 2:47 in the tightest deal (Rabbit, Owl, Snail and Lantern Keeper
+bad), with **13.4 seconds to spare**. The longest tour that still fits is 133 tiles.
 
 ### History, briefly
 
@@ -278,7 +326,9 @@ from the client's sketch, "no card names the wolf", and the clock derived from t
 
 ### Open, and needing a human
 
-- **The copy read**: whether each giveaway is plain to a reader and each good card reads as safe.
+- **The copy read**: whether each giveaway is plain to a reader and each good card reads as safe,
+  and whether a kept reassurance beside a giveaway (Slow Post's "sealed", Latch Lifter's "Locks it
+  again behind you") reads as the lesson rather than as a contradiction.
   The Cat's "Grandma made it" now cuts both ways, which is the title's beat.
 - **Four icons do not exist:** `item-signpost`, `item-parcel`, `item-shortcut`, `item-latch`.
   Nothing was drawn or substituted; the test keeps them on a ratchet list.

@@ -56,18 +56,6 @@ interface Character {
   spawn: string;
 }
 
-/**
- * Long enough that the ghost click has had every chance to land, and nowhere near long enough for
- * the line to have finished.
- *
- * The click was measured arriving one to two milliseconds after `pointerup`, which is about 130ms
- * after the panel appears; the shortest greeting in the file takes several times this to type at
- * the shipped speed. Deliberately not derived from that speed: a settle written as a fraction of
- * `TYPE_SPEED` would move whenever the typewriter was retuned and would stop watching the thing it
- * is here for.
- */
-const SETTLED_MS = 300;
-
 /** A real tap: touch-down, a thumb's worth of hold, touch-up. */
 async function tap(page: Page, cdp: CDPSession, selector: string, holdMs = 120): Promise<void> {
   const box = (await page.locator(selector).boundingBox())!;
@@ -81,57 +69,6 @@ async function tap(page: Page, cdp: CDPSession, selector: string, holdMs = 120):
 
 test.describe('one tap of A is one press and nothing else', () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 375, height: 812 } });
-
-  test('the greeting still types out when the panel was opened by a thumb', async ({
-    page,
-    context,
-  }) => {
-    /*
-     * Chromium synthesises a compatibility `click` from a single-touch gesture a millisecond or
-     * two after `pointerup`, and by then `main.ts` has hidden the pad -- so the click retargets
-     * onto the panel that took its place. It hits no control there (576 combinations of viewport,
-     * character and question state were swept, and the A button's centre is over an actionable
-     * control in none of them), but the modal layer fast-forwards the line being typed on a click
-     * ANYWHERE inside it, so it never needed to. Before `ui/touch-controls.ts` cancelled
-     * `touchend`, eighteen taps out of eighteen found the greeting already finished 120ms in; the
-     * same interact from the keyboard, twelve out of twelve, found it still typing.
-     *
-     * Asserted as the beat the player is owed, and not as a count of listeners: the panel opens
-     * and the line is still being typed, with the caret still on it.
-     */
-    await page.goto('/');
-    await startGame(page);
-    expect(
-      await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches),
-      'there is no typewriter to interrupt under reduced motion, so this test would prove nothing',
-    ).toBe(false);
-    await standAt(page, await mostTalkative(page));
-
-    const cdp = await context.newCDPSession(page);
-    await tap(page, cdp, '.otp-a-button');
-    await expect(page.locator('.otp-dialogue__line')).toBeVisible();
-    await page.waitForTimeout(SETTLED_MS);
-    // The caret is rendered only while the line is still arriving, so its presence IS "still
-    // typing" -- read as a count, because it is an anchor with no box for `toBeVisible` to find.
-    expect(
-      await page.locator('.otp-dialogue__caret').count(),
-      'the tap opened the panel and finished the line in the same gesture',
-    ).toBe(1);
-  });
-
-  test('and the same interact from the keyboard is no different', async ({ page }) => {
-    /*
-     * The other arm of the comparison, because the defect was a DIFFERENCE between two devices: a
-     * guard that watched only the phone could be satisfied by making both of them wrong.
-     */
-    await page.goto('/');
-    await startGame(page);
-    await standAt(page, await mostTalkative(page));
-    await page.keyboard.press('KeyE');
-    await expect(page.locator('.otp-dialogue__line')).toBeVisible();
-    await page.waitForTimeout(SETTLED_MS);
-    expect(await page.locator('.otp-dialogue__caret').count()).toBe(1);
-  });
 
   test('a tap of A raises no click of its own, wherever the pad has gone', async ({
     page,
@@ -152,7 +89,7 @@ test.describe('one tap of A is one press and nothing else', () => {
 
     const cdp = await context.newCDPSession(page);
     await tap(page, cdp, '.otp-a-button');
-    await page.waitForFunction(() => window.__otp!.store.getState().phase === 'dialogue');
+    await page.waitForFunction(() => window.__otp!.store.getState().phase === 'talk');
     // A dozen frames: long enough that a click which was going to be synthesised has been.
     await page.waitForTimeout(250);
     expect(

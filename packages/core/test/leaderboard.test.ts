@@ -4,17 +4,14 @@ import {
   HANDLE_FIRST_WORDS,
   HANDLE_MAX_LENGTH,
   HANDLE_SECOND_WORDS,
-  MAX_LOG_EVENTS,
   MAX_TOP_LIMIT,
   handleSchema,
   isMintedHandle,
   mintHandle,
-  submitRequestSchema,
   submitResponseSchema,
   topLimit,
   topResponseSchema,
 } from '../src/leaderboard.ts';
-import { fullRun } from './helpers.ts';
 
 /*
  * The handle rules are a database constraint and a moderation policy written as code, so they are
@@ -160,42 +157,6 @@ describe('minted handles', () => {
   it('is the same rule as the schema', () => {
     expect(handleSchema.safeParse('brave-lantern-42').success).toBe(true);
     expect(handleSchema.safeParse('wolfspotter').success).toBe(false);
-  });
-});
-
-describe('the submission body', () => {
-  const log = fullRun({ rabbit: 'restrict', owl: 'reject', 'lantern-keeper': 'allow' }).log;
-
-  it('accepts a handle and a log', () => {
-    const parsed = submitRequestSchema.safeParse({ handle: 'brave-lantern-42', log });
-    expect(parsed.success).toBe(true);
-  });
-
-  it('cannot carry a score (golden rule 6: the server recomputes it)', () => {
-    const parsed = submitRequestSchema.safeParse({
-      handle: 'brave-lantern-42',
-      log,
-      score: 999999,
-    });
-    expect(parsed.success).toBe(false);
-  });
-
-  it('refuses an empty log, an oversized log and a handle it did not mint', () => {
-    expect(submitRequestSchema.safeParse({ handle: 'brave-lantern-42', log: [] }).success).toBe(
-      false,
-    );
-    const flood = Array.from({ length: MAX_LOG_EVENTS + 1 }, () => log[0]!);
-    expect(submitRequestSchema.safeParse({ handle: 'brave-lantern-42', log: flood }).success).toBe(
-      false,
-    );
-    expect(submitRequestSchema.safeParse({ handle: 'wolfspotter', log }).success).toBe(false);
-  });
-
-  it('refuses an event shape the reducer never emits', () => {
-    const forged = [{ t: 'verdict', s: 'cottage-finder', v: 'allow', at: 1, points: 9999 }];
-    expect(submitRequestSchema.safeParse({ handle: 'brave-lantern-42', log: forged }).success).toBe(
-      false,
-    );
   });
 });
 

@@ -1,15 +1,13 @@
 import './zod-config.ts';
 import { z } from 'zod';
-import { runEventSchema } from './state.ts';
 
 /*
  * The leaderboard contract, shared by both ends of the wire.
  *
- * The game mints a handle, posts a RUN LOG, and validates whatever comes back. The server parses
- * the body with these same schemas, replays the log through the reducer, and recomputes the score
- * with `score()` -- CLAUDE.md golden rule 6. There is deliberately no `score` field in the request:
- * a number the client sends is not ignored, it is unspeakable, because `submitRequestSchema` is
- * strict and rejects any key it does not name.
+ * The game mints a handle, posts a RUN LOG, and validates whatever comes back. The server's
+ * request schema (apps/api/src/schema.ts) is strict, replays the log through the v2 reducer and
+ * recomputes the score -- CLAUDE.md golden rule 6. There is deliberately no `score` field in the
+ * request: a number the client sends is not ignored, it is unspeakable.
  *
  * Handles are MINTED, never typed. A free-text handle on a Cyera-branded public page is a
  * moderation problem, so the game draws a word pair plus a number from the two lists below and the
@@ -154,13 +152,6 @@ export const handleSchema = z
  * vocabulary suggests, and nothing legitimate comes anywhere near this.
  */
 export const MAX_LOG_EVENTS = 256;
-
-/** The one body `POST /api/score` accepts. Strict: an unknown key -- `score` above all -- is a 400. */
-export const submitRequestSchema = z.strictObject({
-  handle: handleSchema,
-  log: z.array(runEventSchema).min(1).max(MAX_LOG_EVENTS),
-});
-export type SubmitRequest = z.infer<typeof submitRequestSchema>;
 
 /*
  * The responses are parsed with `z.object` rather than `z.strictObject`: strict inbound, tolerant

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import content from '../../../content/game.json';
+import content from '../../../content/game.v2.json';
 import map from '../src/assets/map-forest.json';
 import gids from '../src/assets/tileset-forest.gids.json';
 import manifest from '../src/assets/manifest.json';
@@ -59,21 +59,6 @@ function reachable(avoid?: MapObject): Set<string> {
   }
   return seen;
 }
-
-/*
- * `stands on`, not `touches`. Every rect in this map that the game READS -- a notice, the trigger
- * that ends the run -- is read by `overlaps` in world/logic.ts, which is a point test on Purple's
- * feet. So a rect whose own tiles are all unreachable still passes a `touches` check from the
- * tile next door while being impossible to fire. This lived inside one describe and is now at the
- * top, because three of them ask the same question and the weaker test is the easy one to reach
- * for by accident.
- */
-const standsOn = (seen: Set<string>, o: MapObject): boolean => {
-  const t = tiles(o);
-  for (let y = t.y0; y <= t.y1; y++)
-    for (let x = t.x0; x <= t.x1; x++) if (seen.has(`${x},${y}`)) return true;
-  return false;
-};
 
 /*
  * ===========================================================================
@@ -171,12 +156,13 @@ describe('the generated forest is playable', () => {
   });
 
   /*
-   * world/map.ts's npcSpawns recovers the character id by stripping `npc-` off the object name,
+   * world/map.ts's npcSpawns and bystanderSpawns recover the character id by stripping `npc-` or
+   * `bystander-` off the object name,
    * and forest-scene.ts then uses the whole object name as the texture key. So the content id and
    * the spawn name are one contract written in two files, and this is the only thing asserting it.
    */
   it.each(cast)('%s spawns under the name the scene reads its id back out of', (_n, id, spawn) => {
-    expect(spawn).toBe(`npc-${id}`);
+    expect(spawn).toMatch(new RegExp(`^(npc|bystander)-${id}$`));
   });
 
   it.each(cast)('Purple can walk to %s', (_name, _id, spawn) => {
@@ -227,43 +213,6 @@ describe('the notice post cannot be walked around', () => {
     expect(notice.y0).toBeLessThanOrEqual(gap.y0);
     expect(notice.y1).toBeGreaterThanOrEqual(gap.y1);
     expect(notice.x1).toBe(gap.x0 - 1);
-  });
-});
-
-describe('nothing a goal needs sits behind the end of the walk', () => {
-  /*
-   * The bug this exists to catch: `trigger-cottage` ends the run, and it used to sit on the
-   * garden gate, in front of the note on Grandma's door. A player who met all three travellers
-   * and then walked east had the run taken off her at the gate, so the `sign` errand goal was
-   * advertised in the HUD on every run and could not be earned in that order.
-   *
-   * A flood fill over the collision layer cannot see this. The gate tiles are deliberately
-   * walkable, so the BFS strolls straight through the one thing that ends the run: the trigger is
-   * a terminator, not a wall. The fix is to treat it as a wall HERE, which asks the question that
-   * matters -- can Purple still be in the explore phase when she gets there? -- rather than "is
-   * there a corridor of walkable tiles", which was never in doubt.
-   *
-   * This fails on the old map and passes on the new one.
-   */
-  const stillExploring = reachable(object('trigger-cottage'));
-  const acts = content.scoring.errandGoals.flatMap((g) => ('act' in g && g.act ? [g.act] : []));
-
-  it.each(acts)('the notice "%s" can be stood on before the walk ends', (act) => {
-    expect(standsOn(stillExploring, object(`notice-${act}`))).toBe(true);
-  });
-
-  /*
-   * `overlaps` is a point test on Purple's feet, not a tile test, and a player who only ever holds
-   * Right walks the whole map with her feet on one exact y. A notice rect that misses that line
-   * is unreachable for her however walkable the tiles around it are, which is the same bug one
-   * level down.
-   */
-  it.each(acts)('the notice "%s" lies on the line a due-east walker actually walks', (act) => {
-    const spawn = object('spawn-purple');
-    const feetY = spawn.y + TILE;
-    const notice = object(`notice-${act}`);
-    expect(feetY).toBeGreaterThanOrEqual(notice.y);
-    expect(feetY).toBeLessThan(notice.y + notice.height);
   });
 });
 
@@ -409,35 +358,17 @@ describe('no tile on the map asks Phaser to rotate it', () => {
   });
 });
 
-describe('errand goals are reachable in the world', () => {
-  const acts = content.scoring.errandGoals.flatMap((g) => ('act' in g && g.act ? [g.act] : []));
-
-  it('names at least one act, or this test is vacuous', () => {
-    expect(acts.length).toBeGreaterThan(0);
-  });
-
-  it.each(acts)('the notice "%s" is placed on the map', (act) => {
-    expect(forest.objects.map((o) => o.name)).toContain(`notice-${act}`);
-  });
-
-  /*
-   * There was a second flood fill here, re-inlining `reachable()` to assert each notice could be
-   * stood on from the spawn. It is strictly implied by the stronger assertion above, "the notice
-   * can be stood on before the walk ends": that one floods from the same spawn with the cottage
-   * trigger treated as a wall, so it searches a subset of the same tiles and makes the same
-   * `standsOn` claim. Blocking a rectangle can only remove reachable tiles, never add one.
-   */
-});
-
 describe('bystanders stand where they can be met', () => {
   const open = reachable();
-  const names = content.bystanders.map((b) => b.name);
+  /** The cast who stand about the forest and are not drawn as travellers: spawn `bystander-<id>`. */
+  const bystanders = content.characters.filter((c) => c.spawn.startsWith('bystander-'));
+  const names = bystanders.map((b) => b.name);
 
   it('names at least one bystander, or these tests are vacuous', () => {
     expect(names.length).toBeGreaterThan(0);
   });
 
-  it.each(content.bystanders.map((b) => [b.name, b.spawn] as const))(
+  it.each(bystanders.map((b) => [b.name, b.spawn] as const))(
     '%s has a spawn object on the map',
     (_name, spawn) => {
       expect(forest.objects.map((o) => o.name)).toContain(spawn);
@@ -449,14 +380,14 @@ describe('bystanders stand where they can be met', () => {
    * never meets them and nothing says so. The generator asserts this too; this catches a map
    * committed from an older generator.
    */
-  it.each(content.bystanders.map((b) => [b.name, b.spawn] as const))(
+  it.each(bystanders.map((b) => [b.name, b.spawn] as const))(
     'Purple can walk to %s',
     (_name, spawn) => {
       expect(touches(open, object(spawn))).toBe(true);
     },
   );
 
-  it.each(content.bystanders.map((b) => [b.name, b.spawn] as const))(
+  it.each(bystanders.map((b) => [b.name, b.spawn] as const))(
     '%s does not block the gate approach',
     (_name, spawn) => {
       const at = tiles(object(spawn));
@@ -471,16 +402,12 @@ describe('bystanders stand where they can be met', () => {
    * The scene throws on a missing texture, which turns a forgotten sprite into a black screen
    * rather than a missing bystander. The manifest is what the loader reads.
    */
-  it.each(content.bystanders.map((b) => [b.name, b.sprite] as const))(
+  it.each(bystanders.map((b) => [b.name, b.spawn] as const))(
     "%s's sprite sheet is in the manifest",
     (_name, sprite) => {
       expect(manifest.spritesheets.map((s) => s.key)).toContain(sprite);
     },
   );
-
-  it('every bystander spawn is named after its content id', () => {
-    for (const b of content.bystanders) expect(b.spawn).toBe(`bystander-${b.id}`);
-  });
 });
 
 /*
@@ -495,10 +422,7 @@ describe('bystanders stand where they can be met', () => {
  * which is the opposite of what a person standing there means, and passed.
  */
 describe('the cast is made of people, not decals', () => {
-  const cast = [
-    ...content.characters.map((c) => [c.name, c.spawn] as const),
-    ...content.bystanders.map((b) => [b.name, b.spawn] as const),
-  ];
+  const cast = [...content.characters.map((c) => [c.name, c.spawn] as const)];
 
   const STEPS = [
     [1, 0],

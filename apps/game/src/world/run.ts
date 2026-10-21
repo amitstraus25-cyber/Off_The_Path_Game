@@ -1,17 +1,13 @@
-import { ending } from '@otp/core';
-import type { Phase } from '@otp/core';
+import { v2 } from '@otp/core';
 import type { Store } from '../store';
+import type { HudBasketItem } from '../ui/Hud';
 
 /**
  * WHAT THE FOREST NEEDS TO KNOW ABOUT A RUN, AND NOTHING ELSE.
  *
- * The scene read the v1 store directly -- its phase names, its verdict map, its `ending()` -- so it
- * could only ever host v1. v2 Phase C walks the same forest with a different rulebook, and until
- * Phase D switches the game both have to run on the one scene. This is the whole of what the scene
- * asks of either: whether Purple may walk, whether the run has reached the door, whether the
- * wolf's prints belong there, and who in the cast still has something to say. Each rulebook
- * answers it from its own store; `v1Run` below is the live one, `v2Run` in `v2-wiring.ts` the one
- * behind the dev/e2e switch.
+ * The scene asks this and never reads the store directly: whether Purple may walk, whether the run
+ * has reached the door, whether the wolf's prints belong there, and who in the cast still has
+ * something to say. `gameRun` below answers it from the store.
  */
 export interface WorldRun {
   /**
@@ -27,40 +23,49 @@ export interface WorldRun {
   /** The wolf's prints show on the doorstep for this arrival. */
   pawsEarned(): boolean;
   /**
-   * Who a map spawn is, for this rulebook: a member of the cast who offers a skill, a bystander
-   * who only says a line, or nobody (left off the map). `id` is what interacting emits.
+   * Who a map spawn is: a member of the cast who offers a skill, a bystander who only says a line,
+   * or nobody (left off the map). `id` is what interacting emits.
    */
   castOf(spawnName: string): { kind: 'character' | 'bystander'; id: string } | null;
   /** Whether this character still talks: false once their offer has a verdict. */
   stillOffering(characterId: string): boolean;
 }
 
-/**
- * The phases that happen at the cottage. From the first arrival beat to the end of the run the
- * camera belongs to the door, not to Purple, so Results does not pan the forest back behind itself.
- */
-const AT_THE_COTTAGE: readonly Phase[] = ['cottage', 'results', 'leaderboard'];
-
-/** The live game: v1's store, read exactly as the scene read it before this adapter existed. */
-export function v1Run(store: Store): WorldRun {
+/** The forest's questions, answered from the store. */
+export function gameRun(store: Store): WorldRun {
+  const { content } = store;
   return {
     state: () => store.getState(),
-    exploring: () => store.getState().phase === 'explore',
-    atCottage: () => AT_THE_COTTAGE.includes(store.getState().phase),
-    pawsEarned: () =>
-      (store.content.strings['arrivePawEndings'] ?? '')
-        .split('|')
-        .includes(ending(store.getState(), store.content).id),
+    exploring: () => store.getState().phase === 'forest',
+    atCottage: () => store.getState().phase === 'cottage',
+    // Something came up this path ahead of you exactly when the run reached the wolf's ending:
+    // a skill dealt bad THIS run was taken. Read from core, never from the skill's own data.
+    pawsEarned: () => v2.ending(store.getState(), content) === 'wolf',
+    // The cast is read from content, not from the spawn's prefix: the map's bystanders offer here.
     castOf: (spawnName) => {
-      if (spawnName.startsWith('npc-'))
-        return { kind: 'character', id: spawnName.slice('npc-'.length) };
-      if (spawnName.startsWith('bystander-'))
-        return { kind: 'bystander', id: spawnName.slice('bystander-'.length) };
-      return null;
+      const c = content.characters.find((x) => x.spawn === spawnName);
+      return c ? { kind: 'character', id: c.id } : null;
     },
     stillOffering: (characterId) => {
-      const character = store.content.characters.find((c) => c.id === characterId);
-      return character !== undefined && store.getState().verdicts[character.skillId] === undefined;
+      const c = v2.findCharacter(content, characterId);
+      return c !== undefined && store.getState().verdicts[c.skillId] === undefined;
     },
   };
 }
+
+/** What the HUD's basket shows: each skill taken, in the order it was taken. */
+export function hudBasket(state: v2.State, content: v2.Content): HudBasketItem[] {
+  return state.basket.map((e) => {
+    const skill = v2.findSkill(content, e.s);
+    return { skillId: e.s, name: skill?.name ?? e.s, icon: skill?.icon ?? null };
+  });
+}
+
+/** Time left on the HUD: the live clock while the run runs, frozen where it stopped otherwise. */
+export function remainingMs(state: v2.State, elapsed: number): number {
+  const at = v2.RUNNING.has(state.phase) ? elapsed : state.now;
+  return Math.max(0, v2.TIME_LIMIT_MS - at);
+}
+
+/** A seed for a run the server did not start: the browser's CSPRNG, as core asks (deal.ts). */
+export const localSeed = (): number => crypto.getRandomValues(new Uint32Array(1))[0]!;

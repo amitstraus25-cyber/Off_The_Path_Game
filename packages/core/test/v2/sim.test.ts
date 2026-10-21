@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ContentError } from '../../src/content.ts';
+import { ContentError } from '../../src/v2/load.ts';
 import type { Content } from '../../src/v2/content.ts';
 import { deal, everySeed } from '../../src/v2/deal.ts';
 import { loadContent, parseContent } from '../../src/v2/load.ts';
@@ -147,8 +147,8 @@ describe('the trap stays a trap: properties checked against any content', () => 
 describe('the clock is honest: a reader can make it, in every deal, at the pace the world is measured at', () => {
   it('reads the card the deal shows, giveaway line included', () => {
     const courier = skill('courier');
-    // The bad courier card is the good one plus a line of five words.
-    expect(cardWords(courier, false) - cardWords(courier, true)).toBe(5);
+    // The bad courier card swaps a four-word line for a five-word one.
+    expect(cardWords(courier, false) - cardWords(courier, true)).toBe(1);
     expect(readMs(courier, false)).toBe(cardWords(courier, false) * READING.msPerWord + 3000);
   });
 

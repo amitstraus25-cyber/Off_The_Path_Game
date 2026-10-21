@@ -9,10 +9,25 @@ export interface Probe {
   phase: string;
   position: { x: number; y: number };
   verdicts: Record<string, string>;
-  flags: string[];
+  /** Skill ids in the basket, in the order taken. */
   basket: string[];
   activeCharacter: string | null;
-  log: { t: string }[];
+  log: { e: string }[];
+}
+
+/** The v2 run state, as much of it as a spec reads. */
+export interface RunState {
+  phase: string;
+  seed: number;
+  /** The skills dealt good this run. */
+  good: string[];
+  runId: string | null;
+  active: string | null;
+  met: string[];
+  inspected: string[];
+  verdicts: Record<string, string>;
+  basket: { s: string; v: string }[];
+  log: { e: string; at: number }[];
 }
 
 declare global {
@@ -20,23 +35,27 @@ declare global {
     __otp?: {
       bus: { emit(event: string, payload: Record<string, unknown>): void };
       store: {
-        getState(): {
-          phase: string;
-          verdicts: Record<string, string>;
-          asked: Record<string, string[]>;
-          basket: string[];
-          flags: string[];
-          /** Notice ids Purple has actually read, which is what the errand goals score off. */
-          read: string[];
-          /** Skill ids whose card was opened. Empty for an offer taken on the offerer's word. */
-          inspected: string[];
-          activeCharacter: string | null;
-          runId: string | null;
-          log: { t: string }[];
-        };
+        getState(): RunState;
         dispatch(action: Record<string, unknown>): string | null;
+        elapsed(): number;
       };
-      scene?: { purplePosition: { x: number; y: number } };
+      content: {
+        characters: { id: string; name: string; spawn: string; skillId: string }[];
+        skills: {
+          id: string;
+          name: string;
+          good: { card: { take: string[]; leave: string }; reveal: string };
+          bad: { card: { take: string[]; leave: string }; reveal: string };
+          realWorld: { term: string; note: string };
+        }[];
+      };
+      /** The run clock's e2e override: a skew added to the clock, never the limit. */
+      testClock: { advance(ms: number): void };
+      scene?: {
+        purplePosition: { x: number; y: number };
+        position: { x: number; y: number };
+        placePurple(): void;
+      };
       isSolidAt?: (x: number, y: number) => boolean;
       mapObjects?: { name: string; x: number; y: number; width: number; height: number }[];
     };
@@ -63,11 +82,40 @@ export const tagOf = (page: Page, selector: string): Promise<string | null> =>
     .locator(selector)
     .evaluate((el) => (el as unknown as Record<string, string>)['__otpTag'] ?? null);
 
-/** Clicks past the title screen into the forest. */
+/** Clicks past the title screen and the how-to into the forest. */
 export async function startGame(page: Page): Promise<void> {
   await ready(page);
   await page.getByRole('button', { name: /Begin the walk/ }).click();
-  await page.waitForFunction(() => window.__otp?.store.getState().phase === 'explore');
+  await page.getByRole('button', { name: /Start walking/ }).click();
+  await page.waitForFunction(() => window.__otp?.store.getState().phase === 'forest');
+}
+
+/**
+ * From the cottage door (or the late ending) to the reveal: every line of the arrival, then the
+ * way in. The v2 rules have no FINISH: the run ended at the door, and this is the view walking on.
+ */
+export async function toTheReveal(page: Page): Promise<void> {
+  const finish = page.locator('[data-arrive] [data-action="finish"]');
+  await page.locator('[data-arrive]').waitFor();
+  while (!(await finish.isVisible())) await page.getByRole('button', { name: 'Go on' }).click();
+  await finish.click();
+  await page.locator('.otp-reveal').waitFor();
+}
+
+/**
+ * Answers every offer through the store and walks in: a whole run with no walking, for the specs
+ * that need the end of a run and not the path to it. `take` takes everything; otherwise all left.
+ */
+export async function answerAllAndArrive(page: Page, verdict: 'take' | 'leave'): Promise<void> {
+  await page.evaluate((v) => {
+    const { store, content } = window.__otp!;
+    for (const c of content.characters) {
+      store.dispatch({ type: 'MEET', c: c.id });
+      store.dispatch({ type: 'INSPECT', s: c.skillId });
+      store.dispatch({ type: 'VERDICT', s: c.skillId, v });
+    }
+    store.dispatch({ type: 'ENTER_COTTAGE' });
+  }, verdict);
 }
 
 export async function probe(page: Page): Promise<Probe> {
@@ -78,9 +126,8 @@ export async function probe(page: Page): Promise<Probe> {
       phase: s.phase,
       position: otp.scene?.purplePosition ?? { x: 0, y: 0 },
       verdicts: s.verdicts,
-      flags: s.flags,
-      basket: s.basket,
-      activeCharacter: s.activeCharacter,
+      basket: s.basket.map((b) => b.s),
+      activeCharacter: s.active,
       log: s.log,
     };
   });
@@ -171,9 +218,9 @@ export async function talkingDistance(page: Page, name: string): Promise<{ x: nu
   return { x: spot.x + TILE / 2, y: spot.y + TILE };
 }
 
-/** Closes a notice post if Purple has walked up to one, so a walk across the map is not blocked. */
+/** Walks away from an offer if Purple has stumbled into one, so a walk across the map is not blocked. */
 export async function dismissNotice(page: Page): Promise<void> {
-  const walkOn = page.getByRole('button', { name: /Walk on/ });
+  const walkOn = page.locator('[data-action="walk-on"]');
   if ((await walkOn.count()) > 0) await walkOn.first().click();
 }
 

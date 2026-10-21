@@ -38,7 +38,7 @@ import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { startGame } from './helpers';
+import { answerAllAndArrive, startGame, toTheReveal } from './helpers';
 
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 const VERCEL = fileURLToPath(new URL('../../../vercel.json', import.meta.url));
@@ -164,6 +164,14 @@ test('the game runs clean under the headers vercel.json ships', async ({ page })
       });
     });
 
+    // A run the server started, so the reveal carries the post form this file posts through.
+    await page.route('**/api/start', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ seed: 0, token: 'dGVzdA.c2ln' }),
+      }),
+    );
     const response = await page.goto(origin + '/');
 
     /*
@@ -193,21 +201,8 @@ test('the game runs clean under the headers vercel.json ships', async ({ page })
      * in this bundle happens. The canary is excluded by its URL at the end instead.
      */
     await startGame(page);
-    await page.evaluate(() => {
-      const { store } = window.__otp!;
-      for (const [character, skill] of [
-        ['rabbit', 'cottage-finder'],
-        ['owl', 'word-weaver'],
-        ['lantern-keeper', 'night-light'],
-      ]) {
-        store.dispatch({ type: 'MEET', c: character });
-        store.dispatch({ type: 'INSPECT', s: skill });
-        store.dispatch({ type: 'VERDICT', s: skill, v: 'allow' });
-      }
-      store.dispatch({ type: 'ENTER_COTTAGE' });
-      store.dispatch({ type: 'FINISH' });
-    });
-    await page.waitForFunction(() => window.__otp?.store.getState().phase === 'results');
+    await answerAllAndArrive(page, 'take');
+    await toTheReveal(page);
 
     /*
      * Posting a score is the ONLY thing in the shipped game that uses connect-src, so it is the

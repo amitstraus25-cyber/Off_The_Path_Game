@@ -83,7 +83,7 @@ describe('property: random play under a random clock', () => {
 });
 
 describe('the v2 barrel', () => {
-  it('is exported from core under its own name, beside v1 and not over it', () => {
+  it('is exported from core under its own name', () => {
     expect(core.v2).toBe(barrel);
     for (const name of [
       'contentSchema',
@@ -113,9 +113,6 @@ describe('the v2 barrel', () => {
       'RULES',
     ])
       expect(barrel, name).toHaveProperty(name);
-    // v1 is still what the bare names mean: production imports them.
-    expect(core.reduce).not.toBe(barrel.reduce);
-    expect(core.score).not.toBe(barrel.score);
-    expect(core.checkLog).toBeTypeOf('function');
+    expect(core.ContentError).toBe(barrel.ContentError);
   });
 });
