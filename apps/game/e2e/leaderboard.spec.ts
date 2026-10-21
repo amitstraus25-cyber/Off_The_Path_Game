@@ -511,6 +511,170 @@ for (const outcome of OUTCOMES) {
 }
 
 /*
+ * THE THIRD NODE, IN A BROWSER, WITH THE PLAYER'S OWN RUN ON THE BOARD.
+ *
+ * The block above drives every post outcome against an EMPTY board, which is the launch case and
+ * is where `.otp-error` meets `.otp-board__note`. It cannot reach the third node at all: a row
+ * only renders when the board answers with rows, so none of those runs ever put a sentence in
+ * `.otp-board__row--you`.
+ *
+ * Measured on 2026-10-21 against a clean build, with a board answering a row under the page's own
+ * handle, `.otp-error` and that row:
+ *
+ *   a 400                    "That run could not be posted."
+ *                            "Rank 2. noble-acorn-93, 900 points. This is your run."
+ *   a reply that times out   "The board was unavailable for that post."   (the then-shipped line)
+ *                            "Rank 2. tidy-bellows-34, 900 points. This is your run."
+ *   a 2xx the schema rejects the same pair, by a third route to the same notice
+ *
+ * The two fixes are different in kind and this block exists to hold both:
+ *
+ *   - the 400 is an exclusive pair -- `readerRunDidNotGoUp` against `readerRunIsOnBoard`, both
+ *     long declared, never enumerated against each other. `boardRowKey` now declines the row's
+ *     claim by asking `contradictions()`, so the row drops to the plain sentence.
+ *   - the timeout and the rejected body are not: the run really IS on the board and the page
+ *     really never learned. Nothing may be hidden there -- the row stays marked and the COPY
+ *     moved, because "the board was unavailable" asserted something about a board that was
+ *     plainly answering two lines down.
+ *
+ * As with the block above, these assert the EXACT shipped sentences out of content/game.json
+ * rather than a pattern over the words. The claim algebra is enumerated without a DOM in
+ * test/board.test.ts; this is the wiring.
+ */
+interface RowOutcome {
+  what: string;
+  /** What /api/score answers; `null` means it never answers at all. */
+  answer: ((sent: { handle?: string }) => TopReply) | null;
+  notice: (sent: { handle?: string }) => string;
+  /** Whether the reader's row may still call itself theirs once that notice is on screen. */
+  marked: boolean;
+}
+
+const ROW_OUTCOMES: RowOutcome[] = [
+  {
+    what: 'a post the board takes',
+    answer: (sent) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ handle: sent.handle, score: 900 }),
+    }),
+    notice: (sent) => say('handleAssigned').replace('{handle}', sent.handle!),
+    marked: true,
+  },
+  {
+    what: 'a run already on the board',
+    answer: () => ({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'that run is already on the board' }),
+    }),
+    notice: () => say('leaderboardAlready'),
+    marked: true,
+  },
+  {
+    what: 'a post the board refuses',
+    answer: () => ({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'that submission is not valid' }),
+    }),
+    notice: () => say('leaderboardRefused'),
+    marked: false,
+  },
+  {
+    /*
+     * A 2xx whose body the schema refuses. The server took the run -- it answered 200 -- and the
+     * page cannot believe the reply, so it reports exactly that and nothing about the board.
+     */
+    what: 'a reply the schema cannot believe',
+    answer: () => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ handle: 'brave-lantern-42' }),
+    }),
+    notice: () => say('leaderboardDown'),
+    marked: true,
+  },
+  {
+    // The reply that never comes: the adapter's own timeout has to fire, so this one is slow.
+    what: 'a reply that never comes',
+    answer: null,
+    notice: () => say('leaderboardDown'),
+    marked: true,
+  },
+];
+
+for (const outcome of ROW_OUTCOMES) {
+  test(`${outcome.what} never denies the row the board is showing`, async ({ page }) => {
+    test.slow();
+    let sent: { handle?: string } = {};
+    await page.route('**/api/score', async (route: Route) => {
+      sent = JSON.parse(route.request().postData() ?? '{}') as typeof sent;
+      // A route left unfulfilled is a request that never answers, which is the case under test.
+      if (outcome.answer === null) return;
+      await route.fulfill(outcome.answer(sent));
+    });
+
+    // The mount read finds nothing, so the handle can be read off the page before the board that
+    // carries it is built. It is minted in the browser; there is no other way to build it.
+    const board: Board = { reply: ABSENT_BOARD, calls: 0 };
+    await serveBoard(page, board);
+    await reachResults(page);
+    await expect(note(page)).toHaveText(say('boardDown'));
+
+    const mine = await page.locator('.otp-handle [data-handle]').getAttribute('data-handle');
+    expect(mine).toMatch(/^[a-z]+-[a-z]+-[1-9][0-9]$/);
+    const others = tenRows(mine!);
+    board.reply = rowsReply([
+      others[0]!,
+      { rank: 2, handle: mine!, score: 900 },
+      ...others.slice(2),
+    ]);
+
+    await post(page);
+
+    // The post's own sentence, exactly as the content file ships it, and the read that followed
+    // really did come back with rows -- this is the state, not a dodge.
+    const status = page.getByRole('status');
+    // The reply that never comes has to wait out the adapter's own abort, which is longer than
+    // the default expect timeout. The bound is read from the adapter, not typed here.
+    await expect(status).toHaveText(outcome.notice(sent), {
+      timeout: ADAPTER_TIMEOUT_MS + 9000,
+    });
+    await expect(note(page)).toHaveAttribute('data-board', 'rows');
+    await expect(page.locator('.otp-board__row')).toHaveCount(10);
+    // The row carrying the page's handle is on screen either way. Nothing is ever hidden.
+    await expect(page.locator('.otp-board__row').nth(1)).toContainText(mine!);
+
+    const yours = page.locator('.otp-board__row--you');
+    await expect(yours).toHaveCount(outcome.marked ? 1 : 0);
+
+    const together = await page.evaluate(() => ({
+      posted: document.querySelector('.otp-error')?.textContent ?? '',
+      row: document.querySelector('.otp-board__row--you .otp-visually-hidden')?.textContent ?? null,
+      second:
+        document.querySelectorAll('.otp-board__row')[1]?.querySelector('.otp-visually-hidden')
+          ?.textContent ?? '',
+    }));
+    expect(
+      together.posted,
+      'the post notice is not on screen, so nothing is being contradicted',
+    ).not.toBe('');
+    const sentence = (key: string): string =>
+      say(key).replace('{rank}', '2').replace('{handle}', mine!).replace('{score}', '900');
+    // The rendered pair, in full. Either the row claims the run and the notice does not deny it,
+    // or the row says only what the board shows.
+    expect([together.posted.trim(), together.row]).toEqual([
+      outcome.notice(sent),
+      outcome.marked ? sentence('boardRowYou') : null,
+    ]);
+    expect(together.second.trim()).toBe(sentence(outcome.marked ? 'boardRowYou' : 'boardRow'));
+
+    await expectNoLime(page);
+  });
+}
+
+/*
  * THE NOTE TURNS OVER BEFORE THE REQUEST LANDS, AND THAT IS DELIBERATE -- so what it turns over TO
  * has to be true of a post whose fate nothing yet knows.
  *
@@ -756,6 +920,39 @@ test('the retry asks the board again, and your own row is marked when it arrives
   expect(board.calls, 'the retry did not re-request the board').toBe(2);
   await expect(page.locator('.otp-board__row')).toHaveCount(10);
 
+  /*
+   * AND NOTHING IS MARKED YET, WHICH IS THE HALF THIS TEST ASSERTED THE WRONG WAY ROUND.
+   *
+   * It used to stop here and check that rank 3 said "This is your run." -- with no post made. The
+   * page has sent nothing, so a row carrying the name it is showing is NECESSARILY somebody
+   * else's: the mint has 3,072 names, the board shows ten, and about one visitor in three hundred
+   * would have been told a stranger's run was theirs before touching the button. The fixture only
+   * made that look like a match because it was built by reading the page's own handle.
+   */
+  await expect(
+    page.locator('.otp-board__row--you'),
+    'a run under your name is not your run until you have posted one',
+  ).toHaveCount(0);
+  await expect(page.locator('.otp-board__row').nth(2).locator('.otp-visually-hidden')).toHaveText(
+    say('boardRow').replace('{rank}', '3').replace('{handle}', mine!).replace('{score}', '900'),
+  );
+  await expectNoLime(page);
+
+  // Now post it, which is what earns the claim. The board already holds the row, so the read that
+  // follows the press is the one that marks it.
+  await page.route('**/api/score', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ handle: mine, score: 900 }),
+    }),
+  );
+  await post(page);
+  await expect(page.getByRole('status')).toHaveText(
+    say('handleAssigned').replace('{handle}', mine!),
+  );
+  expect(board.calls, 'the post did not re-read the board').toBe(3);
+
   const yours = page.locator('.otp-board__row--you');
   await expect(yours).toHaveCount(1);
   await expect(yours).toContainText(mine!);
@@ -840,8 +1037,23 @@ for (const width of [375, 768, 1280] as const) {
       { rank: 3, handle: mine!, score: 1000 },
       ...others.slice(3),
     ]);
-    await page.getByRole('button', { name: say('boardRetry'), exact: true }).click();
+    /*
+     * POSTED, not retried, and that is what gets the chip on the page. A row only calls itself
+     * the reader's once this page has posted that name -- before the press the page has sent
+     * nothing, so a row carrying its handle is somebody else's (see `boardRowKey`). The press
+     * re-reads the board, so it brings the rows in as well and the retry click it replaced is
+     * covered by the test that owns the retry.
+     */
+    await page.route('**/api/score', (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ handle: mine, score: 1000 }),
+      }),
+    );
+    await post(page);
     await expect(page.locator('.otp-board__row')).toHaveCount(10);
+    await expect(page.locator('.otp-board__row--you')).toHaveCount(1);
 
     const body = (await page.locator('.otp-screen__body').boundingBox())!;
     for (const row of await page.locator('.otp-board__row').all()) {

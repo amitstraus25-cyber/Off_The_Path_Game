@@ -13,6 +13,7 @@ import {
 } from '@otp/core';
 import type { Action, Content, GameState } from '@otp/core';
 import { createLeaderboardClient, newHandle } from '../src/net/leaderboard';
+import type { PostOutcome } from '../src/net/leaderboard';
 import { validateHandle } from '../src/ui/Results';
 
 /*
@@ -32,6 +33,20 @@ const DOWN = content.strings['leaderboardDown']!;
 const REFUSED = content.strings['leaderboardRefused']!;
 const ALREADY = content.strings['leaderboardAlready']!;
 const ASSIGNED = content.strings['handleAssigned']!;
+
+/*
+ * `submit()` answers an OUTCOME now -- the sentence and the content key that produced it -- so
+ * Results can tell a refusal from a success without matching words (see `PostOutcome`). These
+ * build the whole answer, so an assertion is about both halves: a key that stops matching its
+ * sentence is the drift this shape exists to make visible.
+ */
+const down: PostOutcome = { key: 'leaderboardDown', text: DOWN };
+const refused: PostOutcome = { key: 'leaderboardRefused', text: REFUSED };
+const already: PostOutcome = { key: 'leaderboardAlready', text: ALREADY };
+const assigned = (handle: string): PostOutcome => ({
+  key: 'handleAssigned',
+  text: ASSIGNED.replace('{handle}', handle),
+});
 
 /** A finished run, through the real reducer. The adapter posts this log and nothing else. */
 function finishedRun(): GameState {
@@ -188,8 +203,9 @@ describe('submit', () => {
     intercept(() => okScore('brave-lantern-42'));
     const message = await client.submit(run, 'brave-lantern-42');
     // Never a silent success: the name is minted, so the player is told which one it was.
-    expect(message).toContain('brave-lantern-42');
-    expect(message).not.toContain('{handle}');
+    expect(message?.text).toContain('brave-lantern-42');
+    expect(message?.text).not.toContain('{handle}');
+    expect(message?.key).toBe('handleAssigned');
   });
 
   it('never sends a handle the game did not mint, and says which name went up', async () => {
@@ -198,8 +214,8 @@ describe('submit', () => {
 
     expect(isMintedHandle(bodyOf(sent[0]!).handle)).toBe(true);
     expect(bodyOf(sent[0]!).handle).not.toBe('wolfspotter');
-    expect(message).toContain('quiet-thicket-11');
-    expect(message).not.toContain('{handle}');
+    expect(message?.text).toContain('quiet-thicket-11');
+    expect(message?.text).not.toContain('{handle}');
   });
 
   it('never throws, whatever the network does', async () => {
@@ -211,7 +227,7 @@ describe('submit', () => {
       (): Response => new Response('', { status: 500 }),
     ]) {
       intercept(reply);
-      await expect(client.submit(run, 'brave-lantern-42')).resolves.toBe(DOWN);
+      await expect(client.submit(run, 'brave-lantern-42')).resolves.toEqual(down);
       vi.unstubAllGlobals();
     }
   });
@@ -219,8 +235,14 @@ describe('submit', () => {
   it('separates "the board refused this" from "the board is down"', async () => {
     intercept(() => new Response(JSON.stringify({ error: 'nope' }), { status: 400 }));
     const message = await client.submit(run, 'brave-lantern-42');
-    expect(message).toBe(REFUSED);
-    expect(message).not.toBe(DOWN);
+    expect(message).toEqual(refused);
+    /*
+     * The key half, which is the one Results acts on: `boardRowKey` declines to mark the player's
+     * row while this outcome is on screen, and it decides that from the key. A 400 answering
+     * `leaderboardDown`'s key would put "This is your run." back above a refusal.
+     */
+    expect(message?.key).toBe('leaderboardRefused');
+    expect(message?.key).not.toBe('leaderboardDown');
   });
 
   it('tells a player who pressed Post twice that the run is up, not that it failed', async () => {
@@ -237,9 +259,9 @@ describe('submit', () => {
         }),
     );
     const message = await client.submit(run, 'brave-lantern-42');
-    expect(message).toBe(ALREADY);
-    expect(message).not.toBe(REFUSED);
-    expect(message).not.toBe(DOWN);
+    expect(message).toEqual(already);
+    expect(message?.key).not.toBe('leaderboardRefused');
+    expect(message?.key).not.toBe('leaderboardDown');
   });
 
   it('says every one of its lines in the words of the content file', async () => {
@@ -261,7 +283,7 @@ describe('submit', () => {
 
     intercept(() => okScore('quiet-thicket-11'));
     const message = await client.submit(run, 'brave-lantern-42');
-    expect(message).toBe(ASSIGNED.replace('{handle}', 'quiet-thicket-11'));
+    expect(message).toEqual(assigned('quiet-thicket-11'));
   });
 
   it('calls an undeployed API a board that is down, not a run that was refused', async () => {
@@ -269,7 +291,7 @@ describe('submit', () => {
     // that the game is the same game when the board is not there, and e2e/game.spec.ts holds us
     // to the wording: a 404 must not read as "that run could not be posted".
     intercept(() => new Response('<!doctype html>', { status: 404 }));
-    await expect(client.submit(run, 'brave-lantern-42')).resolves.toBe(DOWN);
+    await expect(client.submit(run, 'brave-lantern-42')).resolves.toEqual(down);
   });
 
   it('believes nothing it cannot parse', async () => {
@@ -280,7 +302,7 @@ describe('submit', () => {
       (): Response => new Response(JSON.stringify({ handle: 'brave-lantern-42' })),
     ]) {
       intercept(reply);
-      await expect(client.submit(run, 'brave-lantern-42')).resolves.toBe(DOWN);
+      await expect(client.submit(run, 'brave-lantern-42')).resolves.toEqual(down);
       vi.unstubAllGlobals();
     }
   });
@@ -290,7 +312,7 @@ describe('submit', () => {
     vi.stubGlobal('fetch', neverAnswers);
     const pending = client.submit(run, 'brave-lantern-42');
     await vi.advanceTimersByTimeAsync(10000);
-    await expect(pending).resolves.toBe(DOWN);
+    await expect(pending).resolves.toEqual(down);
     vi.useRealTimers();
   });
 
@@ -305,7 +327,7 @@ describe('submit', () => {
     vi.stubGlobal('fetch', stalledBody);
     const pending = client.submit(run, 'brave-lantern-42');
     await vi.advanceTimersByTimeAsync(10000);
-    await expect(pending).resolves.toBe(DOWN);
+    await expect(pending).resolves.toEqual(down);
     vi.useRealTimers();
   });
 });

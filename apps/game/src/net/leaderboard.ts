@@ -34,9 +34,38 @@ export interface LeaderboardEntry {
 export type BoardRead =
   { state: 'rows'; entries: LeaderboardEntry[] } | { state: 'empty' } | { state: 'unavailable' };
 
+/**
+ * The content key of every sentence a post can answer with. Four, and no fifth without a line
+ * here: `Results.tsx` declares what each one ASSERTS, and a key with no declaration is a line
+ * nobody has thought about.
+ */
+export type NoticeKey =
+  'handleAssigned' | 'leaderboardAlready' | 'leaderboardRefused' | 'leaderboardDown';
+
+/**
+ * What a post answered: the sentence to show, AND which of the four it is.
+ *
+ * THE KEY IS WHY THIS IS NOT A STRING ANY MORE, and it is worth saying what it bought. The screen
+ * used to receive a sentence and nothing else, so the only way it could have known whether the
+ * notice denied the player's run was to match that sentence against the content file -- a coupling
+ * this module refused, and rightly: it is a bound written against a SPELLING, which is the trap
+ * `Results.tsx` already walked into once over the board note.
+ *
+ * It had a cost. `.otp-board__row--you` says "This is your run." in the same section as the
+ * notice, and on 2026-10-21 a 400 was measured in Chromium rendering "That run could not be
+ * posted." directly above it. The screen could not decline the row's claim, because it could not
+ * tell a refusal from a success without reading the words. It can now, and the words stay free to
+ * change.
+ */
+export interface PostOutcome {
+  key: NoticeKey;
+  /** The sentence, with `{handle}` already substituted where the line has one. */
+  text: string;
+}
+
 export interface LeaderboardClient {
-  /** Returns a message to show the player, or null when there is nothing to say. Never throws. */
-  submit(state: GameState, handle: string): Promise<string | null>;
+  /** Returns what to show the player, or null when there is nothing to say. Never throws. */
+  submit(state: GameState, handle: string): Promise<PostOutcome | null>;
   /** Never throws, never hangs, and never reports an absent board as an empty one. */
   top(limit: number): Promise<BoardRead>;
 }
@@ -154,7 +183,7 @@ export async function readTop(limit: number): Promise<BoardRead> {
  * `handleAssigned`, `leaderboardRefused`, `leaderboardAlready` -- and `test/strings.test.ts` holds
  * the file and these reads against each other in both directions.
  *
- * The literals that remain are BACKSTOPS, not copy. `submit()` promises a sentence or null, and a
+ * The literals that remain are BACKSTOPS, not copy. `submit()` promises an outcome or null, and a
  * key deleted from the content file must not turn that promise into `undefined` rendered on the
  * payoff screen; the build-time guard is the thing that keeps them unreachable.
  */
@@ -166,14 +195,33 @@ export function createLeaderboardClient(content: Content): LeaderboardClient {
    * only worth having if the code it reads is written the way it scans for.
    */
   const say = (value: string | undefined, backstop: string): string => value?.trim() || backstop;
-  const unavailable = say(content.strings['leaderboardDown'], 'Leaderboard unavailable right now.');
-  const refused = say(content.strings['leaderboardRefused'], 'That run could not be posted.');
-  const already = say(content.strings['leaderboardAlready'], 'That run is already on the board.');
-  const assigned = (handle: string): string =>
-    say(content.strings['handleAssigned'], 'Posted to the board as {handle}.').replace(
+  /*
+   * The backstops are the CLAIM as well as the words. `leaderboardDown`'s used to read
+   * "Leaderboard unavailable right now.", which asserts something this client never observed --
+   * it saw no reply, which is not the same as a board that is down, and on 2026-10-21 that
+   * sentence was measured sitting above the player's own run on a board that was plainly
+   * answering. A backstop that says more than the shipped line would reintroduce the defect on
+   * the day the key goes missing.
+   */
+  const unavailable: PostOutcome = {
+    key: 'leaderboardDown',
+    text: say(content.strings['leaderboardDown'], 'No reply came back for that post.'),
+  };
+  const refused: PostOutcome = {
+    key: 'leaderboardRefused',
+    text: say(content.strings['leaderboardRefused'], 'That run could not be posted.'),
+  };
+  const already: PostOutcome = {
+    key: 'leaderboardAlready',
+    text: say(content.strings['leaderboardAlready'], 'That run is already on the board.'),
+  };
+  const assigned = (handle: string): PostOutcome => ({
+    key: 'handleAssigned',
+    text: say(content.strings['handleAssigned'], 'Posted to the board as {handle}.').replace(
       '{handle}',
       handle,
-    );
+    ),
+  });
 
   return {
     async submit(state, handle) {

@@ -9,6 +9,7 @@ import {
   liveCapabilities,
 } from '@otp/core';
 import type { Character, Content, GameState, Verdict } from '@otp/core';
+import type { PostOutcome } from '../net/leaderboard';
 import type { Store } from '../store';
 import { Dialogue } from './Dialogue';
 import { SkillCard } from './SkillCard';
@@ -29,7 +30,8 @@ export interface AppProps {
   onStart(): void;
   onReplay(): void;
   onReadResearch(): void;
-  onPost(handle: string): Promise<string | null>;
+  /** The sentence to show and which of the four it is; see `PostOutcome`. Forwarded to Results. */
+  onPost(handle: string): Promise<PostOutcome | null>;
   /** The notice Red is standing at, if any. */
   noticeId: string | null;
   onReadNotice(id: string): void;

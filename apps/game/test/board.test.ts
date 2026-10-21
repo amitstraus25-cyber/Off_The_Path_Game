@@ -7,11 +7,13 @@ import {
   BOARD_NOTE,
   NOTE_CLAIMS,
   NOTICE_CLAIMS,
+  ROW_CLAIMS,
   boardNoteKey,
   boardReads,
+  boardRowKey,
   contradictions,
 } from '../src/ui/Results';
-import type { BoardState } from '../src/ui/Results';
+import type { BoardState, Claim } from '../src/ui/Results';
 
 /*
  * THE BOARD ON RESULTS: that it can tell an ABSENT board from an EMPTY one, and that it says so.
@@ -199,19 +201,44 @@ describe('what the player is told matches what actually came back', () => {
  * written against a spelling cannot guard a meaning, and it closed 1 while leaving 2 and 3 open.
  *
  * SO THE BOUND IS THE PAIRING, OVER DECLARED CLAIMS. Results.tsx names what each line asserts
- * (`NOTE_CLAIMS`, `NOTICE_CLAIMS`) and which claims are mutually exclusive (`EXCLUSIVE`); this
- * enumerates EVERY post outcome against EVERY board state and asserts no reachable pair carries an
- * exclusive pair of claims. Rewording a line does not move the property. Adding a state, a note
- * line or a post outcome without declaring what it asserts fails here rather than passing in
- * silence -- and the outcome set is read out of `src/net/leaderboard.ts`, which is another owner's
- * file, so it cannot drift out of step with a list kept here.
+ * (`NOTE_CLAIMS`, `NOTICE_CLAIMS`, `ROW_CLAIMS`) and which claims are mutually exclusive
+ * (`EXCLUSIVE`); this enumerates EVERY post outcome against EVERY board state and asserts no
+ * reachable pairing carries an exclusive pair of claims. Rewording a line does not move the
+ * property. Adding a state, a note line or a post outcome without declaring what it asserts fails
+ * here rather than passing in silence -- and the outcome set is read out of
+ * `src/net/leaderboard.ts`, which is another owner's file, so it cannot drift out of step with a
+ * list kept here.
+ *
+ * AND THEN THE MODEL HAD TWO NODES AND THE SECTION HAD THREE -- 2026-10-21, the defect this block
+ * was widened for. `.otp-board__row--you` renders "This is your run." inside the same board
+ * section, carried no declaration, and was in nothing's enumeration. Measured in Chromium against
+ * a clean build on this session's own dist, three ways:
+ *
+ *   4  a 400                    "That run could not be posted."
+ *                               "Rank 2. noble-acorn-93, 900 points. This is your run."
+ *   5  a reply that times out   "The board was unavailable for that post."  (the then-shipped line)
+ *                               "Rank 2. tidy-bellows-34, 900 points. This is your run."
+ *   6  a 2xx the schema rejects the same, via `submitResponseSchema` refusing the body
+ *
+ * 4 is the one with an exclusive pair in it -- `readerRunDidNotGoUp` against `readerRunIsOnBoard`,
+ * already declared, simply never enumerated against each other. 5 and 6 were a sentence claiming
+ * the BOARD was unavailable printed above a board that was visibly answering; the claim the client
+ * could actually support is that no reply came, so the copy moved and the declaration did not.
+ *
+ * THE ENUMERATION IS OVER THE SCREEN'S INPUTS NOW, not over the nodes' outputs. The four free
+ * variables are the board state, `attempted`, which outcome the post answered, and whether a row
+ * carries the page's own handle; the three nodes are DERIVED from them through the real
+ * `boardNoteKey` and `boardRowKey`. That is the difference between a model and a description: a
+ * `boardRowKey` that stopped declining the row reddens a configuration here rather than leaving
+ * this file asserting a property the screen no longer has.
  *
  * What this CANNOT check is that a declaration still matches its own words: a line reworded to mean
  * something else while its claims stay put is a lie in the declaration. That is a human-review
  * boundary and naming it is the honest thing to do -- the alternative is the regex above, which
- * reads as proof and is not.
+ * reads as proof and is not. The `leaderboardDown` rewording in this round is exactly such a
+ * change and nothing below can confirm it: see docs/PAUL_BRIEF.md section 7.
  */
-describe('no pairing of the post notice and the board note can contradict', () => {
+describe('no pairing of the three nodes in the board section can contradict', () => {
   /**
    * Every sentence `.otp-error` can carry, DERIVED from the adapter that produces them.
    *
@@ -234,15 +261,27 @@ describe('no pairing of the post notice and the board note can contradict', () =
     ...new Set(STATES.flatMap((state) => [boardNoteKey(state, false), boardNoteKey(state, true)])),
   ];
 
-  /**
-   * `boardEmpty` is the one line that makes a claim a notice can contradict, and it is shown only
-   * before a press. That is only true if `attempted` cannot be false while a notice is on screen,
-   * which is a fact about `submit()` rather than about this table -- see the source guard below.
-   */
-  const reachable = (noteKey: string): boolean =>
-    noteKey !== 'boardEmpty' || NOTE_KEYS.indexOf('boardEmptyAfterPost') === -1;
+  /** Every state the notice node can be in. `null` is the absent notice, which asserts nothing. */
+  const NOTICE_STATES: (string | null)[] = [null, ...NOTICE_KEYS];
 
-  it('declares what every line either node can carry asserts, and nothing it cannot', () => {
+  /**
+   * Every sentence a board row can carry, derived the same way: by asking `boardRowKey` for every
+   * input it takes rather than by listing the two keys here, where they could drift.
+   */
+  const ROW_KEYS = [
+    ...new Set(
+      [true, false].flatMap((mine) =>
+        [true, false].flatMap((attempted) =>
+          NOTICE_STATES.map((noticeKey) => boardRowKey(mine, attempted, noticeKey)),
+        ),
+      ),
+    ),
+  ];
+
+  /** Every state the row node can be in. `null` is a board with no row of the reader's on it. */
+  const ROW_STATES: (string | null)[] = [null, ...ROW_KEYS];
+
+  it('declares what every line any of the three nodes can carry asserts, and nothing it cannot', () => {
     expect(NOTICE_KEYS.length, 'no post outcome sentences were found in the adapter at all').toBe(
       4,
     );
@@ -250,37 +289,172 @@ describe('no pairing of the post notice and the board note can contradict', () =
     expect(Object.keys(NOTICE_CLAIMS).filter((key) => !NOTICE_KEYS.includes(key))).toEqual([]);
     expect(NOTE_KEYS.filter((key) => !(key in NOTE_CLAIMS)).sort()).toEqual([]);
     expect(Object.keys(NOTE_CLAIMS).filter((key) => !NOTE_KEYS.includes(key))).toEqual([]);
+    // The third node, held to the same rule in both directions. A row sentence `boardRowKey` can
+    // return and `ROW_CLAIMS` does not declare is the 2026-10-21 defect arriving again.
+    expect(ROW_KEYS.sort()).toEqual(['boardRow', 'boardRowYou']);
+    expect(ROW_KEYS.filter((key) => !(key in ROW_CLAIMS)).sort()).toEqual([]);
+    expect(Object.keys(ROW_CLAIMS).filter((key) => !ROW_KEYS.includes(key))).toEqual([]);
     // And every declared line is a line the content file actually ships.
-    for (const key of [...NOTICE_KEYS, ...NOTE_KEYS])
+    for (const key of [...NOTICE_KEYS, ...NOTE_KEYS, ...ROW_KEYS])
       expect(typeof shipped[key], `${key} is declared but not shipped`).toBe('string');
   });
 
-  /*
-   * THE ENUMERATION. Five states of `.otp-error` -- the four outcome sentences plus the absent
-   * notice, which is what is rendered before a press, during a press and after a reroll -- against
-   * every line the note can carry. The absent notice is a state, not a key: `{notice && <p …>}`
-   * renders nothing, so it asserts nothing.
+  /**
+   * One configuration of everything the three nodes are derived from. Four free variables; the
+   * nodes are not among them, which is the whole point -- they come out of the shipped functions.
    */
-  it('holds for every post outcome against every board state', () => {
+  interface Screen {
+    state: BoardState['state'];
+    attempted: boolean;
+    noticeKey: string | null;
+    /** Whether a row on the board carries the handle this page is showing. */
+    mine: boolean;
+  }
+
+  const SCREENS: Screen[] = STATES.flatMap((state) =>
+    [false, true].flatMap((attempted) =>
+      NOTICE_STATES.flatMap((noticeKey) =>
+        [false, true].map((mine) => ({ state, attempted, noticeKey, mine })),
+      ),
+    ),
+  );
+
+  /**
+   * The one configuration rule that is a fact about the COMPONENT rather than about these tables:
+   * a post notice cannot be on screen before the press, because `submit()` sets `attempted` before
+   * the first `await` and nothing sets it back. Proved from source below, not assumed here.
+   */
+  const possible = (screen: Screen): boolean => screen.noticeKey === null || screen.attempted;
+
+  /** The three nodes as this screen renders them. `null` is a node that is not in the DOM. */
+  const nodes = (screen: Screen): { notice: string | null; note: string; row: string | null } => ({
+    notice: screen.noticeKey,
+    note: boardNoteKey(screen.state, screen.attempted),
+    /*
+     * Rows are rendered under `board.state === 'rows'` and nowhere else, which the source guard
+     * below holds the markup to. Everything else about the row -- whether it may claim the
+     * reader's own run -- is `boardRowKey`'s decision and is taken from it rather than restated.
+     */
+    row:
+      screen.state === 'rows' ? boardRowKey(screen.mine, screen.attempted, screen.noticeKey) : null,
+  });
+
+  const claimsOf = (
+    table: Record<string, readonly Claim[]>,
+    key: string | null,
+  ): readonly Claim[] => (key === null ? [] : (table[key] ?? []));
+
+  /*
+   * THE ENUMERATION. Every configuration of the four inputs, with the three nodes derived through
+   * the shipped functions, and all three pairings checked on each.
+   *
+   * The absent notice and the absent row are STATES, not keys: `{notice && <p …>}` and a board
+   * with nobody's own run on it render nothing, and nothing asserts nothing. A reader whose run
+   * is rank 400 is in the second of those, which is why an unmarked board says nothing at all
+   * about where their run is rather than saying it has none.
+   */
+  it('holds for every post outcome against every board state and every row', () => {
     const checked: string[] = [];
     const bad: string[] = [];
-    for (const noticeKey of [null, ...NOTICE_KEYS]) {
-      const noticeClaims = noticeKey === null ? [] : NOTICE_CLAIMS[noticeKey]!;
-      for (const noteKey of NOTE_KEYS) {
-        const pair = `${noticeKey ?? '(no notice)'} + ${noteKey}`;
-        if (!reachable(noteKey) && noticeKey !== null) continue;
-        checked.push(pair);
-        const clash = contradictions(noticeClaims, NOTE_CLAIMS[noteKey]!);
-        if (clash.length > 0)
-          bad.push(`${pair}: "${shipped[noticeKey!] ?? ''}" over "${shipped[noteKey]}" (${clash})`);
+    for (const screen of SCREENS.filter(possible)) {
+      const node = nodes(screen);
+      const name = (key: string | null, absent: string): string => key ?? absent;
+      const seen = `${name(node.notice, '(no notice)')} + ${node.note} + ${name(node.row, '(no row of yours)')}`;
+      checked.push(seen);
+      const pairs: [string, readonly Claim[], readonly Claim[]][] = [
+        ['notice/note', claimsOf(NOTICE_CLAIMS, node.notice), claimsOf(NOTE_CLAIMS, node.note)],
+        ['notice/row', claimsOf(NOTICE_CLAIMS, node.notice), claimsOf(ROW_CLAIMS, node.row)],
+        ['note/row', claimsOf(NOTE_CLAIMS, node.note), claimsOf(ROW_CLAIMS, node.row)],
+      ];
+      for (const [which, a, b] of pairs) {
+        const clash = contradictions(a, b);
+        if (clash.length > 0) bad.push(`${seen} [${which}]: ${clash.join(', ')}`);
       }
     }
-    expect(bad, 'two adjacent paragraphs on Results assert mutually exclusive things').toEqual([]);
-    // The self-check: the enumeration really did walk the matrix. 5 notice states x 5 note lines,
-    // less the 4 that `attempted` makes unreachable.
+    expect(bad, 'two nodes in the board section assert mutually exclusive things').toEqual([]);
+    /*
+     * The self-check, and it is a real one rather than arithmetic that cannot fail: 4 board states
+     * x 2 values of `attempted` x 5 notice states x 2 handle matches, less the 40 configurations
+     * `attempted` rules out. A filter that stopped matching anything, or a `nodes()` that stopped
+     * deriving, shows up here as a number that moved.
+     */
     expect(checked.length, 'the enumeration checked nothing').toBe(
-      (NOTICE_KEYS.length + 1) * NOTE_KEYS.length - NOTICE_KEYS.length,
+      STATES.length * 2 * NOTICE_STATES.length * 2 - STATES.length * NOTICE_KEYS.length * 2,
     );
+  });
+
+  /*
+   * TOTALITY OVER THE NODES, which is the half the enumeration above cannot give on its own.
+   *
+   * Walking the inputs proves that what the screen CAN render is honest. It does not prove that
+   * every combination of the three nodes was thought about -- a fourth node, or a fifth board
+   * state, would simply never appear in `nodes()` and would be missed in exactly the way
+   * `.otp-board__row--you` was missed for three rounds.
+   *
+   * So this takes the full cross product of the three nodes' states -- 5 notice x 5 note x 3 row
+   * -- and demands that each one is either PRODUCED by some configuration above, or struck out by
+   * a named, checkable rule. A triple that is neither fails, with its name in the message, and
+   * there is nowhere to put it except a rule somebody has to write down.
+   */
+  it('accounts for every combination of the three nodes, produced or ruled out by name', () => {
+    const produced = new Set(
+      SCREENS.filter(possible).map((screen) => JSON.stringify(nodes(screen))),
+    );
+
+    /** Why a combination cannot be rendered. Checkable, and each one is tested on its own below. */
+    const RULES: {
+      why: string;
+      rules(n: { notice: string | null; note: string; row: string | null }): boolean;
+    }[] = [
+      {
+        why: 'rows render only under board.state === "rows", and that state\'s note is boardReady',
+        rules: (n) => (n.row !== null) !== (n.note === 'boardReady'),
+      },
+      {
+        why: 'a post notice needs a press, and boardEmpty is only shown before one',
+        rules: (n) => n.note === 'boardEmpty' && n.notice !== null,
+      },
+      {
+        why: "the row may not claim the reader's run while the notice denies it",
+        rules: (n) =>
+          n.row === 'boardRowYou' &&
+          contradictions(ROW_CLAIMS['boardRowYou']!, claimsOf(NOTICE_CLAIMS, n.notice)).length > 0,
+      },
+    ];
+
+    const unaccounted: string[] = [];
+    const struck = new Map<string, number>();
+    let total = 0;
+    for (const notice of NOTICE_STATES)
+      for (const note of NOTE_KEYS)
+        for (const row of ROW_STATES) {
+          total += 1;
+          const node = { notice, note, row };
+          if (produced.has(JSON.stringify(node))) continue;
+          const rule = RULES.find((r) => r.rules(node));
+          if (!rule) {
+            unaccounted.push(`${notice ?? '(none)'} + ${note} + ${row ?? '(none)'}`);
+            continue;
+          }
+          struck.set(rule.why, (struck.get(rule.why) ?? 0) + 1);
+        }
+
+    expect(
+      unaccounted,
+      'a combination of the three nodes is neither rendered nor ruled out: it has not been thought about',
+    ).toEqual([]);
+    // The cross product really is the whole one: 5 x 5 x 3. A fourth node, or a state added to any
+    // of the three, moves this and has to be dealt with rather than quietly skipped.
+    expect(total).toBe(NOTICE_STATES.length * NOTE_KEYS.length * ROW_STATES.length);
+    expect(total).toBe(75);
+    expect(produced.size, 'the screen renders fewer combinations than this file checked').toBe(25);
+    // Every rule earns its place. A rule that strikes nothing is a rule nobody can test.
+    for (const rule of RULES)
+      expect(
+        struck.get(rule.why) ?? 0,
+        `no combination is ruled out by: ${rule.why}`,
+      ).toBeGreaterThan(0);
+    expect([...struck.values()].reduce((a, b) => a + b, 0)).toBe(total - produced.size);
   });
 
   /*
@@ -321,6 +495,90 @@ describe('no pairing of the post notice and the board note can contradict', () =
     expect(code, 'the attempted flag is set back somewhere').not.toContain('setAttempted(false)');
   });
 
+  /*
+   * THE THIRD NODE'S TWO RULES, PROVED RATHER THAN ASSUMED -- the half of the totality check above
+   * that no table can state.
+   *
+   * Rule one is about the MARKUP: a row cannot render outside `board.state === 'rows'`, which is
+   * what collapses forty of the seventy-five combinations. Rule two is about the FUNCTION: it is
+   * `boardRowKey` that declines the reader's claim, and it declines it by asking
+   * `contradictions()` rather than by naming an outcome -- a hand-written
+   * `noticeKey !== 'leaderboardRefused'` would pass every assertion in this file and be the
+   * special case that goes stale the day a fifth outcome is added.
+   */
+  it('a row can only render where the board answered with rows, and the markup says so', () => {
+    const code = results.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    // The list is mounted under that condition and under no other.
+    expect(code, 'the rows list is no longer gated on the board state').toContain(
+      "{board.state === 'rows' && (",
+    );
+    expect(
+      [...code.matchAll(/otp-board__rows/g)].length,
+      'the rows list is rendered somewhere else as well',
+    ).toBe(1);
+    // ...and that state's note line does not vary on `attempted`, so a rendered row always sits
+    // under `boardReady`. Both halves of the rule the enumeration leans on.
+    expect(boardNoteKey('rows', true)).toBe('boardReady');
+    expect(boardNoteKey('rows', false)).toBe('boardReady');
+    // The other direction: a board that answered 'rows' always has a row to render, so
+    // `boardReady` with no row at all is not a state either.
+    expect(BOARD_NOTE['rows']).toBe('boardReady');
+  });
+
+  it("the row claims the reader's run only once this page has posted one", () => {
+    /*
+     * Before the press this page has posted NOTHING, so a row under the name it is showing is
+     * somebody else's: the mint has 3,072 names and the board shows ten, so roughly one visitor
+     * in three hundred would have read "This is your run." about a stranger's. The browser half
+     * is in e2e/leaderboard.spec.ts, which asserted the old behaviour as correct until this round.
+     */
+    for (const noticeKey of NOTICE_STATES)
+      expect(boardRowKey(true, false, noticeKey), 'the row claimed a run before any press').toBe(
+        'boardRow',
+      );
+    // A handle that does not match is never the reader's, whatever else is true.
+    expect(boardRowKey(false, true, null)).toBe('boardRow');
+    // And with the press behind it and nothing denying it, the claim is made.
+    expect(boardRowKey(true, true, null)).toBe('boardRowYou');
+  });
+
+  it("the row declines the reader's claim for every notice that denies it, by checking", () => {
+    const denied = NOTICE_KEYS.filter(
+      (key) => contradictions(ROW_CLAIMS['boardRowYou']!, NOTICE_CLAIMS[key]!).length > 0,
+    );
+    // The set is derived, not typed: this is the list of outcomes that collide with "your run is
+    // on the board", and it is currently the refusal alone.
+    expect(denied).toEqual(['leaderboardRefused']);
+    for (const key of NOTICE_KEYS)
+      expect(boardRowKey(true, true, key), `${key} is handled the wrong way round`).toBe(
+        denied.includes(key) ? 'boardRow' : 'boardRowYou',
+      );
+    // An outcome nobody declared asserts everything, so the row declines rather than guesses.
+    expect(boardRowKey(true, true, 'somethingNobodyDeclared')).toBe('boardRow');
+
+    /*
+     * CHECKED, NOT LISTED. The source half: the decision is the claim algebra, so a fifth outcome
+     * or a new exclusive pair changes what the function does with nobody editing it.
+     */
+    const src = results.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const from = src.indexOf('export const boardRowKey');
+    expect(from, 'boardRowKey is not where it was').toBeGreaterThan(-1);
+    const body = src.slice(from, src.indexOf(';', src.indexOf('boardRowYou', from)));
+    expect(body, 'boardRowKey no longer asks the claims').toContain('contradictions(');
+    expect(body, 'boardRowKey names an outcome instead of checking the claims').not.toContain(
+      'leaderboard',
+    );
+  });
+
+  it('Results marks the row with the function, rather than re-deriving it in the markup', () => {
+    // The composition this file checks is only the shipped one if the screen uses it. The bare
+    // `const yours = entry.handle === handle` ternary is what shipped the defect.
+    expect(results).toContain('const yours = rowKey === ');
+    expect(results).toContain('boardRowKey(');
+    expect(results).not.toContain("s('boardRowYou')");
+    expect(results).not.toContain('const yours = entry.handle === handle');
+  });
+
   it('the shipped post notices really do make the claims declared for them', () => {
     // The other half of each contradiction. If these sentences stop claiming a run went up, this
     // whole block is guarding a collision that cannot happen and should be read again.
@@ -330,6 +588,19 @@ describe('no pairing of the post notice and the board note can contradict', () =
     expect(NOTICE_CLAIMS['handleAssigned']).toContain('readerRunIsOnBoard');
     expect(NOTICE_CLAIMS['leaderboardAlready']).toContain('readerRunIsOnBoard');
     expect(NOTICE_CLAIMS['leaderboardRefused']).toContain('readerRunDidNotGoUp');
+    /*
+     * And the one whose safety is its NARROWNESS. A post that got no reply is the case where the
+     * run really is on the board and the page simply never learned, so the row above it is true
+     * and the notice must claim only what the client observed -- that no reply came, scoped to
+     * the request. The sentence it carries was "The board was unavailable for that post." until
+     * 2026-10-21, which asserted something about the board while the board was visibly answering
+     * two lines below.
+     */
+    expect(NOTICE_CLAIMS['leaderboardDown']).toEqual(['postNotAnswered']);
+    expect(
+      contradictions(NOTICE_CLAIMS['leaderboardDown']!, ROW_CLAIMS['boardRowYou']!),
+      'a post with no reply now denies the row, so the lost-reply case has no honest screen left',
+    ).toEqual([]);
   });
 
   it('explains the absence instead, so the empty board is not simply silent', () => {

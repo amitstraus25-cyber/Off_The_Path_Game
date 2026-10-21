@@ -199,9 +199,22 @@ test('the board names the run itself', async ({ page }) => {
   await page.getByRole('button', { name: /Try another name/ }).click();
   await expect(field).not.toHaveAttribute('data-handle', first!);
 
-  // The post reaches the client, which reports whether the board answered.
+  /*
+   * The post reaches the client, which reports whether the board answered.
+   *
+   * ASSERTED ON THE OUTCOME, NOT ON ITS WORDS. This read
+   * `toContainText(/unavailable|Posted to the board/i)` until 2026-10-21, when `leaderboardDown`
+   * was reworded -- "The board was unavailable for that post." claimed something about the board
+   * that the client never observed, and the sentence lost the word this matched on. A test that
+   * breaks because copy improved is matching the wrong thing: `data-notice` carries which of the
+   * four outcomes it is, which is what this test actually cares about. The exact sentences are
+   * held against content/game.json in e2e/leaderboard.spec.ts.
+   */
   await page.getByRole('button', { name: 'Post', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText(/unavailable|Posted to the board/i);
+  await expect(page.getByRole('status')).toHaveAttribute(
+    'data-notice',
+    /^(leaderboardDown|handleAssigned)$/,
+  );
 });
 
 test('the privacy line is next to the handle field', async ({ page }) => {

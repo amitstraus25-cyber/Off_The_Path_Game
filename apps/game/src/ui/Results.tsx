@@ -18,7 +18,7 @@ import { RESEARCH_URL } from '../embed/postMessage';
  */
 import { newHandle } from '../net/leaderboard';
 import { readTop } from '../net/leaderboard';
-import type { BoardRead } from '../net/leaderboard';
+import type { BoardRead, PostOutcome } from '../net/leaderboard';
 import { CyeraMark, Highlighted, Panel } from './components';
 import { Basket } from './SkillCard';
 import { Trifecta } from './Trifecta';
@@ -249,8 +249,14 @@ export interface ResultsProps {
   state: GameState;
   onReplay(): void;
   onReadResearch(): void;
-  /** Posting arrives with the leaderboard in Phase 6; until then this reports it is unavailable. */
-  onPost(handle: string): Promise<string | null>;
+  /**
+   * Posts the run and answers with the sentence to show AND which of the four it is.
+   *
+   * The key is what lets `boardRowKey` decline the row's claim when the notice denies it, without
+   * matching the sentence against the content file -- the coupling `submit()` refuses, and the
+   * same bound-against-a-spelling trap the board note already walked into once.
+   */
+  onPost(handle: string): Promise<PostOutcome | null>;
   /**
    * Reads the board. Resolves to one of three answers; never throws, never hangs.
    *
@@ -340,11 +346,28 @@ export const BOARD_NOTE: Record<BoardState['state'], string> = {
  * more rewordings pass it. So the claims are named here, the pairing is checked over the claims,
  * and the words are free to change without the property moving.
  *
- * The vocabulary is deliberately only what the two nodes can disagree ABOUT: what the board holds,
- * what it is showing, and what became of the reader's own run. A claim with no `EXCLUSIVE` entry
- * is inert by design and is still named, because "this line asserts nothing that can collide" is
- * the thing that makes it the safe line to show -- and a line with no declaration at all would be
- * indistinguishable from a line nobody has thought about.
+ * The vocabulary is deliberately only what the three nodes can disagree ABOUT: what the board
+ * holds, what it is showing, and what became of the reader's own run. A claim with no `EXCLUSIVE`
+ * entry is inert by design and is still named, because "this line asserts nothing that can
+ * collide" is the thing that makes it the safe line to show -- and a line with no declaration at
+ * all would be indistinguishable from a line nobody has thought about.
+ *
+ * THERE WERE TWO NODES HERE AND THE SECTION HAS THREE. That is the 2026-10-21 finding and it is
+ * worth keeping as written rather than smoothing over: three rounds went into `.otp-error` and
+ * `.otp-board__note`, the 25-pair enumeration behind them is real, and `.otp-board__row--you` sat
+ * one node outside the whole model saying "This is your run." in the same section. Reproduced in
+ * Chromium against a clean build, three ways:
+ *
+ *   a 400                  "That run could not be posted."
+ *                          "Rank 2. noble-acorn-93, 900 points. This is your run."
+ *   a reply that times out "The board was unavailable for that post."   (the old wording)
+ *                          "Rank 2. tidy-bellows-34, 900 points. This is your run."
+ *   a 2xx the schema       the same, via `submitResponseSchema` rejecting the body
+ *   rejects
+ *
+ * So the row is a declaring node now, with `ROW_CLAIMS` beside the other two, and the enumeration
+ * in `test/board.test.ts` walks all three. The lesson the model-with-two-nodes taught is the one
+ * to carry: a node that carries a claim and is not in the structure is not safe, it is unwatched.
  */
 export type Claim =
   /** There are runs on the board. */
@@ -417,11 +440,87 @@ export const NOTICE_CLAIMS: Record<string, readonly Claim[]> = {
   leaderboardDown: ['postNotAnswered'],
 };
 
+/**
+ * Every sentence a row in `.otp-board__rows` can carry, by content key, and what it asserts.
+ *
+ * THE THIRD NODE. Both keys claim the board holds runs, because a row cannot render unless it
+ * does; `boardRowYou` additionally claims the run is the reader's, which is the claim that put
+ * "This is your run." above a notice saying the post failed.
+ *
+ * The absent state is a row that is not the reader's AND a board with no rows at all, and neither
+ * is a key: a reader whose run is rank 400 sees ten rows and none of them marked, so an unmarked
+ * board asserts nothing whatever about where their run is. Under-claiming is the safe direction
+ * and this node is deliberately built to fail that way.
+ */
+export const ROW_CLAIMS: Record<string, readonly Claim[]> = {
+  boardRow: ['boardHoldsRuns'],
+  boardRowYou: ['boardHoldsRuns', 'readerRunIsOnBoard'],
+};
+
 /** Every exclusive pair both of these carry at once, named. Empty means the two may sit together. */
 export const contradictions = (a: readonly Claim[], b: readonly Claim[]): string[] =>
   EXCLUSIVE.filter(
     ([x, y]) => (a.includes(x) && b.includes(y)) || (a.includes(y) && b.includes(x)),
   ).map(([x, y]) => `${x} / ${y}`);
+
+/**
+ * Every claim that can collide with something, derived from `EXCLUSIVE` rather than listed.
+ *
+ * Not the whole vocabulary: `boardShowsNoRuns` and `postNotAnswered` are inert by design and are
+ * deliberately absent, because a set used to mean "assume the worst" wants exactly the claims
+ * that can contradict. A new exclusive pair joins it without anybody editing this line.
+ */
+const EVERY_COLLIDING_CLAIM: readonly Claim[] = [...new Set(EXCLUSIVE.flat())];
+
+/**
+ * What the notice currently on screen asserts. `null` is the absent notice, which asserts nothing.
+ *
+ * AN UNDECLARED KEY ASSERTS EVERYTHING, which is the opposite of what reads naturally and is the
+ * point. A fifth outcome added to `src/net/leaderboard.ts` and not declared above would otherwise
+ * be inert here -- it would collide with nothing, `boardRowKey` would mark the row, and the
+ * forgotten node would be the one that ships the lie. Treated as asserting everything it collides
+ * with everything, so the screen stops claiming rather than starts guessing. `test/board.test.ts`
+ * is what stops it getting that far; this is what happens if it ever does.
+ */
+export const noticeClaims = (key: string | null): readonly Claim[] =>
+  key === null ? [] : (NOTICE_CLAIMS[key] ?? EVERY_COLLIDING_CLAIM);
+
+/**
+ * Which sentence one board row carries -- and the two conditions it has to meet to claim the
+ * reader's own run. The same shape as `boardNoteKey`, pure and exported for the same reason.
+ *
+ * `mine` is the local handle match and it is NECESSARY, NOT SUFFICIENT. Two things gate it:
+ *
+ *  1. **`attempted`.** Before the press this page has posted nothing, so a row under the name it
+ *     is showing is necessarily SOMEBODY ELSE'S -- the mint has 3,072 names and the board shows
+ *     ten of them, so roughly one visitor in three hundred would have been told a stranger's run
+ *     was theirs before touching the button. `e2e/leaderboard.spec.ts` asserted that marking as
+ *     correct behaviour until 2026-10-21, which is how it survived: the fixture was built by
+ *     reading the page's own handle, so the collision the test staged looked like a match.
+ *
+ *  2. **The notice does not deny it.** This is the pairing property, enforced where the claim is
+ *     made rather than only asserted in a test. A 400 answers `leaderboardRefused`, which claims
+ *     `readerRunDidNotGoUp`; that collides with `readerRunIsOnBoard`, so the row drops back to
+ *     the plain sentence and the section says only what it can support -- the board is showing a
+ *     run under this name, and the post was refused. Both true, neither denying the other.
+ *
+ * IT IS CHECKED, NOT LISTED. The condition is `contradictions(...)` over the declared claims, so
+ * a fifth notice, a sixth claim or a new exclusive pair changes what this function does without
+ * anybody editing it. A hand-written `noticeKey !== 'leaderboardRefused'` would have been the
+ * special case the round was told not to write.
+ *
+ * WHAT IT STILL CANNOT DO. A handle collision AFTER a post the server took is indistinguishable
+ * here from the reader's own row: both are "a row carrying the name this page posted", and the
+ * difference lives on the server. Closing that needs `POST /api/score` to answer with the rank it
+ * wrote, or `GET /api/top` to mark it. Recorded in docs/PAUL_BRIEF.md section 7 rather than
+ * papered over.
+ */
+export const boardRowKey = (mine: boolean, attempted: boolean, noticeKey: string | null): string =>
+  mine &&
+  attempted &&
+  contradictions(ROW_CLAIMS['boardRowYou']!, noticeClaims(noticeKey)).length === 0
+    ? 'boardRowYou'
+    : 'boardRow';
 
 /**
  * THE SCREEN CANNOT SAY BOTH THINGS AT ONCE, and until 2026-10-21 it did -- three times over.
@@ -565,7 +664,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
    * eyes would change between reading it and pressing the button.
    */
   const [handle, setHandle] = useState(newHandle);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<PostOutcome | null>(null);
   const [posting, setPosting] = useState(false);
   const [board, setBoard] = useState<BoardState>({ state: 'loading' });
   /*
@@ -930,8 +1029,8 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
               {s('handleHint')} {s('privacyLine')}
             </p>
             {notice && (
-              <p class="otp-error" role="status">
-                {notice}
+              <p class="otp-error" role="status" data-notice={notice.key}>
+                {notice.text}
               </p>
             )}
 
@@ -1014,9 +1113,20 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
                      * Nothing extra goes over the wire to find it, and the board still stores a
                      * handle and a score only -- which is what `privacyLine` on this same screen
                      * promises eight lines up.
+                     *
+                     * The match is the INPUT to the decision, not the decision. `boardRowKey`
+                     * owns the two further conditions -- that this page has posted at all, and
+                     * that the notice above does not deny the run -- and its docstring is where
+                     * the reasoning lives. Reading the ternary back out here is how the third
+                     * node drifted out of the model the first time.
                      */
-                    const yours = entry.handle === handle;
-                    const say = (yours ? s('boardRowYou') : s('boardRow'))
+                    const rowKey = boardRowKey(
+                      entry.handle === handle,
+                      attempted,
+                      notice?.key ?? null,
+                    );
+                    const yours = rowKey === 'boardRowYou';
+                    const say = s(rowKey)
                       .replace('{rank}', String(entry.rank))
                       .replace('{handle}', entry.handle)
                       .replace('{score}', entry.score.toLocaleString('en'));
