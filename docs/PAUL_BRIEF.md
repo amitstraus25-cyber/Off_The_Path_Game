@@ -27,13 +27,13 @@ Their words, their order. Anything not here is not a priority this week.
 
 | #   | Item                                                                 | State                                                                                                                      |
 | --- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 1   | The line / "lagginess"                                               | **Three causes, two fixed.** Two one-pixel holes, gone. The stale checkout (trap 10), gone. **The top-edge band is open.** |
+| 1   | The line / "lagginess"                                               | **Three causes, all fixed.** Two one-pixel holes; the stale checkout (trap 10); the camera top edge cutting a canopy row.  |
 | 2   | Trees in the middle look messed up                                   | **Done.** Brick course gone, trunks and root flares, crowns merge. Squared flank lobe survives at 8x only — gid round.     |
 | 3   | Red's back view                                                      | **Close.** Front and sides shippable. Nape hair reads as a structureless blob; cape mark needs brand sign-off.             |
 | 4   | Inspect card: three verbs, three explanations, nothing else, branded | **Done** — the best thing in the round. One open question: "allow two dots" read as a colon; we used columns.              |
-| 5   | Leaderboard not working                                              | Two faults, not one: no function is deployed (§5), **and no board is ever shown**. Both in flight.                         |
+| 5   | Leaderboard not working                                              | **The board is built and shown.** The route is still undeployed (§5), so it correctly reports itself unavailable.          |
 | 6   | Phone: goals panel eats the screen                                   | **Done.** A 44px bar that taps open: ~5% of the screen against ~16%. Verified by touch.                                    |
-| 7   | Phone: three circled glitches                                        | **Two remain:** the clipped canopy row (same cause as #1) and the market stall sliced at the right edge.                   |
+| 7   | Phone: three circled glitches                                        | **Closed.** The clipped canopy row is fixed with #1; the stall is measured and accepted — it cannot be moved out of frame. |
 | 8   | Arcade-cabinet shell, Cyera themed                                   | **Answered: yes to the mobile deck, no to the desktop cabinet.** The argument is in §8.                                    |
 | 9   | Results block: "nicer and more branded"                              | **Done.** All four faults in §6 fixed; a guard now bans static inline styles.                                              |
 | 10  | The gate (fence)                                                     | In flight — owned at last, tile and placement split, one regeneration.                                                     |
@@ -156,18 +156,57 @@ The client asked for it "nicer and more branded". Four specific faults:
 
 ## 7. Known open defects
 
-- **The board has a THIRD node, and the honesty matrix models two.** Three rounds went into making
-  sure `.otp-error` and `.otp-board__note` cannot contradict each other, and the 25-pair
-  enumeration that guards it is real. But `.otp-board__row--you` renders "This is your run" in the
-  same section, and a post the server **took** whose reply never reached the page — a dropped
-  connection, the adapter's 6s timeout, or a 2xx body the schema rejects — renders
-  _"That run could not be posted."_ directly above _"Rank 2. …, 900 points. This is your run."_
-  Driven in Chromium, suite green throughout. Rare, but it is the same defect class the matrix
-  exists to prevent, one node outside its model.
+- ~~**The board has a THIRD node, and the honesty matrix models two.**~~ **Closed 2026-10-21.**
+  Reproduced first, in Chromium, against a build made for the purpose rather than the shared
+  `dist` — and the report it came from had the mechanism right and the sentence wrong, which is
+  worth keeping. There were **two** defects, not one:
+
+  - a **400** rendered _"That run could not be posted."_ above _"Rank 2. noble-acorn-93, 900
+    points. This is your run."_ That is an exclusive pair — `readerRunDidNotGoUp` against
+    `readerRunIsOnBoard` — both long declared and never enumerated against each other.
+  - a **lost reply** (dropped connection, the adapter's 6s timeout, or a 2xx body
+    `submitResponseSchema` rejects) rendered _"The board was unavailable for that post."_ above
+    the same row. Those are two different sentences: the first is `leaderboardRefused`, the
+    second `leaderboardDown`, and only the 400 produces the one the report quoted.
+
+  A **third** fell out of modelling the node: before any press, the page has posted nothing, so a
+  row carrying the handle it is showing is necessarily somebody else's — 3,072 minted names, ten
+  rows on the board, roughly one visitor in three hundred told a stranger's run was theirs.
+  `e2e/leaderboard.spec.ts` asserted that marking as **correct** until this round; the fixture was
+  built by reading the page's own handle, so the collision it staged looked like a match.
+
+  The fixes are of three kinds, deliberately:
+
+  - **Structure.** `ROW_CLAIMS` sits beside `NOTE_CLAIMS` and `NOTICE_CLAIMS`, and the enumeration
+    in `test/board.test.ts` walks the screen's four INPUTS (board state, `attempted`, post
+    outcome, handle match) deriving the three nodes through the real `boardNoteKey` and
+    `boardRowKey` — 25 combinations rendered — then takes the full 5 × 5 × 3 = 75 cross product of
+    node states and demands each one be produced or struck out by a **named, individually tested**
+    rule. 50 are struck by three rules. A fourth node fails that totality check rather than being
+    forgotten.
+  - **Construction.** `boardRowKey` declines the reader's claim when the notice denies it, by
+    asking `contradictions()` over the declared claims — not by naming `leaderboardRefused`, which
+    a source guard forbids. To do that the screen had to be able to tell one outcome from another
+    without matching words, so `submit()` answers a `PostOutcome` — `{ key, text }` — instead of a
+    bare sentence. That is the coupling the old code refused and was right to refuse; the key is
+    how it is had without it.
+  - **Copy.** The lost-reply case is the one where both sentences are individually true: the run
+    IS on the board and the page never learned. Nothing is hidden there — the row stays marked and
+    `leaderboardDown` moved from _"The board was unavailable for that post."_ to _"No reply came
+    back for that post."_, which is what the client actually observed. **This one is copy and no
+    test can confirm it** (see below).
+
+  **What is NOT closed.** The row is matched locally, by handle. A collision _after_ a post the
+  server took is indistinguishable here from the reader's own row — both are "a row carrying the
+  name this page posted" — and the difference lives on the server. Closing it needs
+  `POST /api/score` to answer with the rank it wrote, or `GET /api/top` to mark it. Under-claiming
+  is the safe direction and the node is built to fail that way, but it is not sound.
+
 - **The pairing property is DECLARED, not guarded, and this is a real limit rather than an
-  oversight.** `NOTE_CLAIMS` and `NOTICE_CLAIMS` in `Results.tsx` are hand-written, and nothing
-  ties a claim to the sentence that carries it. Reverting `boardEmptyAfterPost` to the exact hedge
-  that was sent back twice leaves 651 unit and 212 e2e tests green; so does
+  oversight.** Still open, and the 2026-10-21 round made it **more** load-bearing rather than less.
+  `NOTE_CLAIMS`, `NOTICE_CLAIMS` and now `ROW_CLAIMS` in `Results.tsx` are hand-written, and
+  nothing ties a claim to the sentence that carries it. Reverting `boardEmptyAfterPost` to the
+  exact hedge that was sent back twice leaves the whole suite green; so does
   _"No runs are showing yet. Your run is on the board."_, which is **worse** than the original
   defect.
 
@@ -177,6 +216,15 @@ The client asked for it "nicer and more branded". Four specific faults:
   last gap. **Player-facing copy on this screen needs a human reading the sentences**, which is
   also why `docs/COPY_REVIEW.md` sends leaderboard and privacy copy to Legal. Do not let a future
   round claim the matrix makes that review unnecessary.
+
+  **The `leaderboardDown` rewording is exactly this gap and is the one thing this round could not
+  guard.** The claim stayed `postNotAnswered` and the sentence changed under it; a test that
+  asserted the new words would be the regex trap again, and the one that asserts the declaration
+  passed before the change and after it. What the guards DO cover: that the row and the notice
+  cannot carry an exclusive pair of DECLARED claims, in every combination the screen can render,
+  with the unrenderable ones struck out by name. What they do NOT cover: that _"No reply came back
+  for that post."_ still means `postNotAnswered` and nothing more. A human has to read that
+  sentence beside _"This is your run."_ and agree.
 
 - **The dark band across the top of the world — the third cause of "the line", and the one still
   open.** Not a backdrop hole: the magenta probe reads 0 across 49 configurations. The camera's top
@@ -189,11 +237,36 @@ The client asked for it "nicer and more branded". Four specific faults:
   naively will make vertical walking judder, so it belongs at the clamp or the top bound, not every
   frame. This is also phone glitch #7a: the clipped canopy row is the same defect at a smaller
   camera.
-- **The market stall is sliced** at the phone's right edge — a quarter of it in frame at 390×844,
-  reading as a broken box against the border. Composition, not renderer: the map is composed
-  against a 19.4-tile desktop camera and a phone gets 11.5.
-- **Red cannot reach the toadstool.** `walkTo` gives up 40px short; there is a collision tile at
-  (10,22). This is a real map regression and it is currently making CI red.
+- ~~**The market stall is sliced** at the phone's right edge.~~ **MEASURED AND ACCEPTED,
+  2026-10-21; the proof is composition guard 7k in `forest-map.ts`.** It is sliced — 13% in frame at
+  375×812, 22% at 768×1024, 25% at 390×844 — and whole at 1280×800, at 844×390 and at the client's
+  own 1673×449. **It cannot be moved out of it, which is the part nobody had measured.** At the
+  spawn the camera is pinned to the map's WEST edge at every viewport: Red stands 5.5 tiles from the
+  wall and the narrowest camera the game builds is 11 (`MIN_VIEW`), so `frameAt`'s clamp returns
+  x0 = 0.00 from a 320 phone to a studio display. The stall's distance from the right border is
+  therefore a pure function of camera WIDTH, so a placement at column x is cut by exactly those
+  cameras between x and x+4 wide — and the reviewed cameras run continuously from 11.00 to 40.00
+  tiles. Whole-everywhere needs x ≤ 7; absent-everywhere needs x ≥ 40; every column from 8 to 24 is
+  cut by something. x ≤ 7 is not available: columns 4–8 are the north treeline that closes the top
+  of the title camera (which 7b ratchets and forbids lowering) and column 9 is the fork with the
+  signpost in its crook. Moving it EAST relocates the defect rather than removing it — x = 13 clears
+  the named phones and starts slicing 1024- and 1100-wide laptop windows, and it would fell the
+  sapling pair at columns 15–17 and strand the rabbit who keeps the stall. Three assertions now hold
+  the decision, every bound read from the map's PUBLISHED object rectangle rather than the `11 + i`
+  placement loop: no prop may be cut by a composed frame's edge (the stall is the only exception,
+  east edge, portrait frames only — and it is today the only prop any of the four frames cuts); the
+  rabbit must stand inside her own stall's columns; and the west-edge pinning the whole proof rests
+  on is asserted rather than remembered. One thing still worth a human's eye: at 390×844 the cut
+  lands exactly on a tile boundary, so a visitor sees one WHOLE column — the awning's own left end
+  and a counter tile — not a torn tile.
+- ~~**Red cannot reach the toadstool.**~~ **FIXED, 2026-10-21, and it was never a map bug.** (10,22)
+  is the toadstool's own spawn cell, deliberately solid under the "nobody in the cast is a ghost"
+  invariant, and all four of its neighbours are walkable. The walk TARGET was stale: `37a94b9` wrote
+  `talkingDistance` as `spot.y + TILE + 8`, correct when the cast sat at tile-centre + 24, and the
+  very next commit moved them to tile-centre + 16 without touching the helper. Eight pixels against
+  a 40px tolerance whose north approach is exactly 40.00px — zero margin — so 3px of lateral drift
+  threw "Something is in the corridor." `test/cast-anchor.test.ts` now fails if those two
+  expressions drift apart again.
 - **The gate is not a gate.** The opening is an absence of fence: post run, flat terminator plank,
   gap, flat plank, post run. The terminators are the least-finished object in the payoff frame. It
   needs one new tile (two post tops with a narrow rail), a `TILE_NAMES` **append** — never a
@@ -221,9 +294,30 @@ The client asked for it "nicer and more branded". Four specific faults:
   - Rows 2 to 37, so it is not only the far treeline. The row 24/32/37 cells look like ordinary
     forest floor, which argues against "mark them solid" as the fix for those.
 
-  **The guard's bound must be derived the way the measurement was** — opacity out of the tileset,
-  reachability out of the map — and never written as a list of gids, which would pass in silence the
-  moment a third crown is painted.
+  **There is already a guard and it already derives its bound that way** — `forest-map.ts` renders
+  each `decor-above` painter and counts alpha per pixel, never reading a gid or a name. Its own
+  docstring records that the original finding named four tiles and that rendering them proved only
+  two opaque, `canopy-bl` and `canopy-br` leaving 152 and 111 pixels of daylight. The lesson was
+  resident before anyone restated it.
+
+  **What was wrong was the RATCHET, and that is the transferable part.** `OPEN_ENOUGH` stood at
+  **109 while the map had been at 101** — eight cells of slack, so eight new blind tiles could have
+  been planted and the guard would have gone on passing. Tightened to 101 and proved to have no
+  slack left by setting it to 100 and watching it fire. Two independent instruments agree on the
+  number and share no code: the painter-alpha guard, and a separate pass that decoded
+  `tileset-forest.png`, counted `alpha == 255` per cell and flooded from `spawn-red`. The two tiles
+  are gid 60 = `elder-mc` and gid 63 = `elder-bc`.
+
+  **Lower `OPEN_ENOUGH` as the crowns open up; never raise it.** A correct guard with a stale bound
+  is the quietest failure in this repo: it reads as proof and permits the thing it names.
+
+  **The fix is a painter's and is unowned.** It belongs in `tiles/w-trees.ts` — a few pixels of sky
+  into two solid green squares, which fixes all 101 at once and moves every cell using those crowns
+  in the regeneration. Both map-side alternatives are worse than the fault: making the cells solid
+  hands the connectivity flood 101 new pockets to open by felling the wood, and refusing to plant an
+  elder whose crown reaches walkable ground removes most of the elders. The rows 24/32/37 cells are
+  ordinary forest floor rather than treeline, which is the same conclusion from the other end —
+  "solid" is plainly the wrong remedy for those.
 
 ## 8. The arcade shell — the answer, and the argument
 

@@ -3,6 +3,7 @@
 import {
   cameraCentreTiles,
   cameraFor,
+  MIN_VIEW,
   PORTRAIT_WORLD_BAND,
   REFERENCE_VIEWPORTS,
   topEdgeRows,
@@ -7904,18 +7905,28 @@ export function generateForestMap(): GeneratedMap {
    * painter opened those two quarters up and closed a different one. So each `decor-above` painter is
    * rendered once and asked whether any pixel of it is not opaque.
    *
-   * 109 IS A RATCHET OVER A KNOWN-BAD NUMBER, exactly like the grass ramp's floor, and for the same
+   * 101 IS A RATCHET OVER A KNOWN-BAD NUMBER, exactly like the grass ramp's floor, and for the same
    * reason: the remedy is a painter's. `elder-mc` and `elder-bc` are the middle and bottom centre of
    * an elder's 3x3 crown and they are solid green squares; opening a few pixels of sky into them
-   * costs nothing and fixes all 109 cells at once, and `tiles/w-trees.ts` is where that is done. The
-   * map's own alternatives are both worse than the fault -- making 109 cells solid turns a drawing
-   * problem into a collision problem and hands the connectivity flood 109 new pockets to open by
+   * costs nothing and fixes all 101 cells at once, and `tiles/w-trees.ts` is where that is done. The
+   * map's own alternatives are both worse than the fault -- making 101 cells solid turns a drawing
+   * problem into a collision problem and hands the connectivity flood 101 new pockets to open by
    * felling the wood, and refusing to plant an elder whose crown reaches walkable ground would
    * remove most of the elders. So this holds the line and reports the number. Lower it as the
    * crowns open up; never raise it.
+   *
+   * IT STOOD AT 109 UNTIL 2026-10-21 AND THE MAP HAD BEEN AT 101 FOR SOME TIME, so the guard was
+   * carrying eight cells of slack: eight new blind tiles could have been planted and it would have
+   * gone on passing. A ratchet left above the measurement is not a ratchet, it is a ceiling nobody
+   * is near, and this one was quoted as "109" in three sentences of prose above as well. Checked
+   * independently from the other end at the same time -- decoding `tileset-forest.png` and counting
+   * alpha per cell against the committed map, then flooding from `spawn-red` -- which found the
+   * same 101 cells, the same two tiles (gids 60 and 63, which are these two), all of them genuinely
+   * reachable, spread over rows 2 to 37. Two instruments that share no code agreeing on 101 is the
+   * reason this is a tightening rather than a guess.
    */
   {
-    const OPEN_ENOUGH = 109;
+    const OPEN_ENOUGH = 101;
     const seeThrough = new Map<string, boolean>();
     const hidesHer = (name: string): boolean => {
       const known = seeThrough.get(name);
@@ -8806,6 +8817,125 @@ export function generateForestMap(): GeneratedMap {
       faults.push('no landmark stands in the band a 375 portrait visitor sees');
 
     /*
+     * ===========================================================================
+     * 7k. NO PROP IS CUT BY THE EDGE OF A COMPOSED FRAME -- and the market stall is the single
+     * exception, which is a PROOF that no placement avoids it rather than a waiver.
+     * ===========================================================================
+     *
+     * The client photographed the market stall sliced down its length at the right edge of a phone
+     * and called it a broken box against the border, which is exactly right: a tree or a bush
+     * cropped by the frame reads as forest continuing past the screen, and a drawn, rectilinear
+     * STRUCTURE cropped by the frame reads as a rendering fault. That is the defect class, and
+     * until this pass nothing measured it.
+     *
+     * WHY THE STALL CANNOT BE MOVED TO FIX IT, measured through the real `cameraFor` at twenty
+     * viewports before anything was touched, so that nobody spends a round re-running it:
+     *
+     *   1. AT THE SPAWN THE CAMERA IS PINNED TO THE MAP'S WEST EDGE AT EVERY VIEWPORT. Red stands
+     *      5.5 tiles from the west wall and the NARROWEST camera the game will build is MIN_VIEW,
+     *      11 tiles -- so `frameAt`'s clamp puts x0 at 0.00 for all of them, phone to studio
+     *      display. The stall's distance from the right border is therefore a pure function of the
+     *      camera's WIDTH and nothing else. That is the premise everything below rests on, and it
+     *      is asserted rather than remembered, two paragraphs down.
+     *   2. SO A PLACEMENT AT x0 IS SLICED BY EXACTLY THOSE CAMERAS WITH x0 < width < x0 + 4. The
+     *      reviewed cameras run from 11.00 tiles (a 320 phone) to 40.00 (the client's 1673x449),
+     *      continuously -- portrait phones cluster at 11.06 to 13.25, landscape at 15.38 and up.
+     *      Being whole everywhere therefore needs x0 + 4 <= 11, i.e. x0 <= 7; being absent
+     *      everywhere needs x0 >= 40. Every column from 8 to 24 is cut by something.
+     *   3. AND x0 <= 7 IS OCCUPIED BY THE TWO THINGS THE SPAWN FRAME IS BUILT OUT OF. Columns 4-8
+     *      carry the north treeline -- trunks on rows 14-17 under canopy on rows 13-16 -- which is
+     *      the stand that closes the top of the title camera and that 7b ratchets and forbids
+     *      lowering. Column 9 carries the fork climbing north, rows 14-17, with the signpost in its
+     *      crook at (9,18). A four-wide counter at x0 <= 7 spans one or both.
+     *   4. MOVING IT EAST DOES NOT FIX IT, IT RELOCATES IT. x0 = 13 clears the named phones and
+     *      starts slicing 1024- and 1100-wide landscape windows; x0 = 14 clears every phone and
+     *      cuts the stall out of the narrow laptop range instead. Trading a phone slice for a
+     *      laptop slice on a B2B research page is not a trade worth making, and it would also fell
+     *      the sapling pair standing at columns 15-17 and move the market away from the rabbit who
+     *      keeps it.
+     *
+     * SO THE STALL STAYS AT ITS PUBLISHED COLUMN and the slice is accepted, with two things locked
+     * down so the acceptance cannot rot into a silent drift:
+     *
+     *   - EVERY OTHER PROP, IN EVERY COMPOSED FRAME, MUST BE WHOLE OR ABSENT. Measured: today the
+     *     stall is the only object any frame's edge cuts, in all four. This is the pass that will
+     *     catch the NEXT structure planted at a frame edge, which is the general defect and the
+     *     reason this is not simply a note about one stall.
+     *   - AND THE STALL MAY ONLY BE CUT BY A PORTRAIT FRAME'S EAST EDGE. If it is ever cut by the
+     *     title or payoff camera, or on its north, south or west side, the proof above no longer
+     *     describes the map and the next owner has to re-derive it rather than inherit a waiver.
+     *
+     * THE BOUNDS COME FROM `rectOf`, THE PUBLISHED OBJECT RECTANGLE, NOT FROM THE `11 + i` LOOP
+     * THAT LAYS THE TILES. This is trap 5 and it is the whole reason this pass is worth writing: a
+     * guard that asked the placement loop where the stall is would move with the stall and go on
+     * passing while the client went on seeing a sliced box. `prop-stall`'s rectangle is what
+     * `forest-scene.ts` and every framing decision read, so it is what this measures.
+     */
+    const composed: ReadonlyArray<readonly [string, Rect, boolean]> = [
+      ['the title camera', HERO, false],
+      ['the phone camera', PORTRAIT_FULL, true],
+      ['the payoff camera', ARRIVE, false],
+      ["the phone's payoff camera", ARRIVE_PHONE, true],
+    ];
+    for (const [what, frame, portrait] of composed)
+      for (const o of objects) {
+        if (!o.name.startsWith('prop-') && !o.name.startsWith('npc-')) continue;
+        // `rectOf` is inclusive at both ends; a frame is half-open, so take the span to x1 + 1.
+        const r = rectOf(o.name);
+        const [x0, x1, y0, y1] = [r.x0, r.x1 + 1, r.y0, r.y1 + 1];
+        if (!(x1 > frame.x0 && x0 < frame.x1 && y1 > frame.y0 && y0 < frame.y1)) continue;
+        if (x0 >= frame.x0 && x1 <= frame.x1 && y0 >= frame.y0 && y1 <= frame.y1) continue;
+        const sides = [
+          x0 < frame.x0 ? 'west' : '',
+          x1 > frame.x1 ? 'east' : '',
+          y0 < frame.y0 ? 'north' : '',
+          y1 > frame.y1 ? 'south' : '',
+        ].filter(Boolean);
+        if (o.name === 'prop-stall' && portrait && sides.length === 1 && sides[0] === 'east')
+          continue;
+        faults.push(
+          `${o.name} is cut by the ${sides.join(' and ')} edge of ${what} ` +
+            `(its rectangle is columns ${r.x0}-${r.x1}, rows ${r.y0}-${r.y1}; the frame is ` +
+            `x ${frame.x0.toFixed(2)}-${frame.x1.toFixed(2)}, y ${frame.y0.toFixed(2)}-` +
+            `${frame.y1.toFixed(2)}): a drawn structure sliced by the border reads as a fault`,
+        );
+      }
+
+    /*
+     * THE PREMISE OF ALL OF THAT, ASSERTED RATHER THAN REMEMBERED. Every figure in 7k follows from
+     * the camera being pinned to the map's west edge at the spawn, which holds only while Red
+     * stands within half of the NARROWEST camera of that edge. Move the spawn east, or raise
+     * MIN_VIEW, and the stall's framing stops being a function of camera width alone -- at which
+     * point 7k's exception is describing a map that no longer exists. This is the fact that would
+     * otherwise sit in the prose above and quietly go stale, which is trap 1.
+     */
+    const narrowest = Math.min(
+      ...Object.values(REFERENCE_VIEWPORTS).map((vp) => cameraFor(vp).tiles.width),
+      MIN_VIEW.width / TILE,
+    );
+    if (cameraCentreTiles(SPAWN).x > narrowest / 2)
+      faults.push(
+        `the spawn camera is no longer pinned to the map's west edge (centre ` +
+          `${cameraCentreTiles(SPAWN).x.toFixed(2)} tiles, narrowest camera ${narrowest.toFixed(2)}): ` +
+          "7k's proof that the market stall cannot be moved out of the slice must be re-derived",
+      );
+
+    /*
+     * AND THE KEEPER STANDS AT THE COUNTER SHE KEEPS. Both are literals in this file, placed four
+     * hundred lines apart, and nothing tied them together: the rabbit is the reason the stall is
+     * drawn at all, so a round that nudges the market east to chase the phone frame would leave her
+     * standing in open lawn beside it. Asked of the two PUBLISHED rectangles, so it moves with
+     * neither placement loop.
+     */
+    const stallRect = rectOf('prop-stall');
+    const keeper = rectOf('npc-rabbit');
+    if (keeper.x0 < stallRect.x0 || keeper.x1 > stallRect.x1)
+      faults.push(
+        `the rabbit stands at columns ${keeper.x0}-${keeper.x1}, outside her own stall's ` +
+          `columns ${stallRect.x0}-${stallRect.x1}`,
+      );
+
+    /*
      * 7e. BOULDERS DO NOT STACK, which is the trees' topiary complaint in a material no guard was
      * watching. Measured off the finished map and in plain tiles, so putting the planter's own
      * limit back to something generous fails here rather than moving the bound with it.
@@ -9059,6 +9189,27 @@ export function generateForestMap(): GeneratedMap {
         ]
           .map((n) => (((seen.get(n) ?? 0) / Math.max(lit, 1)) * 100).toFixed(0))
           .join('/')}`,
+    );
+    /*
+     * THE ACCEPTED SLICE, PRINTED EVERY REGENERATION. 7k proves the market stall cannot be moved
+     * out of the phone frame's right edge, and an accepted defect that nobody can see the size of
+     * is one round away from being an accepted defect nobody remembers accepting. So the share of
+     * the stall each reference camera actually shows is reported rather than described: if a
+     * future change to the camera, the spawn or the stall moves these numbers, they move in the
+     * build log where somebody will read them.
+     */
+    const stallSeen = rectOf('prop-stall');
+    console.log(
+      `  market stall in frame: ${Object.entries(REFERENCE_VIEWPORTS)
+        .map(([name, vp]) => {
+          const frame = frameAt(vp, cameraCentreTiles(SPAWN));
+          const span = stallSeen.x1 + 1 - stallSeen.x0;
+          const shown =
+            Math.max(0, Math.min(frame.x1, stallSeen.x1 + 1) - Math.max(frame.x0, stallSeen.x0)) /
+            span;
+          return `${name} ${(shown * 100).toFixed(0)}%`;
+        })
+        .join(', ')} (columns ${stallSeen.x0}-${stallSeen.x1}; see composition guard 7k)`,
     );
   }
 
