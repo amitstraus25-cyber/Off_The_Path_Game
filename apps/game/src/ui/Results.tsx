@@ -666,6 +666,12 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
   const [handle, setHandle] = useState(newHandle);
   const [notice, setNotice] = useState<PostOutcome | null>(null);
   const [posting, setPosting] = useState(false);
+  /*
+   * Whether a post is out, as a ref, so the two buttons can refuse a press that arrives before the
+   * render that says `posting`. They are `aria-disabled` while it is true, not `disabled` (see the
+   * form below for why), and `aria-disabled` does not stop a click -- this does.
+   */
+  const inFlight = useRef(false);
   const [board, setBoard] = useState<BoardState>({ state: 'loading' });
   /*
    * Whether this visit has pressed Post. ATTEMPTED, never "posted": the old name claimed an
@@ -719,12 +725,15 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
 
   /** A different name, and the stale "Posted as ..." line cleared with it. */
   const reroll = (): void => {
+    if (inFlight.current) return;
     setHandle(newHandle());
     setNotice(null);
   };
 
   const submit = async (e: Event): Promise<void> => {
     e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setNotice(null);
     setPosting(true);
     /*
@@ -740,8 +749,13 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
      * claiming the board holds nothing can never meet a notice at all.
      */
     setAttempted(true);
-    setNotice(await onPost(handle));
-    setPosting(false);
+    try {
+      setNotice(await onPost(handle));
+    } finally {
+      // A post that throws must not leave both buttons refusing every press for the rest of the visit.
+      inFlight.current = false;
+      setPosting(false);
+    }
     void readBoard();
   };
 
@@ -1013,26 +1027,48 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
               >
                 <span data-handle={handle}>{handle}</span>
               </span>
+              {/*
+                `aria-disabled`, NOT `disabled`, while a post is out -- and that is the whole fix for
+                focus dropping to <body> after every post, whatever the outcome. A `disabled` button
+                cannot hold focus: the browser blurs it the moment the attribute lands, which is
+                the instant the player presses Post, so a keyboard or screen-reader player who had
+                just pressed the button found their position reset to the top of the page before the
+                reply came back and was spoken. `aria-disabled` keeps the button focusable and keeps
+                it announced as unavailable; the `inFlight` guard in `submit` and `reroll` is what
+                makes the press itself do nothing. Playwright's `toBeEnabled()` reads either.
+              */}
               <button
                 type="button"
                 class="otp-button otp-button--quiet"
                 onClick={reroll}
-                disabled={posting}
+                aria-disabled={posting ? 'true' : undefined}
               >
                 {s('handleReroll')}
               </button>
-              <button type="submit" class="otp-button" disabled={posting}>
+              <button type="submit" class="otp-button" aria-disabled={posting ? 'true' : undefined}>
                 {s('post')}
               </button>
             </form>
             <p class="otp-fine" id="otp-handle-hint">
               {s('handleHint')} {s('privacyLine')}
             </p>
-            {notice && (
-              <p class="otp-error" role="status" data-notice={notice.key}>
-                {notice.text}
-              </p>
-            )}
+            {/*
+              MOUNTED IN EVERY STATE, text swapped, never conditionally rendered -- the shape
+              App.tsx records over the world announcements and the board note below uses. This was
+              `{notice && <p role="status">}`, so pressing Post INSERTED the element already
+              holding its sentence, and a live region inserted with its text is announced by no
+              screen reader: only mutations to a region that was already there are. The one line
+              that says whether the score went up reached nobody, and e2e/a11y-structure.spec.ts
+              reproduced it as a status region that did not exist until the reply landed.
+
+              `data-notice` is absent until there is an outcome, exactly as the element was.
+              `:empty` takes the margin off in screens.css, so a region that has to stay rendered
+              does not stay visible: an empty paragraph with the sentence's top margin would open a
+              gap between the fine print and the board before anything has been posted.
+            */}
+            <p class="otp-error" role="status" data-announce="post" data-notice={notice?.key}>
+              {notice?.text ?? ''}
+            </p>
 
             {/*
               06 Leaderboard, mounted where a run actually ends. docs/UI_FOUNDATIONS.md section 8

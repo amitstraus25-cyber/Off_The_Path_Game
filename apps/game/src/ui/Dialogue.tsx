@@ -115,6 +115,14 @@ export interface DialogueProps {
   onInspect(): void;
   /** Say yes from here, without ever opening the card. */
   onTakeAsOffered(): void;
+  /**
+   * That this conversation is being returned to from the card it opened, rather than begun.
+   *
+   * Read once, on mount. It moves focus to "Show me the skill" -- the control that opened the card
+   * -- instead of to the line, which is where a conversation that has only just started puts it.
+   * Closing a panel gives focus back to what opened it; for the card that is this button.
+   */
+  returning?: boolean;
 }
 
 export function Dialogue({
@@ -124,7 +132,10 @@ export function Dialogue({
   onAsk,
   onInspect,
   onTakeAsOffered,
+  returning = false,
 }: DialogueProps) {
+  /* Frozen at mount: the trap reads `[data-autofocus]` once, when the panel opens. */
+  const [resume] = useState(returning);
   const asked = state.asked[character.id] ?? [];
   // The reply to the last question replaces the greeting, as in the mock.
   const [lastAsked, setLastAsked] = useState<string | null>(null);
@@ -197,7 +208,49 @@ export function Dialogue({
     onAsk(option.id);
   };
 
+  /*
+   * THE FIRST SPACE ON A RETURNED CONVERSATION FINISHES THE LINE, AND IS NOT A PRESS ON THE BUTTON.
+   *
+   * Coming back from the card puts focus on "Show me the skill" -- the control that opened the
+   * card, which is where closing a panel gives focus back to -- while the greeting types in again
+   * from nothing. Space is the advance-text key the Title screen teaches, and on a button it is
+   * also that button's press, so the player who pressed it to finish a line they were reading
+   * reopened the card instead: a behaviour change with no spec, introduced with the return focus.
+   *
+   * Two options were on the table: put focus on the line on return (where Space already advances
+   * text), or keep it on the button and let the first Space finish the line. Focus on the button is
+   * what the focus-on-close spec asserts and what a screen-reader player needs to hear, so it stays;
+   * the key is what bends. It bends only here -- a returned conversation, a line still typing, and
+   * focus on THAT button -- so a question's button keeps the rule `choose` records (a press on a
+   * button is that button's press, whenever it lands), and Enter, which is unambiguously "press
+   * this", is left alone too. Once the line is done, Space is the button's again.
+   *
+   * THE KEYUP IS SWALLOWED TOO, AND THAT HALF IS UNVERIFIED HERE. Measured in Chromium: removing it
+   * changes nothing, because preventing the keydown already cancels the press, and the e2e guard
+   * passes with or without it. It stays for Firefox, which is documented to press a button on the
+   * Space keyup even when the keydown was prevented -- and this suite has no Firefox, so nothing
+   * proves that line. Do not read its presence as tested.
+   */
+  const spaceSwallowed = useRef(false);
+  const onKeyUp = (e: KeyboardEvent): void => {
+    if (e.key !== ' ' || !spaceSwallowed.current) return;
+    spaceSwallowed.current = false;
+    e.preventDefault();
+  };
+
   const onKeyDown = (e: KeyboardEvent): void => {
+    if (
+      resume &&
+      !done &&
+      e.key === ' ' &&
+      e.target instanceof HTMLElement &&
+      e.target.classList.contains('otp-dialogue__show')
+    ) {
+      e.preventDefault();
+      spaceSwallowed.current = true;
+      skip();
+      return;
+    }
     /*
      * Space is the key the Title screen teaches ("Space to talk"). Pressing it again, which is
      * the universal advance-text gesture, used to activate whichever option had focus — so the
@@ -242,11 +295,13 @@ export function Dialogue({
       aria-modal="true"
       aria-label={`Talking to ${character.name}`}
       onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
       onClick={() => !done && skip()}
     >
       <Panel
         number="02"
         title="Question"
+        heading
         aside={<NotationChip label={content.strings['askingFree'] ?? 'Asking costs nothing'} />}
       >
         <div class="otp-dialogue">
@@ -261,7 +316,7 @@ export function Dialogue({
             to be question one, putting a committing control under the player's thumb before they
             had read the line.
           */}
-          <div class="otp-dialogue__text" tabIndex={-1} data-autofocus>
+          <div class="otp-dialogue__text" tabIndex={-1} data-autofocus={resume ? undefined : true}>
             {/* Speaker-name eyebrow, as in the deck. */}
             <p class="otp-dialogue__speaker">{character.name}</p>
             <div class="otp-dialogue__linebox">
@@ -296,7 +351,19 @@ export function Dialogue({
                 </span>
               </p>
             </div>
-            <div class="otp-options" role="listbox" aria-label={`Ask ${character.name}`}>
+            {/*
+              A GROUP OF BUTTONS, NOT A LISTBOX. This was `role="listbox"` with `role="option"` and
+              `aria-selected={index === cursor}`, and `cursor` starts at 0 -- so a screen reader
+              announced "Ask Rabbit, listbox, What does it need?, selected" before the player had
+              chosen anything. Nothing here is a selection: each row is an action that asks a
+              question, and choosing one does not leave it chosen. The listbox pattern also promises
+              a single tab stop and a value, neither of which this has.
+
+              The cursor row is still drawn -- the caret and the Haze fill the board shows -- as
+              `data-cursor`, which is a drawing and carries no claim. An asked question says so the
+              way a button already can, `aria-disabled`.
+            */}
+            <div class="otp-options" role="group" aria-label={`Ask ${character.name}`}>
               {questions.map((option, index) => {
                 const used = asked.includes(option.id);
                 return (
@@ -304,8 +371,7 @@ export function Dialogue({
                     key={option.id}
                     type="button"
                     class={`otp-option${used ? ' otp-option--done' : ''}`}
-                    role="option"
-                    aria-selected={index === cursor}
+                    data-cursor={index === cursor ? 'true' : undefined}
                     aria-disabled={used}
                     onFocus={() => setCursor(index)}
                     onClick={(e) => {
@@ -338,6 +404,7 @@ export function Dialogue({
               <button
                 type="button"
                 class="otp-dialogue__show"
+                data-autofocus={resume ? true : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
                   onInspect();

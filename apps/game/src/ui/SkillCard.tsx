@@ -189,6 +189,7 @@ export function SkillCard({
       <Panel
         number="03"
         title="Inspect"
+        heading
         aside={
           <NotationChip label={`${content.strings['chipSkill'] ?? 'Skill'} ${index} of ${total}`} />
         }
@@ -216,7 +217,8 @@ export function SkillCard({
             </div>
             <div class="otp-card__main">
               <p class="otp-card__eyebrow">Offered by the {offeredBy}</p>
-              <h2 class="otp-card__title">{skill.name}</h2>
+              {/* An h3: the panel's own title above is the h2, under the frame's h1. */}
+              <h3 class="otp-card__title">{skill.name}</h3>
 
               <div class="otp-row">
                 <span class="otp-row__badge">

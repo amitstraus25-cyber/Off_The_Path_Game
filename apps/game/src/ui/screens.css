@@ -486,6 +486,16 @@
   margin: calc(7px * var(--otp-ui)) 0 0;
 }
 
+/*
+ * The post outcome is a live region, so it stays in the document with no text in it until there is
+ * something to say (Results.tsx says why). Empty, it must occupy nothing: no height, and no margin
+ * either, which would otherwise open a 7px gap above the board on a screen where nothing has been
+ * posted.
+ */
+.otp-error:empty {
+  margin: 0;
+}
+
 /* The Read the Research band: this screen's one Lime lives on its button. */
 .otp-band {
   margin-top: calc(26px * var(--otp-ui));

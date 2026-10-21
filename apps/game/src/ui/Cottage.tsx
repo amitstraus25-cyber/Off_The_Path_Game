@@ -156,7 +156,8 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
         If a label is wanted here rather than silence, it needs a key in content/game.json, which
         this round belongs to someone else -- the ask is in the handback as `arriveChip`.
       */}
-      <WorldFrame number="04" title={content.strings['arriveTitle'] ?? 'Arrive'} />
+      {/* The arrival's h1 is its frame: the ending's title below is the h2 under it. */}
+      <WorldFrame number="04" title={content.strings['arriveTitle'] ?? 'Arrive'} heading />
       <div class="otp-layer otp-layer--arrive">
         <div class="otp-dialogue otp-arrive">
           <div

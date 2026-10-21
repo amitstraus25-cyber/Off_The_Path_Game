@@ -263,6 +263,21 @@
 /* Panel title: 14 / +18% tracking / Medium. The floor rule still applies under it -- 14 x 0.7 is
    9.8px -- so the caption floor holds it at 11px on the smallest phones. */
 .otp-panel__title {
+  /* It is an h1 on Explore and Arrive and an h2 on the three panels (components.tsx says why);
+     the UA gives either a block margin the header's flex row has no room for. */
+  margin: 0;
+  /*
+   * THE HEADER'S COLOUR, NOT THE HEADING RULE'S. These titles became h1 and h2 elements so a screen
+   * reader can walk them, and reference/brand/cyera-theme.css line 76 sets `h1, h2, ... { color:
+   * var(--cyera-heading) }` -- Deep Purple, which is right on a light page and is the panel's own
+   * border colour here. On the Black header that is 1.38:1 (measured): the three panel titles ("Question",
+   * "Inspect", the post's) and Arrive's frame title were nearly invisible to every sighted player,
+   * and 274 green tests did not notice because none of them measured a colour. As spans they had
+   * inherited the header's Off-white; this gives that back. The brand file is not edited, and the
+   * guard is e2e/heading-contrast.spec.ts, which computes the ratio of every heading against what
+   * is actually behind it.
+   */
+  color: inherit;
   font-size: max(11px, calc(14px * var(--otp-ui)));
   line-height: 1.2;
   font-weight: 500;
@@ -453,9 +468,10 @@
   /*
    * The screen's name, worth 80px here, is carried by the numeral beside it and by the quest chip
    * directly under the player's eye. Hidden from the layout but NOT from the accessible tree --
-   * this is the .otp-visually-hidden treatment, not display: none, so "Explore" is still
-   * announced. (The Cyera mark above uses display: none below 560px; it has alt text and no
-   * reading order to keep.)
+   * this is the .otp-visually-hidden treatment, not display: none. On Explore the title is
+   * `aria-hidden` (App.tsx has a hidden h1 that says "Explore" and is the world's home for focus);
+   * on Arrive, where it is the page's h1, this is what keeps it announced. (The Cyera mark above
+   * uses display: none below 560px; it has alt text and no reading order to keep.)
    */
   .otp-world-frame__header .otp-panel__title {
     position: absolute;
@@ -849,7 +865,13 @@
   display: block;
 }
 
-.otp-option[aria-selected='true'] {
+/*
+ * The cursor row: the one the caret and the Haze fill sit on. It follows focus, and before any focus
+ * it is the first row, as the board draws it. It is `data-cursor` and not `aria-selected` because
+ * it is a drawing and not a claim: nothing here is selected, each row is a button that asks, and a
+ * screen reader was being told the first question was already chosen before anyone had picked one.
+ */
+.otp-option[data-cursor] {
   background: var(--cyera-haze);
   color: var(--cyera-deep-purple);
   font-weight: 500;

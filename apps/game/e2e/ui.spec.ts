@@ -45,7 +45,8 @@ test('the dialogue shows the speaker, the greeting and the two questions', async
   await expect(page.locator('.otp-dialogue__line')).toContainText('compass', { timeout: 4000 });
 
   // "Show me the skill" is its own action below the hairline, not a third question.
-  const options = page.getByRole('option');
+  // A named group of buttons, not a listbox: each one asks, and none of them is "selected".
+  const options = page.getByRole('group', { name: 'Ask Rabbit' }).getByRole('button');
   await expect(options).toHaveCount(2);
   await expect(options.nth(0)).toHaveText(/What does it need\?/);
   await expect(options.nth(1)).toHaveText(/Who made it\?/);
@@ -55,16 +56,16 @@ test('the dialogue shows the speaker, the greeting and the two questions', async
 
 test('the questions-left counter drops as questions are asked', async ({ page }) => {
   await openDialogue(page);
-  await page.getByRole('option', { name: /What does it need/ }).click();
+  await page.getByRole('button', { name: /What does it need/ }).click();
   await expect(page.locator('.otp-dialogue__left')).toHaveText('1 question left');
 });
 
 test('asking a question replaces the line and marks the option used', async ({ page }) => {
   await openDialogue(page);
-  await page.getByRole('option', { name: /What does it need/ }).click();
+  await page.getByRole('button', { name: /What does it need/ }).click();
 
   await expect(page.locator('.otp-dialogue__line')).toContainText('look around', { timeout: 4000 });
-  await expect(page.getByRole('option', { name: /What does it need/ })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: /What does it need/ })).toHaveAttribute(
     'aria-disabled',
     'true',
   );
@@ -80,13 +81,13 @@ test('the dialogue is operable from the keyboard alone', async ({ page }) => {
   // with the player mid-read.
   await expect(page.locator('.otp-dialogue__text')).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('option', { name: /What does it need/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /What does it need/ })).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('option', { name: /Who made it/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /Who made it/ })).toBeFocused();
   await page.keyboard.press('ArrowDown'); // wraps back round the two questions
-  await expect(page.getByRole('option', { name: /What does it need/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /What does it need/ })).toBeFocused();
 
-  // Tab reaches the inspect action, which is a button rather than an option.
+  // Tab reaches the inspect action, which is an action of its own rather than one of the questions.
   const show = page.locator('.otp-dialogue__show');
   for (let i = 0; i < 5; i++) {
     if (await show.evaluate((el) => el === document.activeElement)) break;
@@ -653,8 +654,50 @@ async function resize(page: Page, width: number, height: number): Promise<void> 
 }
 
 /**
- * Every distinct position and size the spoken line and its panel take, sampled once per frame for
- * as long as the caller asks.
+ * Characters per second the typewriter runs at, read out of the component.
+ *
+ * The sampling window below has to cover a typewriter run, and how long that is comes from this
+ * number and the length of the longest line. A `55` typed here would be a fact in a spec that
+ * goes stale the day somebody retunes the typewriter: the window would then be too short to see
+ * the end of the line, and the test would go on passing on what it did see.
+ */
+const TYPE_SPEED = ((): number => {
+  const src = readFileSync(
+    fileURLToPath(new URL('../src/ui/Dialogue.tsx', import.meta.url)),
+    'utf8',
+  );
+  const cps = /TYPE_SPEED\s*=\s*(\d+)/.exec(src)?.[1];
+  if (!cps) throw new Error('TYPE_SPEED is not in apps/game/src/ui/Dialogue.tsx');
+  return Number(cps);
+})();
+
+/**
+ * The fewest frames a sample may contain before it is allowed to mean anything.
+ *
+ * A window bounded by TIME can no longer hang a starved runner, but it can contain nothing: a
+ * runner that throttles requestAnimationFrame hard enough sees two frames in the window, one
+ * position, and a green tick for "the line never moved" that measured the line twice. This is the
+ * floor under that. Twenty is a frame every 100ms across the shortest window this test samples
+ * (about 1.3s of typing), a rate no unstarved browser comes near the bottom of -- and it is a floor
+ * on the EVIDENCE, not a bound on what is measured, so it does not move with the layout it guards.
+ */
+const MIN_SAMPLES = 20;
+
+interface PanelSample {
+  lineTop: number[];
+  lineHeight: number[];
+  panelHeight: number[];
+  /** How many frames contributed to the sets above. */
+  samples: number;
+  /** Whether the typewriter was seen to START and then to END inside the window. */
+  finished: boolean;
+  /** Wall-clock milliseconds the window ran, for a failure message. */
+  elapsedMs: number;
+}
+
+/**
+ * Every distinct position and size the spoken line and its panel take, sampled once per frame over
+ * a window of TIME.
  *
  * This is the only honest way to see the defect it guards. The sentence is dragged by its own panel
  * growing a line at a time, and `layout-shift` scores none of the worst of it: half the movement
@@ -663,25 +706,77 @@ async function resize(page: Page, width: number, height: number): Promise<void> 
  * they are reading changing position, so that is what is measured -- the top edge of the line's own
  * box, in viewport coordinates, as a set.
  *
- * The first frames are dropped because `.otp-layer--modal` plays `otp-panel-in`, a 180ms
+ * The first `settleMs` are dropped because `.otp-layer--modal` plays `otp-panel-in`, a 180ms
  * `translateY(8px)`. That is the panel arriving, not the panel growing, and a bounding rect cannot
- * tell the two apart.
+ * tell the two apart. Only the call that follows the panel opening needs it: the one made after a
+ * click on a panel that is already on screen passes 0, because the frame after that click is the
+ * very one the sentence used to jump on.
+ *
+ * IT USED TO COUNT FRAMES, AND THAT TIMED OUT AT 90s ON A STARVED CI RUNNER. The loop ran for a
+ * fixed number of requestAnimationFrame callbacks -- 24 to drop and 200 to keep -- and throttled
+ * rAF has no upper bound: a runner that delivers a frame every few hundred milliseconds turns
+ * 224 frames into a minute and a half, per viewport, and the 12-minute CI run failed on the test's
+ * own timeout without having measured anything. It is bounded by CLOCK now, in three ways that do
+ * not depend on frames arriving:
+ *
+ *   1. The first `settleMs` of wall-clock are dropped, however many frames they held.
+ *   2. The window ENDS when the typewriter has been seen to start and then has stayed finished
+ *      (no caret in the DOM) for `QUIET_MS` -- so it covers the whole run and the frame the caret
+ *      leaves on, and ends as soon after as it can. The typewriter itself is on `performance.now()`,
+ *      not on frames, so starvation does not stretch the run.
+ *   3. A `setTimeout` resolves the promise at a hard deadline even if no frame ever comes. The
+ *      deadline is the typewriter's own length (`TYPE_SPEED` and the longest line this panel can
+ *      show) plus a margin for a runner that is very slow, never a typed constant.
+ *
+ * What a bound by time buys is a test that always ends. What it costs is that a starved run can end
+ * having sampled almost nothing -- so the caller asserts `samples >= MIN_SAMPLES` and `finished`
+ * (see `expectCovered`), which is what turns "ended early" into a failure that says so rather than
+ * a pass that measured nothing.
  */
-function samplePanel(
-  page: Page,
-  frames: number,
-): Promise<{ lineTop: number[]; lineHeight: number[]; panelHeight: number[] }> {
-  return page.evaluate((count) => {
-    const lineTop = new Set<number>();
-    const lineHeight = new Set<number>();
-    const panelHeight = new Set<number>();
-    let seen = 0;
-    return new Promise<{ lineTop: number[]; lineHeight: number[]; panelHeight: number[] }>(
-      (done) => {
+function samplePanel(page: Page, settleMs: number): Promise<PanelSample> {
+  return page.evaluate(
+    ({ settle, charsPerSecond }) => {
+      /** How long the caret must stay gone before the typewriter counts as having ended. */
+      const QUIET_MS = 300;
+      const longest = Math.max(
+        0,
+        ...Array.from(document.querySelectorAll('.otp-dialogue__ghost')).map(
+          (g) => (g.textContent ?? '').length,
+        ),
+      );
+      // The run's own length, plus a margin for a runner far slower than any this has been seen on.
+      const deadline = settle + (longest / charsPerSecond) * 1000 + QUIET_MS + 4000;
+
+      const lineTop = new Set<number>();
+      const lineHeight = new Set<number>();
+      const panelHeight = new Set<number>();
+      let samples = 0;
+      let sawTyping = false;
+      let goneSince: number | null = null;
+      let closed = false;
+      const began = performance.now();
+
+      return new Promise<PanelSample>((done) => {
+        const finish = (finished: boolean): void => {
+          if (closed) return;
+          closed = true;
+          clearTimeout(timer);
+          done({
+            lineTop: [...lineTop],
+            lineHeight: [...lineHeight],
+            panelHeight: [...panelHeight],
+            samples,
+            finished,
+            elapsedMs: Math.round(performance.now() - began),
+          });
+        };
+        // The backstop: resolves whether or not a frame ever arrives.
+        const timer = setTimeout(() => finish(false), deadline);
+
         const tick = (): void => {
-          seen += 1;
-          // 24 frames is comfortably past the 180ms slide at 60Hz and at 120Hz.
-          if (seen > 24) {
+          if (closed) return;
+          const now = performance.now();
+          if (now - began >= settle) {
             const line = document.querySelector('.otp-dialogue__line');
             const panel = document.querySelector('.otp-panel');
             if (line) {
@@ -690,19 +785,41 @@ function samplePanel(
               lineHeight.add(Math.round(box.height * 10) / 10);
             }
             if (panel) panelHeight.add(Math.round(panel.getBoundingClientRect().height * 10) / 10);
+            samples += 1;
+
+            const typing = document.querySelector('.otp-dialogue__caret') !== null;
+            if (typing) {
+              sawTyping = true;
+              goneSince = null;
+            } else if (sawTyping) {
+              goneSince ??= now;
+              if (now - goneSince >= QUIET_MS) return finish(true);
+            }
           }
-          if (seen < count + 24) requestAnimationFrame(tick);
-          else
-            done({
-              lineTop: [...lineTop],
-              lineHeight: [...lineHeight],
-              panelHeight: [...panelHeight],
-            });
+          requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
-      },
-    );
-  }, frames);
+      });
+    },
+    { settle: settleMs, charsPerSecond: TYPE_SPEED },
+  );
+}
+
+/**
+ * That a sample is evidence: enough frames, and the whole typewriter run inside the window.
+ * Without this a starved runner passes by measuring nothing -- see `samplePanel`.
+ */
+function expectCovered(sample: PanelSample, where: string, what: string): void {
+  expect(
+    sample.samples,
+    `${where}: only ${sample.samples} frames in ${sample.elapsedMs}ms while ${what} -- the runner ` +
+      `was too starved for "the line never moved" to mean anything`,
+  ).toBeGreaterThanOrEqual(MIN_SAMPLES);
+  expect(
+    sample.finished,
+    `${where}: the window closed after ${sample.elapsedMs}ms without seeing the typewriter start ` +
+      `and end while ${what}, so part of the run went unmeasured`,
+  ).toBe(true);
 }
 
 test('the sentence being read never moves, and the panel around it never resizes', async ({
@@ -746,8 +863,10 @@ test('the sentence being read never moves, and the panel around it never resizes
     await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'owl' }));
     await expect(page.locator('.otp-dialogue__line')).toBeVisible();
 
-    // Through the whole of the greeting's typewriter run.
-    const typing = await samplePanel(page, 200);
+    // Through the whole of the greeting's typewriter run, after the panel's 180ms slide-in (250ms
+    // to be clear of it at any refresh rate).
+    const typing = await samplePanel(page, 250);
+    expectCovered(typing, where, 'the greeting typed');
     expect(typing.lineTop, `${where}: the line moved while it was being typed`).toHaveLength(1);
     expect(typing.lineHeight, `${where}: the line's box resized while it was typed`).toHaveLength(
       1,
@@ -757,8 +876,11 @@ test('the sentence being read never moves, and the panel around it never resizes
     );
 
     // And across the reply, which is a different length and used to be what moved it.
-    await page.getByRole('option').first().click();
-    const replying = await samplePanel(page, 200);
+    await page.locator('.otp-option').first().click();
+    // No settle: the panel is already on screen, and the frame after the click is the one that
+    // used to move the sentence.
+    const replying = await samplePanel(page, 0);
+    expectCovered(replying, where, 'the reply typed');
     expect(replying.lineTop, `${where}: the line moved when the reply arrived`).toEqual(
       typing.lineTop,
     );

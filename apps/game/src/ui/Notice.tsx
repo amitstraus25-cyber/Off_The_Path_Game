@@ -67,7 +67,7 @@ export function Notice({ content, state, notice, onRead, onWalkOn }: NoticeProps
        */
       tabIndex={-1}
     >
-      <Panel number="--" title={notice.title}>
+      <Panel number="--" title={notice.title} heading>
         <div class="otp-notice">
           {/*
             Empty until the post is read, then mutated -- which is the only form of this that is

@@ -475,7 +475,7 @@ for (const outcome of OUTCOMES) {
     // and it is the one line on this screen that claims the board holds nothing. Nothing can
     // contradict it here, because no post notice exists yet.
     await expect(note(page)).toHaveText(say('boardEmpty'));
-    await expect(page.locator('.otp-error')).toHaveCount(0);
+    await expect(page.locator('.otp-error')).toHaveText('');
 
     await post(page);
 
@@ -709,7 +709,9 @@ test('the line the note turns over to is true before the post is answered', asyn
   await page.waitForTimeout(500);
 
   // Nothing has been answered, so nothing is in .otp-error -- this is the moment the review found.
-  await expect(page.locator('.otp-error')).toHaveCount(0);
+  // The region itself is always mounted now (a live region has to be there before it has text),
+  // so "nothing yet" is an empty one, not an absent one.
+  await expect(page.locator('.otp-error')).toHaveText('');
   // And the note has already turned over. What it turned over to may not claim the reader has a
   // run pending, because the reply that is still in flight is about to say they do not.
   await expect(note(page)).toHaveText(say('boardEmptyAfterPost'));

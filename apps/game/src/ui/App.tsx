@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import {
   CAPABILITIES,
   canEnterCottage,
@@ -54,6 +54,12 @@ function useStoreState(store: Store): GameState {
   useEffect(() => store.subscribe(setState), [store]);
   return state;
 }
+
+/**
+ * What the forest is called: the frame's visible title and the screen's h1, from one place.
+ * A literal like the frame's other fixed words ("Question", "Inspect"); not copy a researcher edits.
+ */
+const EXPLORE_TITLE = 'Explore';
 
 /**
  * Past tense of each verdict, for the lines that report one. `main.ts` carries the same three
@@ -202,6 +208,62 @@ export function App({
   const inForest = state.phase === 'explore';
   const allLive = live.length === CAPABILITIES.length;
 
+  /*
+   * WHERE FOCUS GOES WHEN THE FOREST COMES BACK.
+   *
+   * Every panel closed by dropping focus to `document.body`, so a screen-reader player's reading
+   * position went back to the top of the page. `useFocusTrap` already gives focus back to whatever
+   * had it when the panel opened, and that is right when there is such a thing -- but a panel is
+   * opened by a key on the canvas or a tap on the pad, and neither is an element, so what it found
+   * was the body and what it restored was the body.
+   *
+   * So the world has a home for focus: its own h1, the one thing on Explore that says which screen
+   * this is. It is taken only when focus has nowhere else to be -- on the body, or on something the
+   * render just removed -- so a player who is on the music switch, or on whatever the trap gave
+   * back, keeps it.
+   *
+   * THE H1 IS THE FIRST THING IN THE WORLD'S DOM, AND THAT IS WHY IT IS NOT THE FRAME'S TITLE.
+   * The first cut focused the frame header's h1 and broke the tab order it was meant to leave
+   * alone: on a phone the errand-goals bar is the first stop after the walk begins (it is in
+   * `.otp-world-anchor`, which comes before the frame), and with focus parked on a heading INSIDE
+   * the frame the next Tab skipped it -- e2e/hud-goals-drop.spec.ts, "the bar opens from the
+   * keyboard", failed on exactly that. Focus is the starting point for the next Tab, so the home
+   * has to come before the first control; the anchor's first child is the only place that is true
+   * without moving the frame in the document, and the frame's stacking is its document order.
+   * The frame's own numeral and title are `labelHidden` so a reader does not hear "Explore" twice.
+   *
+   * This runs on the forest coming into view, which is the same moment for four different reasons:
+   * a panel closing, the walk beginning from the title, and a replay from Results. All of them
+   * leave focus on a button that no longer exists, and all of them are the same fix. The effect
+   * runs after the commit, so the h1 it reaches for is the one that is now in the document.
+   *
+   * A LAYOUT effect, so it runs in the same task as the removal and no frame is ever painted with
+   * focus on the body. `useEffect` runs after the next paint: an assistive technology that reads
+   * focus on the DOM change (and a test that reads it the moment the panel is gone) saw the body
+   * in the gap, which is exactly the reading-position reset this is here to prevent.
+   *
+   * A notice is a panel over a forest whose phase is still `explore`, hence `!noticeId`.
+   */
+  const forestHome = useRef<HTMLHeadingElement>(null);
+  const forestClear = inForest && !noticeId;
+  useLayoutEffect(() => {
+    if (!forestClear) return;
+    const on = document.activeElement;
+    if (on && on !== document.body && on.isConnected) return;
+    forestHome.current?.focus({ preventScroll: true });
+  }, [forestClear]);
+
+  /*
+   * Which phase the PREVIOUS render was in, so the conversation can tell it is being returned to.
+   * Updated after every commit, so during the render that follows `BACK` it still says `inspect`.
+   * It is only ever read by Dialogue on its first render, which is the one this is for.
+   */
+  const lastPhase = useRef(state.phase);
+  const cameFromCard = lastPhase.current === 'inspect';
+  useEffect(() => {
+    lastPhase.current = state.phase;
+  });
+
   /**
    * What the speech bubble over someone's head says, for a player who cannot see it: the name,
    * then what to do about it.
@@ -294,6 +356,19 @@ export function App({
       */}
       {inWorld && (
         <div class="otp-world-anchor" key="world-hud">
+          {/*
+            Explore's h1, and the world's home for focus (see `forestHome`). Visually hidden: the
+            visible "01 Explore" in the frame's header says the same thing to the eye, and that
+            copy is `labelHidden` so the two are not both read. One constant feeds both, so the
+            word cannot drift between what is shown and what is announced.
+
+            `tabindex="-1"` and `data-autofocus` are the pair `.otp-ui [tabindex='-1']
+            [data-autofocus]:focus-visible` keys the suppressed ring off: a label nobody can act on
+            has nothing for a focus ring to indicate, and this one is clipped to a pixel anyway.
+          */}
+          <h1 class="otp-visually-hidden" ref={forestHome} tabIndex={-1} data-autofocus>
+            {EXPLORE_TITLE}
+          </h1>
           <HudGoals
             goals={errandGoals(state, content)}
             heading={content.strings['errandHeading'] ?? 'Grandma asked for'}
@@ -412,6 +487,7 @@ export function App({
             onTakeAsOffered={() =>
               void store.dispatch({ type: 'VERDICT', s: character.skillId, v: 'allow' })
             }
+            returning={cameFromCard}
           />
         ) : null;
 
@@ -490,7 +566,8 @@ export function App({
       <WorldFrame
         key="world-frame"
         number="01"
-        title="Explore"
+        title={EXPLORE_TITLE}
+        labelHidden
         music={{
           ...music,
           labels: {

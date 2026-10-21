@@ -14,14 +14,29 @@ export interface PanelProps {
    * carries a notation chip, a sound control, or nothing.
    */
   aside?: ComponentChildren;
+  /**
+   * Whether the title is the panel's heading, as an h2.
+   *
+   * The three panels that open over the world (the conversation, the card, the post) say it: the
+   * frame under them already carries the screen's one h1, so a panel's title is the next level
+   * down and the card's own heading (the skill's name) the one after, with nothing skipped.
+   * Results leaves it off, because its h1 is the score and a second heading in the header would
+   * be a second subject for the page.
+   *
+   * It is a prop and not always-on so that the visual header is the same element either way: the
+   * class carries every pixel of it, and `.otp-panel__title` zeroes the margin the UA gives a
+   * heading.
+   */
+  heading?: boolean;
 }
 
-export function Panel({ number, title, children, aside }: PanelProps) {
+export function Panel({ number, title, children, aside, heading }: PanelProps) {
+  const Title = heading ? 'h2' : 'span';
   return (
     <section class="otp-panel">
       <header class="otp-panel__header">
         <span class="otp-panel__number">{number}</span>
-        <span class="otp-panel__title">{title}</span>
+        <Title class="otp-panel__title">{title}</Title>
         {aside && <span class="otp-panel__aside">{aside}</span>}
       </header>
       <div class="otp-panel__body">{children}</div>
@@ -70,6 +85,21 @@ export interface WorldFrameProps {
   children?: ComponentChildren;
   /** Music state and the control for it. Absent on screens that do not carry the frame. */
   music?: { on: boolean; onToggle(): void; labels: MusicLabels };
+  /**
+   * Whether the frame's title is the page's h1.
+   *
+   * Only where the frame IS the screen's heading: 04 Arrive. The title card carries its own h1
+   * (the wordmark), so its frame leaves this off and the page keeps exactly one. Explore's h1 is
+   * NOT the frame's -- it is `ui/App.tsx`'s, for the reason given there, and its frame says so
+   * with `labelHidden`.
+   */
+  heading?: boolean;
+  /**
+   * That the numeral and the title are drawn but are not read: another element is this screen's
+   * heading and says the same word, so a screen reader would otherwise hear "Explore" twice and a
+   * bare "01" with nothing to number. The words stay on screen exactly as they were.
+   */
+  labelHidden?: boolean;
 }
 
 /**
@@ -77,12 +107,29 @@ export interface WorldFrameProps {
  * that ui/stage.ts publishes, so the world sits inside the same frame as every other screen
  * instead of floating on the page with its quest chip in the window's corner.
  */
-export function WorldFrame({ number, title, aside, children, music }: WorldFrameProps) {
+export function WorldFrame({
+  number,
+  title,
+  aside,
+  children,
+  music,
+  heading,
+  labelHidden,
+}: WorldFrameProps) {
+  const hidden = labelHidden ? ({ 'aria-hidden': 'true' } as const) : {};
   return (
     <div class="otp-world-frame">
       <header class="otp-panel__header otp-world-frame__header">
-        <span class="otp-panel__number">{number}</span>
-        <span class="otp-panel__title">{title}</span>
+        <span class="otp-panel__number" {...hidden}>
+          {number}
+        </span>
+        {heading ? (
+          <h1 class="otp-panel__title">{title}</h1>
+        ) : (
+          <span class="otp-panel__title" {...hidden}>
+            {title}
+          </span>
+        )}
         {aside && <span class="otp-panel__aside otp-hud">{aside}</span>}
         {music && <MusicToggle on={music.on} onToggle={music.onToggle} labels={music.labels} />}
         <CyeraMark />
