@@ -325,6 +325,74 @@ const CLOTH_BIAS = 1.35;
 const DOME_RIM = 0.955;
 
 /**
+ * THE DOME'S SHADED FACE, which 2026-10-21 is the round that found there wasn't one.
+ *
+ * `DOME_RIM` above fixed the LIT limb and nobody looked at the other one. Measured off the shipped
+ * back frame, rows 9 and 10 of the hood -- the two widest rows, the middle of the largest mass on
+ * her -- are:
+ *
+ *     14 | 87 87 87 87 87 87 87 87 87 87 87 87 87 87 87 87 87 87 87 87 87 | 54 | 14
+ *
+ * THREE DISTINCT COLOURS ACROSS TWENTY-FOUR PIXELS, one of which is the keyline and one of which is
+ * the single-pixel fold lip. The dome has no shaded side at all: twenty-one of its twenty-four
+ * columns are the same value. That, and not the absence of a seam, is why the back view reads as an
+ * egg -- `domeRun`'s note has promised "a distinctly darker zone in the lower-right quadrant"
+ * (sampled off the board) since it was written, and the pixels never had one.
+ *
+ * The cause is `plateau`'s LOWER join and it is trap 1 in the shape this file keeps meeting: 0.24 is
+ * a fraction of the LIT RANGE, and on a sphere the shaded limb flattens towards the terminator
+ * exactly as the lit limb flattens towards the pole. So 0.24 of range buys one pixel of the surface
+ * -- measured, exactly one, on every row from 2 to 10 -- while the same figure on the cloth's
+ * cylinder buys a quarter of the run. `DOME_RIM` is the identical argument, written out at length on
+ * `plateau` below, applied to the other end and never carried across.
+ *
+ * RAISING THE JOIN IS NOT THE FIX, and it was tried first. Sweeping it 0.24 -> 0.66 and pasting the
+ * run, row 9's shaded limb comes out as:
+ *
+ *     0.24   87 (nothing)
+ *     0.34   86
+ *     0.42   84 80
+ *     0.50   85 82 79 76
+ *     0.58   85 83 80 78 76 74
+ *     0.66   85 83 81 79 77 75 74
+ *
+ * which is an eight-pixel even descent in two-luma steps: the airbrush, arriving on the limb that
+ * had not been looked at yet, by the identical mechanism. Two-luma steps are invisible at 1x and the
+ * whole effect is that the right edge is slightly dimmer.
+ *
+ * So the shaded face is a SECOND FLAT FIELD, which is what the board was sampled as having -- a
+ * zone, not a falloff -- and it mirrors the lit arc exactly: three pixels of flat value, a two-pixel
+ * turn, then the mass. `DOME_OCCIPUT` is where the flat dark field ends and `DOME_TURN` where it
+ * has finished turning into the mass. Pasted from the run that chose them, rows 2..10, counting in
+ * from the silhouette past the fold lip:
+ *
+ *     occiput/turn    flat px, rows 2..10      turn px, rows 2..10
+ *     0.30 / 0.40     0 0 0 0 0 0 0 0 1        0 0 0 0 0 1 1 2 2
+ *     0.36 / 0.46     0 0 0 0 0 0 1 1 2        0 0 0 0 0 2 1 2 2
+ *     0.40 / 0.50     0 0 0 0 0 1 1 2 3        0 0 0 1 1 2 2 2 2
+ *     0.44 / 0.54     0 0 0 0 0 2 2 3 4        0 0 0 2 2 2 2 2 2   <- this file
+ *     0.48 / 0.58     0 0 0 1 1 3 3 4 5        0 0 1 1 2 2 2 2 2
+ *
+ * It grows DOWN the dome and is absent at the crown, which is what a sphere does and what keeps the
+ * top of the hood open. The turn holds at two pixels on every row that has one, which is the lit
+ * arc's own budget read back the other way.
+ *
+ * All three of the lower pairs were rendered on grass at 1x and 3x and looked at together. 0.40 is
+ * a thin dark edge and reads as a one-pixel accident; 0.44 is a face; 0.48 is also a face and is
+ * REJECTED, because its turn reaches row 4 and its flat band row 5 -- it has started closing the
+ * crown, which is the one part of this dome the previous round's caution rules out touching. 0.44
+ * is the strongest reading that leaves rows 2 to 6 of the crown pixel-identical to what shipped.
+ *
+ * The lit arc does not move: row 4 is `114 161 161 161 126 87 ...` before and after, to the pixel.
+ * Nor does the flat mass, which the previous round's caution asks for -- what this adds is a face
+ * the light does not reach, which `docs/PIXEL_STANDARD.md` section 3 requires of everything in the
+ * world ("bottom and right faces fall to level 0") and which the largest object on the protagonist
+ * was the one thing not doing.
+ */
+const DOME_OCCIPUT = 0.44;
+const DOME_TURN = 0.54;
+
+/**
  * The lit fraction `u` mapped onto the band, with a FLAT PLATEAU across the middle.
  *
  * This is the correction to the previous round, and it is worth stating plainly because the
@@ -366,9 +434,27 @@ const DOME_RIM = 0.955;
  * So the join is a parameter: the cloth keeps 0.78, the dome takes `DOME_RIM`. The flat middle, the
  * lower limb and both continuity guarantees are untouched, which is what the previous round's own
  * caution asks for -- the mass is not the problem and must not be sanded again.
+ *
+ * ---
+ *
+ * 2026-10-21 SAID THE SAME THING ABOUT THE LOWER LIMB, and `DOME_OCCIPUT` above is the long version.
+ * `lower` and `floor` are now parameters for the same reason `upper` is: a fraction of the lit range
+ * is not a fraction of the surface, and the cloth's cylinder and the dome's sphere want different
+ * numbers at BOTH ends. `floor` holds the band at `lo` below it, so the dark side can be a flat
+ * field rather than a descent -- the cloth does not use it and the defaults are exactly the old
+ * behaviour, since at `floor = 0` the first limb still returns `lo` at `u = 0`.
  */
-function plateau(u: number, lo: number, mid: number, hi: number, upper = 0.78): number {
-  if (u < 0.24) return lo + (mid - lo) * (u / 0.24);
+function plateau(
+  u: number,
+  lo: number,
+  mid: number,
+  hi: number,
+  upper = 0.78,
+  lower = 0.24,
+  floor = 0,
+): number {
+  if (u <= floor) return lo;
+  if (u < lower) return lo + (mid - lo) * ((u - floor) / (lower - floor));
   if (u > upper) return mid + (hi - mid) * ((u - upper) / (1 - upper));
   return mid;
 }
@@ -523,6 +609,58 @@ const MOTIF = 9;
  *
  * IT STILL WANTS BRAND SIGN-OFF. See the docstring above: approve it as a deliberately-not-the-logo
  * device, or leave the cape plain. Both are acceptable, and that question is not mine to close.
+ *
+ * ---
+ *
+ * TWELFTH PASS, 2026-10-21: THE CLIENT SAYS IT "SITS LOW AND OFF-CENTRE AND READS AS A FLOATING
+ * RING". Both halves of that are TRUE and MEASURED, and NEITHER is cheap to fix. Nothing was
+ * changed here; what follows is the measurement, so the brand owner's decision has numbers under
+ * it instead of two more rounds of eyeballing.
+ *
+ * OFF-CENTRE: IT IS, BY TWO PIXELS, AND THEY ARE RIGHT ABOUT WHICH WAY. The ink measures x13..x19
+ * on `up-0`, so the device is centred on x16 -- which is `CX`, the GARMENT's own centre, and by
+ * that measure it is dead straight. But the cloth a player can SEE in its own rows runs x11..x25
+ * (rows 29..31) and x11..x26 (rows 32..34), because the basket and its keyline cover the skirt's
+ * left five columns from x6 to x10. The midpoint of the visible cloth is therefore 18.0 to 18.5,
+ * and the device sits 2 to 2.5 px LEFT of it -- a sixth of the width of the cloth it is drawn on,
+ * towards her right, which is exactly what was reported.
+ *
+ * NOT CHEAP, and the reason is an ordering one rather than a drawing one. `paintCloak` runs BEFORE
+ * `paintBasket` (`paintFrame` paints cloak, sleeve, basket, hand, hood, in that order and for
+ * reasons its own note gives), so at the moment the device is placed nothing in scope knows where
+ * the basket is going to be. Centring it on the visible cloth means threading the basket's column
+ * into `paintCloak`, and the hem gathers move with it or collide -- they already sit at x9/x10 and
+ * x21/x22 precisely to clear a device at x12..x20, with ONE pixel of slack on the left and NONE on
+ * the right. That is three couplings across two functions plus the guard's scan window, to move a
+ * mark two pixels, on an object that has no brand sign-off and might be removed.
+ *
+ * SITS LOW: IT CANNOT BE CENTRED VERTICALLY, and this is arithmetic rather than a judgement. The
+ * band between the cape line (`capeY`, row 27) and the hem (`HEM`, row 36) is EIGHT rows, 28..35.
+ * `MOTIF_ROWS` is nine rows with its top and bottom deliberately empty, so its ink is SEVEN rows.
+ * Seven in eight leaves one row of slack, which has to be all above or all below: the device
+ * either touches the cape keyline or it touches the hem keyline, and today it is the hem. Moving
+ * the box up a row swaps which line it rests on and centres nothing. Closing it properly needs
+ * either a smaller device -- which reopens a form this file records settling after three rejected
+ * shapes, and is not a thing to do to an unapproved brand-adjacent mark -- or `CAPE_EDGE` to move,
+ * which changes the silhouette's layering on all four facings.
+ *
+ * THE "FLOATING RING" IS THE FORM, NOT A FAULT, and that is worth saying plainly because it is the
+ * one part a round might try to fix by drawing. Rows 31, 32 and 33 carry exactly two pixels each,
+ * at x13 and x19 -- the arcs are one pixel thick down their flanks by construction. A one-pixel
+ * ring on a flat field reads as a ring. Thickening it is redrawing the device, and the note above
+ * records two-pixel spokes having already been rejected as "four sparkles".
+ *
+ * ONE THING THAT IS NOT THE PROBLEM, measured so it is not chased: the hem gather's own highlight
+ * is `tone('cloak', CLOAK_RIM)`, the IDENTICAL value to the arms, and the worry that it reads as a
+ * satellite beside the mark does not survive a count. Over `up-0` it survives on exactly ONE pixel,
+ * (9,35) -- the basket covers x9 on rows 32 to 34 -- so it is a speck below the basket, four
+ * columns clear of the device, not a cluster.
+ *
+ * SO THE RECOMMENDATION, and it is the same one section 6a and `PAUL_BRIEF` already carry: this is
+ * the brand owner's call and it is now a cheap call to make. Approve the device as it stands and
+ * accept two pixels of visual offset and one keyline contact, or remove it and the question with
+ * it. Removing it is one line and would also hand the hem gathers their natural positions back.
+ * What must NOT happen is a round spending the coupling above to move a mark nobody has approved.
  */
 const MOTIF_ROWS = [
   '.........',
@@ -561,7 +699,15 @@ function domeTone(dx: number, dy: number): number {
   // `lit` spans about -0.93 to +0.93 over the disc. Normalise, then bias towards the light so the
   // dome's mass sits at Lilac and only the far lower-right quadrant descends towards the fold.
   const u = Math.max(0, Math.min(1, (lit + 0.95) / 1.9));
-  return plateau(Math.pow(u, DOME_BIAS), CLOAK_SHADE, CLOAK_BASE, CLOAK_RIM, DOME_RIM);
+  return plateau(
+    Math.pow(u, DOME_BIAS),
+    CLOAK_SHADE,
+    CLOAK_BASE,
+    CLOAK_RIM,
+    DOME_RIM,
+    DOME_TURN,
+    DOME_OCCIPUT,
+  );
 }
 
 /**
@@ -839,12 +985,107 @@ function paintFace(
  * it was a second vertical competing with the one mark that matters. Recorded so the next round
  * does not reach for it as the obvious missing thing.
  */
+/*
+ * SECOND ROUND ON THE NAPE, 2026-10-21. EVERYTHING ABOVE IS DRAWN AND IT STILL DOES NOT READ.
+ *
+ * The client cropped this view twice. The four marks above are all present -- the bob, the parting,
+ * the ring, the rim's step -- and the note calling them deliberate is accurate. So this round
+ * measured what they actually produce rather than checking whether they exist, and the gap is not
+ * where the previous round left its caution.
+ *
+ * WHAT THE SHIPPED NAPE MEASURES, off `up-0`:
+ *
+ *     32 px of warm, rows 17..20, widths 6 / 8 / 10 / 8 -- a lozenge TEN pixels across
+ *     the head at those rows is 24 px wide, so the opening is 42 PER CENT OF THE HEAD
+ *     luma 58..110, mean 81; the cloth it sits in is 87 and the cowl's gather band is 63
+ *     the parting is 11 luma on one column; down the bob it darkens 8 luma over four rows
+ *
+ * Three conclusions, and the first kills one of the obvious fixes:
+ *
+ * 1. IT IS NOT WINNING ON VALUE. Mean 81 against cloth at 87 is six luma. Shifting the hair's value
+ *    closer to the cloak -- the reading that first suggests itself, since it is the thing the eye
+ *    lands on -- is already true and is therefore not the lever. It wins on HUE (it is the only
+ *    warm mass on a purple figure, and nothing about this drawing changes that) and on AREA.
+ *
+ * 2. SO AREA IS THE LEVER, and 42 per cent of the head is a panel rather than a glimpse. A cowl
+ *    seen from behind shows a little hair where it gathers, not a window.
+ *
+ * 3. THE INTERNAL MODELLING IS BELOW THE SIZE IT IS DRAWN AT. Eight to eleven luma over a four-row
+ *    mass is invisible at 1x and barely there at 3x, so the modelling that is genuinely drawn
+ *    contributes nothing to the read and the lozenge comes out flat. Either it earns a step that
+ *    reads or it should not be spent.
+ *
+ * AND THE RING ABOVE IT WAS THE BAR, which is the part nobody had looked at. The note on mark 2
+ * says the cap row "is pulled in a pixel so the opening arcs over her instead of ending in a bar".
+ * Measured, row 16 of the shipped frame is:
+ *
+ *     14 63 63 63 63 63 63 63 63 | 14 14 14 14 14 14 | 63 63 63 63 63 63 63 54 14
+ *
+ * SIX PIXELS OF FLAT KEYLINE, straight, directly above a six-pixel row of hair. It is narrower than
+ * the row below it, which is what the note is describing, and it is still a bar -- "narrower than"
+ * and "arcs" are not the same claim. A dark bar over a warm lozenge is a letterbox, which is
+ * precisely the fault the FACE ring was fixed for on the other three facings, surviving on the one
+ * facing where the ring was laid by hand as three `rect` calls instead of being hugged to the shape.
+ *
+ * THREE CHANGES, and all three are the same change: let the drawing produce the opening.
+ *
+ *   a. The hair is NARROWER -- 4 / 6 / 8 / 6, a third less area -- so it is a glimpse through the
+ *      gather. It keeps four rows, because the fourth is what reaches the hood's last row and makes
+ *      the rim step down, and that step is the only thing breaking row 20's eighteen-pixel keyline
+ *      bar. Shortening it to three rows was tried and silently reopens that defect.
+ *   b. The ring is DERIVED, not laid. Every opaque pixel four-adjacent to a hair pixel takes the
+ *      keyline. The opening then hugs the bob exactly -- 4 px of cap, then 6, then 8, then 6 --
+ *      so it arcs because the hair arcs, and the two cannot drift apart. The hand-laid version
+ *      could be, and was, a bar above a shape that was not one.
+ *   c. The hair has a BOTTOM EDGE rather than stopping. Its last row drops under the `trunk` ramp
+ *      through `keyline('trunk', drop)` -- luma 44 at the shaded end to 54 at the lit one, against
+ *      the hair's own 69..110 above it. That helper is already how this figure's boots reach below
+ *      a ramp whose floor is too bright (`trunk` level 0 is luma 58), and `paintLegs`' note argues
+ *      for it on this exact ramp; it is not a new value, a new hue or a new ramp step. The lit end
+ *      is one step up from the shaded one for the reason the hem line already gives: an edge the
+ *      light reaches is not the same value as an edge in shadow.
+ *
+ * TWO OF THE THREE WERE PICKED BY RENDERING, so the numbers above are a choice and not the first
+ * thing that worked. All of these went onto grass at 1x, 3x and 10x together:
+ *
+ *   - underside at 32..50 (`drop` 26 - 18 * across). A bottom edge, and it half-dissolves into the
+ *     keyline below it -- 18 luma from the outline at the shaded end -- so at 3x the bob reads as
+ *     three rows over a thick outline rather than four rows with an underside. Rejected: it is a
+ *     fatter keyline, which is not what "a bottom edge" means.
+ *   - underside at 44..54 (`drop` 14 - 10 * across). Thirty luma clear of the outline AND thirty
+ *     clear of the hair above it, so the underside is its own layer at both joins. KEPT.
+ *   - `NAPE_HW = [3, 4, 4, 3]`, 6 / 8 / 8 / 6, with the same underside and the same ring -- the
+ *     halfway house between the shipped lozenge and the glimpse. Rejected by eye at 10x: 28 px of
+ *     warm against the glimpse's 24 starts reading as the panel again. It is a JUDGEMENT between
+ *     two acceptable drawings and not a defect, and `assertBackView` passes it on purpose -- run
+ *     through the guard to check, which is where an earlier draft of that note had it backwards.
+ *     If a later round wants more hair than this, that profile is the step to take.
+ *
+ * ONE CROSS-REFERENCE KEPT, because the comment carrying it was rewritten and a dropped pointer is
+ * how a record rots. It read: "the correction `paintHood` already records having had to make to the
+ * face ring for the same reason" -- that ring originally took the widest of three neighbouring
+ * rows, so it stood three pixels proud of the jaw and she read as a face in a letterbox, until its
+ * cap and chin rows were pulled in. That lesson is live and still worth following. What this round
+ * corrects is only the claim that the NAPE's ring had already learned it.
+ *
+ * NOT DONE, and recorded as a decision. Strands breaking the silhouette: at this size the only
+ * place a strand can break the outline is below the hood's rim, onto the shoulder cloth, and one
+ * or two warm pixels adrift on the garment read as damage rather than as hair -- the same
+ * population the opening-leak guard exists to catch. The silhouette is broken instead by the
+ * opening's own arc, which costs nothing and cannot be mistaken for a defect.
+ *
+ * ALSO NOT DONE, and this is the one the brief offered that the measurement refuses: the parting
+ * is left at its nine luma. On a bob four, six and eight pixels wide it falls on one column of a
+ * four-pixel row, and nine luma at 32x48 does not read -- but it is drawn, it is cheap, and taking
+ * it out is a separate argument from the one this round is making. It is recorded here as a mark
+ * that does not contribute rather than as one that does, so the next round does not count it.
+ */
 /**
  * The hair at the nape, as half-widths down from the cowl: narrow where it leaves the opening,
  * widening to the jaw. The last row reaches the hood's own last row, which is what lets the rim
  * step down under it.
  */
-const NAPE_HW = [3, 4, 5, 4];
+const NAPE_HW = [2, 3, 4, 3];
 
 function paintNape(img: Img, cx: number, top: number): Set<number> {
   // The cowl's own curve, so the hair cannot drift off the fold it is supposed to sit in.
@@ -863,23 +1104,46 @@ function paintNape(img: Img, cx: number, top: number): Set<number> {
   //    interior ring does round the face on the other three facings. Without it the hair is
   //    painted ONTO the hood rather than seen THROUGH it, and -- measured -- her hair met the
   //    garment over sixteen adjacencies with no outline between, which is the same class of fault
-  //    as the nose leak on the side profiles. The cap row is pulled in a pixel so the opening arcs
-  //    over her instead of ending in a bar, which is the correction `paintHood` already records
-  //    having had to make to the face ring for the same reason.
+  //    as the nose leak on the side profiles.
+  //
+  //    REWRITING THIS AS A DERIVED OUTLINE WAS TRIED AND REVERTED, 2026-10-21, and the measurement
+  //    is the reason. This round's note above opens by observing that the shipped cap was a flat
+  //    six-pixel run of keyline over a six-pixel row of hair, and the obvious reading -- that the
+  //    three hand-laid rects ARE the bar, and that hugging the hair with a real outline pass would
+  //    make the opening arc -- is WRONG. The derived version was written, rendered and diffed
+  //    against these four lines over all sixteen frames: ZERO PIXELS DIFFER. The cap rect is
+  //    already exactly the hair's own top row, and each side rect is already one pixel proud of its
+  //    own row, so for any profile that widens and then tapers the two algorithms are the same
+  //    drawing. What fixed the bar was NARROWING the bob. The ring was never the fault, and the
+  //    paragraph above would have shipped claiming a win that measures zero.
+  //
+  //    The twelve-line version is genuinely the more robust of the two -- a profile whose widest
+  //    row is not its last, say [2, 4, 3, 2], leaves this cap a pixel short and opens a leak, which
+  //    an outline pass cannot do -- and it is still reverted, because that exact failure is what
+  //    `assertRedReads`' first check already looks for, by population rather than by construction,
+  //    and four lines that read plainly beat twelve that guard something already guarded.
   img.rect(cx - NAPE_HW[0]!, centreRow - 1, NAPE_HW[0]! * 2, 1, keyline('cloak'));
   NAPE_HW.forEach((hw, j) => {
     img.rect(cx - hw - 1, centreRow + j, (hw + 1) * 2, 1, keyline('cloak'));
   });
 
   // 3. The hair, as a bob seen from behind: narrowest where it leaves the cowl, widening to the
-  //    jaw, with a parting one step darker down the middle. The ring above is its brim shadow, so
-  //    there is no second dark row inside it -- two of those together is the letterbox the face
-  //    ring was fixed for.
+  //    jaw, then cut. The ring above is its brim shadow, so there is no second dark row inside it
+  //    -- two of those together is the letterbox the face ring was fixed for.
   //
   //    The profile is a bob and not a rectangle for a reason that cost a render: an even block of
   //    `trunk` eight pixels wide across the bottom of the hood reads as a plank nailed to the back
   //    of her head. Hair has to taper somewhere to be hair.
+  //
+  //    THE LAST ROW IS THE BOTTOM EDGE, and it is the second of this round's three changes. The bob
+  //    used to darken by eight luma over its four rows and then simply stop against the rim, which
+  //    at 1x is a lozenge with no underside. It now drops below the ramp's own floor through
+  //    `keyline('trunk', drop)` -- the helper `paintLegs` already reaches for on this ramp, and for
+  //    the same reason, `trunk` level 0 being luma 58 where this wants the forties. The lit end sits
+  //    one step up from the shaded end, for the reason the hem line already gives: an edge the light
+  //    reaches is not the same value as an edge in shadow.
   const covered = new Set<number>();
+  const last = NAPE_HW.length - 1;
   NAPE_HW.forEach((hw, j) => {
     const y = centreRow + j;
     for (let i = 0; i < hw * 2; i++) {
@@ -887,7 +1151,13 @@ function paintNape(img: Img, cx: number, top: number): Set<number> {
       // Across the nape, lit at the sweep and falling to the far side; down it, into the parting.
       const across = 1 - i / (hw * 2 - 1);
       const parting = Math.abs(x - cx) < 1 ? 0.12 : 0;
-      img.px(x, y, tone('trunk', 0.24 + 0.46 * across - 0.08 * j - parting));
+      img.px(
+        x,
+        y,
+        j === last
+          ? keyline('trunk', 14 - Math.round(10 * across))
+          : tone('trunk', 0.24 + 0.46 * across - 0.08 * j - parting),
+      );
       if (y >= top + HOOD_H - 1) covered.add(x);
     }
   });
@@ -1203,6 +1473,41 @@ function paintLegs(img: Img, facing: Facing, stride: -1 | 0 | 1, dir: number): v
  * is never hidden behind her: on the facings where her carrying arm would fall on the far side it
  * swings forward instead. Nine pixels across buys an arched handle, a rim, the cloth folded over it
  * and three weave courses, which is what the board shows and roughly what it spends on it.
+ *
+ * ---
+ *
+ * 2026-10-21: "THE BASKET READS AS A YELLOW SMEAR ON HER LEFT." Measured, the complaint lands on one
+ * line of this function, and the fix is a PALETTE decision rather than a painter's, so this round
+ * states it and leaves it rather than reaching for the nearest ramp step.
+ *
+ * THE CLOTH FOLDED OVER THE RIM IS THE BRIGHTEST THING ON HER. `shade('wall', 3)` is luma 250, and
+ * on the back frame it is three pixels at (3,28)..(5,28) against a figure whose next brightest value
+ * is her cloak's Lilac rim at 161. Eighty-nine luma of clear air above everything else on the
+ * protagonist, on her shopping. On the FRONT frames it does not read that way and the histogram says
+ * why: her face carries sixteen pixels at 235 and a spread from 216 to 250, so there the cream sits
+ * inside a population. Turn her round and the face goes, and those three pixels are alone at the top.
+ * That is the whole of the "smear", and it is also why this round's nape work makes it louder rather
+ * than quieter -- taking the warm panel off the back of her head promotes whatever was second.
+ *
+ * AND IT CANNOT BE FIXED FROM INSIDE THE `wall` RAMP, which is the finding. The four stops are
+ * 175 / 222 / 237 / 250 and `tone` only reads between them, so the ramp's own FLOOR is 175 -- still
+ * fourteen luma above her brightest cloth. Every value this rect could take is the brightest thing
+ * on the back view. The two candidates were measured and both are worse than the fault:
+ *
+ *   shade('wall', 2) = 237. Thirteen luma off the peak, which is nothing; the cream is still top of
+ *     the hierarchy and the change buys a different number rather than a different reading.
+ *   shade('wall', 0) = 175. Low enough, and it collapses the cloth into the wicker: the basket's
+ *     own lit top is `tone('wood', 0.8)` at 166, so nine luma apart, and the fold stops being a
+ *     fold on all sixteen frames to fix three pixels on four of them.
+ *
+ * So the honest answer is that the cloth over the rim wants a ramp this palette does not have -- a
+ * cream that can sit at about her rim light rather than above it -- and that is `paint.ts`'s
+ * business and a brand reviewer's, not this file's. `docs/PIXEL_STANDARD.md` section 2 already
+ * carries three families (`rust`, `rose`, `ember`) that live in a painter and want moving into
+ * `PALETTE`; this is a fourth of the same kind. The next round that opens `paint.ts` should take it.
+ *
+ * Until then: left alone deliberately, measured, and NOT quietly stepped down. The front and both
+ * side profiles are signed off as shippable and this rect paints on all sixteen frames.
  */
 function paintBasket(img: Img, bx: number, by: number): void {
   // Handle: an arch, lit at the top-left and turning dark on the right upright.
@@ -1666,9 +1971,195 @@ function assertCapeDevice(): void {
   if (faults.length) throw new Error(`Red's cape device is broken:\n  ` + faults.join('\n  '));
 }
 
+/**
+ * THE BACK VIEW READS, 2026-10-21 -- the three things this round fixed and the sheet must not lose.
+ *
+ * `assertRedReads`' third check already holds a FLOOR on this view: that the back of her head
+ * carries twelve pixels of something that is not the garment. That check is correct and it passed
+ * on every frame the client sent back, twice, because "there is hair there" was never the question.
+ * These are the three properties that were actually missing, and each one is measured on the
+ * rendered frame rather than read off the constant that produces it.
+ *
+ * Every bound below fires on the SHIPPED sheet. That is the test of a guard and all three were run
+ * against the previous painter before being written down, so none of them is a restatement of a
+ * number this round happened to choose.
+ *
+ * 1. THE DOME HAS A SHADED FACE, not just a lit arc. `docs/PIXEL_STANDARD.md` section 3 requires
+ *    every object in this world to catch the light on its top and left and fall away on its bottom
+ *    and right; the largest mass on the protagonist was the one thing not doing it. Measured on the
+ *    hood's WIDEST rows, with the single lip pixel at each end of the run discarded, counting cloth
+ *    darker than the row's own modal value:
+ *
+ *        shipped        rows 7, 8, 9, 10 -> 0, 0, 0, 0
+ *        this file      rows 7, 8, 9, 10 -> 4, 4, 5, 6
+ *
+ *    Four rows across the middle of her head on which the right-hand side was the IDENTICAL value
+ *    to the centre. That is the egg, as a number.
+ *
+ *    THE BOUND IS TWO AND IT IS NOT A MEASUREMENT OF THIS DRAWING, which carries four to eleven.
+ *    One pixel would be satisfied by the silhouette's own shaded lip, which `domeRun` lays on every
+ *    row whether the dome is modelled or not -- so one is a bound that the egg itself could pass
+ *    once the lip is counted. Two is the shortest run that is a face rather than an edge. The
+ *    modal value is taken FROM THE ROW, so the guard never needs to know what `CLOAK_BASE` is or
+ *    whether the plateau moved.
+ *
+ * 2. THE OPENING IS A GLIMPSE, NOT A PANEL. The whole of the client's second crop. On the hair's
+ *    widest row the hair must be no wider than the garment left beside it on that same row:
+ *
+ *        shipped        10 px of hair beside 6 px of garment
+ *        this file       8 px of hair beside 8 px of garment
+ *
+ *    The bound is the GARMENT on the same row, which is a different thing in the drawing from the
+ *    hair, so it scales if the hood is ever redrawn wider and cannot be satisfied by renaming a
+ *    constant.
+ *
+ *    WHAT IT ACTUALLY PERMITS, measured by breaking it rather than asserted -- and the first draft
+ *    of this paragraph claimed the opposite, which is why it is written out. Profiles run through
+ *    the guard:
+ *
+ *        [2, 3, 4, 3]   8 px of hair beside 8 px of garment   passes -- this file
+ *        [2, 4, 4, 3]   8 px, carried a row higher            passes
+ *        [3, 4, 4, 3]   8 px, the rejected halfway house      PASSES
+ *        [2, 3, 5, 3]  10 px beside 6                         fires
+ *        [3, 4, 5, 4]  10 px beside 6, THE SHIPPED PANEL      fires
+ *        [4, 5, 6, 5]  12 px beside 4                         fires
+ *
+ *    So it is NOT the zero-slack ratchet an earlier draft of this comment called it. It bites on
+ *    the hood's narrowing rows, where ten pixels of opening leaves six of garment, and it has a
+ *    pixel of room on the widest row. The halfway house in `paintNape`'s note passes it, and that
+ *    is correct rather than a hole: `[3, 4, 4, 3]` was rejected by eye between two acceptable
+ *    drawings, and a guard that cannot tell a judgement from a defect would be enforcing taste.
+ *    What it does hold is the thing the client sent back twice -- an opening wider than the cloth
+ *    around it.
+ *
+ * 3. THE HAIR HAS A BOTTOM EDGE. Its lowest row must sit a readable step below the row above it,
+ *    or the bob stops rather than ending:
+ *
+ *        shipped        mean 78.7 -> 72.9, a step of 5.8 luma
+ *        this file      mean 78.6 -> 49.0, a step of 29.6 luma
+ *
+ *    Twenty luma is the floor, with fourteen of daylight under it and ten over it -- a gap in the
+ *    population rather than a number fitted to today's ramp. The file's own evidence for where
+ *    legibility sits at this size is on `paintNape`: a parting of nine luma does not read.
+ */
+function assertBackView(): void {
+  const faults: string[] = [];
+  const ink = keyline('cloak');
+  /** Her garment, minus its outline: the cloth whose value the dome's modelling lives in. */
+  const isGarment = (c: RGBA): boolean =>
+    c[3] > 0 && c[2] > c[0] && !(c[0] === ink[0] && c[1] === ink[1] && c[2] === ink[2]);
+  /** One pixel is a lip; two is a face. See the note above -- NOT read off this drawing. */
+  const FACE = 2;
+  /** A step that reads at 32x48. Nine luma demonstrably does not; see `paintNape`. */
+  const EDGE = 20;
+
+  for (const phase of [0, 1, 2, 3] as const) {
+    const name = `up-${phase}`;
+    const img = frameOf(name);
+    const lumaAt = (x: number, y: number): number => Math.round(lumaOf(img.get(x, y)));
+
+    // The hood's extent. The first attempt at this took it as "the lowest warm row", on the
+    // reasoning that the hair reaches the hood's last row by construction -- and it was wrong in
+    // the way worth recording: `isWarm` is R > B, which is her BOOTS (`keyline('trunk')`), her HAND
+    // (`skin`) and her BASKET (`wood`) as much as her hair. It found row 42 and reported her boots
+    // as a twelve-pixel panel on the back of her head. So the window is anchored the way
+    // `assertRedReads` already anchors its own -- from where she starts, plus the hood's height --
+    // which also carries the one-row bob without naming it.
+    let top = 0;
+    while (top < RED_FRAME_H) {
+      let any = false;
+      for (let x = 0; x < RED_FRAME_W; x++) if (isOpaque(img, x, top)) any = true;
+      if (any) break;
+      top++;
+    }
+    const hoodBottom = top + HOOD_H;
+    const warmRows: number[] = [];
+    for (let y = top; y <= hoodBottom; y++)
+      for (let x = 0; x < RED_FRAME_W; x++)
+        if (isWarm(img.get(x, y))) {
+          warmRows.push(y);
+          break;
+        }
+    if (!warmRows.length) {
+      faults.push(
+        `${name}: nothing but garment in the hood's own rows, so there is no bob to read`,
+      );
+      continue;
+    }
+
+    // Every row's garment run, over the hood only.
+    const runs = new Map<number, number[]>();
+    for (let y = top; y <= hoodBottom; y++) {
+      const xs: number[] = [];
+      for (let x = 0; x < RED_FRAME_W; x++) if (isGarment(img.get(x, y))) xs.push(x);
+      if (xs.length) runs.set(y, xs);
+    }
+    const widest = Math.max(...[...runs.values()].map((xs) => xs.length));
+
+    // 1. The dome's shaded face, on each of its widest rows.
+    const flat: string[] = [];
+    for (const [y, xs] of runs) {
+      if (xs.length < widest) continue;
+      // Drop the silhouette's own lip at each end: `domeRun` draws it regardless of the modelling.
+      const run = xs.slice(1, -1);
+      const freq = new Map<number, number>();
+      for (const x of run) freq.set(lumaAt(x, y), (freq.get(lumaAt(x, y)) ?? 0) + 1);
+      const mass = [...freq].sort((a, b) => b[1] - a[1])[0]![0];
+      const shaded = run.filter((x) => lumaAt(x, y) < mass).length;
+      if (shaded < FACE) flat.push(`row ${y} (mass ${mass}, ${shaded} px shaded)`);
+    }
+    if (flat.length)
+      faults.push(
+        `${name}: the dome's widest rows have a lit arc and no shaded face -- ${flat.join(', ')} ` +
+          `-- so her hood is an egg rather than a hood, which is the client's own word for it`,
+      );
+
+    // 2. The opening at the nape is a glimpse, not a panel.
+    let hairRow = -1;
+    let hairWidth = 0;
+    for (let y = top; y <= hoodBottom; y++) {
+      let n = 0;
+      for (let x = 0; x < RED_FRAME_W; x++) if (isWarm(img.get(x, y))) n++;
+      if (n > hairWidth) {
+        hairWidth = n;
+        hairRow = y;
+      }
+    }
+    const garmentThere = runs.get(hairRow)?.length ?? 0;
+    if (hairWidth > garmentThere)
+      faults.push(
+        `${name}: row ${hairRow} is ${hairWidth} px of hair beside only ${garmentThere} px of ` +
+          `garment -- the cowl's opening is a panel on the back of her head, not a glimpse ` +
+          `through it`,
+      );
+
+    // 3. The hair has a bottom edge rather than stopping.
+    const meanWarm = (y: number): number => {
+      const v: number[] = [];
+      for (let x = 0; x < RED_FRAME_W; x++) if (isWarm(img.get(x, y))) v.push(lumaAt(x, y));
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+    };
+    const rowsWithHair = [...new Set(warmRows)];
+    if (rowsWithHair.length >= 2) {
+      const lowest = rowsWithHair[rowsWithHair.length - 1]!;
+      const above = rowsWithHair[rowsWithHair.length - 2]!;
+      const step = meanWarm(above) - meanWarm(lowest);
+      if (step < EDGE)
+        faults.push(
+          `${name}: the bob's last row sits ${step.toFixed(1)} luma under the row above it -- it ` +
+            `stops against the hood's rim rather than having an underside, so at 1x it is a ` +
+            `lozenge with no bottom edge`,
+        );
+    }
+  }
+
+  if (faults.length) throw new Error(`Red's back view does not read:\n  ` + faults.join('\n  '));
+}
+
 assertContactLine();
 assertRedReads();
 assertCapeDevice();
+assertBackView();
 
 /*
  * ONE RETRACTION, AND TWO THINGS THE NEXT PASS HAS TO PICK UP THAT CANNOT BE DONE FROM THIS FILE.

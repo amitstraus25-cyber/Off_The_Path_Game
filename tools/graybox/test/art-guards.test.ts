@@ -39,6 +39,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CAST_FRAMES } from '../src/sprites/cast.ts';
+import { RED_FRAMES } from '../src/sprites/char-red.ts';
 import { NPC_PAINTERS } from '../src/sprites.ts';
 import { CROWNS, TREE_TILES } from '../src/tiles/w-trees.ts';
 import { UNDERGROWTH_TILES } from '../src/tiles/w-undergrowth.ts';
@@ -84,6 +85,47 @@ describe('the cast and its faces', () => {
 
   it('renders all ten cast frames', () => {
     expect(Object.keys(CAST_FRAMES)).toHaveLength(10);
+  });
+});
+
+describe('Red', () => {
+  /*
+   * RED IS IMPORTED DIRECTLY, and that is the point of the line rather than the expectation below.
+   *
+   * `sprites/char-red.ts` arms FOUR module-scope guards -- `assertContactLine`, `assertRedReads`,
+   * `assertCapeDevice` and, since 2026-10-21, `assertBackView`. Until this round the only thing
+   * loading that module in CI was `../src/sprites.ts`, imported three lines up for `NPC_PAINTERS`,
+   * which reaches Red transitively. That worked, and it is exactly the fragility the header of this
+   * file warns about one level down: Red's guards were armed by a side effect of somebody else's
+   * import, and dropping `char-red` from `sprites.ts` -- or narrowing that import -- would have
+   * disarmed all four of them while every test here stayed green. The protagonist's own painter
+   * should not be loaded by accident.
+   *
+   * The expectation is a CONTRACT and not a bound, which is why writing it out is right here where
+   * restating a threshold is wrong: `<facing>-<phase>` is the key format `generate.ts` writes the
+   * sheet from and `forest-scene.ts` looks its animations up by, so the sixteen keys have three
+   * readers and no owner to drift from. Nothing here re-derives any of the four guards' own
+   * numbers; they are stated, with the measurements that chose them, on the guards themselves.
+   */
+  it('keys all sixteen frames the scene animates her from', () => {
+    expect(Object.keys(RED_FRAMES).sort()).toEqual([
+      'down-0',
+      'down-1',
+      'down-2',
+      'down-3',
+      'left-0',
+      'left-1',
+      'left-2',
+      'left-3',
+      'right-0',
+      'right-1',
+      'right-2',
+      'right-3',
+      'up-0',
+      'up-1',
+      'up-2',
+      'up-3',
+    ]);
   });
 });
 
