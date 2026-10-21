@@ -3,7 +3,16 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { REFERENCE_VIEWPORTS, TILE, cameraFor } from '@otp/core';
 import type { Size } from '@otp/core';
-import { hold, mapObject, probe, ready, startGame, talkingDistance, walkTo } from './helpers';
+import {
+  hold,
+  mapObject,
+  probe,
+  ready,
+  startGame,
+  talkingDistance,
+  walkTo,
+  walkUntil,
+} from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
@@ -43,17 +52,24 @@ test('the run starts in explore with Purple at the spawn', async ({ page }) => {
 });
 
 test('Purple walks east along the path and the camera follows', async ({ page }) => {
+  // Walked until it got there, not for a fixed time: the world caps movement per frame, so a
+  // starved CI runner delivering few frames moved 38px in a fixed 800ms and failed a 40px bar.
+  // The claim is that holding the key walks Purple east, not how fast the runner renders.
   const before = await probe(page);
-  await hold(page, 'ArrowRight', 800);
-  const after = await probe(page);
+  const after = await walkUntil(
+    page,
+    'ArrowRight',
+    (p) => p.position.x > before.position.x + 40,
+    4000,
+  );
   expect(after.position.x).toBeGreaterThan(before.position.x + 40);
   expect(after.position.y).toBeCloseTo(before.position.y, 0);
 });
 
 test('WASD works as well as the arrows', async ({ page }) => {
   const before = await probe(page);
-  await hold(page, 'KeyD', 500);
-  expect((await probe(page)).position.x).toBeGreaterThan(before.position.x + 20);
+  const after = await walkUntil(page, 'KeyD', (p) => p.position.x > before.position.x + 20, 4000);
+  expect(after.position.x).toBeGreaterThan(before.position.x + 20);
 });
 
 test('the forest border holds Purple inside the map', async ({ page }) => {
