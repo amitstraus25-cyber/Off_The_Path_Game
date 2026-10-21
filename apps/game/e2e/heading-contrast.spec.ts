@@ -27,9 +27,34 @@
  * It waits for the panel's 180ms slide-in to finish before it measures, because a colour read
  * mid-animation is the colour of a frame nobody sees.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import { ready, startGame } from './helpers';
+
+const read = (relative: string): string =>
+  readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
+
+/** The player-facing words, read from the file the game reads, so a retitled heading is followed. */
+const STRINGS = (
+  JSON.parse(read('../../../content/game.json')) as { strings: Record<string, string> }
+).strings;
+
+/**
+ * The text a heading is required BY: its first words, read from content, not typed here. The
+ * measured name is the heading's own text cut at 40 characters, so a prefix always matches it.
+ */
+const named = (key: string): string => {
+  const text = STRINGS[key];
+  expect(
+    text,
+    `content/game.json has no string "${key}", so a heading cannot be required by it`,
+  ).toBeTruthy();
+  return text!.trim().slice(0, 24);
+};
+
+const manifest = JSON.parse(read('../src/assets/manifest.json')) as { tilesets: string[] };
 
 const SKILL_OF: Record<string, string> = {
   rabbit: 'cottage-finder',
@@ -251,8 +276,9 @@ for (const size of SIZES) {
       await page.goto('/');
       await ready(page);
 
-      // 00 Title.
-      await expectReadable(page, at('title'), []);
+      // 00 Title: the h1, and the "How to play" h2 under it. Both are named, so a selector that
+      // drifts onto nothing, or a heading that drops out of view, fails here rather than passing.
+      await expectReadable(page, at('title'), [named('title'), named('howToPlayLabel')]);
 
       // 01 Explore: the frame's own title is aria-hidden and the h1 is visually hidden, so there
       // is nothing visible to measure here and nothing is required of it.
@@ -304,10 +330,47 @@ for (const size of SIZES) {
         (await page.locator('.otp-ending__title').textContent())!.trim().slice(0, 20),
       ]);
 
-      // 05 Results: the score is the h1, and the sections below it are h2s.
+      // 05 Results: the score is the h1, and the sections below it are h2s. Every one is named:
+      // the h1 by the one word of its `<small>` that is content (`scoreOutOf`), the three h2s by
+      // their own text. Before this only the h1 was required, so the other three could vanish.
       await page.getByRole('button', { name: /Step inside/ }).click();
       await expect(page.locator('.otp-hero__score')).toBeVisible();
-      await expectReadable(page, at('results'), ['out of']);
+      await expectReadable(page, at('results'), [
+        named('scoreOutOf'),
+        named('trifectaLabel'),
+        named('recapHeading'),
+        named('leaderboardTitle'),
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+for (const size of SIZES) {
+  test(`the load-failure screen's heading clears AA against its rendered background at ${size.width}px`, async ({
+    browser,
+  }) => {
+    /*
+     * ProblemScreen is the one screen in the game that is not reached by playing it, so the tour
+     * above never visited it. Its h1 is Deep Purple on a Shell card -- a light surface, the case the
+     * panel-title defect was NOT, which is why it passes -- and that is a fact about two colour
+     * tokens that nothing was holding. A missing tileset is how it is reached for real: the
+     * loader's `loaderror` is what mounts it, exactly as `load-failure.spec.ts` blocks it.
+     */
+    const context = await browser.newContext({ viewport: size });
+    const page = await context.newPage();
+    try {
+      const file = manifest.tilesets[0]!;
+      const dot = file.lastIndexOf('.');
+      const stem = file.slice(0, dot).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      await page.route(
+        new RegExp(`/assets/${stem}-[A-Za-z0-9_-]{8}\\.${file.slice(dot + 1)}$`),
+        (route: Route) => route.fulfill({ status: 404, body: 'not found' }),
+      );
+      await page.goto('/');
+      await expect(page.locator('.otp-problem[data-problem="load"]')).toBeVisible();
+      await expectReadable(page, `${size.width}px, load failure`, [named('loadFailedTitle')]);
     } finally {
       await context.close();
     }

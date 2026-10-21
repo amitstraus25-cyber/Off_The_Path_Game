@@ -953,7 +953,9 @@ test('the retry asks the board again, and your own row is marked when it arrives
   await expect(page.getByRole('status')).toHaveText(
     say('handleAssigned').replace('{handle}', mine!),
   );
-  expect(board.calls, 'the post did not re-read the board').toBe(3);
+  // Polled, not read once: the route handler counts the third read a round trip after the status
+  // text lands, so a synchronous read raced it (3 of 16 at 8 workers, HEAD included).
+  await expect.poll(() => board.calls, { message: 'the post did not re-read the board' }).toBe(3);
 
   const yours = page.locator('.otp-board__row--you');
   await expect(yours).toHaveCount(1);

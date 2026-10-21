@@ -107,8 +107,45 @@ async function headlineTotal(page: Page): Promise<number> {
   return Number(digits.replace(/,/g, ''));
 }
 
-const scrollTop = (page: Page): Promise<number> =>
-  page.evaluate(() => document.querySelector('.otp-screen')!.scrollTop);
+/**
+ * Resolves with the panel's scrollTop once it has stopped moving, or rejects if it never does.
+ *
+ * "Stopped" is judged on the clock, not on a frame count: the value must have held for 250ms of
+ * `performance.now()` and across at least three frames, so a starved runner that delivers a frame
+ * every few hundred milliseconds is waited for rather than mistaken for a panel at rest. The
+ * scroll position has TWO writers that outlive the call that started them -- Chromium's keyboard
+ * scroll animation runs on the compositor after `keyboard.press` has returned, and the first
+ * reading of scrollTop that is above zero is the animation's first step, not its last -- so
+ * anything that reads or resets the position without waiting for this is racing a scroll that is
+ * still arriving. See the Tab step in the test below for what that race did to a CI run.
+ */
+const scrollSettled = (page: Page, within = 8000): Promise<number> =>
+  page.evaluate(
+    ({ within, quiet }) =>
+      new Promise<number>((done, fail) => {
+        const screen = document.querySelector('.otp-screen')!;
+        const began = performance.now();
+        let last = screen.scrollTop;
+        let changedAt = began;
+        let framesSince = 0;
+        const tick = (): void => {
+          const now = performance.now();
+          const top = screen.scrollTop;
+          if (top !== last) {
+            last = top;
+            changedAt = now;
+            framesSince = 0;
+          } else {
+            framesSince += 1;
+          }
+          if (now - changedAt >= quiet && framesSince >= 3) return done(top);
+          if (now - began >= within) return fail(new Error(`scrollTop never settled, last ${top}`));
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    { within, quiet: 250 },
+  );
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 860 });
@@ -120,6 +157,19 @@ test.beforeEach(async ({ page }) => {
 
 test('the keyboard reaches the one Lime call to action, and reaches it first', async ({ page }) => {
   await playToResults(page, PERFECT);
+
+  // Arrival focuses the screen's own body, so the scroller the panel lives in owns the keyboard.
+  // `.otp-screen` is `position: fixed`, so the document has no overflow of its own: with focus on
+  // BODY, as it was, every scroll key was a no-op over 820px of unreachable panel.
+  //
+  // Polled, because Results focuses its body from a `useEffect`, which Preact runs after the next
+  // paint: a runner that is slow to paint reads BODY for a moment and is not wrong, it is early. A
+  // build that never moves focus still fails here, after the poll's timeout, which is the defect.
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.className ?? ''), {
+      message: 'arrival focuses the screen body',
+    })
+    .toContain('otp-screen__body');
 
   const measured = await page.evaluate(() => {
     const screen = document.querySelector('.otp-screen')!;
@@ -141,38 +191,90 @@ test('the keyboard reaches the one Lime call to action, and reaches it first', a
   // rather than pass silently.
   expect(measured.panelHeight).toBeGreaterThan(measured.viewport);
 
-  // Arrival focuses the screen's own body, so the scroller the panel lives in owns the keyboard.
-  // `.otp-screen` is `position: fixed`, so the document has no overflow of its own: with focus on
-  // BODY, as it was, every scroll key was a no-op over 820px of unreachable panel.
-  expect(measured.focused).toContain('otp-screen__body');
-
   // The band is above the Post form: the one dead control on the screen no longer stands between
   // the recap and the question the asset exists to ask.
   expect(measured.bandBeforeForm).toBe(true);
 
-  // PageDown moves the panel.
-  await page.keyboard.press('PageDown');
-  await expect
-    .poll(() => scrollTop(page), { message: 'PageDown scrolled Results' })
-    .toBeGreaterThan(0);
+  // PageDown moves the panel. Pressed again if the first press moved nothing within 2.5s, up to
+  // three presses, not once: the press is a key event on the page's main thread, and on a runner
+  // starved hard enough to take seconds per frame it can be handled before the panel has a scrollable
+  // box to scroll, and be dropped without a trace. That is the runner being early, and it was seen
+  // (one run in sixteen at 40x CPU throttle: focus on the body, scrollTop 0 for eight seconds). A
+  // page whose focus is in the wrong place drops every press, so this still fails on the defect
+  // this step guards -- three presses is three chances for the page to answer, not a way to pass.
+  let scrolled = false;
+  for (let press = 1; press <= 3 && !scrolled; press++) {
+    await page.keyboard.press('PageDown');
+    scrolled = await page
+      .waitForFunction(() => document.querySelector('.otp-screen')!.scrollTop > 0, undefined, {
+        timeout: 2500,
+      })
+      .then(
+        () => true,
+        () => false,
+      );
+  }
+  expect(scrolled, 'PageDown scrolled Results').toBe(true);
 
-  // And from the top, the first thing Tab lands on is the call to action itself, scrolled into view.
+  // THE SCROLL MUST HAVE STOPPED BEFORE ANYTHING ELSE TOUCHES IT. The poll above returns on the
+  // first frame of Chromium's keyboard scroll animation, which is still running on the compositor.
+  // Resetting scrollTop and pressing Tab with that animation in flight gave this test three writers
+  // to the same number -- the animation, the reset, and the focus scroll -- and the compositor
+  // folds a programmatic scroll into a running animation as an adjustment to its target, so where
+  // the panel ended up depended on how many frames each had run. Measured at 1x CPU with the reset
+  // landing 520-660px into the animation, the panel ended at its very bottom (scrollTop 1125) and
+  // with the reset after the animation finished it ended with the call to action centred (997):
+  // same page, same keys, a different final position by timing alone. Both of those are in view.
+  // CI once saw an outcome that was not (the call to action focused and out of view for the whole
+  // five-second poll, passing on retry); that exact interleaving was not reproduced here, so this is
+  // the cause the evidence supports, not one that was caught in the act. A player who presses
+  // PageDown and then Tab, with no scripted reset in between, was in view on all 42 tries.
+  await scrollSettled(page);
   await page.evaluate(() => {
     document.querySelector('.otp-screen')!.scrollTop = 0;
   });
+  expect(await scrollSettled(page), 'the panel is back at the top before Tab').toBe(0);
+
+  // Tab starts from the focused element, and Results' own effect has run by now, but a Tab pressed
+  // from anywhere else would start somewhere else: say where it starts.
+  expect(
+    await page.evaluate(() => document.activeElement?.className ?? ''),
+    'Tab starts from the screen body',
+  ).toContain('otp-screen__body');
+
+  // And from the top, the first thing Tab lands on is the call to action itself, scrolled into view.
   await page.keyboard.press('Tab');
   await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const el = document.activeElement as HTMLElement | null;
-        const rect = el?.getBoundingClientRect();
-        return {
-          className: el?.className ?? '',
-          inView: rect ? rect.top >= 0 && rect.bottom <= window.innerHeight : false,
-        };
-      }),
-    )
-    .toEqual({ className: expect.stringContaining('otp-cta'), inView: true });
+    .poll(() => page.evaluate(() => document.activeElement?.className ?? ''), {
+      message: 'the first Tab stop is the call to action',
+    })
+    .toContain('otp-cta');
+
+  // In view means inside the box that scrolls, which is the panel's own, not the window's. They are
+  // the same rectangle today (`.otp-screen` is `position: fixed; inset: 0`), but the window is the
+  // wrong thing to measure against the day a header or a safe-area inset makes them differ. Read
+  // once the scroll has stopped, so what is measured is where the focus scroll left the call to
+  // action and not a frame on the way there. One pixel of slack is for the sub-pixel offset a
+  // scroll-into-view can leave; the call to action is 64px tall.
+  await scrollSettled(page);
+  const placed = await page.evaluate(() => {
+    const el = document.activeElement as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const box = document.querySelector('.otp-screen')!.getBoundingClientRect();
+    return {
+      className: el.className,
+      top: Math.round(rect.top - box.top),
+      bottom: Math.round(box.bottom - rect.bottom),
+    };
+  });
+  expect(placed.className).toContain('otp-cta');
+  expect(placed.top, 'the call to action is not above the top of the panel').toBeGreaterThanOrEqual(
+    -1,
+  );
+  expect(
+    placed.bottom,
+    'the call to action is not below the bottom of the panel',
+  ).toBeGreaterThanOrEqual(-1);
 });
 
 /* ----------------------------------------------------------------- finding 15 */

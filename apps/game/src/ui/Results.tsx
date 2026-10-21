@@ -751,6 +751,20 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
     setAttempted(true);
     try {
       setNotice(await onPost(handle));
+    } catch {
+      /*
+       * `onPost` promises an outcome or null and the shipped one cannot throw -- `ask()` swallows
+       * every network failure -- so this is for the day a caller's promise breaks, or for something
+       * outside `ask()`: `submit()` builds its body before it reaches it. Without a catch that
+       * rejection left the handler unhandled, the player was told nothing, and the board read ran
+       * on as if a post had been answered.
+       *
+       * What the player is told is the one sentence that claims least: THIS POST DID NOT COME
+       * BACK (`postNotAnswered`), scoped to the post and silent about the run, which is true
+       * whether or not the server took it. It is the same line a lost reply gets, and it is already
+       * declared in NOTICE_CLAIMS, so the row and the board note stay inside the pairing property.
+       */
+      setNotice({ key: 'leaderboardDown', text: s('leaderboardDown') });
     } finally {
       // A post that throws must not leave both buttons refusing every press for the rest of the visit.
       inFlight.current = false;

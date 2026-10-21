@@ -40,8 +40,10 @@ const stillTyping = (page: Page) =>
     'the line had already finished, so this press proves nothing about pressing mid-type',
   ).toHaveCount(1);
 
-const asked = (page: Page): Promise<string[]> =>
-  page.evaluate(() => window.__otp!.store.getState().asked['rabbit'] ?? []);
+const askedBy = (page: Page, who: string): Promise<string[]> =>
+  page.evaluate((c) => window.__otp!.store.getState().asked[c] ?? [], who);
+
+const asked = (page: Page): Promise<string[]> => askedBy(page, 'rabbit');
 
 test('two question buttons pressed in a row, mid-line, are both asked', async ({ page }) => {
   await meetRabbit(page);
@@ -119,9 +121,8 @@ test.describe('coming back from the card', () => {
    * still typing when the key lands. `stillTyping` is asserted immediately before the press for the
    * reason it is everywhere in this file -- a press on a finished line proves nothing.
    */
-  test('the first Space finishes the line instead of reopening the card, and the second is the button', async ({
-    page,
-  }) => {
+  /** Meets the Owl, opens her card and comes back with Escape: the conversation is now a RETURNED one. */
+  async function returnToOwl(page: Page): Promise<void> {
     await page.goto('/');
     await startGame(page);
     expect(
@@ -135,11 +136,17 @@ test.describe('coming back from the card', () => {
     await page.locator('.otp-dialogue__show').click();
     await expect(page.locator('.otp-card')).toBeFocused();
     await page.keyboard.press('Escape');
-    const show = page.locator('.otp-dialogue__show');
     await expect(
-      show,
+      page.locator('.otp-dialogue__show'),
       'the return no longer lands on the control that opened the card',
     ).toBeFocused();
+  }
+
+  test('the first Space finishes the line instead of reopening the card, and the second is the button', async ({
+    page,
+  }) => {
+    await returnToOwl(page);
+    const show = page.locator('.otp-dialogue__show');
 
     await stillTyping(page);
     await page.keyboard.press('Space');
@@ -159,5 +166,36 @@ test.describe('coming back from the card', () => {
     // With the line finished, Space is the button's again.
     await page.keyboard.press('Space');
     await expect(page.locator('.otp-card')).toBeVisible();
+  });
+
+  /*
+   * THE SWALLOW IS FOR THE GREETING THE RETURN RETYPED, NOT FOR THE LIFE OF THE CONVERSATION.
+   *
+   * `resume` is frozen at mount, so the first cut bent Space on "Show me the skill" for every line
+   * typed after the return -- including the reply to a question the player had since asked. That is
+   * not the line the return put there, and a player who asks, tabs back to the button and presses
+   * Space while the answer types means the button. They got the line finished and no card, and a
+   * second press: the same eaten press `choose` exists to prevent, by the other key.
+   *
+   * The Owl's `needs` reply is the longest she has (59 characters, over a second at the typewriter's
+   * speed), and `stillTyping` is asserted immediately before the press for the usual reason.
+   */
+  test('once a question has been asked, Space on the button is the button even while the reply types', async ({
+    page,
+  }) => {
+    await returnToOwl(page);
+
+    await page.getByRole('button', { name: /What does it need/ }).click();
+    await expect.poll(() => askedBy(page, 'owl')).toEqual(['needs']);
+
+    // Back to the button the way a keyboard player would, with the reply still arriving.
+    await page.locator('.otp-dialogue__show').focus();
+    await stillTyping(page);
+    await page.keyboard.press('Space');
+    await expect(
+      page.locator('.otp-card'),
+      'Space on "Show me the skill" while a REPLY typed was swallowed as "show me the rest": the return\'s ' +
+        'swallow outlived the greeting it was written for',
+    ).toBeVisible();
   });
 });

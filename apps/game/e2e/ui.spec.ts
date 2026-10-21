@@ -689,7 +689,12 @@ interface PanelSample {
   panelHeight: number[];
   /** How many frames contributed to the sets above. */
   samples: number;
-  /** Whether the typewriter was seen to START and then to END inside the window. */
+  /**
+   * Whether the typewriter was seen typing and then gone (the caret out of the DOM for QUIET_MS)
+   * inside the window. It says the run was seen to END. It does not say it was seen to begin: the
+   * first frame sampled is `settleMs` plus a round trip after the caller's trigger, so the line is
+   * already typing when the window opens and the first characters are never in it.
+   */
   finished: boolean;
   /** Wall-clock milliseconds the window ran, for a failure message. */
   elapsedMs: number;
@@ -720,9 +725,10 @@ interface PanelSample {
  * not depend on frames arriving:
  *
  *   1. The first `settleMs` of wall-clock are dropped, however many frames they held.
- *   2. The window ENDS when the typewriter has been seen to start and then has stayed finished
- *      (no caret in the DOM) for `QUIET_MS` -- so it covers the whole run and the frame the caret
- *      leaves on, and ends as soon after as it can. The typewriter itself is on `performance.now()`,
+ *   2. The window ENDS when the typewriter has been seen typing and then has stayed finished
+ *      (no caret in the DOM) for `QUIET_MS` -- so it covers the run from the first sampled frame
+ *      to the frame the caret leaves on, and ends as soon after as it can. The first sampled frame
+ *      is not the first character: see `PanelSample.finished`. The typewriter itself is on `performance.now()`,
  *      not on frames, so starvation does not stretch the run.
  *   3. A `setTimeout` resolves the promise at a hard deadline even if no frame ever comes. The
  *      deadline is the typewriter's own length (`TYPE_SPEED` and the longest line this panel can
@@ -806,26 +812,52 @@ function samplePanel(page: Page, settleMs: number): Promise<PanelSample> {
 }
 
 /**
- * That a sample is evidence: enough frames, and the whole typewriter run inside the window.
- * Without this a starved runner passes by measuring nothing -- see `samplePanel`.
+ * Why a sample is NOT evidence, or null when it is: too few frames, or the typewriter not seen to
+ * finish inside the window. Without this check a starved runner passes by measuring nothing -- see
+ * `samplePanel`.
+ *
+ * It answers with a reason rather than asserting, because the two ways of being wrong are not the
+ * same kind of wrong. Too few frames is the RUNNER's fault (docs/PAUL_BRIEF.md trap 9: a ready-state
+ * or coverage shortfall under load is starvation, an assertion about the line's position is a
+ * defect), and the right response to a runner's fault is to take the sample again, not to fail the
+ * suite -- CI runs `--fail-on-flaky-tests`, so a retry that passes the second time is a red build.
+ * The caller decides what to do about it; the one thing it may not do is count a starved sample
+ * as having shown the line holding still.
+ *
+ * What a covered sample does NOT establish is that the first characters were sampled: the window
+ * opens after the trigger plus a round trip (and `settleMs`, for a panel that is still sliding in),
+ * so it begins on a line that is already typing. The measurement is of the stretch from there to
+ * the end.
  */
-function expectCovered(sample: PanelSample, where: string, what: string): void {
-  expect(
-    sample.samples,
-    `${where}: only ${sample.samples} frames in ${sample.elapsedMs}ms while ${what} -- the runner ` +
-      `was too starved for "the line never moved" to mean anything`,
-  ).toBeGreaterThanOrEqual(MIN_SAMPLES);
-  expect(
-    sample.finished,
-    `${where}: the window closed after ${sample.elapsedMs}ms without seeing the typewriter start ` +
-      `and end while ${what}, so part of the run went unmeasured`,
-  ).toBe(true);
+function starvedBecause(sample: PanelSample): string | null {
+  if (sample.samples < MIN_SAMPLES) {
+    return `only ${sample.samples} frames in ${sample.elapsedMs}ms (floor ${MIN_SAMPLES})`;
+  }
+  if (!sample.finished) {
+    return `the window closed after ${sample.elapsedMs}ms without seeing the typewriter finish`;
+  }
+  return null;
 }
+
+/**
+ * How many times a viewport may take its samples before "every attempt was starved" fails the test.
+ *
+ * A starved attempt costs a fresh context, a page load and one window of up to
+ * `longest line / TYPE_SPEED + 4s`, so this is also the bound on how long a runner that is starved
+ * all the way through can keep the test alive. Four is the point where a runner that has produced
+ * one usable window in two tries stops being unlucky and starts being unfit for the measurement.
+ */
+const ATTEMPTS = 4;
 
 test('the sentence being read never moves, and the panel around it never resizes', async ({
   browser,
 }) => {
   test.slow();
+  // `slow()` alone is 90s, which five viewports can spend on their own if a runner is starved: each
+  // starved attempt is a fresh context and a window of up to about 10s, and ATTEMPTS of them are
+  // allowed per viewport. The budget is set to cover the worst case that still ends in the test's
+  // own message ("every attempt was starved") rather than in Playwright's bare timeout.
+  test.setTimeout(240_000);
   /*
    * THE ONE DEFECT ON THIS BOARD A PLAYER CAN LITERALLY SEE.
    *
@@ -852,43 +884,103 @@ test('the sentence being read never moves, and the panel around it never resizes
     { width: 1280, height: 800 },
     ...REFERENCE.map(([w, h]) => ({ width: w, height: h })),
   ]) {
-    const context = await browser.newContext({ viewport: size });
-    const page = await context.newPage();
     const where = `${size.width}x${size.height}`;
-    await page.goto('/');
-    await startGame(page);
+    /*
+     * STARVATION IS RETRIED, A MOVING LINE IS NOT.
+     *
+     * This failed once on a CI runner delivering 12 frames in 1.5s ("the runner was too starved for
+     * 'the line never moved' to mean anything") and passed on retry, which `--fail-on-flaky-tests`
+     * reports as a red build. That was never a page defect: no frame can move a line that nobody
+     * sampled. So an attempt that cannot be evidence is thrown away and taken again in a fresh
+     * context, up to ATTEMPTS times, each one recorded as a `starved` annotation so a slow runner is
+     * visible in the report instead of silent.
+     *
+     * Nothing a covered sample showed is weakened: the moment a covered window sees the line, the
+     * panel or the reply move, the test fails there, on that attempt, with no second chance. And the
+     * test cannot pass on no evidence: it passes only if one attempt produced a covered typing
+     * window AND a covered reply window, and fails, naming every attempt, if none did.
+     */
+    const starved: string[] = [];
+    let covered = false;
+    for (let attempt = 1; attempt <= ATTEMPTS && !covered; attempt++) {
+      const context = await browser.newContext({ viewport: size });
+      try {
+        const page = await context.newPage();
+        await page.goto('/');
+        await startGame(page);
 
-    // The Owl's greeting is the longest in the cast and its replies are shorter, so this covers
-    // both directions: the paragraph must not grow as it types, and must not shrink on the reply.
-    await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'owl' }));
-    await expect(page.locator('.otp-dialogue__line')).toBeVisible();
+        // The Owl's greeting is the longest in the cast and its replies are shorter, so this covers
+        // both directions: the paragraph must not grow as it types, and must not shrink on the reply.
+        await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'owl' }));
+        await expect(page.locator('.otp-dialogue__line')).toBeVisible();
 
-    // Through the whole of the greeting's typewriter run, after the panel's 180ms slide-in (250ms
-    // to be clear of it at any refresh rate).
-    const typing = await samplePanel(page, 250);
-    expectCovered(typing, where, 'the greeting typed');
-    expect(typing.lineTop, `${where}: the line moved while it was being typed`).toHaveLength(1);
-    expect(typing.lineHeight, `${where}: the line's box resized while it was typed`).toHaveLength(
-      1,
-    );
-    expect(typing.panelHeight, `${where}: the panel resized while the line was typed`).toHaveLength(
-      1,
-    );
+        // Through the whole of the greeting's typewriter run, after the panel's 180ms slide-in (250ms
+        // to be clear of it at any refresh rate).
+        const typing = await samplePanel(page, 250);
+        const typingStarved = starvedBecause(typing);
+        if (typingStarved === null) {
+          expect(typing.lineTop, `${where}: the line moved while it was being typed`).toHaveLength(
+            1,
+          );
+          expect(
+            typing.lineHeight,
+            `${where}: the line's box resized while it was typed`,
+          ).toHaveLength(1);
+          expect(
+            typing.panelHeight,
+            `${where}: the panel resized while the line was typed`,
+          ).toHaveLength(1);
+        }
 
-    // And across the reply, which is a different length and used to be what moved it.
-    await page.locator('.otp-option').first().click();
-    // No settle: the panel is already on screen, and the frame after the click is the one that
-    // used to move the sentence.
-    const replying = await samplePanel(page, 0);
-    expectCovered(replying, where, 'the reply typed');
-    expect(replying.lineTop, `${where}: the line moved when the reply arrived`).toEqual(
-      typing.lineTop,
-    );
-    expect(replying.panelHeight, `${where}: the panel resized when the reply arrived`).toEqual(
-      typing.panelHeight,
-    );
+        // And across the reply, which is a different length and used to be what moved it. Taken even
+        // when the greeting was starved: the reply cannot be compared with a greeting that was not
+        // measured, but the attempt is over either way and this keeps one code path.
+        await page.locator('.otp-option').first().click();
+        // No settle: the panel is already on screen, and the frame after the click is the one that
+        // used to move the sentence.
+        const replying = await samplePanel(page, 0);
+        const replyStarved = starvedBecause(replying);
 
-    await context.close();
+        if (typingStarved !== null || replyStarved !== null) {
+          const why =
+            `${where} attempt ${attempt}/${ATTEMPTS}: ` +
+            [
+              typingStarved !== null ? `greeting ${typingStarved}` : null,
+              replyStarved !== null ? `reply ${replyStarved}` : null,
+            ]
+              .filter((m) => m !== null)
+              .join('; ');
+          starved.push(why);
+          test.info().annotations.push({ type: 'starved', description: why });
+          console.log(`starved, sampling again: ${why}`);
+          continue;
+        }
+
+        expect(replying.lineTop, `${where}: the line moved when the reply arrived`).toEqual(
+          typing.lineTop,
+        );
+        expect(replying.panelHeight, `${where}: the panel resized when the reply arrived`).toEqual(
+          typing.panelHeight,
+        );
+        covered = true;
+        test.info().annotations.push({
+          type: 'sampled',
+          description:
+            `${where}: covered on attempt ${attempt}/${ATTEMPTS} ` +
+            `(greeting ${typing.samples} frames in ${typing.elapsedMs}ms, ` +
+            `reply ${replying.samples} frames in ${replying.elapsedMs}ms)`,
+        });
+      } finally {
+        await context.close();
+      }
+    }
+
+    expect(
+      covered,
+      `${where}: all ${ATTEMPTS} attempts were starved, so "the line never moved" was never ` +
+        `measured. A runner this slow cannot run this test; it is not a page defect.\n` +
+        starved.join('\n'),
+    ).toBe(true);
   }
 });
 

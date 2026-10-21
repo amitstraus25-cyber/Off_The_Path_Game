@@ -220,8 +220,9 @@ export function Dialogue({
    * Two options were on the table: put focus on the line on return (where Space already advances
    * text), or keep it on the button and let the first Space finish the line. Focus on the button is
    * what the focus-on-close spec asserts and what a screen-reader player needs to hear, so it stays;
-   * the key is what bends. It bends only here -- a returned conversation, a line still typing, and
-   * focus on THAT button -- so a question's button keeps the rule `choose` records (a press on a
+   * the key is what bends. It bends only here -- a returned conversation, the GREETING still
+   * typing (no question asked yet: a reply is not the line the return retyped), and focus on THAT
+   * button -- so a question's button keeps the rule `choose` records (a press on a
    * button is that button's press, whenever it lands), and Enter, which is unambiguously "press
    * this", is left alone too. Once the line is done, Space is the button's again.
    *
@@ -241,6 +242,11 @@ export function Dialogue({
   const onKeyDown = (e: KeyboardEvent): void => {
     if (
       resume &&
+      // The GREETING, and only it. `resume` is frozen for the whole visit, so on its own this bent
+      // for every reply typed after the return as well -- a player who asked a question and then
+      // pressed Space on "Show me the skill" while the answer typed had the line finished instead
+      // of the card opened.
+      lastAsked === null &&
       !done &&
       e.key === ' ' &&
       e.target instanceof HTMLElement &&

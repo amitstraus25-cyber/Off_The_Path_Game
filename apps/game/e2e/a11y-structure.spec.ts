@@ -207,6 +207,148 @@ test('the empty post region takes no room on the screen', async ({ page }) => {
   expect(box, 'the empty status region occupies space').toEqual({ h: 0, mt: 0, mb: 0 });
 });
 
+test('a reroll pressed while a post is out changes nothing: the name posted is the name shown', async ({
+  page,
+}) => {
+  /*
+   * "Try another name" used to be `disabled` while a post was out, so the BROWSER refused the press.
+   * It is `aria-disabled` now (a disabled button cannot hold focus), which stops nothing: the only
+   * thing refusing it is the `inFlight` check in `reroll`, and until this test nothing exercised it.
+   * Lose that check and a press during a post swaps the handle on screen while the old one is being
+   * posted -- and the board decides which row is "your run" by comparing against the handle on
+   * screen, so it would then mark, or fail to mark, the wrong row.
+   *
+   * The request is held at a gate so the press lands DURING the post, and it is pressed three ways
+   * -- pointer, Enter, Space -- because `aria-disabled` is honoured by none of them. The pointer press
+   * is forced: Playwright treats aria-disabled as not-enabled and would otherwise wait for it to clear.
+   */
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const posted: string[] = [];
+  await page.route('**/api/score', async (route: Route) => {
+    posted.push((route.request().postDataJSON() as { handle: string }).handle);
+    await gate;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ handle: posted[0], score: 900 }),
+    });
+  });
+  await startGame(page);
+  await reachResults(page);
+
+  const shown = (): Promise<string | null> =>
+    page.locator('[data-handle]').getAttribute('data-handle');
+  const before = await shown();
+  expect(before, 'the screen shows no handle, so there is nothing to hold still').toBeTruthy();
+
+  const post = page.getByRole('button', { name: 'Post', exact: true });
+  const reroll = page.getByRole('button', { name: CONTENT.strings['handleReroll']! });
+  await post.click();
+  await expect.poll(() => posted.length, { message: 'the press never sent a post' }).toBe(1);
+  await expect(reroll, 'the post is not in flight, so a reroll now proves nothing').toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+
+  await reroll.click({ force: true });
+  await reroll.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(150);
+  expect(
+    await shown(),
+    'a reroll pressed during a post changed the handle on screen while the old one was being posted',
+  ).toBe(before);
+
+  release();
+  const status = page.getByRole('status');
+  await expect(status).not.toHaveText('');
+  expect(posted, 'the name that went to the server is not the name the player was shown').toEqual([
+    before,
+  ]);
+  expect(await shown(), 'the handle on screen changed once the post was answered').toBe(before);
+  await expect(status, 'the notice names a different handle from the one on screen').toContainText(
+    before!,
+  );
+
+  // Once the post is over the button is a button again: it clears the stale line, which is its job.
+  await reroll.click();
+  await expect(status).toHaveText('');
+});
+
+test('a post that throws is said, raises nothing unhandled, and leaves both buttons working', async ({
+  page,
+}) => {
+  /*
+   * `onPost` is `leaderboard.submit`, whose `ask()` swallows every network failure -- so the shipped
+   * post cannot throw, and the try/finally in `Results.submit` had never run its finally branch under
+   * any test (removing it left three specs green). It CAN throw from outside `ask()`: the body is
+   * built before the call, so a `JSON.stringify` that throws rejects `submit` itself. That is what
+   * this arms, for the first body only, in the real page rather than a mock of it.
+   *
+   * Three things are asserted, and each fails a different regression. The sentence is said (no
+   * `catch`: the rejection is unhandled and the player is told nothing). Nothing reaches
+   * `pageerror` (a `catch` that rethrows). And the second Post goes out (no `finally`: `inFlight`
+   * stays true and both buttons refuse every press for the rest of the visit).
+   */
+  const unhandled: string[] = [];
+  page.on('pageerror', (error) => unhandled.push(String(error)));
+  let requests = 0;
+  await page.route('**/api/score', (route: Route) => {
+    requests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ handle: 'brave-lantern-42', score: 900 }),
+    });
+  });
+  await startGame(page);
+  await reachResults(page);
+  await page.evaluate(() => {
+    const real = JSON.stringify;
+    let armed = true;
+    JSON.stringify = ((value: unknown, ...rest: unknown[]) => {
+      if (armed && typeof value === 'object' && value !== null && 'handle' in value) {
+        armed = false;
+        throw new Error('the request body could not be built');
+      }
+      return (real as (...args: unknown[]) => string)(value, ...rest);
+    }) as typeof JSON.stringify;
+  });
+
+  const post = page.getByRole('button', { name: 'Post', exact: true });
+  const status = page.getByRole('status');
+  await post.click();
+  await expect(
+    status,
+    'a post that threw told the player nothing: Results.submit has no catch',
+  ).toHaveAttribute('data-notice', 'leaderboardDown');
+  await expect(status).not.toHaveText('');
+  expect(requests, 'the request went out, so the throw this test armed never happened').toBe(0);
+
+  // An unhandled rejection is reported after the microtask that raised it; give it its turn.
+  await page.evaluate(() => new Promise<void>((done) => setTimeout(done, 100)));
+  expect(unhandled, 'a post that threw escaped as an unhandled rejection').toEqual([]);
+
+  await expect(
+    post,
+    'the Post button is still unavailable after a post that threw: the in-flight flag was never cleared',
+  ).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(
+    page.getByRole('button', { name: CONTENT.strings['handleReroll']! }),
+  ).not.toHaveAttribute('aria-disabled', 'true');
+
+  // And it still works: the next press is a real post, answered and said.
+  await post.click();
+  await expect
+    .poll(() => requests, {
+      message: 'Post pressed after a post that threw sent nothing: both buttons refuse every press',
+    })
+    .toBe(1);
+  await expect(status).toHaveAttribute('data-notice', 'handleAssigned');
+});
+
 test.describe('pressing Post by keyboard keeps focus on the button, for every outcome', () => {
   /*
    * The Post button was `disabled` while the post was out, and a disabled button cannot hold focus:

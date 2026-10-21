@@ -14,8 +14,8 @@ client reports seeing.
 
 - The game is live at `off-the-path-game.vercel.app`, embedded-ready, `frame-ancestors` locked to
   `cyera.com` and `*.cyera.com`.
-- The suite is **535 tests** — `packages/core` 203 at a 100% gate on statements, branches, functions
-  AND lines; `apps/api` 53 at the same gate; `apps/game` 272; `tools/graybox` 7 — plus **179 e2e**.
+- The suite is **807 tests** — `packages/core` 345 at a 100% gate on statements, branches, functions
+  AND lines; `apps/api` 79 at the same gate; `apps/game` 375; `tools/graybox` 8 — plus **299 e2e**.
 - The art generator is deterministic: `pnpm graybox` regenerates `map-forest.json` byte-identical
   unless a painter changed. That property is the proof standard for every art change.
 - Phase 6 (the leaderboard) exists: `apps/api`, score recomputed server-side from the run log,
