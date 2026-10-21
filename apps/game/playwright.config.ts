@@ -10,7 +10,7 @@ export default defineConfig({
   // different timing-sensitive spec flaked on each of three consecutive runs (the frame sampler,
   // the Results CTA scroll, the cottage notice), each passing on retry, and --fail-on-flaky-tests
   // turned every one of them red. Fixing them one by one was whack-a-mole; the cause was contention.
-  workers: process.env['CI'] ? 1 : undefined,
+  ...(process.env['CI'] ? { workers: 1 } : {}),
   // The build runs here, not in webServer.command, so that reusing a preview server cannot skip it
   // and leave every spec measuring a stale dist. See e2e-build.ts.
   globalSetup: './e2e-build.ts',
