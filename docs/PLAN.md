@@ -430,7 +430,7 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
       loop with take / take-limited / leave; the basket as an inventory; the three-minute timer as an
       injected clock (no `Date`); the "never made it" ending; scoring by what each collected skill
       did; a version tag on the run log, so a v1 log can never score as a v2 run.
-- [ ] **B. Content** (M) — six or seven skills and characters as data: what each promises, the card,
+- [x] **B. Content** (M) — done 2026-10-21 as draft 4, after three refutations (GAME_DESIGN_V2 section 10). Checked by an independent scorer: one run of 2,187 at 1000, the best wolf run 500, the best two-clause rote rule 650. Phase C must lay the cast out in content order, Rabbit first. — six or seven skills and characters as data: what each promises, the card,
       and what it did under each verdict. The mix is tuned through `pnpm sim` until the ceiling, the
       greedy floor and restrict-everything all come out right.
 - [ ] **C. World** (M) — three or four new characters on the map, one regeneration with every

@@ -127,7 +127,7 @@ describe('lint rules', () => {
     [
       'a skill nobody offers',
       (c) => void (c.characters[0]!.skillId = c.characters[1]!.skillId),
-      /skill "lantern" must be offered by exactly one character \(found 0\)/,
+      /skill "courier" must be offered by exactly one character \(found 0\)/,
     ],
     [
       'a limit that earns more than taking it in full',
