@@ -22,6 +22,7 @@ import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
 import { watchStage } from './ui/stage';
 import { App } from './ui/App';
+import { ProblemScreen } from './ui/ProblemScreen';
 import type { NoticeClose } from './ui/Notice';
 import { createLeaderboardClient } from './net/leaderboard';
 import { emit } from './embed/postMessage';
@@ -41,6 +42,96 @@ const SAY_MS = 4200;
 const cssColor = (name: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+/*
+ * THE GAME COULD NOT RUN, and the visitor is told so in our words.
+ *
+ * Two things used to leave a visitor looking at a healthy-looking page that did nothing. An asset
+ * that would not load threw from inside Phaser's loader, where no promise catch can reach it (see
+ * BootScene in world/scenes.ts), and `start().catch` at the foot of this file replaced the whole
+ * interface with an unstyled sentence. A crash after boot was a console line and nothing else.
+ *
+ * Read from the content file's raw JSON rather than from `loadContent()`'s result, on purpose: this
+ * has to work when `start()` failed BEFORE the content was validated, and a problem screen that needs
+ * the thing that broke to say that something broke is not one.
+ *
+ * NO STACK TRACE, NO ERROR MESSAGE, NO FILE NAME. The words are fixed copy. What the browser says is
+ * in the console, where it always was.
+ *
+ * It is a separate mount from `App` because `App` may not exist yet, or may be the thing that threw.
+ * The recoverable case -- an asset that 404ed -- is NOT this: that one goes through `App`, with a
+ * retry that restarts the scene and keeps the page (`loadFailed` below). This is the one with
+ * nowhere to retry to, so its button reloads the page.
+ */
+const strings = (gameContent as { strings: Record<string, string> }).strings;
+let fatalShown = false;
+/** Set by `start()` once there is a music player to stop. A crash must not leave a bed playing. */
+let silence: () => void = () => {};
+
+function showFatal(kind: 'load' | 'crash'): void {
+  // Once. A second error while the first screen is going up must not mount a second screen.
+  if (fatalShown) return;
+  fatalShown = true;
+  silence();
+  const ui = document.getElementById('ui');
+  if (!ui) {
+    document.body.textContent = strings['crashTitle'] ?? '';
+    return;
+  }
+  // Everything under the screen is out of reach of keys, focus and assistive technology.
+  for (const child of Array.from(ui.children)) (child as HTMLElement).inert = true;
+  document.getElementById('game')?.setAttribute('inert', '');
+  const root = document.createElement('div');
+  ui.append(root);
+  render(
+    h(ProblemScreen, {
+      kind,
+      title: kind === 'load' ? (strings['loadFailedTitle'] ?? '') : (strings['crashTitle'] ?? ''),
+      body: kind === 'load' ? (strings['loadFailedBody'] ?? '') : (strings['crashBody'] ?? ''),
+      action: kind === 'load' ? (strings['loadFailedRetry'] ?? '') : (strings['crashReload'] ?? ''),
+      onAction: () => location.reload(),
+    }),
+    root,
+  );
+}
+
+/*
+ * Anything uncaught, from here on. Registered at module load, before `start()`, so the boot itself
+ * is covered. The one message dropped is the browser's own `ResizeObserver loop` notice, which is
+ * not an error in anything: it is raised when a callback changes layout and the observer has to
+ * wait a frame, it is delivered as an `error` event for historical reasons, and showing a crash
+ * screen for it would end every session that resized a window.
+ */
+/*
+ * ONLY OUR OWN CODE MAY END A SESSION. The first version showed the crash screen for every uncaught
+ * error and every unhandled rejection on the page, and an adversarial reviewer named what that
+ * catches besides us: a browser extension that injects a script into the page, an opaque
+ * cross-origin "Script error.", anything evaluated by a tool. On a research page a visitor's
+ * extensions are not ours to break the game over. So an error ends the session only when it came
+ * from a script served by this origin -- `event.filename` for an error, the stack for a rejection
+ * -- which is every script the game has, because it loads nothing third-party (CLAUDE.md).
+ *
+ * The rest is logged rather than swallowed, so a real fault is still visible to whoever is looking.
+ */
+const ours = (where: string | undefined): boolean =>
+  typeof where === 'string' && where.includes(location.origin);
+
+window.addEventListener('error', (event) => {
+  if (/ResizeObserver/.test(event.message)) return;
+  if (!ours(event.filename)) {
+    console.warn('[off-the-path] ignoring an error from outside the game:', event.message);
+    return;
+  }
+  showFatal('crash');
+});
+window.addEventListener('unhandledrejection', (event) => {
+  const stack = event.reason instanceof Error ? event.reason.stack : undefined;
+  if (!ours(stack)) {
+    console.warn('[off-the-path] ignoring a rejection from outside the game');
+    return;
+  }
+  showFatal('crash');
+});
+
 async function start(): Promise<void> {
   const content = loadContent(gameContent);
   const manifest = await loadManifest();
@@ -51,10 +142,13 @@ async function start(): Promise<void> {
 
   const store = createStore(content, () => performance.now());
   const bus = createBus();
+  /** The assets that would not load, or null. While it is set the world is not on screen. */
+  let loadFailure: readonly string[] | null = null;
   const leaderboard = createLeaderboardClient(content);
   // The world keeps its own "is a panel open" flag: a notice is a DOM panel that does not change
   // the store phase, and Purple must not keep walking while the player is reading it.
-  const worldHasInput = (): boolean => store.getState().phase === 'explore' && noticeId === null;
+  const worldHasInput = (): boolean =>
+    loadFailure === null && store.getState().phase === 'explore' && noticeId === null;
   const input = createInput(window, {
     onBack: () => void store.dispatch({ type: 'BACK' }),
     isActive: worldHasInput,
@@ -86,6 +180,7 @@ async function start(): Promise<void> {
    * only ever start after a click anyway, which the browser requires and the design wants.
    */
   const music = createMusicPlayer();
+  silence = music.stop;
 
   let hint: string | null = null;
   /** The last thing a bystander said, and who said it. Pure flavour; no game state moves. */
@@ -144,6 +239,15 @@ async function start(): Promise<void> {
             music.toggle();
             draw();
           },
+        },
+        loadFailed: loadFailure,
+        onRetryLoad: () => {
+          // Clear first, so the next frame the player sees is the title or the world, not the
+          // failure again; if the files fail a second time `loadFailed` puts it straight back.
+          loadFailure = null;
+          syncWorldChrome();
+          draw();
+          boot.retry();
         },
         onStart: beginRun,
         onReplay: () => {
@@ -278,6 +382,13 @@ async function start(): Promise<void> {
     draw();
   });
 
+  bus.on('loadFailed', ({ keys }) => {
+    loadFailure = keys;
+    // The pad and the bed follow what is on screen, and what is on screen is the retry screen.
+    syncWorldChrome();
+    draw();
+  });
+
   bus.on('enteredCottage', () => {
     if (store.getState().phase !== 'explore') return;
     if (!canEnterCottage(store.getState(), content)) {
@@ -299,6 +410,9 @@ async function start(): Promise<void> {
   const firstView = stageFit(
     availableFor({ width: innerWidth, height: innerHeight }).available,
   ).view;
+
+  // Held, not inlined, because the retry screen has to be able to restart it.
+  const boot = new BootScene(manifest, bus);
 
   // Phaser reads this too, so movement, prompts and triggers all stop together.
   const game = new Phaser.Game({
@@ -336,7 +450,7 @@ async function start(): Promise<void> {
      */
     disablePreFX: true,
     disablePostFX: true,
-    scene: [new BootScene(manifest), new ForestScene(store, bus, input, worldHasInput)],
+    scene: [boot, new ForestScene(store, bus, input, worldHasInput)],
   });
 
   /*
@@ -433,7 +547,8 @@ async function start(): Promise<void> {
 }
 
 start().catch((err: unknown) => {
-  const el = document.getElementById('ui');
-  if (el) el.textContent = 'Something went wrong loading the game.';
+  // Boot itself failed -- the manifest would not fetch, or an asset it names is missing from the
+  // build -- so there is no game to retry into. Our words, no trace; the console has the rest.
   console.error(err);
+  showFatal('load');
 });

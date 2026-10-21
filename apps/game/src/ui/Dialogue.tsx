@@ -166,12 +166,31 @@ export function Dialogue({
   const [cursor, setCursor] = useState(0);
   const trapRef = useFocusTrap();
 
+  /*
+   * A PRESS ON A QUESTION IS A QUESTION, WHENEVER IT LANDS.
+   *
+   * This opened with `if (!done) { skip(); return; }` -- "while the line is still typing, any
+   * activation means 'show me the rest', never 'ask this'" -- so the first press on a question
+   * while the character was still talking finished the line and asked nothing. The player pressed
+   * "What does it need?", saw the greeting snap to its end, and had to press it again: up to nine
+   * presses a run (there are nine questions) on the interaction the game is named for.
+   *
+   * It was written to stop one real thing, the SPACE key answering question one unread, and it
+   * stopped it with a rule about the wrong layer. That is handled where the key is -- `onKeyDown`
+   * below only takes Space and Enter for "show me the rest" when focus is on the line itself, not on
+   * a button -- so a press on a button can do what the button says.
+   *
+   * "Show me the skill" and "Take it as offered" below never had the guard: they stop propagation
+   * and act mid-typing, and nobody has ever complained about either. The questions follow them. The
+   * press still finishes the greeting (the line is about to be replaced by the reply, which types
+   * in from nothing), so nothing is lost that was ever on screen long enough to read.
+   *
+   * It was only ever caught by a player, because every other test either waits for the line to
+   * finish before it presses anything or dispatches ASK to the store; e2e/dialogue-press.spec.ts
+   * presses the real buttons with the typewriter running.
+   */
   const choose = (index: number): void => {
-    // While the line is still typing, any activation means "show me the rest", never "ask this".
-    if (!done) {
-      skip();
-      return;
-    }
+    if (!done) skip();
     const option = questions[index];
     if (!option || asked.includes(option.id)) return;
     setLastAsked(option.id);
@@ -184,7 +203,14 @@ export function Dialogue({
      * the universal advance-text gesture, used to activate whichever option had focus — so the
      * second press of the key the player was just taught answered question one, unread.
      */
-    if (!done && (e.key === ' ' || e.key === 'Enter')) {
+    /*
+     * ...but only when the key lands on the LINE. On a button, Space and Enter are that button's
+     * press, and taking them here made a keyboard player's first Enter on a question they had just
+     * arrowed to do nothing -- the same eaten press as the pointer's, by the other device. The
+     * handler runs on the container, so a keydown bubbling from an option or from "Show me the
+     * skill" arrives here with that button as its target.
+     */
+    if (!done && (e.key === ' ' || e.key === 'Enter') && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
       skip();
       return;

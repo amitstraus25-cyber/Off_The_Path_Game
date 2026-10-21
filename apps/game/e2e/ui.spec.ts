@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { devices, expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { probe, startGame } from './helpers';
+import { probe, reachByGesture, startGame } from './helpers';
 
 /**
  * The shipped copy, read rather than repeated -- the pattern e2e/card-rulebook.spec.ts sets and
@@ -388,39 +388,97 @@ test('panels fit without horizontal scrolling at 375, 768 and 1280', async ({ br
   }
 });
 
-test('every verdict stays reachable at laptop and landscape-phone heights', async ({ browser }) => {
-  /*
-   * The Inspect group is the tallest thing in the game. `.otp-layer` is position: fixed, and a
-   * fixed box produces no scrollbar, so anything taller than the viewport used to be painted
-   * outside it and could not be reached by scroll, wheel or focus — the run could not be
-   * finished. The sizes below are the ones that were broken; 800px tall, which the test above
-   * uses, was just tall enough to hide it.
-   */
-  for (const size of [
-    { width: 1366, height: 768 },
-    { width: 1280, height: 720 },
-    { width: 844, height: 390 },
-  ]) {
-    const context = await browser.newContext({ viewport: size });
-    const page = await context.newPage();
-    await page.goto('/');
-    await startGame(page);
-    await page.evaluate(() => {
-      const { store } = window.__otp!;
-      store.dispatch({ type: 'MEET', c: 'rabbit' });
-      store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
-    });
-    await expect(page.locator('.otp-card')).toBeVisible();
+/*
+ * EVERY VERDICT IS REACHABLE BY A PLAYER, not by a script.
+ *
+ * The first defect here, kept from the original docstring because it is why these sizes are listed:
+ * "The Inspect group is the tallest thing in the game. `.otp-layer` is position: fixed, and a fixed
+ * box produces no scrollbar, so anything taller than the viewport used to be painted outside it and
+ * could not be reached by scroll, wheel or focus -- the run could not be finished. The sizes below
+ * are the ones that were broken; 800px tall, which the test above uses, was just tall enough to hide
+ * it." That is the 800px blind spot, and it is why no single tall viewport proves anything here.
+ *
+ * The second defect is this test's own. It was one test that opened the card at three desktop and landscape sizes and called
+ * `pills.nth(i).scrollIntoViewIfNeeded()` before asserting each pill was in the viewport. That call
+ * scrolls an `overflow: hidden` box exactly as readily as an `overflow: auto` one, so it passed at
+ * 375 and 390 on a phone at 200% browser zoom -- where Allow, Restrict and Reject sat 283 to 435px
+ * below the fold and NO gesture a player has could bring them up. It was a test of whether the
+ * buttons exist, not of whether anyone could press them, and it turned green on the exact defect
+ * it was written for.
+ *
+ * The sizes below are the ones that have ever been broken: the laptop and the landscape phone it was
+ * written for, and the two phones at 200% zoom, which are the CSS-pixel viewports 375 and 390
+ * become (188x406 and 195x422, device pixel ratio 2). Each is driven by BOTH gestures a player has,
+ * in its own context, through `reachByGesture` -- see helpers.ts for what it refuses to do. The last
+ * step is a real pointer press on the bottom-most control, at coordinates, because `Locator.click()`
+ * scrolls its target into view first and would put the same cheat back.
+ */
+const REACH_SIZES = [
+  { width: 1366, height: 768, dpr: 1, mustScroll: false },
+  { width: 1280, height: 720, dpr: 1, mustScroll: false },
+  { width: 844, height: 390, dpr: 1, mustScroll: false },
+  // The card is taller than these screens, so the gestures are what is being tested. `mustScroll`
+  // is the guard on the guard: if a later change makes the card fit, the assertion below fails
+  // instead of letting this pass having exercised nothing.
+  { width: 188, height: 406, dpr: 2, mustScroll: true },
+  { width: 195, height: 422, dpr: 2, mustScroll: true },
+] as const;
 
-    const pills = page.locator('.otp-verdict');
-    await expect(pills).toHaveCount(3);
-    for (let i = 0; i < 3; i++) {
-      await pills.nth(i).scrollIntoViewIfNeeded();
-      await expect(pills.nth(i), `${size.width}x${size.height} verdict ${i}`).toBeInViewport();
-    }
-    await context.close();
+for (const size of REACH_SIZES) {
+  for (const gesture of ['wheel', 'touch'] as const) {
+    test(`every verdict is reachable by ${gesture} at ${String(size.width)}x${String(size.height)} @${String(size.dpr)}x`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({
+        viewport: { width: size.width, height: size.height },
+        deviceScaleFactor: size.dpr,
+        hasTouch: true,
+        isMobile: size.dpr === 2,
+      });
+      const page = await context.newPage();
+      await page.goto('/');
+      await startGame(page);
+      await page.evaluate(() => {
+        const { store } = window.__otp!;
+        store.dispatch({ type: 'MEET', c: 'rabbit' });
+        store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
+      });
+      await expect(page.locator('.otp-card')).toBeVisible();
+
+      const pills = page.locator('.otp-verdict');
+      await expect(pills).toHaveCount(3);
+      // Top to bottom, then back up to the first: a panel that only scrolls one way would pass a
+      // single downward sweep and strand Allow above the fold.
+      let gestures = 0;
+      for (const i of [0, 1, 2, 0, 2]) {
+        gestures += await reachByGesture(page, pills.nth(i), gesture).catch((err: unknown) => {
+          throw new Error(
+            `${String(size.width)}x${String(size.height)} verdict ${String(i)}: ${(err as Error).message}`,
+          );
+        });
+      }
+      if (size.mustScroll)
+        expect(
+          gestures,
+          'the card fits this screen without scrolling, so no gesture was exercised',
+        ).toBeGreaterThan(0);
+
+      // And the press itself, on the control that was furthest away. Real coordinates.
+      const box = await pills.nth(2).boundingBox();
+      expect(box, 'the last verdict has no box').not.toBeNull();
+      const x = box!.x + box!.width / 2;
+      const y = box!.y + box!.height / 2;
+      if (gesture === 'touch') await page.touchscreen.tap(x, y);
+      else await page.mouse.click(x, y);
+      await expect
+        .poll(() => probe(page).then((p) => p.verdicts), {
+          message: 'a press on the last verdict, reached by gesture, registered nothing',
+        })
+        .toEqual({ 'cottage-finder': 'reject' });
+      await context.close();
+    });
   }
-});
+}
 
 test('the HUD basket shows what Purple carries, and loses the key when she allows it', async ({
   page,

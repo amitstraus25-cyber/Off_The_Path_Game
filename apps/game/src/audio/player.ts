@@ -30,7 +30,24 @@ const MASTER_GAIN = 0.34;
 const DUCKED_GAIN = 0.1;
 const FADE_S = 0.4;
 
-const STORE_KEY = 'otp:music';
+/*
+ * NOTHING IN THIS FILE TOUCHES BROWSER STORAGE, and a test holds it down from the outside.
+ *
+ * The preference used to be written to `localStorage['otp:music']`, so a returning player got their
+ * sound back. The Results screen's privacy line says "No account, no email, no cookies", it is
+ * Legal-reviewed copy (docs/COPY_REVIEW.md), and a key in the visitor's browser is exactly the sort
+ * of thing that sentence is read as ruling out -- by a reader, by a regulator and by a security
+ * team auditing a security company's research page. It was one boolean and not a cookie, which is
+ * the defence the review note offered and which nobody reading the page would ever hear. The sentence
+ * stayed and the code was changed to match it: the choice lives in a variable for as long as the
+ * page does and is gone with it. A reload starts silent, which is what the game already did for a
+ * first-time player and what an embed inside someone else's page should do anyway.
+ *
+ * e2e/storage-empty.spec.ts plays a whole run with the music toggled and then enumerates
+ * localStorage, sessionStorage, cookies and IndexedDB, rather than looking for the one key that was
+ * here -- a guard that names `otp:music` goes on passing the day somebody persists the same
+ * boolean under another name.
+ */
 
 const midiToHz = (midi: number): number => 440 * 2 ** ((midi - 69) / 12);
 
@@ -49,9 +66,9 @@ function noiseBuffer(ctx: AudioContext): AudioBuffer {
 }
 
 export interface MusicPlayer {
-  /** True when the player has asked for sound. Survives a reload. */
+  /** True when the player has asked for sound. Lives for the page and is never persisted. */
   readonly wanted: boolean;
-  /** Turn it on or off, and remember the choice. Returns the new state. */
+  /** Turn it on or off for as long as this page is open. Returns the new state. */
   toggle(): boolean;
   /** Called once the run begins; starts only if the player already asked for sound. */
   begin(): void;
@@ -60,28 +77,9 @@ export interface MusicPlayer {
   stop(): void;
 }
 
-/**
- * Reads the remembered choice. Wrapped because storage throws outright in some privacy modes,
- * and a game that will not boot without localStorage is a worse game than a silent one.
- */
-function remembered(): boolean {
-  try {
-    return localStorage.getItem(STORE_KEY) === 'on';
-  } catch {
-    return false;
-  }
-}
-
-function remember(on: boolean): void {
-  try {
-    localStorage.setItem(STORE_KEY, on ? 'on' : 'off');
-  } catch {
-    // Nothing to do. The choice just will not survive the reload.
-  }
-}
-
 export function createMusicPlayer(): MusicPlayer {
-  let wanted = remembered();
+  // In memory and nowhere else: see the note above about browser storage.
+  let wanted = false;
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
   let noise: AudioBuffer | null = null;
@@ -170,13 +168,26 @@ export function createMusicPlayer(): MusicPlayer {
       window.AudioContext ??
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return; // No Web Audio. The game is unchanged; there is simply no music.
-    ctx ??= new Ctor();
-    noise ??= noiseBuffer(ctx);
-    master ??= ctx.createGain();
-    master.connect(ctx.destination);
-    master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(target(), ctx.currentTime + 1.2);
-    void ctx.resume();
+    /*
+     * MUSIC IS OPTIONAL, SO NOTHING HERE MAY END THE GAME. Since main.ts mounts a crash screen for
+     * uncaught errors and unhandled rejections from our own code, two lines here became fatal that
+     * used to be harmless: `new AudioContext()` can throw (too many contexts, a locked-down
+     * browser), and `resume()` returns a promise that REJECTS when the browser refuses audio
+     * without a user gesture -- and as `void ctx.resume()` that rejection was unhandled. Either
+     * would have ended a session over background music. Both now leave the game silent instead.
+     */
+    try {
+      ctx ??= new Ctor();
+      noise ??= noiseBuffer(ctx);
+      master ??= ctx.createGain();
+      master.connect(ctx.destination);
+      master.gain.setValueAtTime(0, ctx.currentTime);
+      master.gain.linearRampToValueAtTime(target(), ctx.currentTime + 1.2);
+    } catch {
+      ctx = null;
+      return;
+    }
+    ctx.resume().catch(() => undefined);
     nextBar = 0;
     nextBarAt = ctx.currentTime + 0.15;
     running = true;
@@ -205,7 +216,6 @@ export function createMusicPlayer(): MusicPlayer {
     },
     toggle() {
       wanted = !wanted;
-      remember(wanted);
       if (wanted) start();
       else stop();
       return wanted;

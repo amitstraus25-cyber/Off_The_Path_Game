@@ -315,6 +315,62 @@
 }
 
 /*
+ * A PANEL OVER THE WORLD IS ITS OWN SCROLLPORT.
+ *
+ * THE DEFECT. At 200% browser zoom on a phone -- 375 and 390 CSS px become 188x406 and 195x422 at a
+ * device pixel ratio of 2 -- the Inspect card's Allow, Restrict and Reject sat 283 to 435px below
+ * the bottom of the screen (tops 705/759/813 at 188x406, 690/744/798 at 195x422) and no wheel, drag
+ * or flick brought them up. The run could not be finished.
+ *
+ * WHY `.otp-layer`'S OWN `overflow-y: auto` DID NOTHING, which is the part worth keeping, because
+ * it is the first thing anyone reaches for and it is already there. Measured on the layer at
+ * 188x406: scrollHeight 406 = clientHeight 406, scrollTop 0. The layer never overflowed. It is a
+ * grid, the panel is an item in an auto row, and the panel carries `overflow: hidden`, which takes
+ * its automatic minimum size to ZERO. An auto track whose items can shrink to nothing is only
+ * grown to the room the container has, so the row came out at the container's own 386px (406 less
+ * 2 x 10 padding) and the panel was squeezed to fit it -- 386px tall, with the 895px card inside
+ * it clipped by the panel's `overflow: hidden`. There was nothing left over for the layer to
+ * scroll. `.otp-card` is 895px at that size; it was simply hidden.
+ *
+ * That is also why the old reachability test passed: `scrollIntoViewIfNeeded()` scrolls an
+ * `overflow: hidden` box programmatically, which no player can. e2e/ui.spec.ts now reaches the
+ * buttons with a wheel and a drag only.
+ *
+ * THE FIX is the stylesheet's own pattern for a box that must give height up before anything
+ * else does -- `.otp-title__scroll` in screens.css: `flex: 0 1 auto; min-height: 0; overflow-y:
+ * auto`. The panel becomes a flex column whose header keeps its height and whose body takes what is
+ * left and scrolls inside it. `min-height: 0` is what lets a flex item be shorter than its content
+ * at all (its automatic minimum is its content, which is exactly what stops a scroll box from
+ * shrinking), and `overflow-x: hidden` keeps the rounded bottom corners clipping what they used to.
+ * `overscroll-behavior: contain` keeps a flick that reaches the end of the card off the page behind
+ * it, as the layer's own rule does.
+ *
+ * SCOPED TO THE MODAL LAYER, because `.otp-panel` is also the Results panel, whose own column
+ * scrolls the page and which must not become a second scroll box inside it.
+ *
+ * NO `max-height` ON THE PANEL, deliberately. It is not needed -- the grid row already clamps the
+ * panel to the layer's content box, which is the measurement above -- and `max-height: 100%` on a
+ * grid item resolves against a track that is itself being sized from the item, which is a cycle
+ * browsers resolve differently. The bound is the one the layout already supplies.
+ */
+.otp-layer--modal > .otp-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.otp-layer--modal > .otp-panel > .otp-panel__header {
+  flex: none;
+}
+
+.otp-layer--modal > .otp-panel > .otp-panel__body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/*
  * The HUD now lives inside the world frame's header rather than floating in the window's corner,
  * so this is just the layout of that corner's contents.
  */
@@ -1276,10 +1332,12 @@
  * press first.
  */
 /*
- * It is the only control on Explore and it carries a setting that survives the session in
- * localStorage, so a returning player who cannot reach it has music they cannot stop. It was a
- * 26.6x12.6 box at 375 -- well under --otp-touch-min, and 131px outside the viewport besides.
- * The box does not scale: a thumb is the same size at every breakpoint.
+ * It is the only control on Explore, and a player who cannot reach it has music they cannot stop.
+ * (The setting used to be remembered in localStorage, which made that worse across visits and is
+ * why this was first written as it was; it is no longer stored anywhere -- see audio/player.ts --
+ * and the rule stands for the page's own lifetime.) It was a 26.6x12.6 box at 375 -- well under
+ * --otp-touch-min, and 131px outside the viewport besides. The box does not scale: a thumb is the
+ * same size at every breakpoint.
  */
 .otp-music {
   flex: none;

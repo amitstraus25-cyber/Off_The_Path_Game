@@ -14,6 +14,11 @@ export interface GameEvents {
   cottageLocked: void;
   /** Phaser finished booting the forest. */
   worldReady: void;
+  /**
+   * One or more assets would not load, so the forest was NOT built. The keys are Phaser's own
+   * (`map-forest`, `npc-owl`), for the inspector and the specs; the UI never prints them.
+   */
+  loadFailed: { keys: readonly string[] };
 }
 
 type Handler<T> = (payload: T) => void;

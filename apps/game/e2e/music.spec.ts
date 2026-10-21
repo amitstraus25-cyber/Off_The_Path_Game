@@ -56,7 +56,17 @@ test('the toggle starts it, and says which state it is in', async ({ page }) => 
   expect(await contexts(page), 'one context, built on demand').toBe(1);
 });
 
-test('the choice survives a reload, and is still not autoplay', async ({ page }) => {
+test('the choice does NOT survive a reload: nothing is stored, and nothing autoplays', async ({
+  page,
+}) => {
+  /*
+   * This test used to assert the opposite -- "the choice survives a reload" -- because the
+   * preference was written to `localStorage['otp:music']`. The privacy line on the Results screen
+   * says "No account, no email, no cookies", so the code was changed to match the sentence: the
+   * choice lives in memory for the page and is gone with it. e2e/storage-empty.spec.ts enumerates
+   * every kind of browser storage after a whole run; this is the player-facing half, that a
+   * reload really does start silent and switched off.
+   */
   await page.goto('/');
   await startGame(page);
   await page.getByRole('switch', { name: /music/i }).click();
@@ -64,18 +74,18 @@ test('the choice survives a reload, and is still not autoplay', async ({ page })
     'aria-checked',
     'true',
   );
+  expect(await contexts(page), 'on, so one context').toBe(1);
 
   await page.reload();
-  // Remembered on the title screen, but still silent: the run has not begun.
   await expect(page.getByRole('button', { name: /Begin the walk/ })).toBeVisible();
-  expect(await contexts(page), 'remembered, but nothing sounds on the title screen').toBe(0);
+  expect(await contexts(page), 'a fresh page has built no audio context').toBe(0);
 
   await startGame(page);
   await expect(page.getByRole('switch', { name: /music/i })).toHaveAttribute(
     'aria-checked',
-    'true',
+    'false',
   );
-  expect(await contexts(page), 'now the walk has begun, it plays').toBe(1);
+  expect(await contexts(page), 'the walk began and the reloaded page stayed silent').toBe(0);
 });
 
 test('turning it off again stops it', async ({ page }) => {

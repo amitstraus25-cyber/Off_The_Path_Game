@@ -205,7 +205,6 @@ test('the world chrome says what is on screen, and the bed comes back up', async
    * hanging off it.
    */
   await page.addInitScript(() => {
-    localStorage.setItem('otp:music', 'on');
     const w = window as unknown as { __gain: number[] };
     w.__gain = [];
     const master = new WeakSet<AudioParam>();
@@ -234,6 +233,12 @@ test('the world chrome says what is on screen, and the bed comes back up', async
   });
   await page.goto('/');
   await startGame(page);
+  /*
+   * The bed is turned on the way a player turns it on. This used to seed `localStorage['otp:music']`
+   * in the init script above, because the preference was remembered across visits; it is no longer
+   * stored anywhere (audio/player.ts), so there is nothing to seed and the toggle is the only way.
+   */
+  await page.getByRole('switch', { name: /music/i }).click();
 
   const phase = (): Promise<string | undefined> =>
     page.evaluate(() => document.getElementById('game')?.dataset['phase']);

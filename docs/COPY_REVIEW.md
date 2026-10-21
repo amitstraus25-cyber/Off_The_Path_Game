@@ -98,10 +98,16 @@ All **PLACEHOLDER** except `cta`, `ctaPrompt`, `quest` and `leaderboardTitle`, w
 cookies.") and `handleHint` against decision D10 before launch. **That review has not happened**, and
 two things should go into it rather than being settled here:
 
-- The sentence describes an API that does not exist yet (Phase 6), so nothing can currently verify it.
-- The game does write one `localStorage` boolean, for the music preference. It is not a cookie, but it
-  is a similar technology to most readers and to ePrivacy, and "no cookies" on a data security
-  company's own research page is the one sentence an unfriendly reader will test.
+- ~~The sentence describes an API that does not exist yet.~~ **Resolved 2026-10-21:** the leaderboard
+  API is live and reads the database, and it stores a handle and a score only, as the sentence says.
+- ~~The game does write one `localStorage` boolean, for the music preference.~~ **Resolved
+  2026-10-21, by changing the code rather than this sentence:** the music preference now lives in
+  memory for the page and is never persisted, so a reload starts silent. Nothing is written to
+  `localStorage`, `sessionStorage`, cookies or IndexedDB during a full run, and
+  `e2e/storage-empty.spec.ts` enumerates all four to keep it that way. The flag below stands as the
+  reason it had to be fixed: "no cookies" on a data security company's own research page is the one
+  sentence an unfriendly reader will test, and the literal truth of it was not enough while the
+  implicature was false. **For Legal:** the sentence itself is unchanged.
 
 ## 6. Things deliberately not said
 

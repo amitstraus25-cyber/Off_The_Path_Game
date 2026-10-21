@@ -196,9 +196,10 @@ for (const size of FIT_SIZES) {
     ).toEqual([]);
 
     /*
-     * And the music control specifically. It is the only control on Explore and its setting
-     * persists in localStorage, so a returning player who cannot reach it has music with no way
-     * to stop it. --otp-touch-min, not a scaled size: a thumb is the same at every breakpoint.
+     * And the music control specifically. It is the only control on Explore, so a player who cannot
+     * reach it has music with no way to stop it. (Its setting used to persist in localStorage,
+     * which is why this was written; it no longer does, and the rule holds for the page's own
+     * lifetime.) --otp-touch-min, not a scaled size: a thumb is the same at every breakpoint.
      */
     const music = await page.evaluate(() => {
       const el = document.querySelector('.otp-music');

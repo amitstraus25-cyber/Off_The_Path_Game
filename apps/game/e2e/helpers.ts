@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 // The real constants, not copies: `logic.ts` is pure TypeScript with no Phaser and no DOM, so the
 // walking helpers below pace themselves off the same numbers the game walks at. They used to carry
 // a hardcoded 60 px/s and a 20px tolerance, which were right for 16px tiles and silently wrong the
@@ -235,4 +235,97 @@ export async function walkTo(
         `needing ${Math.round(within)}px. Something is in the corridor.`,
     );
   return last;
+}
+
+/**
+ * How a player moves a panel that is taller than the screen. These two and nothing else: a mouse
+ * wheel over the panel, and a finger dragged along it.
+ *
+ * `Locator.scrollIntoViewIfNeeded()`, `element.scrollIntoView()`, setting `scrollTop` and
+ * `Locator.click()` -- which scrolls its target into view before it clicks -- are all things a
+ * PROGRAMME can do and a player cannot. They scroll an `overflow: hidden` box as readily as an
+ * `overflow: auto` one, which is exactly the difference between a button a player can reach and
+ * one they cannot. `ui.spec.ts` carried a reachability test built on `scrollIntoViewIfNeeded()` for
+ * as long as the verdict buttons were unreachable at 200% zoom on a phone, and it passed the whole
+ * time: it scrolled the clipped panel on the player's behalf.
+ */
+export type PlayerGesture = 'wheel' | 'touch';
+
+/**
+ * Whether a real pointer put at the middle of the control would land on it.
+ *
+ * Both halves are needed. Inside the viewport is not enough, because a box clipped by an
+ * `overflow: hidden` ancestor still has a bounding rect and still reports it; `elementFromPoint`
+ * is what notices that the point belongs to something else.
+ */
+export const pointerCanLandOn = (locator: Locator): Promise<boolean> =>
+  locator.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return false;
+    const inside = r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth;
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return inside && hit !== null && el.contains(hit);
+  });
+
+/**
+ * Scrolls with a wheel or a finger over the panel until a pointer could land on `target`, and
+ * THROWS if it cannot -- with where the control is, so the message says which way it is stuck.
+ *
+ * It only ever gestures over `.otp-panel`, because that is where a player's hand is: dragging
+ * the dim above a bottom-docked card is not a thing anyone does to read it. A gesture goes in the
+ * direction the control lies in, which is how a player works, and a control that is not moving
+ * after a gesture is exactly the failure this exists to name.
+ */
+export async function reachByGesture(
+  page: Page,
+  target: Locator,
+  gesture: PlayerGesture,
+  maxGestures = 16,
+): Promise<number> {
+  const cdp = gesture === 'touch' ? await page.context().newCDPSession(page) : null;
+  const where = (): Promise<{ top: number; bottom: number; viewport: number }> =>
+    target.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), viewport: innerHeight };
+    });
+
+  let made = 0;
+  for (;;) {
+    if (await pointerCanLandOn(target)) return made;
+    const at = await where();
+    if (made >= maxGestures)
+      throw new Error(
+        `${String(made)} ${gesture} gestures over the panel and the control is still out of reach: ` +
+          `top ${String(at.top)}, bottom ${String(at.bottom)}, viewport ${String(at.viewport)}px tall`,
+      );
+    // Over the part of the panel that is actually on screen.
+    const hand = await page
+      .locator('.otp-panel')
+      .last()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const top = Math.max(r.top, 0);
+        const bottom = Math.min(r.bottom, innerHeight);
+        return { x: Math.round(r.left + r.width / 2), y: Math.round((top + bottom) / 2) };
+      });
+    // Down the page if the control is below the fold, up it if it is above: a third of the screen
+    // at a time, so a tiny panel is not flung past its target and a tall one still arrives.
+    const step = Math.round(at.viewport / 3) * (at.bottom > at.viewport ? 1 : -1);
+    if (cdp) {
+      // `yDistance` is positive for a finger travelling DOWN, which scrolls the content UP.
+      await cdp.send('Input.synthesizeScrollGesture', {
+        x: hand.x,
+        y: hand.y,
+        yDistance: -step,
+        gestureSourceType: 'touch',
+        speed: 900,
+      });
+    } else {
+      await page.mouse.move(hand.x, hand.y);
+      await page.mouse.wheel(0, step);
+    }
+    made += 1;
+    // A wheel tick is animated; let it land before asking where the control went.
+    await page.waitForTimeout(gesture === 'wheel' ? 220 : 60);
+  }
 }

@@ -1483,3 +1483,55 @@ html[data-otp-shell='cabinet'] .otp-touch > [role='group']:focus-within {
   /* Nothing here animates. Stated so the next person does not add something
      that does: a cabinet is furniture, and furniture holds still. */
 }
+
+/* ---------------------------------------------------------------- the problem screen */
+
+/*
+ * What the visitor sees when an asset will not load or the game stops. Black ground from
+ * `.otp-screen`, a Shell card with the Deep Purple rule every panel in the game has, and the one
+ * Lime button. Purple tints and type only: no red, no green. See ui/ProblemScreen.tsx for why it
+ * exists and what it refuses to show.
+ */
+.otp-problem {
+  align-content: center;
+}
+
+.otp-problem__card {
+  width: min(94vw, 460px);
+  margin: auto;
+  display: grid;
+  justify-items: start;
+  gap: calc(14px * var(--otp-ui));
+  background: var(--cyera-shell);
+  color: var(--cyera-black);
+  border: var(--otp-panel-border) solid var(--cyera-deep-purple);
+  border-radius: var(--otp-r-panel);
+  padding: calc(26px * var(--otp-ui)) calc(30px * var(--otp-ui));
+}
+
+.otp-problem__disc {
+  fill: var(--cyera-haze);
+}
+
+.otp-problem__bang {
+  fill: var(--cyera-deep-purple);
+}
+
+.otp-problem__title {
+  margin: 0;
+  font-size: calc(28px * var(--otp-ui));
+  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--cyera-deep-purple);
+}
+
+.otp-problem__body {
+  margin: 0;
+  font-size: max(14px, calc(17px * var(--otp-ui)));
+  line-height: 1.4;
+}
+
+.otp-problem__action {
+  margin-top: calc(6px * var(--otp-ui));
+}

@@ -18,6 +18,7 @@ import { Cottage } from './Cottage';
 import { Results } from './Results';
 import { Notice } from './Notice';
 import { Trifecta } from './Trifecta';
+import { ProblemScreen } from './ProblemScreen';
 import { HudBasket, HudGoals, NotationChip, WorldFrame } from './components';
 
 export interface AppProps {
@@ -38,6 +39,14 @@ export interface AppProps {
   onLeaveNotice(): void;
   /** Whether the bed is playing, and the control that changes it. */
   music: { on: boolean; onToggle(): void };
+  /**
+   * The keys of the assets that would not load, or null when everything did. While it is set, the
+   * retry screen is ALL this renders: a title or a HUD over a world that was never built is the
+   * healthy-looking empty screen this exists to end.
+   */
+  loadFailed: readonly string[] | null;
+  /** Try the load again. The scene restarts and `loadFailed` clears on its own. */
+  onRetryLoad(): void;
 }
 
 function useStoreState(store: Store): GameState {
@@ -168,6 +177,8 @@ export function App({
   onReadNotice,
   onLeaveNotice,
   music,
+  loadFailed,
+  onRetryLoad,
 }: AppProps) {
   const state = useStoreState(store);
   const withinReach = useWithinReach();
@@ -247,6 +258,23 @@ export function App({
     heldAtDoor && outstanding.length > 0
       ? [hint, outstanding.map((c) => c.name).join(', ')].join(' ')
       : hint;
+
+  /*
+   * A world that did not load is the whole screen. Placed after every hook above, which must run
+   * on every render, and before the markup, so there is nothing to forget to guard: no title with
+   * a Begin button, no HUD, no frame, no announce regions for a forest that is not there.
+   */
+  if (loadFailed !== null)
+    return (
+      <ProblemScreen
+        kind="load"
+        failed={loadFailed}
+        title={content.strings['loadFailedTitle'] ?? ''}
+        body={content.strings['loadFailedBody'] ?? ''}
+        action={content.strings['loadFailedRetry'] ?? ''}
+        onAction={onRetryLoad}
+      />
+    );
 
   return (
     <>
