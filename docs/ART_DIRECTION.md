@@ -50,7 +50,7 @@ from. On the board a flower bush is 60 to 90 levels darker than the lawn it grow
 
 ## 2. How the board was measured, and how to convert
 
-The board has no stated scale, so everything below is anchored to Red, who is 48 px tall in our build.
+The board has no stated scale, so everything below is anchored to Purple, who is 48 px tall in our build.
 In the Explore frame she stands 106 board pixels tall, which makes **1 of our pixels = 2.21 board
 pixels**. Every size in this document was measured in board pixels and divided by 2.21. The Explore
 frame's viewport is about 23 of our tiles wide; ours is 26, so the board is composed slightly tighter
@@ -66,7 +66,7 @@ The four frames are a 2×2 grid of 1536×1024: Explore at (0,0), Question at (15
 (0,1024), Arrive at (1536,1024). Useful crops: a tree at `360 225 300 260 3`, the river and its banks
 at `90 230 320 560 1.6`, lawn and a path edge at `980 560 230 200 4`, a flower clump at
 `1290 660 130 90 7`, the fence at `1130 410 260 190 3.5`, the bridge at `330 600 220 190 4`, the stall
-at `2240 250 470 360 2`, the cottage at `1960 1130 700 480 1.3`, Red at `770 620 120 130 7`.
+at `2240 250 470 360 2`, the cottage at `1960 1130 700 480 1.3`, Purple at `770 620 120 130 7`.
 
 ---
 
@@ -86,12 +86,12 @@ Measured off the board:
 | Wood, earth, bark  | `#472618` – `#583526`               | 44–59 | `wood[0]` `#6b4522`        | 75   | **~25**  |
 | Stone, slate, rock | `#3a3645` (cool, faint purple cast) | 55    | `stone[0]` `#5f5f66`       | 95   | **~40**  |
 | Characters         | near-black                          | 15–20 | `ink[0]` `#160923`         | 15   | none ✓   |
-| Red's cloak        | near-black                          | 15–20 | `cloak[0]` `#441363`       | 35   | none ✓   |
+| Purple's cloak     | near-black                          | 15–20 | `cloak[0]` `#441363`       | 35   | none ✓   |
 
-Red and the wolf already look closest to the board, and §14 explains why: they are the only two
+Purple and the wolf already look closest to the board, and §14 explains why: they are the only two
 things in the game whose ramp already contains a true keyline step.
 
-**3.2 The thickness.** Measured on Red's ring and on the crown edges: **1 px everywhere, 2 px along
+**3.2 The thickness.** Measured on Purple's ring and on the crown edges: **1 px everywhere, 2 px along
 the bottom and lower-right edge of any mass wider than 16 px.** The 2 px band is not a second
 outline — it is the keyline thickening on the side the light does not reach, and it is what seats a
 tree, a boulder or a roof onto the ground. Do not thicken the top or left edge. Ever.
@@ -130,7 +130,7 @@ seventy-five tiles had no keyline at all, which is the mechanical root of §1. (
 **One sun, from the top-left, at about 45°, in every frame of the game.** The board never breaks
 this, and a single object lit from elsewhere reads as a hole in the ground at the game's camera.
 
-**On a round mass** (a leaf clump, a boulder, Red's hood, a flower bloom): the lit arc is a band
+**On a round mass** (a leaf clump, a boulder, Purple's hood, a flower bloom): the lit arc is a band
 1–2 px wide hugging the upper-left edge, set **one pixel in from the keyline, never touching it**.
 Base occupies the middle. The lower-right third falls to shade. The terminator between base and shade
 is a curve concentric with the silhouette, not a straight diagonal.
@@ -353,7 +353,7 @@ If you cannot, the silhouette is wrong and no amount of interior detail will sav
 
 |                         | w × h, px | widest at    | the signature                                                                                                         |
 | ----------------------- | --------- | ------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Red                     | 20 × 48   | the head     | a round hood **wider than her shoulders**, overhanging; basket breaks the right edge at hip height                    |
+| Purple                  | 20 × 48   | the head     | a round hood **wider than her shoulders**, overhanging; basket breaks the right edge at hip height                    |
 | Rabbit                  | 20 × 34   | the base     | two ears, each 4 px wide and 14 px tall **with a 4 px gap of sky between them** — 40% of her height is ear            |
 | Owl                     | 22 × 26   | mid-height   | no neck: head and body one barrel, flat-topped, two 3 px ear tufts at the corners                                     |
 | Lantern Keeper (badger) | 24 × 44   | the hem      | straight-sided A-shape under a hood; **the lantern on its pole breaks the right edge 10 px out** at shoulder height   |
@@ -366,11 +366,11 @@ If you cannot, the silhouette is wrong and no amount of interior detail will sav
 **10.3 Inside the outline.** Keyline at L15–20 around the whole figure (§3), plus an interior keyline
 wherever two materials meet — hood against face, cloak against trousers, wing against belly. Two
 pixels of eye. At 48 px, unlike at 32, there is room for the board's **mouth and cheek blush on
-Red**, and the board uses both; take them. The board's rabbit also has pink inner ears, a pink nose
+Purple**, and the board uses both; take them. The board's rabbit also has pink inner ears, a pink nose
 and a blush, and grey underside shading — at L194 flat white with a L194 outline our rabbit has none
 of it (see §13).
 
-**10.4 Red specifically.** The hood is a separate round mass sitting _over_ the shoulders, with a
+**10.4 Purple specifically.** The hood is a separate round mass sitting _over_ the shoulders, with a
 dark line between them and a shadow cast on her forehead by the brim. The cloak has 3–4 fold lines in
 `cloak[0]` running from the shoulder to the hem. The basket is carried in the off hand in every
 frame. The current sprite has the keyline and the light direction right and the structure wrong: the
@@ -396,7 +396,7 @@ it currently is, so none of them can be individually interesting enough to notic
 ## 12. The one deliberate departure from the board
 
 The board predates the Cyera rebrand. It shows a **scarlet cloak** and a **terracotta roof**; both
-stay rebranded per `docs/ART_PRODUCTION.md` §6a. Red's cloak is Lilac-led Cyera purple (`cloak`, with
+stay rebranded per `docs/ART_PRODUCTION.md` §6a. Purple's cloak is Lilac-led Cyera purple (`cloak`, with
 level 2 carrying the mass — that exception is already documented in `paint.ts`), the cottage roof and
 the well roof are slate (`roof`), the stall awning is Haze and Offwhite, the toadstools are Aubergine,
 `flower-red` and `flower-pink` are Lilac and Haze, and the wolf is black and Deep Purple. Lime appears
@@ -546,7 +546,7 @@ no partial alpha against transparency, nothing touching a tile edge unless it co
 
 ## 16. Quick reference — every size in this document
 
-All in our pixels, at `TILE = 32`, Red 48 tall.
+All in our pixels, at `TILE = 32`, Purple 48 tall.
 
 |                                      | size                                                      | in tiles            |
 | ------------------------------------ | --------------------------------------------------------- | ------------------- |
@@ -582,7 +582,7 @@ All in our pixels, at `TILE = 32`, Red 48 tall.
 | Trees, bushes, flowers                | §3, §4, §5, §7, §13 items 2–5, §14                                                    |
 | River, shores, waterfall, rocks       | §3, §4, §8, §13 items 7, 8, 14                                                        |
 | Cottage, fence, bridge, stall, props  | §3 (especially 3.4), §4, §5, §9, §13 items 9–14                                       |
-| Red                                   | §3, §4, §10 entire, §12, §13 item 16                                                  |
+| Purple                                | §3, §4, §10 entire, §12, §13 item 16                                                  |
 | Rabbit, Owl, Keeper, Wolf, bystanders | §3, §4, §10 entire, §13 items 15 and 16                                               |
 | Portraits, items, effects             | §3.1, §4, §5, §13 item 16 — and `docs/UI_FOUNDATIONS.md`, since these land in the DOM |
 | Palette / integration                 | §14 entire, plus the §0 table of superseded `PIXEL_STANDARD` lines                    |

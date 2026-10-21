@@ -126,7 +126,7 @@ let vh = Number(arg('h', String(Math.ceil(DESKTOP.tiles.height))));
 /*
  * The three rectangles the game actually draws, each derived the way the game derives it.
  *
- * `forest-scene.ts` puts Red's feet one tile BELOW the `spawn-red` object (`spawn.y + TILE`) and
+ * `forest-scene.ts` puts Purple's feet one tile BELOW the `spawn-purple` object (`spawn.y + TILE`) and
  * then frames `position.y + CAMERA_FOCUS_Y`, five eighths of a tile up. Composing against the
  * object's own row instead -- which is the easy mistake, and the one that was live in
  * `forest-map.ts` when this was written -- aims every framing decision one whole tile high, so the
@@ -142,8 +142,8 @@ const frameRect = (
     return o;
   };
   if (name === 'title' || name === 'portrait') {
-    const s = obj('spawn-red');
-    // Red's feet, then the camera's lift. Both read off the game, never written down here.
+    const s = obj('spawn-purple');
+    // Purple's feet, then the camera's lift. Both read off the game, never written down here.
     const centre = { x: s.x / TILE + 0.5, y: (s.y + TILE) / TILE - 5 / 8 };
     const vp = name === 'title' ? REFERENCE_VIEWPORTS.desktop : REFERENCE_VIEWPORTS.phone;
     return { ...centre, vp };
@@ -189,7 +189,7 @@ if (WHOLE) {
         : ''),
   );
 } else if (vx < 0 || vy < 0) {
-  const want = arg('at', 'spawn-red');
+  const want = arg('at', 'spawn-purple');
   const found =
     objects.find((o) => o.name === want) ??
     objects.find((o) => o.name === `prop-${want}`) ??

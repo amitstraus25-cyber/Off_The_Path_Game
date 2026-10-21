@@ -7,7 +7,7 @@
  * instantly nameable at the playing camera and charming for the two seconds anyone looks.
  *
  * THE SIZE IS THE DRAWING (2026-10-19, UX review finding 19). These four used to stand as tall as
- * Red: the snail, whom `docs/ART_DIRECTION.md` section 10.2 puts LOWEST in the cast at 14 px, was
+ * Purple: the snail, whom `docs/ART_DIRECTION.md` section 10.2 puts LOWEST in the cast at 14 px, was
  * 41 px and taller than the magpie, and the cat and the rabbit shared an outline at 22 x 44 each.
  * Nine characters inside a 1.4:1 band cannot be told apart from across a clearing however well each
  * one is shaded, which is the whole of the finding. They are now drawn to the section 10.2 boxes --
@@ -42,7 +42,7 @@
  *     spots follow the tile from `fur` to `wall` for the same reason.
  *
  *     FLAGGED, NOT DECIDED HERE: docs/PIXEL_STANDARD.md section 2 still reads "Brand colour
- *     reaches the world through Red, the wolf, the toadstools, the flowers, the stall awning and
+ *     reaches the world through Purple, the wolf, the toadstools, the flowers, the stall awning and
  *     the night, and nowhere else." Four of those six moved off brand colour -- the flowers and
  *     toadstool caps in `w-undergrowth.ts`, the awning in `s-props.ts`, the wolf in `cast.ts` --
  *     on the director's "standard 3 inversion" note and on probes of the board. The doc has not
@@ -59,7 +59,7 @@
  *     who is the one character meant to read as a flat silhouette, and a second near-black bird in
  *     the same ramp makes that reservation mean nothing. `night` was the answer to that and it was
  *     a violet: the design board's 2026-10-20 note is "it is currently purple-black rather than
- *     black, the same ink family as Red's cloak", which is exactly what #1a1026 to #2d1b3d is.
+ *     black, the same ink family as Purple's cloak", which is exactly what #1a1026 to #2d1b3d is.
  *     `keyline('stone', 64..30)` runs #1f1f21 to #3e3e43, luma 31 to 66 -- a cool grey-black that
  *     is nobody else's hue, with enough range for the lit crown the board gives every mass, and
  *     with its keyline at luma 22 still clear of `ink` 0 at 16, so the wolf keeps the darkest mass
@@ -222,7 +222,7 @@ const CAP_LINE = pull(keyline('wood'), 0.62, 0.52);
  *
  * He was 31 x 40 -- a mushroom the height of a wolf -- and the cost was not only that he broke his
  * own row in section 10.2 but that he broke the joke: a toadstool is funny because it is a small
- * thing with opinions, and at Red's height he was a tree. Everything above the stem is still cap,
+ * thing with opinions, and at Purple's height he was a tree. Everything above the stem is still cap,
  * so the silhouette is a toadstool before the face is read at all, and the face plus the pointing
  * twig are what turn it into somebody with a view about where you should be going.
  *
@@ -393,12 +393,12 @@ function paintToadstool(img: Img, blink: boolean): void {
 
 /**
  * HER BLACK IS NEUTRAL NOW, and that is the design board's finding of 2026-10-20: "it is currently
- * purple-black rather than black, the same ink family as Red's cloak."
+ * purple-black rather than black, the same ink family as Purple's cloak."
  *
  * It was `night` 0 to 1, #1a1026 to #2d1b3d. Those are violets -- the blue channel runs half again
  * the red and nearly four times the green -- and the file's old header argued for them on the
  * grounds that a magpie's gloss is a blue-black. The gloss is, in three pixels on the wing; the
- * other two hundred are plain black, and painting the whole bird in Red's own hue family put a
+ * other two hundred are plain black, and painting the whole bird in Purple's own hue family put a
  * small purple animal in a forest whose one purple thing is supposed to be the protagonist.
  *
  * `stone` is the palette's neutral, #5f5f66, six points of blue over a flat grey. Taken down by
@@ -409,7 +409,7 @@ function paintToadstool(img: Img, blink: boolean): void {
  */
 const MAGPIE_DARK: RGBA = keyline('stone', 74);
 
-/** The plumage, cool near-black, nowhere near Red's purple. */
+/** The plumage, cool near-black, nowhere near Purple's purple. */
 const PLUMAGE = (t: number): RGBA => mix(keyline('stone', 64), keyline('stone', 30), clamp01(t));
 
 /**
@@ -735,7 +735,7 @@ function paintSnail(img: Img, blink: boolean): void {
    * `fur` 0 UNDER `fur` 1, not the other way up, because the brief says CLAY and Clay is #D4D2C8 at
    * luma 209 -- between `fur` 0 at 194 and `fur` 1 at 231, and much nearer the first. Led by 1 the
    * shell averaged near-white: blitted into the real world render beside the path it was the
-   * brightest object in the frame, out-shouting Red, and on the sand it vanished altogether, which a
+   * brightest object in the frame, out-shouting Purple, and on the sand it vanished altogether, which a
    * flat-grass preview cannot show you. Led by 0 its mean lands on Clay, where it was always
    * specified, and the dark foot under a mid-pale shell becomes a two-value read at the playing
    * camera, which is the only thing that makes a 14 px animal findable at all.

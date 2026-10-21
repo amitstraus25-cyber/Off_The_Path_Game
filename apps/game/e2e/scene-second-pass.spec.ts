@@ -33,8 +33,8 @@ import { TILE } from '../src/world/logic';
 /** Enough of the scene for these three tests; the rest is private and stays that way. */
 interface SceneProbe {
   arrived: boolean;
-  red: { x: number; y: number };
-  redShadow: { visible: boolean; setVisible(v: boolean): void };
+  purple: { x: number; y: number };
+  purpleShadow: { visible: boolean; setVisible(v: boolean): void };
   npcs: {
     id: string;
     sprite: {
@@ -180,7 +180,7 @@ test('the ground under every figure in shot is darker for their standing on it',
   test.setTimeout(60_000);
   await page.goto('/');
   await startGame(page);
-  // The opening shot, settled: a puff of Red's dust mid-fade would be in the difference too.
+  // The opening shot, settled: a puff of Purple's dust mid-fade would be in the difference too.
   await page.waitForTimeout(500);
 
   const measured = await page.evaluate(
@@ -188,7 +188,7 @@ test('the ground under every figure in shot is darker for their standing on it',
       const scene = window.__otp!.scene as unknown as SceneProbe;
       const cam = scene.cameras.main;
       const figures = [
-        { id: 'red', x: scene.red.x, y: scene.red.y, shadow: scene.redShadow },
+        { id: 'purple', x: scene.purple.x, y: scene.purple.y, shadow: scene.purpleShadow },
         ...scene.npcs.map((n) => ({ id: n.id, x: n.sprite.x, y: n.sprite.y, shadow: n.shadow })),
       ];
 
@@ -309,7 +309,7 @@ test('the ground under every figure in shot is darker for their standing on it',
      * The bound is the review's own, and so is the unit: a figure touches the ground when there
      * are PIXELS under it at least 25 luma below the ground around it. Measured that way the
      * tileset seats everything it draws and the cast seated nothing -- bush 518 such pixels, rock
-     * 104, Red 24, and the rabbit, the owl and the Lantern Keeper 0 each. Thirty is inside the
+     * 104, Purple 24, and the rabbit, the owl and the Lantern Keeper 0 each. Thirty is inside the
      * smallest pool in the cast -- the magpie stands on nine pixels -- and nowhere near the 0 this
      * shipped with; the three figures in the opening shot measure 68, 86 and 60.
      */

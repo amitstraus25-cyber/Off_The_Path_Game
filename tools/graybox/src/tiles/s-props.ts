@@ -41,7 +41,7 @@
  * canopy rather than by any prop. That axis is not this file's to fix and is not claimed here.
  *
  * THE ONE DELIBERATE DEPARTURE from the board stands: the board predates the rebrand and shows a
- * scarlet cloak and a terracotta roof. Red is Lilac-led Cyera purple and the roof is slate. The
+ * scarlet cloak and a terracotta roof. Purple is Lilac-led Cyera purple and the roof is slate. The
  * lantern's flame is the other deliberate exception -- it stays warm gold, because it is a light
  * source and it is the skill the Keeper offers.
  *
@@ -463,7 +463,7 @@ function clipEllipse(img: Img, cx: number, cy: number, rx: number, ry: number, y
  * grey. `stone` starts at luma 96, which is far too light for metal that has to hold a gold pane,
  * and `ink`, which the first version of this file reached for, is frankly PURPLE: #160923 to
  * #543d66. Rendered at 32px it gave the Keeper a violet lantern, and violet is a hue this world
- * reserves for Red and the wolf. So the metal is interpolated between the stone keyline and the
+ * reserves for Purple and the wolf. So the metal is interpolated between the stone keyline and the
  * foot of the stone ramp, which is derived from the palette rather than invented beside it.
  */
 const slate = (t: number): RGBA => {
@@ -556,7 +556,7 @@ function barrel(img: Img, x: number, y: number, w: number, h: number): void {
  * is Lime.
  *
  * The tone-down an earlier pass made is kept and is carried FURTHER, never undone. That pass found
- * the awning painted flat at level 3 across half of each tile, carrying twice Red's purple pixel
+ * the awning painted flat at level 3 across half of each tile, carrying twice Purple's purple pixel
  * count: one tile off her route the awning was the most findable thing on screen and the
  * protagonist was not. The accent is now two pixels in sixteen rather than three, 12.5 per cent of
  * the cloth against the fifth the direction allows, and it never reaches level 3 at all.
@@ -580,10 +580,10 @@ const STRIPE_REPEAT = 16;
  * roughly equal width to its stripes of warm sand #f4d3ab (luma 216): an eighteen-luma step between
  * two colours of the same warm family. Ours was six bars of Lilac at luma 109 to 144 on a cream
  * sheet at 204 to 231 -- a ninety-five-luma hue flip, repeated six times, and by a long way the
- * loudest thing in the spawn camera. Rendered beside Red it was the market stall the eye found.
+ * loudest thing in the spawn camera. Rendered beside Purple it was the market stall the eye found.
  *
  * Wide warm stripes are both the board's drawing and the brand-safe one. Purple leaves the world
- * art entirely here, which is standard 3 the right way up: Red is the only saturated figure in the
+ * art entirely here, which is standard 3 the right way up: Purple is the only saturated figure in the
  * forest, and the awning she walks past is cloth.
  */
 const ACCENT_WIDTH = 7;
@@ -618,7 +618,7 @@ const stripeAt = (x: number): { accent: boolean; offset: number; width: number }
  * back as a neon bar. The answer is that the stripe is not purple. It is `path`, the warm sand the
  * track is drawn in, which is the hue the board actually uses and which already exists in this
  * world. Section 6a should be read as having lost its argument here: an awning is cloth in a
- * forest, not a brand surface, and the one place Cyera purple belongs on this screen is Red.
+ * forest, not a brand surface, and the one place Cyera purple belongs on this screen is Purple.
  *
  * On the brief's instruction to drop the awning twenty-five luma, honestly: the probe does not
  * support twenty-five. The board's own awning runs 203 at the hem to 235 at the crown, and ours ran
@@ -1351,7 +1351,7 @@ const well: Painter = (img) => {
       dome(s, 16, 17.1, 11.4, 2.8, 'stone', 0.1, 0.1 + SPAN * 0.7);
       // The shaft, in the stone's own near-black rather than in `night`. `night` is the portrait
       // backdrop ramp and it is frankly purple: at 32px it put a violet fringe round the mouth of
-      // a grey well, which is a hue this world has nowhere outside Red and the wolf.
+      // a grey well, which is a hue this world has nowhere outside Purple and the wolf.
       s.ellipse(16, 18.2, 8.2, 2.3, LINE.stone);
       s.ellipse(16.2, 17.8, 6.8, 1.5, tone('stone', 0.06));
 
@@ -1579,7 +1579,7 @@ const signpost: Painter = (img) => {
  *                  ruled with writing, nailed at its top corners, dog-eared at the foot.
  *   door-note      the approved `door`, repainted exactly, with a small sheet pinned to its leaf.
  *
- * Why the door note is a TILE rather than a decor-above overlay: decor-above draws over Red, so a
+ * Why the door note is a TILE rather than a decor-above overlay: decor-above draws over Purple, so a
  * note laid there is drawn across her face whenever she stands on the doorstep. One tile that
  * paints the cottage owner's door and then the note on top of it keeps the layer order honest, and
  * because `door-note` is appended to `TILE_NAMES` the existing map keeps every gid it had.

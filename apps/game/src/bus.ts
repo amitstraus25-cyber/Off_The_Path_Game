@@ -8,7 +8,7 @@ export interface GameEvents {
   greetBystander: { bystanderId: string };
   /** The player walked up to a notice post. */
   reachedNotice: { noticeId: string };
-  /** A replay began: the world must put Red back at the spawn. */
+  /** A replay began: the world must put Purple back at the spawn. */
   restartRun: void;
   /** The cottage is still locked; show the hint line. */
   cottageLocked: void;

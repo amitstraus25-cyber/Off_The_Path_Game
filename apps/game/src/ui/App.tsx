@@ -32,7 +32,7 @@ export interface AppProps {
   onReadResearch(): void;
   /** The sentence to show and which of the four it is; see `PostOutcome`. Forwarded to Results. */
   onPost(handle: string): Promise<PostOutcome | null>;
-  /** The notice Red is standing at, if any. */
+  /** The notice Purple is standing at, if any. */
   noticeId: string | null;
   onReadNotice(id: string): void;
   onLeaveNotice(): void;
@@ -89,7 +89,7 @@ function useWithinReach(): string | null {
 
 /**
  * The canvas saying which way each traveller lies. The sibling of `WITHIN_REACH` above and a DOM
- * event for the same reason: the scene is the only thing in the build that knows where Red is
+ * event for the same reason: the scene is the only thing in the build that knows where Purple is
  * standing, the UI holds no bus, and `main.ts` is not on the path between them.
  *
  * NOTHING DISPATCHES THIS YET -- the producer is a handover, recorded in `worldAsText()` below.
@@ -506,7 +506,7 @@ export function App({
    * content file with nothing in the build able to reach them.
    *
    * THE OTHER HALF IS A HANDOVER, and it is one file: `world/forest-scene.ts` is the only thing
-   * that knows where Red is standing. The UI holds no bus, and `main.ts` is not on the path, so
+   * that knows where Purple is standing. The UI holds no bus, and `main.ts` is not on the path, so
    * the channel is a DOM event beside the one that scene already dispatches -- see `BEARINGS` at
    * the top of this file for the payload, which is indices and ids with no words in it. Until that
    * dispatch lands, `bearings` is empty and every line below reads as it read before.

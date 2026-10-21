@@ -3,7 +3,7 @@
  *
  * Drawn against `reference/mocks/gameplay-concepts.png`, crops `1178 470 165 70` for the picket run
  * and `345 600 215 160` for the bridge. Sizes are board pixels divided by 2.21, the board-to-our-
- * pixel ratio docs/ART_DIRECTION.md section 2 anchors on Red.
+ * pixel ratio docs/ART_DIRECTION.md section 2 anchors on Purple.
  *
  * REDRAWN 2026-10-19 AGAINST THE BOARD RESAMPLED TO OUR OWN RESOLUTION, which is the thing that
  * changed and the reason this pass could see what the last two could not. Every earlier version was
@@ -877,7 +877,7 @@ const fenceCornerWith =
  * are three readings the run does not have, and they do not depend on counting pixels of width at
  * the playing camera.
  *
- * Everything outside x9..21 stays transparent, so the sand track shows through the opening and Red
+ * Everything outside x9..21 stays transparent, so the sand track shows through the opening and Purple
  * walks on it.
  */
 const GATE_X = RUN_X;

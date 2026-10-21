@@ -14,7 +14,7 @@ and the alpha rule), `reference/mocks/gameplay-concepts.png` (the approved direc
 | Thing                     | Source size | Shown at (zoom 2) |
 | ------------------------- | ----------- | ----------------- |
 | Terrain tile              | 32 × 32     | 64 × 64           |
-| Red, NPCs, bystanders     | 32 × 48     | 64 × 96           |
+| Purple, NPCs, bystanders  | 32 × 48     | 64 × 96           |
 | Portraits                 | 64 × 64     | DOM, unscaled     |
 | Items                     | 64 × 64     | DOM, unscaled     |
 | Interact prompt, pawprint | 32 × 32     | 64 × 64           |
@@ -57,7 +57,7 @@ Three functions reach a ramp, and which one you pick is a drawing decision:
 Each ramp is still four steps — `0` dark, `1` base, `2` light, `3` highlight — and `tone` reads
 between them, so `tone(r, 0)` is `shade(r, 0)` and `tone(r, 1)` is `shade(r, 3)`.
 
-- **Base is the subject.** Most of any object is level 1. The one documented exception is Red,
+- **Base is the subject.** Most of any object is level 1. The one documented exception is Purple,
   whose cloak is Lilac-led so she stays findable at the game's camera; the reasoning is on `cloak`
   in `paint.ts` and it is confined to her.
 - **Level 0 is the shaded face, and `keyline()` is the outline.** This reverses what this section
@@ -75,18 +75,18 @@ between them, so `tone(r, 0)` is `shade(r, 0)` and `tone(r, 1)` is `shade(r, 3)`
 **The forest stays a forest.** Cyera's palette has no green, no brown and no water blue, so grass,
 water, wood, stone and sand keep their own ramps.
 
-**Brand colour is Red, the wolf, and dusk — not an accent scattered through the world.** This list
+**Brand colour is Purple, the wolf, and dusk — not an accent scattered through the world.** This list
 was longer and the three that left are worth knowing about, because the old wording still reads as
 permission to paint props purple:
 
-- **Red** (`cloak`, Lilac-led) and **the wolf** (`wolf`, Deep Purple at level 1) carry it, and they
+- **Purple** (`cloak`, Lilac-led) and **the wolf** (`wolf`, Deep Purple at level 1) carry it, and they
   are the point: the protagonist and the attacker are the only saturated figures in frame.
 - **`night`** is Deep Purple and Aubergine at levels 2 and 3. It backs every portrait, and it now
   also paints the cottage chimney flue in `s-cottage.ts` — so, unlike the note on `night` in
   `paint.ts` says, it is no longer DOM-only.
 - **The toadstools, the flowers and the stall awning have moved off brand colour**, in
   `w-undergrowth.ts` and `s-props.ts`. They painted from `cloak`, which put a dozen-plus Lilac
-  objects a camera in Red's exact hue at her exact luma and inverted the standard they were meant
+  objects a camera in Purple's exact hue at her exact luma and inverted the standard they were meant
   to serve. The caps are now `rust`, the blooms `rose` and `ember`, the awning cream `wall` with a
   warm sand stripe. Those three families are derived from `wood`, `skin` and `gold` at their call
   site in `w-undergrowth.ts`; that file flags that they want to live in `PALETTE`, and they do —
@@ -155,7 +155,7 @@ floats.
 - **Two pixels of eye, and no mouth** below this size. A drawn mouth at 32px reads as a smear.
 - **The walk cycle moves the whole body**, not just the legs: a one-pixel bob on frames 1 and 3
   does more for the walk than any amount of leg detail.
-- **Red carries her basket in the off hand** in every frame. It is the detail that says she is on an
+- **Purple carries her basket in the off hand** in every frame. It is the detail that says she is on an
   errand rather than out for a walk.
 
 ---
@@ -168,7 +168,7 @@ A painter who has not looked at the output has not finished.
 pnpm preview --out /tmp/art --zoom 8 --what tiles
 ```
 
-`--what` takes `tiles`, `red`, `npcs`, `portraits`, `items`, `fx` or `all`. It writes contact sheets
+`--what` takes `tiles`, `purple`, `npcs`, `portraits`, `items`, `fx` or `all`. It writes contact sheets
 at an integer zoom, on a checkerboard so transparency is visible, with a magenta grid on the frame
 boundaries, and prints which cell holds which name. Magenta and the checkerboard are not in any
 palette, so neither can be mistaken for art.

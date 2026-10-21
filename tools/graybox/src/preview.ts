@@ -6,7 +6,7 @@
  * prints the name of every cell, so a change can be judged by looking at it rather than by reading
  * the code that drew it.
  *
- *   node src/preview.ts --out <dir> [--zoom 8] [--what tiles|red|npcs|portraits|items|fx|all]
+ *   node src/preview.ts --out <dir> [--zoom 8] [--what tiles|purple|npcs|portraits|items|fx|all]
  *
  * Nearest-neighbour only: these are pixels, and a smoothed preview would hide exactly the
  * single-pixel mistakes it exists to catch.
@@ -26,9 +26,9 @@ import {
   paintInteractPrompt,
   paintNpcSheet,
   paintPawprints,
-  paintRedSheet,
-  RED_H,
-  RED_W,
+  paintPurpleSheet,
+  PURPLE_H,
+  PURPLE_W,
 } from './sprites.ts';
 
 const arg = (name: string, fallback: string): string => {
@@ -137,18 +137,20 @@ if (want('tiles')) {
   index(TILE_NAMES, 12);
 }
 
-if (want('red')) {
-  const red = paintRedSheet();
-  write('sheet-red.png', sheet(red.sheet, RED_W, RED_H));
-  console.log(`  Red ${RED_W}x${RED_H} per frame, ${Object.keys(red.frames).length} frames`);
-  index(Object.keys(red.frames), 4);
+if (want('purple')) {
+  const purple = paintPurpleSheet();
+  write('sheet-purple.png', sheet(purple.sheet, PURPLE_W, PURPLE_H));
+  console.log(
+    `  Purple ${PURPLE_W}x${PURPLE_H} per frame, ${Object.keys(purple.frames).length} frames`,
+  );
+  index(Object.keys(purple.frames), 4);
 }
 
 if (want('npcs')) {
   // The wolf is not in NPC_PAINTERS -- he is never spawned from the map -- so he has to be named
   // here or the one character with no reference art is also the one nobody can look at.
   for (const name of [...Object.keys(NPC_PAINTERS), 'npc-wolf']) {
-    write(`sheet-${name}.png`, sheet(paintNpcSheet(name), RED_W, RED_H));
+    write(`sheet-${name}.png`, sheet(paintNpcSheet(name), PURPLE_W, PURPLE_H));
   }
 }
 

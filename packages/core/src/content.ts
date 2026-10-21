@@ -82,7 +82,7 @@ const notice = z.strictObject({
 });
 
 /**
- * Someone Red can talk to who is not offering anything.
+ * Someone Purple can talk to who is not offering anything.
  *
  * Deliberately outside the rules: no skill, no capability, no verdict, nothing logged and nothing
  * scored. The game stays three decisions long. They exist because the walk between the three real

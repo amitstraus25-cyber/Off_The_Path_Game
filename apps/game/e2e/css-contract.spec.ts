@@ -698,12 +698,12 @@ test('the world chrome stays inside the viewport below 358px', async ({ page }) 
   }
 });
 
-/* --------------------------------------------- finding 11: the title column and Red */
+/* --------------------------------------------- finding 11: the title column and Purple */
 
-test('the title column leaves Red on the path it says she is standing on', async ({ page }) => {
+test('the title column leaves Purple on the path it says she is standing on', async ({ page }) => {
   test.slow();
   /*
-   * "Red is already standing on the path" was the first thing the hero screen said and it was false
+   * "Purple is already standing on the path" was the first thing the hero screen said and it was false
    * at every landscape width: a 430px copy column put its right edge 46px past her, and she renders
    * behind 88%-black at about 1.1:1, which is invisible. The chip has gone with the claim. The
    * camera cannot help -- scrollX is already clamped at the map's left bound -- so the column is
@@ -731,14 +731,14 @@ test('the title column leaves Red on the path it says she is standing on', async
 
     const seen = await page.evaluate(() => {
       const scene = window.__otp!.scene as unknown as {
-        redPosition: { x: number; y: number };
+        purplePosition: { x: number; y: number };
         cameras: { main: { width: number; scrollX: number } };
       };
       const canvas = document.querySelector('#game canvas')!.getBoundingClientRect();
       const column = document.querySelector('.otp-title-panel')!.getBoundingClientRect();
-      // red.png frames are 32x48 with the origin at her feet (world/forest-scene.ts).
+      // purple.png frames are 32x48 with the origin at her feet (world/forest-scene.ts).
       const zoom = canvas.width / scene.cameras.main.width;
-      const left = canvas.left + (scene.redPosition.x - 16 - scene.cameras.main.scrollX) * zoom;
+      const left = canvas.left + (scene.purplePosition.x - 16 - scene.cameras.main.scrollX) * zoom;
       return {
         clear: Math.round(left - column.right),
         column: Math.round(column.width),
@@ -757,15 +757,15 @@ test('the title column leaves Red on the path it says she is standing on', async
     expect(seen.column, `the title column at ${w}x${h}`).toBe(Math.round(TITLE_CARD_W * seen.ui));
     expect(
       seen.clear,
-      `air between the title column and Red's left edge at ${w}x${h}`,
+      `air between the title column and Purple's left edge at ${w}x${h}`,
     ).toBeGreaterThanOrEqual(12);
   }
 });
 
-/* ---------------------- finding 11, the portrait half: the card and Red's FEET */
+/* ---------------------- finding 11, the portrait half: the card and Purple's FEET */
 
 interface TitleFrame {
-  /** Air between the card's top edge and the bottom of Red's sprite box. Negative is over her. */
+  /** Air between the card's top edge and the bottom of Purple's sprite box. Negative is over her. */
   clear: number;
   /** Whole CSS pixels per game pixel, read off the running canvas. */
   zoom: number;
@@ -778,12 +778,12 @@ interface TitleFrame {
 }
 
 /**
- * Where Red is on the screen, and what the title card is doing about it.
+ * Where Purple is on the screen, and what the title card is doing about it.
  *
- * `red.png` frames are 32x48 with the origin at her FEET (world/forest-scene.ts), so her world y
+ * `purple.png` frames are 32x48 with the origin at her FEET (world/forest-scene.ts), so her world y
  * IS the bottom edge of her sprite box -- the edge a card docked to the bottom of the viewport
  * covers first, exactly as the column covers her left edge in landscape. Her painted boots stop
- * three rows above it (`RED_FRAME_H` 48 against `FOOT` 45 in tools/graybox), so measuring the box
+ * three rows above it (`PURPLE_FRAME_H` 48 against `FOOT` 45 in tools/graybox), so measuring the box
  * is the stricter of the two readings, which is the same choice the landscape test makes and for
  * the same reason: the round before it, that test measured the edge that could not be covered and
  * passed for a round while she was buried.
@@ -791,14 +791,14 @@ interface TitleFrame {
 function titleFrame(page: Page, tile: number): Promise<TitleFrame> {
   return page.evaluate((px) => {
     const scene = window.__otp!.scene as unknown as {
-      redPosition: { x: number; y: number };
+      purplePosition: { x: number; y: number };
       cameras: { main: { width: number; scrollY: number } };
     };
     const canvas = document.querySelector('#game canvas')!.getBoundingClientRect();
     const panel = document.querySelector<HTMLElement>('.otp-title-panel')!;
     const card = panel.getBoundingClientRect();
     const zoom = canvas.width / scene.cameras.main.width;
-    const feet = canvas.top + (scene.redPosition.y - scene.cameras.main.scrollY) * zoom;
+    const feet = canvas.top + (scene.purplePosition.y - scene.cameras.main.scrollY) * zoom;
     /*
      * The start edge belongs to whatever actually SCROLLS, which is now the prose box rather than
      * the card -- ui/Title.tsx moved the copy into `.otp-title__scroll` so the call to action
@@ -821,7 +821,7 @@ function titleFrame(page: Page, tile: number): Promise<TitleFrame> {
   }, tile);
 }
 
-test('the title card leaves Red on the path in portrait, as the column does in landscape', async ({
+test('the title card leaves Purple on the path in portrait, as the column does in landscape', async ({
   page,
 }) => {
   test.slow();
@@ -844,7 +844,7 @@ test('the title card leaves Red on the path in portrait, as the column does in l
    * own --otp-ui scale matrix, so the suite was already visiting the sizes it was broken at.
    *
    * THE BOUND IS NOT TAKEN FROM THE STYLESHEET. screens.css caps the card against three fifths of
-   * the canvas box ui/stage.ts publishes; this reads Red's real position out of the running scene
+   * the canvas box ui/stage.ts publishes; this reads Purple's real position out of the running scene
    * and the card's real rect out of the DOM. Change that fraction and the MEASUREMENT moves while
    * the threshold stays put, which is the opposite of the guard the last round had to throw away.
    * 12px is the landscape test's figure, deliberately the same number.
@@ -881,7 +881,7 @@ test('the title card leaves Red on the path in portrait, as the column does in l
     expect(seen.zoom, `the camera at ${where} is the one cameraFor() derives`).toBe(camera.zoom);
     expect(
       seen.clear,
-      `air between the title card and the bottom of Red's sprite box at ${where} ` +
+      `air between the title card and the bottom of Purple's sprite box at ${where} ` +
         `(card top ${seen.feet + seen.clear}, her feet ${seen.feet}, ` +
         `${seen.bandTiles} tiles of world above the card)`,
     ).toBeGreaterThanOrEqual(12);
@@ -1067,6 +1067,17 @@ test.describe('on a touch screen', () => {
      * the button sat 19px lower still. The phone held sideways is both the worst case and the
      * device most visitors to a research page arrive on, so it is asserted rather than inferred
      * from the mouse reading.
+     *
+     * THOSE TWO STRINGS ARE BOTH SHORTER NOW and the conclusion is unchanged, which is why the
+     * paragraph above is left standing rather than rewritten: it records the measurement that
+     * decided this test exists. The 2026-10-21 copy cut took the controls out of the hint and into
+     * ui/Title.tsx's three-step how-to-play, so the hint reads "About five minutes." (19) against
+     * "About five minutes. The controls appear when you start." (55) -- and the step that replaced
+     * them branches the same way, "Arrow keys to walk. Space to talk." (34) against "Drag the
+     * joystick to walk. Tap A to talk." (41). The touch card is therefore STILL the taller of the
+     * two at every width, by rather less, so this reading is still the worst case and still worth
+     * taking separately. The card also has three lines of copy it did not have, which is the other
+     * reason not to infer this from the mouse reading.
      */
     await expectEntranceOnScreen(page, ENTRANCE_VIEWPORTS);
   });

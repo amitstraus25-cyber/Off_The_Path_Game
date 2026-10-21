@@ -20,7 +20,7 @@ them is derived or generated rather than typed out:
 | Which files ship, with what frame sizes and atlas keys?  | **`apps/game/src/assets/manifest.json`**, which the loader reads at boot and `apps/game/test/assets.test.ts` checks the PNGs against. |
 | How big is the camera, and what is in frame?             | `cameraFor()` in `packages/core/src/camera.ts`, or `pnpm world --frame title`.                                                        |
 
-`manifest.json` currently declares one tileset, one map, Red's atlas, eleven spritesheets (four NPCs,
+`manifest.json` currently declares one tileset, one map, Purple's atlas, eleven spritesheets (four NPCs,
 four bystanders, three effects) and eleven images (six portraits and five items). It carries
 `"placeholder": true`; that flag flipping to `false` is what "real art has landed" means.
 
@@ -34,15 +34,15 @@ cites this file by name for them.
   the PNG, and those are forbidden. Build soft shading by picking a darker ramp level, never by lowering
   alpha over nothing. (`docs/PIXEL_STANDARD.md` section 4 states the same rule and names this file as
   its home.)
-- **Palette: keep the approved board's greens, browns, water blues, Red's cloak red.** Exactly **one**
+- **Palette: keep the approved board's greens, browns, water blues, Purple's cloak red.** Exactly **one**
   limited "dusk shadow" ramp is allowed, for the wolf reveal, and it extends an existing ramp downward
   rather than introducing a hue. **Do not recolor the world to Cyera purple**; `docs/PIXEL_STANDARD.md`
   section 2 says which three things carry brand colour and why.
-- **Layers per tileset:** `ground`, `decor-below`, `decor-above` (tree canopies Red walks behind),
-  `collision` (invisible), `objects` (Tiled object layer: `spawn-red`, `npc-*`, `bystander-*`,
+- **Layers per tileset:** `ground`, `decor-below`, `decor-above` (tree canopies Purple walks behind),
+  `collision` (invisible), `objects` (Tiled object layer: `spawn-purple`, `npc-*`, `bystander-*`,
   `trigger-cottage`, `notice-*`, `gate-fence-gap`, `prop-*`).
-- **File naming:** `kebab-case`, no spaces. Atlas frame names: `red-idle-<facing>-0` and
-  `red-walk-<facing>-0..2` for four facings. The generator and the scene both depend on exactly these
+- **File naming:** `kebab-case`, no spaces. Atlas frame names: `purple-idle-<facing>-0` and
+  `purple-walk-<facing>-0..2` for four facings. The generator and the scene both depend on exactly these
   names.
 - **Source files** in Aseprite (`.aseprite`) kept in `art-src/`; exports to PNG (+ JSON hash atlas) into
   `apps/game/src/assets/`.

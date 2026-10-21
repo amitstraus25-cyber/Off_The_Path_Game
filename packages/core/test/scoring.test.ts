@@ -120,7 +120,7 @@ describe('score: whole runs (seed content)', () => {
   });
 
   it('a goal needing an act is only earned by doing it on the walk', () => {
-    // Same verdicts either way; the difference is whether Red went to the post.
+    // Same verdicts either way; the difference is whether Purple went to the post.
     const withWord = { rabbit: 'restrict', owl: 'restrict', 'lantern-keeper': 'restrict' } as const;
     const straightThere = score(fullRun(withWord, ['needs']).log, content);
     expect(straightThere.goals.filter((g) => g.met).map((g) => g.id)).toEqual(['route']);
@@ -188,7 +188,7 @@ describe('score: whole runs (seed content)', () => {
   /*
    * Taking an offer on the offerer's word: the one path by which a skill starts running with
    * nobody having read what it asks for. The card scores nothing of its own, and the whole of
-   * what it is worth is paid once at the end, only if Red arrived with everything.
+   * what it is worth is paid once at the end, only if Purple arrived with everything.
    */
   describe('an offer taken on trust', () => {
     /** Meet, then say yes from the conversation without ever opening the card. */
@@ -223,7 +223,7 @@ describe('score: whole runs (seed content)', () => {
       expect(r.total).toBe(1000);
     });
 
-    it('pays nothing once anything has been taken from Red', () => {
+    it('pays nothing once anything has been taken from Purple', () => {
       const state = run([
         ...begin,
         ...onTrust('rabbit'),

@@ -29,7 +29,7 @@ Their words, their order. Anything not here is not a priority this week.
 | --- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | 1   | The line / "lagginess"                                               | **Three causes, all fixed.** Two one-pixel holes; the stale checkout (trap 10); the camera top edge cutting a canopy row.  |
 | 2   | Trees in the middle look messed up                                   | **Done.** Brick course gone, trunks and root flares, crowns merge. Squared flank lobe survives at 8x only — gid round.     |
-| 3   | Red's back view                                                      | **Close.** Front and sides shippable. Nape hair reads as a structureless blob; cape mark needs brand sign-off.             |
+| 3   | Purple's back view                                                   | **Close.** Front and sides shippable. Nape hair reads as a structureless blob; cape mark needs brand sign-off.             |
 | 4   | Inspect card: three verbs, three explanations, nothing else, branded | **Done** — the best thing in the round. One open question: "allow two dots" read as a colon; we used columns.              |
 | 5   | Leaderboard not working                                              | **The board is built and shown.** The route is still undeployed (§5), so it correctly reports itself unavailable.          |
 | 6   | Phone: goals panel eats the screen                                   | **Done.** A 44px bar that taps open: ~5% of the screen against ~16%. Verified by touch.                                    |
@@ -73,7 +73,7 @@ pixel` passed happily while the canvas sat on a half pixel. Same shape as trap 1
     `Off_The_Path_Game.git`, HEAD `ebb9d0b`, an object that **does not exist here at all** — was
     still serving the game on `:5173`, `:5174` and `:4190`, from a build dated two days before the
     hole fixes landed. `:5173` is the default port `pnpm dev` prints, so it is what anybody opens by
-    habit. That build has Red in a **red** cloak, flat blob trees, and a measurable dark column down
+    habit. That build has Purple in a **red** cloak, flat blob trees, and a measurable dark column down
     the left edge (122 magenta pixels, all in column 0). The current build measures 0 across 49
     configurations.
 
@@ -90,6 +90,15 @@ pixel` passed happily while the canvas sat on a half pixel. Same shape as trap 1
 
 ## 4. The rules of a round
 
+- **Staffing: the top model is for judgment, not for labour.** Set by the client 2026-10-21. Only
+  the orchestrator, this gate, synthesis and completeness critics, refuters on judgment lenses
+  (honesty, regression, "does it read"), spec and design agents, and builders whose brief leaves a
+  design decision open run on the session model (Opus 5.5). Builders working from a decided spec,
+  measurement and reproduction agents, and anyone re-running a suite to check exit codes run on
+  **Sonnet**. Pure grunt — grep, count, list, extract, format — runs on **Haiku**. The reason is
+  this project's own record: every failure that cost a round was a judgment failure, never a
+  failure to count. When unsure, staff the cheaper tier and put the judgment in a top-tier
+  refuter.
 - **File ownership is the whole mechanism.** Two owners never share a file. It is why 460 agents
   have not trodden on each other. Merge the tasks or sequence them and say so.
 - **One owner regenerates.** Painters commit source only; exactly one task runs `pnpm graybox` and
@@ -231,7 +240,7 @@ The client asked for it "nicer and more branded". Four specific faults:
   edge settles **part-way into a tile row**, so the world opens on the bottom slice of a canopy row
   — crown keylines and nothing else. Measured: at the client's own 1673×449 the first 8 game rows
   are 25.1% dark against 6.3% mid-frame; at 390×844 it is 48.1% against 8.1%. Causation proved by
-  moving Red at a fixed world position (25.1→8.0 desktop, 48.1→19.2 phone), so it is where the
+  moving Purple at a fixed world position (25.1→8.0 desktop, 48.1→19.2 phone), so it is where the
   camera sits, not what is painted. The fix is `topEdgeRows()` in `packages/core/src/camera.ts` —
   **already written, already tested, and never once called from the running game.** Snapping
   naively will make vertical walking judder, so it belongs at the clamp or the top bound, not every
@@ -241,7 +250,7 @@ The client asked for it "nicer and more branded". Four specific faults:
   2026-10-21; the proof is composition guard 7k in `forest-map.ts`.** It is sliced — 13% in frame at
   375×812, 22% at 768×1024, 25% at 390×844 — and whole at 1280×800, at 844×390 and at the client's
   own 1673×449. **It cannot be moved out of it, which is the part nobody had measured.** At the
-  spawn the camera is pinned to the map's WEST edge at every viewport: Red stands 5.5 tiles from the
+  spawn the camera is pinned to the map's WEST edge at every viewport: Purple stands 5.5 tiles from the
   wall and the narrowest camera the game builds is 11 (`MIN_VIEW`), so `frameAt`'s clamp returns
   x0 = 0.00 from a 320 phone to a studio display. The stall's distance from the right border is
   therefore a pure function of camera WIDTH, so a placement at column x is cut by exactly those
@@ -259,7 +268,7 @@ The client asked for it "nicer and more branded". Four specific faults:
   on is asserted rather than remembered. One thing still worth a human's eye: at 390×844 the cut
   lands exactly on a tile boundary, so a visitor sees one WHOLE column — the awning's own left end
   and a counter tile — not a torn tile.
-- ~~**Red cannot reach the toadstool.**~~ **FIXED, 2026-10-21, and it was never a map bug.** (10,22)
+- ~~**Purple cannot reach the toadstool.**~~ **FIXED, 2026-10-21, and it was never a map bug.** (10,22)
   is the toadstool's own spawn cell, deliberately solid under the "nobody in the cast is a ghost"
   invariant, and all four of its neighbours are walkable. The walk TARGET was stale: `37a94b9` wrote
   `talkingDistance` as `spot.y + TILE + 8`, correct when the cast sat at tile-centre + 24, and the
@@ -288,7 +297,7 @@ The client asked for it "nicer and more branded". Four specific faults:
   - 101 cells, not 109 — the difference is this week's art, not an earlier miscount.
   - **Only two gids, 60 and 63.** Counted by decoding `tileset-forest.png` and measuring
     `alpha == 255` per cell, not by reading tile names. So it is two crown tiles, not scattered art.
-  - **Every one of them is reachable.** A BFS from `spawn-red` at tile (5,20) over `collision == 0`
+  - **Every one of them is reachable.** A BFS from `spawn-purple` at tile (5,20) over `collision == 0`
     reaches 1,514 tiles and all 101 are in that set, so this is not walkable-but-enclosed. A player
     can stand on any of them and disappear: **6.7% of the reachable world.**
   - Rows 2 to 37, so it is not only the far treeline. The row 24/32/37 cells look like ordinary
@@ -305,7 +314,7 @@ The client asked for it "nicer and more branded". Four specific faults:
   been planted and the guard would have gone on passing. Tightened to 101 and proved to have no
   slack left by setting it to 100 and watching it fire. Two independent instruments agree on the
   number and share no code: the painter-alpha guard, and a separate pass that decoded
-  `tileset-forest.png`, counted `alpha == 255` per cell and flooded from `spawn-red`. The two tiles
+  `tileset-forest.png`, counted `alpha == 255` per cell and flooded from `spawn-purple`. The two tiles
   are gid 60 = `elder-mc` and gid 63 = `elder-bc`.
 
   **Lower `OPEN_ENOUGH` as the crowns open up; never raise it.** A correct guard with a stale bound

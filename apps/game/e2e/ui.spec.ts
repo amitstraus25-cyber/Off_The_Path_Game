@@ -1,6 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { devices, expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { probe, startGame } from './helpers';
+
+/**
+ * The shipped copy, read rather than repeated -- the pattern e2e/card-rulebook.spec.ts sets and
+ * states the reason for: a sentence pasted into a browser test reddens the suite the day somebody
+ * rewords it in content/game.json, which CLAUDE.md rule 3 says is where copy lives.
+ */
+const content = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
+) as { strings: Record<string, string> };
 
 /** Opens the Rabbit dialogue through the store, so these tests do not depend on walking. */
 async function openDialogue(page: Page): Promise<void> {
@@ -165,8 +176,26 @@ test('all three cards are the same shape, so the honest one cannot be spotted by
   ).toEqual([2, 2, 2]);
   for (const c of cards) expect(c.eyebrows).toEqual(['What it does', 'What it asks for']);
 
-  // The honest card still says it asks for nothing — you just have to read it to find that out.
-  expect(cards[2]!.asks).toContain('no fine print');
+  /*
+   * The honest card still says it asks for nothing -- you just have to read it to find that out.
+   *
+   * THIS USED TO READ `toContain('no fine print')`, and that was a bound written against a
+   * SPELLING of the claim rather than against the claim, which is trap 5 in docs/PAUL_BRIEF.md: the
+   * 2026-10-21 copy cut took `noFinePrint` from "Nothing beyond what it does. There is no fine
+   * print on this card: read it as closely as you like, you will find nothing in it." down to
+   * "Nothing. Read it as closely as you like, you will find nothing in it." -- a shorter sentence
+   * making exactly the same claim -- and the guard went red while the product got better.
+   *
+   * So it is asserted two ways instead, neither of which pins a phrase. The row IS the shipped
+   * `noFinePrint` string, which proves the `cardAsksFor` fallback branch is the one that rendered
+   * -- not an empty row, not another skill's fine print. And it still says "nothing", which is the
+   * one word the claim cannot be made without. test/content-copy.test.ts holds the other end: the
+   * Keeper's own testable claim has to be somewhere a player can reach, and this row is where.
+   */
+  const honest = content.strings['noFinePrint']!;
+  expect(honest, 'content/game.json still carries the honest card row').toMatch(/\S/);
+  expect(cards[2]!.asks).toBe(honest);
+  expect(cards[2]!.asks, 'the honest row still says it asks for nothing').toMatch(/nothing/i);
   expect(cards[2]!.asks).not.toBe(cards[0]!.asks);
 });
 
@@ -220,7 +249,7 @@ test('a card can be left without recording a verdict, on desktop and on a phone'
   }
 });
 
-test('the verdict key lands on every card opened, whoever Red meets first', async ({ page }) => {
+test('the verdict key lands on every card opened, whoever Purple meets first', async ({ page }) => {
   /*
    * The primer is the only place the game says what Restrict means, and GAME_DESIGN section 4
    * requires the right answer to be discoverable. It used to render on `index === 1`, the skill's
@@ -393,7 +422,7 @@ test('every verdict stays reachable at laptop and landscape-phone heights', asyn
   }
 });
 
-test('the HUD basket shows what Red carries, and loses the key when she allows it', async ({
+test('the HUD basket shows what Purple carries, and loses the key when she allows it', async ({
   page,
 }) => {
   /*
@@ -796,7 +825,7 @@ test('Explore can be walked without a pointer, from the keyboard alone', async (
   /*
    * `ui/tokens.css` used to take the whole pad out of the document on a fine pointer, and the pad is
    * where the five named walk buttons live -- the ones that exist because a joystick answers a
-   * screen reader's single activation with a (0, 0) vector and moves Red exactly 0px. Enumerating
+   * screen reader's single activation with a (0, 0) vector and moves Purple exactly 0px. Enumerating
    * the focusable controls on Explore at 1280x800 therefore returned exactly ONE, the music toggle:
    * no way to walk, no way to stop, no way to reach anybody. The arrow keys are the better input
    * here and they still work, but they are in no accessible tree and the run could not be finished
@@ -838,6 +867,6 @@ test('Explore can be walked without a pointer, from the keyboard alone', async (
   const after = (await probe(page)).position;
   expect(
     Math.hypot(after.x - before.x, after.y - before.y),
-    'a walk button that cannot move Red is not a control',
+    'a walk button that cannot move Purple is not a control',
   ).toBeGreaterThan(1);
 });

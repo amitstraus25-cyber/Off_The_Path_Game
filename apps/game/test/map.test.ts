@@ -34,7 +34,7 @@ const solid = (x: number, y: number): boolean =>
 
 /** Every walkable tile reachable from the spawn, optionally refusing to enter a rectangle. */
 function reachable(avoid?: MapObject): Set<string> {
-  const spawn = tiles(object('spawn-red'));
+  const spawn = tiles(object('spawn-purple'));
   const blocked = avoid ? tiles(avoid) : null;
   const start = `${spawn.x0},${spawn.y0}`;
   const seen = new Set([start]);
@@ -62,7 +62,7 @@ function reachable(avoid?: MapObject): Set<string> {
 
 /*
  * `stands on`, not `touches`. Every rect in this map that the game READS -- a notice, the trigger
- * that ends the run -- is read by `overlaps` in world/logic.ts, which is a point test on Red's
+ * that ends the run -- is read by `overlaps` in world/logic.ts, which is a point test on Purple's
  * feet. So a rect whose own tiles are all unreachable still passes a `touches` check from the
  * tile next door while being impossible to fire. This lived inside one describe and is now at the
  * top, because three of them ask the same question and the weaker test is the easy one to reach
@@ -80,9 +80,9 @@ const standsOn = (seen: Set<string>, o: MapObject): boolean => {
  * AND A SECOND FLOOD, OVER POSITIONS, BECAUSE THE ONE ABOVE ANSWERS A DIFFERENT QUESTION.
  * ===========================================================================
  *
- * `reachable()` walks TILES, which is the right model for "can Red get to this object". It is the
+ * `reachable()` walks TILES, which is the right model for "can Purple get to this object". It is the
  * wrong model for every claim about a rect FIRING, and those are the claims the level's lesson
- * rests on. A notice opens through `overlaps()`, a point test on Red's position -- and her
+ * rests on. A notice opens through `overlaps()`, a point test on Purple's position -- and her
  * position is the BOTTOM EDGE of her foot box, not the middle of her tile. The two models
  * disagree at a row boundary: standing in the lowest row of a rect she presents a y equal to the
  * rect's own bottom edge, the half-open test reads it as the row below, and nothing fires. Both
@@ -98,7 +98,7 @@ const standsOn = (seen: Set<string>, o: MapObject): boolean => {
 function standingFlood(refuse?: MapObject): Uint8Array {
   const pw = forest.collision.width * TILE;
   const ph = forest.collision.height * TILE;
-  const spawn = object('spawn-red');
+  const spawn = object('spawn-purple');
   const seen = new Uint8Array(pw * ph);
   const start = (spawn.y + TILE) * pw + (spawn.x + TILE / 2);
   seen[start] = 1;
@@ -126,7 +126,7 @@ function standingFlood(refuse?: MapObject): Uint8Array {
   return seen;
 }
 
-/** The tiles of `o` Red can still be standing in, given a position flood. */
+/** The tiles of `o` Purple can still be standing in, given a position flood. */
 const canStandIn = (seen: Uint8Array, o: MapObject): string[] => {
   const pw = forest.collision.width * TILE;
   const hit = new Set<string>();
@@ -179,16 +179,16 @@ describe('the generated forest is playable', () => {
     expect(spawn).toBe(`npc-${id}`);
   });
 
-  it.each(cast)('Red can walk to %s', (_name, _id, spawn) => {
+  it.each(cast)('Purple can walk to %s', (_name, _id, spawn) => {
     expect(touches(open, object(spawn))).toBe(true);
   });
 
-  it('Red can reach the cottage door', () => {
+  it('Purple can reach the cottage door', () => {
     expect(touches(open, object('trigger-cottage'))).toBe(true);
   });
 
-  it('Red starts somewhere she can stand', () => {
-    const spawn = tiles(object('spawn-red'));
+  it('Purple starts somewhere she can stand', () => {
+    const spawn = tiles(object('spawn-purple'));
     expect(solid(spawn.x0, spawn.y0)).toBe(false);
   });
 });
@@ -202,7 +202,7 @@ describe('the notice post cannot be walked around', () => {
    *
    * IT FLOODS POSITIONS NOW, AND THAT IS NOT A TIDY-UP. The tile version of this assertion was
    * green on a map where the gate could be walked through with the notice silent: standing in the
-   * lowest row of the approach Red presents a y of exactly 704, the rect ended at 704, `overlaps`
+   * lowest row of the approach Purple presents a y of exactly 704, the rect ended at 704, `overlaps`
    * is half-open, and 704 is on the 2px grid she walks from the spawn. Hold Down, hold Right, and
    * the lesson of the level never happens. See the note on `standingFlood`.
    */
@@ -240,7 +240,7 @@ describe('nothing a goal needs sits behind the end of the walk', () => {
    * A flood fill over the collision layer cannot see this. The gate tiles are deliberately
    * walkable, so the BFS strolls straight through the one thing that ends the run: the trigger is
    * a terminator, not a wall. The fix is to treat it as a wall HERE, which asks the question that
-   * matters -- can Red still be in the explore phase when she gets there? -- rather than "is
+   * matters -- can Purple still be in the explore phase when she gets there? -- rather than "is
    * there a corridor of walkable tiles", which was never in doubt.
    *
    * This fails on the old map and passes on the new one.
@@ -253,13 +253,13 @@ describe('nothing a goal needs sits behind the end of the walk', () => {
   });
 
   /*
-   * `overlaps` is a point test on Red's feet, not a tile test, and a player who only ever holds
+   * `overlaps` is a point test on Purple's feet, not a tile test, and a player who only ever holds
    * Right walks the whole map with her feet on one exact y. A notice rect that misses that line
    * is unreachable for her however walkable the tiles around it are, which is the same bug one
    * level down.
    */
   it.each(acts)('the notice "%s" lies on the line a due-east walker actually walks', (act) => {
-    const spawn = object('spawn-red');
+    const spawn = object('spawn-purple');
     const feetY = spawn.y + TILE;
     const notice = object(`notice-${act}`);
     expect(feetY).toBeGreaterThanOrEqual(notice.y);
@@ -450,7 +450,7 @@ describe('bystanders stand where they can be met', () => {
    * committed from an older generator.
    */
   it.each(content.bystanders.map((b) => [b.name, b.spawn] as const))(
-    'Red can walk to %s',
+    'Purple can walk to %s',
     (_name, spawn) => {
       expect(touches(open, object(spawn))).toBe(true);
     },
@@ -488,7 +488,7 @@ describe('bystanders stand where they can be met', () => {
  * THE CAST IS MADE OF PEOPLE, NOT DECALS.
  * ===========================================================================
  *
- * Measured in the running game before this: Red walks straight through all seven of them -- three
+ * Measured in the running game before this: Purple walks straight through all seven of them -- three
  * travellers and four bystanders -- and is drawn inside them at equal depth on the way past. Both
  * seating helpers in the generator call `clearArea`, which clears collision, so every one of them
  * stood on an open tile. The old spec could not see it: it asked whether each spawn was WALKABLE,
@@ -508,7 +508,7 @@ describe('the cast is made of people, not decals', () => {
   ] as const;
 
   /*
-   * The closest Red's FEET can get to a cell, standing in the neighbour `[dx, dy]` of it.
+   * The closest Purple's FEET can get to a cell, standing in the neighbour `[dx, dy]` of it.
    *
    * Derived from `FOOT_BOX`, which is what `blocked()` actually tests, rather than assumed to be
    * the neighbour's centre: she presses against a wall, she does not stand politely in the middle
@@ -533,11 +533,11 @@ describe('the cast is made of people, not decals', () => {
     expect(cast.length).toBeGreaterThan(0);
   });
 
-  it.each(cast)('Red cannot walk through %s', (_name, spawn) => {
+  it.each(cast)('Purple cannot walk through %s', (_name, spawn) => {
     const t = tiles(object(spawn));
     for (let y = t.y0; y <= t.y1; y++)
       for (let x = t.x0; x <= t.x1; x++)
-        expect(solid(x, y), `${spawn} at (${x},${y}) is a tile Red walks straight through`).toBe(
+        expect(solid(x, y), `${spawn} at (${x},${y}) is a tile Purple walks straight through`).toBe(
           true,
         );
   });
@@ -549,7 +549,7 @@ describe('the cast is made of people, not decals', () => {
    * be today: a smaller radius some later round chooses would fail here, loudly, instead of
    * quietly making a traveller unspeakable-to.
    */
-  it.each(cast)('%s can still be spoken to from a cell Red can stand in', (_name, spawn) => {
+  it.each(cast)('%s can still be spoken to from a cell Purple can stand in', (_name, spawn) => {
     const o = object(spawn);
     const t = tiles(o);
     const centre = { x: o.x + o.width / 2, y: o.y + o.height / 2 };
@@ -589,13 +589,13 @@ describe('the cast is made of people, not decals', () => {
 /*
  * A PLAYER WHO ONLY EVER HOLDS RIGHT STILL GETS THERE.
  *
- * `overlaps` is a point test on Red's feet, so the two rows she spawns on are the whole of that
+ * `overlaps` is a point test on Purple's feet, so the two rows she spawns on are the whole of that
  * player's journey and one solid tile anywhere along them costs her both notices and the ending.
  * A flood fill cannot see it: the map stays perfectly connected around any obstacle. The
  * generator asserts the same thing where the obstacle gets planted; this is the shipped artefact.
  */
 describe('the due-east walk is clear from the spawn to the door lane', () => {
-  const spawn = tiles(object('spawn-red'));
+  const spawn = tiles(object('spawn-purple'));
   const end = tiles(object('trigger-cottage'));
 
   it.each([spawn.y0, spawn.y0 + 1])('row %i carries no obstacle', (row) => {
@@ -720,7 +720,7 @@ describe('the garden cannot be entered round the end of the fence', () => {
  * the gable and the chimney stand -- which left the two columns beside and between them walkable:
  * one-tile alcoves wedged into the building's own silhouette, reachable from the garden strip
  * behind the house and from the alley between the house and the west fence. Driven to them in the
- * running game, Red is drawn standing on the ridge with the gable at her elbow and the chimney
+ * running game, Purple is drawn standing on the ridge with the gable at her elbow and the chimney
  * smoking beside her head, in the frame every player ends the game on.
  *
  * The row above the building is part of the building, and that is the invariant rather than the
@@ -733,7 +733,7 @@ describe('the cottage is a building, not a climbing frame', () => {
     const open: string[] = [];
     for (let y = house.y0 - 1; y <= house.y1; y++)
       for (let x = house.x0; x <= house.x1; x++) if (!solid(x, y)) open.push(`(${x},${y})`);
-    expect(open, 'tile(s) of the cottage Red can stand on').toEqual([]);
+    expect(open, 'tile(s) of the cottage Purple can stand on').toEqual([]);
   });
 
   /*

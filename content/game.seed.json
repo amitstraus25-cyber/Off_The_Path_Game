@@ -124,7 +124,7 @@
       },
       "finePrint": {
         "title": "Also forwards everything you say",
-        "detail": "Sends what Red says to a helper address so it can improve.",
+        "detail": "Sends what Little Purple says to a helper address so it can improve.",
         "flag": "messagesLeaked"
       },
       "bestVerdict": "reject",
@@ -134,7 +134,7 @@
           "basketAdds": ["translator"],
           "basketRemoves": [],
           "flagsSet": ["messagesLeaked"],
-          "recap": "It forwarded everything Red said to the wolf."
+          "recap": "It forwarded everything Little Purple said to the wolf."
         },
         "restrict": {
           "points": 150,

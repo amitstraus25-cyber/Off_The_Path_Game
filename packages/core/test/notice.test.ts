@@ -4,7 +4,7 @@
  * one notice in `content/game.json` with a `whenExposed`.
  *
  * docs/UX_REVIEW.md blocker 2 found that it can be SPENT before it can FIRE. The only clear lane
- * out of the spawn runs due east along Red's own row and reaches the post in under ten seconds, so
+ * out of the spawn runs due east along Purple's own row and reaches the post in under ten seconds, so
  * the natural first thing a player does is read it with no verdicts given -- and `already-read`
  * then latched it shut for the rest of the run.
  *

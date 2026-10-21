@@ -30,7 +30,7 @@ Finish with a `pnpm sim` CLI. Report coverage and the totals for reject-all, all
 
 ```
 Plan and implement Phase 2. Use the graybox assets from tools/graybox. Phaser renders the world only; no UI text on canvas.
-Build: boot/loader that fails on missing assets, tilemap with layered depth, Red movement with collision, camera,
+Build: boot/loader that fails on missing assets, tilemap with layered depth, Purple movement with collision, camera,
 a DOM virtual joystick + A button using pointer events, NPC interaction prompts, and the typed event bus that
 switches the store phase. I should be able to walk the whole map on keyboard and on a phone-sized viewport.
 Verify crisp pixels at DPR 1, 2 and 3 and report fps.

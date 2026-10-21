@@ -14,14 +14,14 @@ import { startGame } from './helpers';
 
 const OUT = process.env['SHOT_DIR'];
 
-/** Puts Red at a named map object and snaps the camera to her. */
+/** Puts Purple at a named map object and snaps the camera to her. */
 async function teleport(page: Page, object: string, dy: number): Promise<void> {
   await page.evaluate(
     ({ object, dy }) => {
       const scene = window.__otp!.scene as unknown as {
         position: { x: number; y: number };
         camera: { x: number; y: number };
-        red: { setPosition(x: number, y: number): void; setDepth(d: number): void; y: number };
+        purple: { setPosition(x: number, y: number): void; setDepth(d: number): void; y: number };
         focus(): { x: number; y: number };
         syncCamera(): void;
       };
@@ -30,8 +30,8 @@ async function teleport(page: Page, object: string, dy: number): Promise<void> {
       const x = o.x + o.width / 2;
       const y = o.y + o.height + dy;
       scene.position = { x, y };
-      scene.red.setPosition(Math.round(x), Math.round(y));
-      scene.red.setDepth(scene.red.y);
+      scene.purple.setPosition(Math.round(x), Math.round(y));
+      scene.purple.setDepth(scene.purple.y);
       scene.camera = scene.focus();
       scene.syncCamera();
     },
@@ -41,7 +41,7 @@ async function teleport(page: Page, object: string, dy: number): Promise<void> {
 
 /** Landmark, and how far below it to stand so the thing itself is in frame. */
 const PLACES: [name: string, object: string, dy: number][] = [
-  ['01-spawn', 'spawn-red', 0],
+  ['01-spawn', 'spawn-purple', 0],
   ['02-cottage', 'prop-cottage', 80],
   ['03-stall', 'prop-stall', 64],
   ['04-gate', 'gate-fence-gap', 40],

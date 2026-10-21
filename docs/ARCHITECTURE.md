@@ -27,7 +27,7 @@ Always run `npm view <pkg> time` (or equivalent) and pick a version older than 1
 
 ## 2a. Phase 0 spike result: Phaser vs hand-rolled canvas (2026-10-15)
 
-Same graybox map, Red sprite, camera follow and integer scaling in both (a throwaway `tools/spike`
+Same graybox map, Purple sprite, camera follow and integer scaling in both (a throwaway `tools/spike`
 package for the canvas version, `apps/game` for Phaser), measured in headless Chromium at 4x CPU
 throttle, DPR 2, 812x375. **The spike package has since been deleted**: the decision below is the
 artifact worth keeping, and leaving a second buildable app in the repo made Vercel offer to deploy
@@ -125,7 +125,7 @@ explore -> cottage -> results -> leaderboard -> (replay -> title)
 - `dialogue` / `inspect`: Phaser input is paused; UI has focus (focus trap, Esc backs out one level, never skips a verdict).
 - Verdicts are final for a run (replay to retry).
 - Cottage door: an NPC-free `trigger-cottage` object on the **doorstep**, NOT at the garden gate; if not
-  all verdicts are in, Red says a hint line ("I should hear all three travellers first"). It moved off
+  all verdicts are in, Purple says a hint line ("I should hear all three travellers first"). It moved off
   the gate because the gate sat in front of the note on Grandma's door and made the `sign` errand goal
   unearnable. **Do not quote its coordinates here.** What matters is the relationship, and all of it is
   tested: the trigger is east of `notice-cottage-door`, the two rects never share a tile, and both span

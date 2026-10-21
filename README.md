@@ -1,6 +1,6 @@
 # Off the Path: "That's Not My Grandma"
 
-A short browser pixel adventure for Cyera's **Off the Path** research page. Red walks a forest, three
+A short browser pixel adventure for Cyera's **Off the Path** research page. Purple walks a forest, three
 travellers offer her "skills", and the player decides what each is allowed to do: **Allow / Restrict /
 Reject**. A notice nailed to a post carries an instruction nobody wrote on any card, and it fires only
 if all three capabilities are live at once.

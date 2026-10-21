@@ -53,7 +53,7 @@ async function start(): Promise<void> {
   const bus = createBus();
   const leaderboard = createLeaderboardClient(content);
   // The world keeps its own "is a panel open" flag: a notice is a DOM panel that does not change
-  // the store phase, and Red must not keep walking while the player is reading it.
+  // the store phase, and Purple must not keep walking while the player is reading it.
   const worldHasInput = (): boolean => store.getState().phase === 'explore' && noticeId === null;
   const input = createInput(window, {
     onBack: () => void store.dispatch({ type: 'BACK' }),
@@ -94,7 +94,7 @@ async function start(): Promise<void> {
   /** How many times each bystander has been greeted, so they cycle instead of repeating. */
   const greeted = new Map<string, number>();
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
-  // The notice Red is currently standing at, and the ones she has already walked away from.
+  // The notice Purple is currently standing at, and the ones she has already walked away from.
   let noticeId: string | null = null;
   const dismissed = new Set<string>();
 
@@ -147,7 +147,7 @@ async function start(): Promise<void> {
         },
         onStart: beginRun,
         onReplay: () => {
-          // The store is only half the run: the notices Red walked past and where she is standing
+          // The store is only half the run: the notices Purple walked past and where she is standing
           // both live outside it, and a replay has to forget them too.
           dismissed.clear();
           greeted.clear();
@@ -236,8 +236,8 @@ async function start(): Promise<void> {
     /*
      * A `notice-<id>` the content does not define is a map that has outrun `content/game.json`.
      * Opening the panel for it bricked the run: `noticeId` went non-null, so `worldHasInput` went
-     * false and Red stopped walking, while App's `findNotice` returned undefined and rendered no
-     * panel -- no Walk on, no Esc, nothing to close. Measured on the built page: Red at
+     * false and Purple stopped walking, while App's `findNotice` returned undefined and rendered no
+     * panel -- no Walk on, no Esc, nothing to close. Measured on the built page: Purple at
      * (176, 672), 600ms of ArrowRight, still (176, 672), and no error anywhere to say why. The
      * warning is for whoever renames the object or the notice.
      */

@@ -9,7 +9,7 @@ Effort sizes: **S** under half a day, **M** about a day, **L** several days (for
 | Milestone                                                                                                                                               | When           | What you can show                                                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------- |
 | **M0 Foundations**                                                                                                                                      | End of Phase 0 | Repo, CI, brand tokens, graybox art, decisions made.                                                                  |
-| **M1 Walking Red**                                                                                                                                      | End of Phase 2 | Move Red around the graybox forest on keyboard and touch.                                                             |
+| **M1 Walking Purple**                                                                                                                                   | End of Phase 2 | Move Purple around the graybox forest on keyboard and touch.                                                          |
 | **M2 Vertical slice**                                                                                                                                   | End of Phase 4 | One full encounter (Rabbit + Cottage Finder) from talk to verdict to basket, in brand UI. **Show stakeholders here.** |
 | **M3 Feature complete**                                                                                                                                 | End of Phase 6 | Three skills, cottage finale, results, leaderboard (mock or live).                                                    |
 | **M4 Release candidate**                                                                                                                                | End of Phase 7 | Embedded, accessible, fast, hardened.                                                                                 |
@@ -30,6 +30,7 @@ Effort sizes: **S** under half a day, **M** about a day, **L** several days (for
 | D8  | Must the player meet all three characters before the cottage?                                                                                                                                                                                                                                                                                            | **Yes** (consistent scores).                                                                                                                                                                                                                                | Game design            |
 | D9  | Where is the game hosted and who owns analytics?                                                                                                                                                                                                                                                                                                         | **Static host under a cyera.com subdomain, embedded by iframe; parent page owns analytics via postMessage events.**                                                                                                                                         | Web team               |
 | D10 | Leaderboard retention, moderation, privacy review                                                                                                                                                                                                                                                                                                        | **Handle + score only, 12-month retention, manual delete endpoint, Legal sign-off before launch.**                                                                                                                                                          | Legal + Security       |
+| D11 | After the 2026-10-21 rename of the protagonist from Red to Purple, is she "Purple" or "Little Purple"? Her cloak is Aubergine and the brand rules ban red outright, so "Red" was a contradiction from the first commit; the fairy-tale shape survives the rename and the colour error does not.                                                          | **"Little Purple" in player-facing copy, "Purple" in code, identifiers, docstrings and docs.** A player meeting "Purple" alone reads a colour; "Little Purple" reads a person and keeps the tale's shape. Four player-facing strings carry the long form.   | Game design + Brand    |
 
 ### Decisions recorded (2026-10-15, Phase 0)
 
@@ -80,7 +81,7 @@ Goal: the entire game works as pure logic with no graphics.
 Phase 1 notes (2026-10-16):
 
 - Decisions: Night Light "restrict" was set at 150 here, shipped at 100, and is **200 and the best verdict** since 2026-10-16. Only the `needs` and `who` questions earn the +100 bonus (`scoring.bonusQuestions` in content); "Show me" never does. Flags are set at verdict time.
-- Totals with `content/game.json`. **Superseded 2026-10-17** by the three errand goals. **Say which run shape a total belongs to**: two of the three goals need a notice read, so the same verdicts score differently depending on where Red walked, and this line used to mix the two. Without questions and (with):
+- Totals with `content/game.json`. **Superseded 2026-10-17** by the three errand goals. **Say which run shape a total belongs to**: two of the three goals need a notice read, so the same verdicts score differently depending on where Purple walked, and this line used to mix the two. Without questions and (with):
 
   | Line                    | Straight to the cottage, no notice read | Both notices read |
   | ----------------------- | --------------------------------------- | ----------------- |
@@ -97,24 +98,24 @@ Phase 1 notes (2026-10-16):
 
 ## Phase 2: The forest world (M1)
 
-Goal: walk Red around the graybox forest on any device.
+Goal: walk Purple around the graybox forest on any device.
 
 - [x] (M) Boot: load content + assets (fail loudly on missing), Phaser config (`pixelArt`, `roundPixels`, 480x270, FIT scaling, integer zoom, letterbox).
-- [x] (M) Tilemap loader for `map-forest.json` with layers (ground, decor-below, decor-above, collision); objects layer parsing (`spawn-red`, `npc-*`, `trigger-cottage`).
-- [x] (M) Player: 4-direction movement, speed tuned (about 60 px/s logical), tile collision, camera follow with world bounds, depth sorting so Red walks behind canopy tiles.
+- [x] (M) Tilemap loader for `map-forest.json` with layers (ground, decor-below, decor-above, collision); objects layer parsing (`spawn-purple`, `npc-*`, `trigger-cottage`).
+- [x] (M) Player: 4-direction movement, speed tuned (about 60 px/s logical), tile collision, camera follow with world bounds, depth sorting so Purple walks behind canopy tiles.
 - [x] (M) Input layer: keyboard (arrows/WASD, Space/Enter/E), **DOM virtual joystick + A button** (pointer events, multi-touch safe), unified `InputState`. Pause input when `phase !== 'explore'`.
 - [x] (S) NPC placement from objects; interaction radius; floating "A" prompt (bobbing, respects reduced motion).
 - [x] (S) Event bus + store wiring (ARCHITECTURE section 6). `interact(characterId)` flips `phase` to `dialogue` (UI not built yet; log to console).
 - [x] (S) Cottage trigger: emits `enteredCottage`; gate logic uses `canEnterCottage`.
 - [x] (S) Perf pass: no per-frame allocations; check 60 fps on a throttled mobile profile.
-      Acceptance (M1): Red walks the whole map on keyboard and touch without clipping through collision; camera is smooth; NPC prompts appear in range; resizing and rotating keep pixels crisp.
+      Acceptance (M1): Purple walks the whole map on keyboard and touch without clipping through collision; camera is smooth; NPC prompts appear in range; resizing and rotating keep pixels crisp.
 
 Phase 2 notes (2026-10-16):
 
 - Movement and collision are hand-rolled in `apps/game/src/world/logic.ts` (pure, 26 unit tests) rather than Phaser Arcade Physics: deterministic, testable, and no per-frame allocations. Phaser draws the tilemap and sprites, and nothing else.
 - Scaling: Phaser runs at a fixed 480x270 with `Scale.NONE`; `ui/stage.ts` sets the canvas CSS size to a whole number of device pixels per game pixel (`integerZoom`), verified at DPR 1, 2 and 3. Phaser's FIT mode produced fractional scales and blurred the art.
 - Camera uses `cameraTopLeft` with rounded, clamped scroll, so tiles never shimmer.
-- Depth: Red sorts by her feet; the `decor-above` canopy layer is pinned above everything, so she walks behind tree tops.
+- Depth: Purple sorts by her feet; the `decor-above` canopy layer is pinned above everything, so she walks behind tree tops.
 - Until Phase 3 there is no title screen: the run auto-starts, and dialogue and the cottage hint appear as a plain DOM toast.
 - Measured: 60 fps while moving at 4x CPU throttle and DPR 2, with a flat JS heap. Bundle is now 368 KB gzipped against the 450 KB budget; Preact and the UI still have to fit, so Phase 3 should watch it.
 - Not verified: a real phone. Touch is covered by Playwright emulation only; check a Vercel preview on a device before closing M1.
@@ -178,7 +179,7 @@ Goal: the full game.
 - [x] (M) Results screen: score, per-skill recap rows (success vs missed styling), "Post your score" handle field with validation and clear privacy line, **Read the Research** band with the screen's one Lime.
 - [x] (S) Replay: reset store, new run id, back to title.
 - [ ] (S) **Research review pass**: send all fine-print and recap copy to the research team; apply edits in `content/game.json` only.
-- [ ] (M) **Real art swap-in checklist** (as assets arrive): tileset, map, Red, NPCs, portraits, items; re-verify collision and depth sorting after each swap.
+- [ ] (M) **Real art swap-in checklist** (as assets arrive): tileset, map, Purple, NPCs, portraits, items; re-verify collision and depth sorting after each swap.
 - [x] (S) e2e: perfect run = 1000 and "clean" ending; reject-all (no questions) = 600 and, since 2026-10-17, "The long way round"; allow-all (no questions) = 100 and "wolf's house".
       Acceptance (M3 part 1): all three endings reachable and tested; copy approved by research.
 

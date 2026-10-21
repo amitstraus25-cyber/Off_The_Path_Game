@@ -75,7 +75,7 @@ interface Rect {
  * CAMERA_LIFT USED TO LIVE HERE, and its own docstring is why this file was wrong for a round. It
  * argued: "It is not a camera size, which is the thing this file is forbidden to remember: it is
  * where the shot is pointed." The rule was known and reasoned around -- and the shot was pointed
- * one tile too high, because the lift is only half of the answer. Red's feet are one tile BELOW her
+ * one tile too high, because the lift is only half of the answer. Purple's feet are one tile BELOW her
  * spawn object, so the camera centre is `spawn.y + 1 - 5/8`, not `spawn.y - 5/8`.
  *
  * A rectangle has four numbers; publishing two of them is not publishing the rectangle. The centre
@@ -249,15 +249,21 @@ export function generateForestMap(): GeneratedMap {
        */
       { cx: 3, cy: 16.5, r: 4.6, strength: 0.86, why: 'closes the top-left of the spawn camera' },
       /*
-       * The west margin carried DOWN BEHIND RED, which is the other half of the title screen's
+       * The west margin carried DOWN BEHIND PURPLE, which is the other half of the title screen's
        * complaint. The spawn camera is clamped to x 0, so the left column of the title frame is
-       * always the edge of the world; with the margin wood stopping at row 18 and Red's glade
+       * always the edge of the world; with the margin wood stopping at row 18 and Purple's glade
        * subtracting below it, what the frame showed down that column was the sealed band itself --
        * the 2x6 block of near-identical bushes the review named. Canopy over the band is the only
        * thing that hides it, and it is what the file's own note on `sealBorder` says: where a wood
        * stands on the margin, the longest visible run of hedge is not the length of the band at all.
        */
-      { cx: 1, cy: 21, r: 4.2, strength: 0.9, why: 'the west margin behind Red, under her glade' },
+      {
+        cx: 1,
+        cy: 21,
+        r: 4.2,
+        strength: 0.9,
+        why: 'the west margin behind Purple, under her glade',
+      },
       { cx: 58.5, cy: 10, r: 6, strength: 0.88, why: 'east margin, north' },
       { cx: 58.5, cy: 27, r: 6, strength: 0.88, why: 'east margin, south' },
       // --- the middle band: backs the landmarks and narrows the road in stretches --------------
@@ -391,7 +397,7 @@ export function generateForestMap(): GeneratedMap {
    * different job from a glade. This is the open ground the wood is asked to leave round them.
    */
   const GLADES: ReadonlyArray<{ cx: number; cy: number; r: number; why: string }> = [
-    { cx: 7, cy: 21, r: 3.4, why: 'where Red is standing when the game starts' },
+    { cx: 7, cy: 21, r: 3.4, why: 'where Purple is standing when the game starts' },
     { cx: 13, cy: 18.5, r: 2.8, why: 'the ground in front of the market stall' },
     /*
      * Smaller than it was, by a tile. At 4.6 it was centred on row 13 and so held the wood off rows
@@ -507,7 +513,7 @@ export function generateForestMap(): GeneratedMap {
      * the treeline round a clearing from being a traced curve: the wood thins towards the glade
      * over two or three tiles, so the planting floor below cuts the outline somewhere different
      * along every stretch of it. Full strength at the glade's core means a clearing is genuinely
-     * empty -- Red's own glade and the well's are places with nothing in them, which is what makes
+     * empty -- Purple's own glade and the well's are places with nothing in them, which is what makes
      * the thing that IS in them readable from across the frame.
      */
     let cut = 0;
@@ -930,14 +936,14 @@ export function generateForestMap(): GeneratedMap {
     }
 
   /*
-   * Where Red stands when the game opens, and therefore where two of the three rectangles below
+   * Where Purple stands when the game opens, and therefore where two of the three rectangles below
    * are pointed. It is declared here, above the track, because the carriageway's swing is held
    * flat across her pad: she steps onto the road, and a road that is mid-lean under her feet
    * arrives at the spawn as a four-row delta of sand in the one frame a visitor sees first.
    */
   const SPAWN = { x: 5, y: 20 };
   /**
-   * THE HERO SHOT. The title screen and the first seconds of play: the camera is on Red at the
+   * THE HERO SHOT. The title screen and the first seconds of play: the camera is on Purple at the
    * spawn, and in landscape the copy column is opaque over the left of it (`visibleTitleColumns`).
    */
   const HERO = frameAt(REFERENCE_VIEWPORTS.desktop, cameraCentreTiles(SPAWN));
@@ -1187,7 +1193,7 @@ export function generateForestMap(): GeneratedMap {
       GATE_FLAT_FROM - x,
       x - TRACK_X0 - 1,
       /*
-       * ...AND IT IS FLAT UNDER RED'S FEET, which is the third window and the newest. The spawn
+       * ...AND IT IS FLAT UNDER PURPLE'S FEET, which is the third window and the newest. The spawn
        * pad is two tiles of plain sand laid later, in a fixed place; a band that is mid-lean there
        * meets it a row off and their union is a four-row delta of sand in the exact middle of the
        * hero shot. Two columns of flat either side, then the same three-column ramp as the others.
@@ -1230,7 +1236,7 @@ export function generateForestMap(): GeneratedMap {
    * Two rows is affordable now for a reason that did not hold before: the tear SUBTRACTS, so the
    * band costs two tiles a column instead of two-and-a-half, and the sand freed by that is what
    * pays for the extra rows of travel. Three windows hold it flat where the level needs it -- the
-   * crossing, the gate approach and Red's own pad -- and each is ramped over three columns, which
+   * crossing, the gate approach and Purple's own pad -- and each is ramped over three columns, which
    * is one more than the deepest swing needs to come back to twenty.
    */
   /*
@@ -1314,7 +1320,7 @@ export function generateForestMap(): GeneratedMap {
        *
        * The old curve sat on 19 there because its periods were long and its phase happened to put it
        * there; nothing asked for it. So the junction gets a window like the bridge, the gate and
-       * Red's pad have -- except that this one clamps to a row one NORTH of the spawn rather than
+       * Purple's pad have -- except that this one clamps to a row one NORTH of the spawn rather than
        * damping towards it, because that is the row the arithmetic above names.
        *
        * Clamping `want` rather than `held` keeps the one-row-per-column slew intact, which is what
@@ -1914,7 +1920,7 @@ export function generateForestMap(): GeneratedMap {
 
   // --- forest border and tree clusters ---------------------------------------
   /*
-   * Red's clearing, reserved BEFORE anything is planted in it.
+   * Purple's clearing, reserved BEFORE anything is planted in it.
    *
    * The first attempt cleared the decor layers in a square around the spawn after the fact, which
    * cut trees in half: a tree is a 2x1 trunk on `below` plus a 2x2 canopy two rows above it on
@@ -1934,7 +1940,7 @@ export function generateForestMap(): GeneratedMap {
    * bright field evenly dotted with dark holes reads as watched, and the board never shows open
    * lawn larger than 3x3.
    *
-   * A 5x5 is still more than Red needs. She stands on two tiles, she needs somewhere to step in
+   * A 5x5 is still more than Purple needs. She stands on two tiles, she needs somewhere to step in
    * every direction before she meets anything, and the verge sweep at the foot of the file plants
    * the ring around her pad with tufts and flower the way the board's Explore frame does.
    */
@@ -2069,7 +2075,7 @@ export function generateForestMap(): GeneratedMap {
     },
     /*
      * The sapling is ONE 64x64 drawing cut into four, trunk included, so its bottom row carries
-     * both bark and leaf. That row goes on `below` like any other trunk -- Red walks in front of
+     * both bark and leaf. That row goes on `below` like any other trunk -- Purple walks in front of
      * it -- and only the top row goes on `above`, where she passes behind the crown. Putting all
      * four on `above` would draw a knee-high shrub over her head.
      */
@@ -2754,13 +2760,13 @@ export function generateForestMap(): GeneratedMap {
    * wood's strength has to fall to its planting floor somewhere, and the woods beside the road are
    * small ones placed between the glades; their floor contour lands two or three rows short of the
    * sand, every time, because that is what a falloff does. Then the glades the landmarks need are
-   * centred ON the track -- Red's, the bridge reach, the gate approach -- and subtract another two
+   * centred ON the track -- Purple's, the bridge reach, the gate approach -- and subtract another two
    * or three rows on top. The corridor is the sum of two effects that are each individually
    * correct, and the only thing that fixes it is planting the verge deliberately.
    *
    * THE GEOMETRY, which decides everything about this pass. A crown may not be laid on sand: the
    * road is the one line the player follows and `decor-above` draws at depth 10,000, so a crown over
-   * the track would hide Red while she walks it. So on the NORTH side a tree's trunk row may be the
+   * the track would hide Purple while she walks it. So on the NORTH side a tree's trunk row may be the
    * row touching the sand and its crown sits above that; on the SOUTH side the trunk has to stand
    * three rows clear, or its crown lands on the path and the planter refuses the site. Either way
    * the nearest DARK row to the sand is the one immediately beside it, which is all that is needed:
@@ -2772,7 +2778,7 @@ export function generateForestMap(): GeneratedMap {
    * what the board's road has and it is most of what makes a track read as walked rather than
    * surveyed. The far shoulder is never touched on the same column, so the corridor is never
    * narrower than two lanes plus one open side -- the invariant five end-to-end tests failed on when
-   * an earlier pass closed both verges and Red had no room to round a corner.
+   * an earlier pass closed both verges and Purple had no room to round a corner.
    *
    * THE TREES ARE FLAGGED, NOT FILTERED, and the long note on `Tree.verge` is the reason. The sweep
    * at the foot of the file fells scenery off a shoulder; these are not scenery, so they are marked
@@ -3385,7 +3391,7 @@ export function generateForestMap(): GeneratedMap {
    *
    * These are NOT solid, and that is a deliberate change from the old scattered bushes.
    * Undergrowth this dense would otherwise be a second collision layer over most of the map, and
-   * the whole point of a glade is to be able to walk into it. Red pushes through fern; she still
+   * the whole point of a glade is to be able to walk into it. Purple pushes through fern; she still
    * cannot walk through a trunk, a boulder or the river.
    */
   const scrubNoise = valueNoise2D(20261025);
@@ -3416,7 +3422,7 @@ export function generateForestMap(): GeneratedMap {
        * above about 0.85, so every empty tile in a wooded region was floored -- including the
        * regions a GLADE has emptied. A glade subtracts from the planting, so the trees are gone, and
        * it does not subtract from this, so the bushes stay. The west margin of the spawn camera is
-       * the exact case: wood field high, Red's glade cutting the trees out of it, and what the title
+       * the exact case: wood field high, Purple's glade cutting the trees out of it, and what the title
        * frame shows is thirty-odd bushes standing in open sunlit grass on a four-column pitch. The
        * review called it a hedge wall and the client called it a market garden; both were looking at
        * a forest floor with no forest over it.
@@ -3524,7 +3530,7 @@ export function generateForestMap(): GeneratedMap {
         const floor = meadow(x / 2.3 + 17, y / 2.3 + 17);
         const tile = floor > 0.86 ? 'rock' : floor > 0.8 ? 'flower-white' : scrub(x, y);
         set(below, x, y, gid(tile));
-        // A BOULDER IS NOT UNDERGROWTH. The note above this sweep says Red pushes through fern and
+        // A BOULDER IS NOT UNDERGROWTH. The note above this sweep says Purple pushes through fern and
         // still cannot walk through "a trunk, a boulder or the river", and the stone drifts were
         // the one thing here contradicting it: `rock` is solid on the gorge banks and solid in
         // `clump`, and was soft in the only two places it was drawn as scatter. It is drawn as a
@@ -3980,7 +3986,7 @@ export function generateForestMap(): GeneratedMap {
    * wall two tiles east of the door. "Roughly four tiles of empty cream in the middle of the payoff
    * shot" is that blob, and the audit at the foot of this file now measures it.
    *
-   * MEASURED ON THE BOARD, and this is the part that settles it. Red is 48 pixels tall in our build
+   * MEASURED ON THE BOARD, and this is the part that settles it. Purple is 48 pixels tall in our build
    * and 162 of the mock's own pixels in its Arrive frame, so the mock is drawn at about 3.4 of its
    * pixels to one of ours (ART_DIRECTION section 2 derives the same ratio off the Explore frame).
    * Converted at that ratio, the board's cottage is:
@@ -4134,7 +4140,7 @@ export function generateForestMap(): GeneratedMap {
    * THE PAYOFF FRAME, derived the way the game derives it rather than guessed at.
    * ===========================================================================
    *
-   * `forest-scene.ts` stops following Red the moment she arrives and frames the BUILDING instead:
+   * `forest-scene.ts` stops following Purple the moment she arrives and frames the BUILDING instead:
    * the span from the chimney row above the facade down through the three rows of lane below it,
    * centred, so the smoke stays off the top edge. The camera is then clamped to the east edge of
    * the world, which is why this shot is NOT symmetrical about the cottage and why the facade sits
@@ -4518,7 +4524,7 @@ export function generateForestMap(): GeneratedMap {
    * THE GATE STANDS OPEN, and that is forced rather than chosen: these two cells MUST stay
    * walkable (`map.test.ts:240`, audit 2a's due-east walk, and the fact that the player walks
    * through here to reach the cottage), so a rail drawn from post to post would be a picture of a
-   * shut gate over a cell Red strolls through. Read down column 46 now: post, rail, daylight,
+   * shut gate over a cell Purple strolls through. Read down column 46 now: post, rail, daylight,
    * rail, post.
    *
    * NOT `panel`. `panel` clears the cell, draws AND makes it solid -- it is the barrier's helper
@@ -4723,7 +4729,7 @@ export function generateForestMap(): GeneratedMap {
    *
    * This runs after the lane and the door approach are cut, and it skips anything already placed,
    * so it can only land on the lawn between them. Nothing here is solid: the walk to the door
-   * must stay clear whichever row Red is on.
+   * must stay clear whichever row Purple is on.
    */
   /*
    * BEDS GO WHERE THE BEDS ARE SEEN, which is the payoff frame and not the whole enclosure.
@@ -4789,9 +4795,9 @@ export function generateForestMap(): GeneratedMap {
    */
   /*
    * The spawn clearing is NOT excluded here, and that is deliberate. Everything this predicate
-   * gates -- the landmark dressing and the verge tufts -- is soft: flower and scrub that Red pushes
+   * gates -- the landmark dressing and the verge tufts -- is soft: flower and scrub that Purple pushes
    * through, never a boulder, which is why `rock` came out of the mix. Refusing to plant soft cover
-   * round the spawn is what left her standing in the middle of a mown field; the board's Red stands
+   * round the spawn is what left her standing in the middle of a mown field; the board's Purple stands
    * at a fork with tufts and flower beds right up to the sand.
    */
   const onGrass = (x: number, y: number): boolean =>
@@ -5008,11 +5014,11 @@ export function generateForestMap(): GeneratedMap {
     }
   };
   /*
-   * WHERE RED IS STANDING, which had no dressing at all and is the first thing anybody sees.
+   * WHERE PURPLE IS STANDING, which had no dressing at all and is the first thing anybody sees.
    *
    * Every other landmark on the map got a ring of planting and the spawn did not, because until a
    * few hundred lines up nothing was allowed to grow inside the spawn clearing. So the hero frame
-   * of the asset opened on a character standing in the middle of a mown field. The board's Red
+   * of the asset opened on a character standing in the middle of a mown field. The board's Purple
    * stands at a fork with flower beds and tufts right up to the sand on both sides.
    *
    * Wider and heavier than the other rings: this is the one clearing a player looks at for several
@@ -5289,15 +5295,15 @@ export function generateForestMap(): GeneratedMap {
     return last + 1;
   };
 
-  // --- Red's pad and the spawn clearing ----------------------------------------------------------
+  // --- Purple's pad and the spawn clearing ----------------------------------------------------------
   const spawnX = SPAWN.x;
   const spawnY = SPAWN.y;
   /*
-   * Red's pad, and it is TRACK rather than two tiles painted to look like it.
+   * Purple's pad, and it is TRACK rather than two tiles painted to look like it.
    *
    * It used to be two `set(ground, ..., 'path')` calls and nothing else, so for the whole of the
    * rest of this file the two tiles she is standing on were not a path: they got no rim, which is
-   * why the hero shot carried a hard-edged rectangle of sand at Red's feet with a ruled vertical
+   * why the hero shot carried a hard-edged rectangle of sand at Purple's feet with a ruled vertical
    * side, against a carriageway whose every other tile is torn. The garden lane had exactly this
    * bug and the note above `lane` records the three silent consequences of it.
    */
@@ -5311,7 +5317,7 @@ export function generateForestMap(): GeneratedMap {
     for (let x = spawnX - 1; x <= spawnX + 2; x++) if (isPath(x, y)) pathEdge(x, y);
 
   const objects = [
-    { name: 'spawn-red', x: spawnX * TILE, y: spawnY * TILE, width: TILE, height: TILE },
+    { name: 'spawn-purple', x: spawnX * TILE, y: spawnY * TILE, width: TILE, height: TILE },
     npc('npc-rabbit', 13, 19),
     // Directly below the trunk of the tree planted for him in the fountain glade, at the end of the
     // footpath, so the trunk and its crown stand behind his head. See the note beside that tree.
@@ -5373,7 +5379,7 @@ export function generateForestMap(): GeneratedMap {
      * outstanding, reading the note, and walking back, which nobody does.
      *
      * It spans all three rows of the door lane, not just the doorstep. `overlaps` is a point test
-     * on Red's feet, and a player who only ever holds Right keeps her feet on row 21 for the whole
+     * on Purple's feet, and a player who only ever holds Right keeps her feet on row 21 for the whole
      * map. A trigger on row 19 alone is invisible to that player: she walks straight past the door,
      * out across the lawn, and the run never ends. That is worse than the bug this move fixed.
      */
@@ -5403,7 +5409,7 @@ export function generateForestMap(): GeneratedMap {
        * THREE ROWS, AND THE THIRD IS THE ONE THAT MAKES IT A BARRIER.
        *
        * Two rows spanned the gate approach tile for tile and the zero-click beat was still
-       * optional, because `overlaps` is a point test on Red's POSITION and her position is the
+       * optional, because `overlaps` is a point test on Purple's POSITION and her position is the
        * bottom edge of her foot box. Standing in the lowest row of the approach she presents a y
        * of exactly 704 -- the rect's own bottom edge, which `overlaps` reads as the row below --
        * and 704 is on the 2px-per-frame grid she walks on from the spawn. Hold Down, then hold
@@ -5420,7 +5426,7 @@ export function generateForestMap(): GeneratedMap {
       /*
        * The note on Grandma's door, which the `sign` errand goal needs. It sits in the lane
        * immediately WEST of the doorstep and matches the trigger row for row, so every approach
-       * from the garden crosses the note first and the trigger second, whichever row Red walks.
+       * from the garden crosses the note first and the trigger second, whichever row Purple walks.
        * Putting it east of the gate but west of the door is what makes the ordering hold without
        * the two rects ever sharing a tile, which would race inside one frame.
        *
@@ -5443,7 +5449,7 @@ export function generateForestMap(): GeneratedMap {
        *
        * ...AND "ONE ROW SOUTH" WAS THE FIRST ANSWER AND IT WAS WRONG, which is worth more than
        * the fix. A tile-level flood with the four-row rect as a wall says the trigger is sealed.
-       * Driven in the running game it is not: `overlaps` is a point test on Red's POSITION, her
+       * Driven in the running game it is not: `overlaps` is a point test on Purple's POSITION, her
        * position is the BOTTOM EDGE of her foot box, so standing in the lowest row of the lane she
        * presents a y of exactly the rect's bottom edge -- which the half-open test reads as the
        * row below -- and the rows below that are open garden. Measured by walking her: from (47,22)
@@ -6339,7 +6345,7 @@ export function generateForestMap(): GeneratedMap {
    * `plantTree` already refuses a path tile, so the track itself is always clear -- but it happily
    * plants a trunk in the tile NEXT to it, on both sides, and a wood that presses right up to the
    * sand turns every road into a one-tile slot. Measured by the end-to-end suite rather than by
-   * eye: with the verges closed, five tests that walk Red somewhere timed out, including the whole
+   * eye: with the verges closed, five tests that walk Purple somewhere timed out, including the whole
    * errand line to the cottage, because every journey became a single-file shuffle with no room to
    * round a corner. The connectivity pass below cannot see this -- a one-tile corridor is perfectly
    * connected.
@@ -6383,7 +6389,7 @@ export function generateForestMap(): GeneratedMap {
    *
    * What happened next: a thicket grew into the notch at (38,20) and (39,20), where the main track
    * steps a row south, and planted `bush-low` and `bush-tall` solid in the one row a player who
-   * only ever holds Right actually walks. Every unit test passed. `pnpm e2e` failed on "Red never
+   * only ever holds Right actually walks. Every unit test passed. `pnpm e2e` failed on "Purple never
    * reached both notices walking east", 60 seconds of pressing Right against a knee-high shrub, and
    * that is the whole class of fault the client's "movement has to work where it should" is about.
    *
@@ -6412,7 +6418,7 @@ export function generateForestMap(): GeneratedMap {
    * rather than surveyed.
    *
    * WHAT KEEPS IT SAFE. The reason this pass exists is that a one-tile corridor cannot be walked --
-   * five end-to-end tests timed out when the verges closed, because Red had no room to round a
+   * five end-to-end tests timed out when the verges closed, because Purple had no room to round a
    * corner. A shoulder may therefore only stay wooded where the track beside it is AT LEAST TWO
    * TILES WIDE: the test is whether the tile directly across from the obstacle, on the far side of
    * the path tile, is itself sand. On the main track that is true everywhere, so the corridor is
@@ -6464,7 +6470,7 @@ export function generateForestMap(): GeneratedMap {
          * ===========================================================================
          *
          * What keeps a path walkable is TWO WALKABLE TILES ABREAST -- five end-to-end tests timed
-         * out when the verges closed, because Red had no room to round a corner. "The tile across
+         * out when the verges closed, because Purple had no room to round a corner. "The tile across
          * the path is also sand" is ONE way of having them and it is not the only one: open ground
          * across the path does just as well. On the two-lane carriageway the two are the same test,
          * so nothing there changes. On a one-wide footpath the proxy is false everywhere, which is
@@ -6505,10 +6511,10 @@ export function generateForestMap(): GeneratedMap {
    * THE DUE-EAST LINE, which was an accident of the pass above and is now a stated invariant.
    * ===========================================================================
    *
-   * `overlaps` in `world/logic.ts` is a point test on Red's FEET, so a player who only ever holds
+   * `overlaps` in `world/logic.ts` is a point test on Purple's FEET, so a player who only ever holds
    * Right walks the whole map along one exact row -- the spawn row plus one -- and `map.test.ts`
    * asserts that both notices lie on it. The end-to-end suite walks her that way and has already
-   * failed once on "Red never reached both notices walking east", sixty seconds of pressing Right
+   * failed once on "Purple never reached both notices walking east", sixty seconds of pressing Right
    * against a knee-high shrub that had grown into a notch where the track steps a row.
    *
    * Until now that row was kept clear by accident: the track occupied it for most of the width of
@@ -6521,14 +6527,14 @@ export function generateForestMap(): GeneratedMap {
    * Only `fellable` things come out, so the fence, the cottage and the notice are untouchable; if
    * one of them ever lands on this row the audit says so instead of this pass quietly demolishing it.
    *
-   * IT IS TWO ROWS, AND THE REASON IS WORTH WRITING DOWN BECAUSE IT IS COUNTER-INTUITIVE. Red's
+   * IT IS TWO ROWS, AND THE REASON IS WORTH WRITING DOWN BECAUSE IT IS COUNTER-INTUITIVE. Purple's
    * position is her FEET, and `logic.ts` puts her foot box three sixteenths of a tile ABOVE that
    * point: at the spawn her feet sit on y = (spawnY + 1) * 32 exactly, which is the top edge of row
    * spawnY + 1, and the box she is tested against spans y 660 to 672 -- entirely inside row spawnY.
    * So the row a due-east walker reads as a notice and the row she COLLIDES along are not the same
    * row, and the first version of this pass cleared only the latter. `map.test.ts` could not see it
    * either, because the notice test compares her feet against the rect and both notices span both
-   * rows. `pnpm e2e` caught it: "Red never reached both notices walking east", sixty seconds of
+   * rows. `pnpm e2e` caught it: "Purple never reached both notices walking east", sixty seconds of
    * holding Right against something standing on row 20 where the track had just been leaned off it.
    *
    * Clearing both rows either side of the line costs eight tiles and is correct whatever the foot
@@ -6553,7 +6559,7 @@ export function generateForestMap(): GeneratedMap {
    * spawn -- the other third sat in sealed pockets. Every named object stayed reachable, which is
    * why `apps/game/test/map.test.ts` passed throughout: it floods for object reachability, not for
    * whether the player has room. The end-to-end suite is what caught it, as five walk timeouts and
-   * "Red never reached both notices walking east".
+   * "Purple never reached both notices walking east".
    *
    * So rather than thin the whole wood -- which costs the density the board is made of, and a sweep
    * of the treeline threshold from 0.44 to 0.62 only moved solid from 49 to 44 per cent anyway --
@@ -6569,7 +6575,7 @@ export function generateForestMap(): GeneratedMap {
    * tile this file warns about twice already.
    */
   /*
-   * Every walkable tile Red can reach on foot from the spawn.
+   * Every walkable tile Purple can reach on foot from the spawn.
    *
    * `floodPocket` below is the same breadth-first walk from an arbitrary seed, in the same
    * `NEIGHBOURS` order, so this is that walk seeded at the spawn rather than a second copy of it.
@@ -7072,13 +7078,13 @@ export function generateForestMap(): GeneratedMap {
   /*
    * 1. NOBODY IN THE CAST IS A GHOST.
    *
-   * Measured in the running game: Red walks through all seven of them -- three travellers and four
+   * Measured in the running game: Purple walks through all seven of them -- three travellers and four
    * bystanders -- and is drawn INSIDE them at equal depth on the way past, because the cast is
    * seated by `npc()`/`bystander()`, both of which call `clearArea` and so leave the cell open. A
    * character you walk through is not a character standing there; it is a decal.
    *
    * The spawn cell becomes solid. Talking survives it: `INTERACT_RADIUS` is 48px against a 32px
-   * tile, so Red standing in the next cell is 32px from the spawn centre (40px approaching from
+   * tile, so Purple standing in the next cell is 32px from the spawn centre (40px approaching from
    * the south, where her feet sit a row below her tile) and well inside reach. `map.test.ts`
    * asserts that rather than leaving it to this comment.
    *
@@ -7101,7 +7107,7 @@ export function generateForestMap(): GeneratedMap {
    * the gable and the chimney stand -- which leaves the two columns between and beside them open:
    * one-tile alcoves wedged into the building's own silhouette, reachable from the garden strip
    * behind the house and from the alley between the house and the west fence. Driven to them in
-   * the running game at 1280x860, Red is drawn standing on the ridge with the gable at her elbow
+   * the running game at 1280x860, Purple is drawn standing on the ridge with the gable at her elbow
    * and the chimney smoking beside her head, in the frame every player ends the game on.
    *
    * The whole bounding box of the building is solid, gable row included, and that is the invariant
@@ -7413,7 +7419,7 @@ export function generateForestMap(): GeneratedMap {
    *
    * This was a tile flood, and a tile flood is the wrong instrument for the question. Everything
    * these audits are about -- a notice opening, the run ending -- is `overlaps()` in
-   * world/logic.ts, which is a POINT test on Red's position, and her position is the BOTTOM EDGE
+   * world/logic.ts, which is a POINT test on Purple's position, and her position is the BOTTOM EDGE
    * of her foot box rather than the middle of a tile. The two models disagree exactly at a row
    * boundary: standing in the lowest row of a rect she presents a y equal to the rect's bottom
    * edge, the half-open test reads that as the row below, and the notice does not fire. 704 for
@@ -7891,7 +7897,7 @@ export function generateForestMap(): GeneratedMap {
    * 12. WHERE THE PLAYER CAN STAND, THE PLAYER CAN BE SEEN.
    * ===========================================================================
    *
-   * `decor-above` is drawn OVER Red. A tile on it that is opaque across all 1,024 of its pixels
+   * `decor-above` is drawn OVER Purple. A tile on it that is opaque across all 1,024 of its pixels
    * therefore hides her outright: she walks onto the cell and disappears, with no shadow, no outline
    * and nothing to say where she went. Every other crown quarter in the set is drawn with daylight
    * in it -- `canopy-tl` is 51% opaque, `canopy-bl` 85%, `elder-tc` 28% -- so the ones that do this
@@ -7900,7 +7906,7 @@ export function generateForestMap(): GeneratedMap {
    * ASKED OF THE ALPHA, NOT OF A LIST OF NAMES. The finding this came from named four tiles:
    * `elder-mc`, `elder-bc`, `canopy-bl` and `canopy-br`. Rendered and counted, only the first two
    * are actually opaque everywhere; `canopy-bl` and `canopy-br` leave 152 and 111 pixels of daylight,
-   * so Red is dimmed under them and not erased. A guard written from the list would have been wrong
+   * so Purple is dimmed under them and not erased. A guard written from the list would have been wrong
    * about half of it in both directions, and -- the expensive half -- it would keep passing after a
    * painter opened those two quarters up and closed a different one. So each `decor-above` painter is
    * rendered once and asked whether any pixel of it is not opaque.
@@ -7920,7 +7926,7 @@ export function generateForestMap(): GeneratedMap {
    * gone on passing. A ratchet left above the measurement is not a ratchet, it is a ceiling nobody
    * is near, and this one was quoted as "109" in three sentences of prose above as well. Checked
    * independently from the other end at the same time -- decoding `tileset-forest.png` and counting
-   * alpha per cell against the committed map, then flooding from `spawn-red` -- which found the
+   * alpha per cell against the committed map, then flooding from `spawn-purple` -- which found the
    * same 101 cells, the same two tiles (gids 60 and 63, which are these two), all of them genuinely
    * reachable, spread over rows 2 to 37. Two instruments that share no code agreeing on 101 is the
    * reason this is a tightening rather than a guess.
@@ -7949,7 +7955,7 @@ export function generateForestMap(): GeneratedMap {
          *
          * The test was `walkableAt(x, y)`, which asks whether the collision layer would let a foot
          * stand there, not whether a foot can ever GET there. Those differ: audit 2 above exists
-         * precisely because walkable tiles can be stranded, and it floods from `spawn-red` to find
+         * precisely because walkable tiles can be stranded, and it floods from `spawn-purple` to find
          * them. So this counted cells a player cannot reach, and it would have gone on passing
          * unchanged if a future map sealed every blind cell off -- which would be a real
          * improvement it could not see, in either direction.
@@ -7968,7 +7974,7 @@ export function generateForestMap(): GeneratedMap {
     if (blindCells.length > OPEN_ENOUGH)
       fault(
         `walkable tile(s) under a crown quarter that is opaque in all ${TILE * TILE} of its ` +
-          `pixels, so Red vanishes when she stands on one (want at most ${OPEN_ENOUGH}; open the ` +
+          `pixels, so Purple vanishes when she stands on one (want at most ${OPEN_ENOUGH}; open the ` +
           'quarter up in `tiles/w-trees.ts` rather than making the ground solid)',
         blindCells,
       );
@@ -8165,7 +8171,7 @@ export function generateForestMap(): GeneratedMap {
      * `visibleTitleColumns()` answers in columns FROM THE CAMERA'S LEFT EDGE, and `columnsOf` gives
      * map-absolute ones, so the frame's own origin has to be added before they can be compared.
      *
-     * Without it this was right by luck. Red spawns at column 5 and the hero camera is 19.41 tiles
+     * Without it this was right by luck. Purple spawns at column 5 and the hero camera is 19.41 tiles
      * wide, so `frameAt` clamps `HERO.x0` to exactly 0 and the two coordinate systems coincide --
      * move the spawn east by one tile and this guard, and 7b below it, would quietly start reading
      * the wrong columns while still reporting a number. The call is also lifted out of the filter
@@ -8849,7 +8855,7 @@ export function generateForestMap(): GeneratedMap {
      * WHY THE STALL CANNOT BE MOVED TO FIX IT, measured through the real `cameraFor` at twenty
      * viewports before anything was touched, so that nobody spends a round re-running it:
      *
-     *   1. AT THE SPAWN THE CAMERA IS PINNED TO THE MAP'S WEST EDGE AT EVERY VIEWPORT. Red stands
+     *   1. AT THE SPAWN THE CAMERA IS PINNED TO THE MAP'S WEST EDGE AT EVERY VIEWPORT. Purple stands
      *      5.5 tiles from the west wall and the NARROWEST camera the game will build is MIN_VIEW,
      *      11 tiles -- so `frameAt`'s clamp puts x0 at 0.00 for all of them, phone to studio
      *      display. The stall's distance from the right border is therefore a pure function of the
@@ -8921,7 +8927,7 @@ export function generateForestMap(): GeneratedMap {
 
     /*
      * THE PREMISE OF ALL OF THAT, ASSERTED RATHER THAN REMEMBERED. Every figure in 7k follows from
-     * the camera being pinned to the map's west edge at the spawn, which holds only while Red
+     * the camera being pinned to the map's west edge at the spawn, which holds only while Purple
      * stands within half of the NARROWEST camera of that edge. Move the spawn east, or raise
      * MIN_VIEW, and the stall's framing stops being a function of camera width alone -- at which
      * point 7k's exception is describing a map that no longer exists. This is the fact that would

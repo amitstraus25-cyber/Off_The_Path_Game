@@ -15,7 +15,7 @@
  *   Colour is only ever shade(ramp, level). The 16px rabbit portrait carried two raw pink literals
  *   for its inner ears and its nose -- exactly the kind of pixel that would have survived the
  *   rebrand untouched. The inner ear here is `skin`, which is the palette's warm pale ramp and is
- *   already Red's own face, so the rabbit and Red agree.
+ *   already Purple's own face, so the rabbit and Purple agree.
  *
  *   One light, from the top-left. Nearly every rounded mass here is built the same way, in three
  *   calls: the full shape in level 0, a slightly smaller copy up-left in level 2, then the base
@@ -34,7 +34,7 @@
  *
  * The portrait backdrop is the `night` ramp, as it has always been, but as a niche rather than a
  * flat field: level 0 in the corners, a level 1 dome behind the head, a level 2 rim up its top-left.
- * paint.ts flags the reason this had to change -- the rebrand left Red's hood (`cloak` 1) sitting on
+ * paint.ts flags the reason this had to change -- the rebrand left Purple's hood (`cloak` 1) sitting on
  * a `night` 2 field at 33 levels of luma and the same hue, which is mud. Against `night` 1 it is 40
  * levels and the dome's edge does the separating.
  *
@@ -201,7 +201,7 @@ function bonnet(img: Img, brow: RGBA): void {
 // ----------------------------------------------------------------------------- portraits (64x64)
 
 /**
- * Red. The hood is the portrait: it is half the frame, it is the colour the whole rebrand turned on,
+ * Purple. The hood is the portrait: it is half the frame, it is the colour the whole rebrand turned on,
  * and it has to read as the same garment the sprite wears -- `cloak` 1 for the body of it, level 2
  * as a rim and the brim, level 3 as a few pixels of specular on the crown and nowhere else. The
  * ramp's trap is that levels 1 and 2 are 99 levels of luma apart (see paint.ts), so a broad level-2
@@ -211,7 +211,7 @@ function bonnet(img: Img, brow: RGBA): void {
  * reason: section 6 bans one below 32px because it smears; at 64px it is four pixels and it is the
  * difference between a girl and a doll. The animals do not get one.
  */
-const portraitRed: Painter = (img) => {
+const portraitPurple: Painter = (img) => {
   backdrop(img);
 
   // --- shoulders: the cloak, running off both edges of the frame ---
@@ -438,7 +438,7 @@ const portraitKeeper: Painter = (img) => {
   /*
    * His coat is `roof`, the same slate the cast sprite wears, and for the same reason: `night` 2
    * and 3 are #441363 and #6D2D93, which are `cloak` 0 and 1 exactly, so a coat lit in them was a
-   * second character wearing Red's two tokens. See the note on `paintKeeper` in cast.ts.
+   * second character wearing Purple's two tokens. See the note on `paintKeeper` in cast.ts.
    *
    * It also retires the one collision this set had. His coat used to BE the backdrop ramp -- a
    * `night` 1 cloth on a `night` 1 niche has no edge at all -- and the fix was an `ink` 0
@@ -629,7 +629,7 @@ const portraitWolfGrandma: Painter = (img) => {
  *   silver hair at the temples, where his bonnet has two low grey points that are ears;
  *   and a mouth that is smiling, with nothing over the lip.
  *
- * She is the second face in the game to get a mouth, after Red's, and for the same reason: section
+ * She is the second face in the game to get a mouth, after Purple's, and for the same reason: section
  * 6 of docs/PIXEL_STANDARD.md bans one below 32px because it smears, and at 64px it is four pixels
  * and it is the difference between a person and a doll. Both human faces here get those four
  * pixels; none of the animals do.
@@ -710,7 +710,7 @@ const portraitGrandma: Painter = (img) => {
  * budget buys the things that make it an instrument -- knurling round the bezel, eight ticks on the
  * dial, a glass gloss across the top-left -- rather than a bigger flat disc.
  *
- * The needle's north was Red's own scarlet on the board and `cloak` in the 16px painter, which after
+ * The needle's north was Purple's own scarlet on the board and `cloak` in the 16px painter, which after
  * the rebrand means it was wearing her ramp. Her ramp belongs to her: north goes to `night` 2, which
  * is Deep Purple #441363 exactly, and lights to `night` 3, Aubergine. Same two tokens as the wax
  * seal, and the compass stops borrowing from the one character the palette exists to make findable.
@@ -933,13 +933,13 @@ const key: Painter = (img) => {
 };
 
 /**
- * The letter in Red's basket, with the flap folded and the wax still on it. The 4x budget goes on
+ * The letter in Purple's basket, with the flap folded and the wax still on it. The 4x budget goes on
  * the fold: the flap is a plane of its own, one level darker than the paper it lies on, with its
  * creases drawn and a lit edge along its top, instead of the two diagonal scratches the 16px version
  * had room for.
  *
  * The seal is Deep Purple per docs/ART_PRODUCTION.md section 6a: `night` 2 is #441363 exactly and
- * `night` 3 is Aubergine, so the seal takes the brand tokens without borrowing Red's ramp. The heart
+ * `night` 3 is Aubergine, so the seal takes the brand tokens without borrowing Purple's ramp. The heart
  * is the board's own motif and is pressed INTO the wax -- its near rim shades, its far wall catches
  * the light -- which is the opposite of how a raised shape is lit and the only thing that stops it
  * reading as a sticker.
@@ -1147,7 +1147,7 @@ export function paintPawprintsFrame(img: Img, frame: 0 | 1 | 2): void {
 }
 
 export const FACE_PAINTERS: Record<string, Painter> = {
-  'portrait-red': portraitRed,
+  'portrait-purple': portraitPurple,
   'portrait-rabbit': portraitRabbit,
   'portrait-owl': portraitOwl,
   'portrait-keeper': portraitKeeper,

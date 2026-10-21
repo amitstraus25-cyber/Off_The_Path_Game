@@ -240,7 +240,7 @@ export const TILE_NAMES: readonly string[] = [
    *                 keeps the fork at (9,18), because a fork still needs marking and because arrows
    *                 and paper now say two different things. See the long note in s-props.ts.
    *   door-note     the cottage owner's `door`, repainted exactly, with a sheet pinned to its west
-   *                 leaf. A tile rather than a decor-above overlay: decor-above draws over Red, so
+   *                 leaf. A tile rather than a decor-above overlay: decor-above draws over Purple, so
    *                 a note laid there is painted across her face on the doorstep.
    *
    * Appending renumbers nothing, so `map-forest.json` stays valid as committed. Both have to be

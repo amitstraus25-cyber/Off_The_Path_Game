@@ -1,7 +1,7 @@
 # Off the Path: "That's Not My Grandma"
 
 A short, browser-based pixel adventure that lives on Cyera's **Off the Path** research page.
-Players guide Little Red through a forest, question each character's offer, inspect what a
+Players guide Little Purple through a forest, question each character's offer, inspect what a
 "skill" really does, choose **Allow / Restrict / Reject**, and reach Grandma's cottage.
 The point: _a skill can do what it promises and still follow an attacker's instructions._
 Players should leave asking: **who wrote these instructions, and what will my agent actually do?**

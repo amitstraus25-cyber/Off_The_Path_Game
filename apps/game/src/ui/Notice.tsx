@@ -24,7 +24,7 @@ export interface NoticeProps {
 
 /**
  * A post by the path with words on it. The words are the same whoever walks past. What changes is
- * whether anything Red is carrying can read them aloud, see what she holds, and send word out.
+ * whether anything Purple is carrying can read them aloud, see what she holds, and send word out.
  * Nothing on any skill card warned about this, which is the point.
  *
  * One panel in two states, rather than two panels (UX_REVIEW finding 14). The announcement of what

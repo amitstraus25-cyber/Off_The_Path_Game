@@ -291,10 +291,10 @@ test('replay starts a fresh run with a new id', async ({ page }) => {
   expect(after.runId).not.toBe(firstRun);
 });
 
-test('replay puts Red back at the spawn and lets the notice fire again', async ({ page }) => {
+test('replay puts Purple back at the spawn and lets the notice fire again', async ({ page }) => {
   await page.getByRole('button', { name: /Begin the walk/ }).click();
   const spawn = await page.evaluate(() =>
-    window.__otp!.mapObjects!.find((o) => o.name === 'spawn-red')!,
+    window.__otp!.mapObjects!.find((o) => o.name === 'spawn-purple')!,
   );
 
   // Decide everything, read the notice while still exploring, then finish the run.
@@ -323,7 +323,7 @@ test('replay puts Red back at the spawn and lets the notice fire again', async (
   const after = await probe(page);
   expect(after.phase).toBe('explore');
   expect(after.flags).toEqual([]);
-  // Red is a world object: resetting the store alone used to leave her at the cottage gate.
+  // Purple is a world object: resetting the store alone used to leave her at the cottage gate.
   expect(Math.abs(after.position.x - spawn.x)).toBeLessThan(64);
   expect(Math.abs(after.position.y - spawn.y)).toBeLessThan(64);
 
@@ -431,7 +431,7 @@ test.describe('the A button on a phone', () => {
     page,
     context,
   }) => {
-    // CI walks Red across the map on slower hardware than this machine; the tripled
+    // CI walks Purple across the map on slower hardware than this machine; the tripled
     // budget is for the walk, not for a defect.
     test.slow();
     await page.getByRole('button', { name: /Begin the walk/ }).click();

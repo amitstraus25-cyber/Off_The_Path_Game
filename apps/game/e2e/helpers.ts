@@ -26,7 +26,7 @@ declare global {
           asked: Record<string, string[]>;
           basket: string[];
           flags: string[];
-          /** Notice ids Red has actually read, which is what the errand goals score off. */
+          /** Notice ids Purple has actually read, which is what the errand goals score off. */
           read: string[];
           /** Skill ids whose card was opened. Empty for an offer taken on the offerer's word. */
           inspected: string[];
@@ -36,7 +36,7 @@ declare global {
         };
         dispatch(action: Record<string, unknown>): string | null;
       };
-      scene?: { redPosition: { x: number; y: number } };
+      scene?: { purplePosition: { x: number; y: number } };
       isSolidAt?: (x: number, y: number) => boolean;
       mapObjects?: { name: string; x: number; y: number; width: number; height: number }[];
     };
@@ -76,7 +76,7 @@ export async function probe(page: Page): Promise<Probe> {
     const s = otp.store.getState();
     return {
       phase: s.phase,
-      position: otp.scene?.redPosition ?? { x: 0, y: 0 },
+      position: otp.scene?.purplePosition ?? { x: 0, y: 0 },
       verdicts: s.verdicts,
       flags: s.flags,
       basket: s.basket,
@@ -134,7 +134,7 @@ export async function mapObject(page: Page, name: string): Promise<MapObject> {
  *
  * `npc-rabbit` is a tile at (416, 608); the person standing on it answers at (432, 640), because
  * the spawn is centred in its tile and the sprite's origin is its feet. Walking to the object's own
- * corner parks Red short of being able to say anything -- which is exactly how
+ * corner parks Purple short of being able to say anything -- which is exactly how
  * e2e/world-reach.spec.ts was wrong first time round.
  *
  * Both offsets are derived from TILE rather than typed: half a tile across to the centre of the
@@ -152,7 +152,7 @@ export async function mapObject(page: Page, name: string): Promise<MapObject> {
  * touched and kept encoding the old anchor.
  *
  * Eight pixels, and it read as a hole in the map. `walkTo`'s tolerance is `TILE * 1.25` = 40 and
- * the north approach to a cast member is EXACTLY 40.00px, margin zero, so Red landing 3px off
+ * the north approach to a cast member is EXACTLY 40.00px, margin zero, so Purple landing 3px off
  * centre at (333,704) measured 40.11 to the stale target and threw "Something is in the corridor."
  * Against the real anchor it is 32.14, inside tolerance with 8px to spare, and `INTERACT_RADIUS` is
  * 48 -- she could always talk. The game was never broken; the test measured to a point that had
@@ -171,7 +171,7 @@ export async function talkingDistance(page: Page, name: string): Promise<{ x: nu
   return { x: spot.x + TILE / 2, y: spot.y + TILE };
 }
 
-/** Closes a notice post if Red has walked up to one, so a walk across the map is not blocked. */
+/** Closes a notice post if Purple has walked up to one, so a walk across the map is not blocked. */
 export async function dismissNotice(page: Page): Promise<void> {
   const walkOn = page.getByRole('button', { name: /Walk on/ });
   if ((await walkOn.count()) > 0) await walkOn.first().click();
@@ -208,7 +208,7 @@ export async function walkTo(
         ? 'ArrowDown'
         : 'ArrowUp';
     const distance = horizontal ? Math.abs(dx) : Math.abs(dy);
-    // Long enough to cover the gap at the speed Red actually walks, so she lands on the target
+    // Long enough to cover the gap at the speed Purple actually walks, so she lands on the target
     // instead of sailing past it and turning round to sail past it again.
     const ms = Math.min(900, Math.max(120, (distance / WALK_SPEED) * 1000));
     await hold(page, key, ms);
@@ -229,7 +229,7 @@ export async function walkTo(
   const gap = Math.hypot(target.x - last.position.x, target.y - last.position.y);
   if (gap > within)
     throw new Error(
-      `walkTo gave up after ${budgetMs}ms: Red stopped at ` +
+      `walkTo gave up after ${budgetMs}ms: Purple stopped at ` +
         `(${Math.round(last.position.x)}, ${Math.round(last.position.y)}), ` +
         `${Math.round(gap)}px from (${Math.round(target.x)}, ${Math.round(target.y)}), ` +
         `needing ${Math.round(within)}px. Something is in the corridor.`,

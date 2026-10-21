@@ -3,7 +3,7 @@
  *
  * `world/input.ts` cancels Space and Enter on the window whenever the world owns input, and a
  * button's activation is a default action, so the five walk controls answered neither key: 0 click
- * events and Red moved 0.0px, measured on all five for both keys at 1280x800, while a pointer click
+ * events and Purple moved 0.0px, measured on all five for both keys at 1280x800, while a pointer click
  * on the same button moved her 78px. `ui/touch-controls.ts` now stops those two keys at the button
  * so the window never sees them and the browser's own activation survives.
  *

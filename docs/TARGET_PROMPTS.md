@@ -15,15 +15,15 @@ Binding references for all of them: `docs/UI_FOUNDATIONS.md` (supersedes `BRAND_
 
 ## 00 Title
 
-**The gap.** The chip says "Red is already standing on the path". She is not on screen.
+**The gap.** The chip says "Purple is already standing on the path". She is not on screen.
 
 In `apps/game/src/ui/Title.tsx` and `ui/screens.css`, keep the title card docked but cap it near 44% of
-the frame, and set the title screen's camera so Red is framed in the open half rather than off camera.
-The chip "Red is already standing on the path" has to be true on screen or be deleted. Move the Cyera
+the frame, and set the title screen's camera so Purple is framed in the open half rather than off camera.
+The chip "Purple is already standing on the path" has to be true on screen or be deleted. Move the Cyera
 mark from the header into the card. Keep every string as shipped: `strings.title`, `titleHighlight`,
 `subtitle`, `introNote`, `introBody`, `play`, `titleMeta`.
 
-**Acceptance.** At 1280, 768 and 375 wide, Red's sprite is fully visible and never under the card. One
+**Acceptance.** At 1280, 768 and 375 wide, Purple's sprite is fully visible and never under the card. One
 Lime on the screen and it is **Begin the walk**.
 
 ---
@@ -97,7 +97,7 @@ card without reading it.
 
 A modal that halts the game reads as chrome, and this is the one piece of text in the forest the player is
 meant to take seriously. In `apps/game/src/ui/Notice.tsx` and `world/forest-scene.ts`, render it as a
-panel anchored to the post's screen position while Red is inside the trigger, with a pointer back at the
+panel anchored to the post's screen position while Purple is inside the trigger, with a pointer back at the
 post, dismissed by walking away. Keep it focusable and in reading order, and keep a visible **Walk on**
 for touch. The forest post stays unavoidable on the due-east line.
 
@@ -126,7 +126,7 @@ live region.
 
 Entering the cottage opens the dialogue immediately over the current camera position, so the first line
 can land with no cottage on screen. Stage it across `apps/game/src/ui/Cottage.tsx` and
-`world/forest-scene.ts`: ease the camera off Red onto the door, let her walk the last steps, count the
+`world/forest-scene.ts`: ease the camera off Purple onto the door, let her walk the last steps, count the
 basket in the HUD, then open the dialogue and land the three shipped `arriveLines` one at a time. Under
 two seconds in total and skippable with Space or a tap.
 

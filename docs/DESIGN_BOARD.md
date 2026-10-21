@@ -31,7 +31,7 @@ clumps, five tones, a scalloped silhouette, a two-pass blue-black keyline, the b
 dropped to deep teal — and the trunk beneath it, with three lit roots flaring out of a keylined base
 onto a contact shadow in the ground's own green, is as good as anything on the board. The grass finally
 sits at the board's value. The bush has lobes. The flowers sit on bushes with no stems, as they should.
-Red is a character. The Inspect card is better than the board's. Six people have done real work.
+Purple is a character. The Inspect card is better than the board's. Six people have done real work.
 
 And then you render the world and none of it is visible, because **the thing a visitor actually looks
 at is composition, and nobody owns composition.** 270 trees of one crown at one scale are scattered at
@@ -136,7 +136,7 @@ Judge against the named crop. Not against your last version.
 
 ### The bunny — `cast.ts` · board `955 500 130 130 8`
 
-**Right:** proportion (21 × 34, two thirds of Red, thirteen rows of ear); the six-pixel ear gap that
+**Right:** proportion (21 × 34, two thirds of Purple, thirteen rows of ear); the six-pixel ear gap that
 survives `outline()`; the splayed feet; the breath that moves only the head.
 
 **Wrong:** §2 above.
@@ -309,9 +309,9 @@ plausible fix in §3 would casually destroy.
    two-pass keyline, the deep-teal lower half or the root flare.
 4. **The grass's value.** Its mid-range now matches the board exactly. The tuft fix adds sprigs; it does
    not re-open the field tone.
-5. **The wolf, and Red.** Red's approved aubergine-led cloak and her 9×9 cape device — which is a
+5. **The wolf, and Purple.** Purple's approved aubergine-led cloak and her 9×9 cape device — which is a
    deliberately-not-the-logo mark, is not the logo, and must never be called one.
-6. **Warm flowers and toadstool caps.** Settled: purple undergrowth made Red the least findable thing
+6. **Warm flowers and toadstool caps.** Settled: purple undergrowth made Purple the least findable thing
    in her own forest.
 7. **The writing.** The Lantern Keeper's "You will find nothing in it," the Owl's "They were kind,
    though. Very kind," the forest post, and `ctaPrompt`. Protect as written.

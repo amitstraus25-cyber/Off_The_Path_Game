@@ -388,7 +388,7 @@
  * rebranded" and painted the sprawl Haze, the spire Lilac and the toadstool caps Aubergine. That
  * was a misreading of the rebrand. Moving RED's cloak to purple is what makes her findable; it
  * does not make purple the world's accent. On the board, purple is UI chrome and the logo and
- * nothing else, the flowers are pink, red, white and yellow, and Red is the only saturated figure
+ * nothing else, the flowers are pink, red, white and yellow, and Purple is the only saturated figure
  * in frame. Fifteen Lilac objects a camera, in her exact hue and at her exact luma, inverted the
  * standard they were meant to serve. See the note on `rose`, `ember` and `rust` below, which also
  * flags that those three families want to live in `PALETTE` rather than here.
@@ -448,9 +448,9 @@ const ROCK_LINE = keyline('stone', 46);
  * there; what belongs in this file is only why they had to leave it.
  *
  * They were built here because `PALETTE` has no pink, no red and no russet, so the pass before this
- * one painted `flower-pink`, `flower-red` AND the toadstool caps from `cloak` -- Red's own hue --
+ * one painted `flower-pink`, `flower-red` AND the toadstool caps from `cloak` -- Purple's own hue --
  * and the forest came out with roughly fifteen purple objects per camera in the protagonist's
- * colour. PIXEL_STANDARD 3 says Red is the single most findable thing in a green forest; painting
+ * colour. PIXEL_STANDARD 3 says Purple is the single most findable thing in a green forest; painting
  * the undergrowth in her hue made her the least findable. That is settled and the warm families are
  * the fix.
  *
@@ -3083,7 +3083,7 @@ const rockTile: Painter = (img) => {
  *
  * The cap WAS Aubergine, and it was the single loudest piece of Cyera purple in the forest: a
  * bright `cloak` dome at luma 175 with near-white spots on it, three to a tile, ringed round every
- * glade. Russet is both what the board draws and 50 luma of competition taken off Red. It is also
+ * glade. Russet is both what the board draws and 50 luma of competition taken off Purple. It is also
  * the biggest measured win in the file -- this was the worst tile here on both local axes, 23.5
  * per cent edges and 58.5 texture, because `cloak` spans 133 luma across eight pixels and then had
  * `fur` at 250 dropped on top of it. `rust` spans 73 over the same dome and the spots come down

@@ -52,7 +52,7 @@
   },
 
   "scale": {
-    "how": "Red's cloak is the only object drawn on both sides at a known size, so she is the ruler. Her cloak silhouette was isolated as a connected scarlet blob in each board frame and compared with ours (24 px across the hood, 37 rows crown to hem).",
+    "how": "Purple's cloak is the only object drawn on both sides at a known size, so she is the ruler. Her cloak silhouette was isolated as a connected scarlet blob in each board frame and compared with ours (24 px across the hood, 37 rows crown to hem).",
     "measured": {
       "explore": "cloak 64 x 101 board px -> 2.67 by width, 2.73 by height, n = 2.70",
       "question": "cloak 87 x 130 -> 3.63 by width, 3.51 by height, n = 3.57",
@@ -192,6 +192,6 @@
     },
     "old-method": "The same five views, cropped at the board's own resolution (700x500 and similar) and profiled directly, with the three frames' different zooms averaged together.",
     "what-it-cost": "`edges` and `variety` were together ~60% of the spawn distance and ~73% of the whole-map distance, and both pointed the wrong way: edges said 'simplify' to art already softer than the board, and variety said 'add colours' in a way only a gradient could satisfy. Three agents independently found the measurement was off and optimised against it anyway.",
-    "distances-under-each-ruler": "Measured on identical renders, 2026-10-19; the art did not change, only the ruler. spawn-red 0.738 -> 0.351, cottage 0.796 -> 0.536, stall 0.776 -> 0.453, whole map 1.003 -> 0.611. The drop is not progress. It is the two impossible targets being removed. What matters is that all six axes now point the same way -- every ratio is below 1 -- where before `edges` fought the other five."
+    "distances-under-each-ruler": "Measured on identical renders, 2026-10-19; the art did not change, only the ruler. spawn-purple 0.738 -> 0.351, cottage 0.796 -> 0.536, stall 0.776 -> 0.453, whole map 1.003 -> 0.611. The drop is not progress. It is the two impossible targets being removed. What matters is that all six axes now point the same way -- every ratio is below 1 -- where before `edges` fought the other five."
   }
 }

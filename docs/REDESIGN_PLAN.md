@@ -16,14 +16,14 @@ Binding specs: `docs/ART_DIRECTION.md`, `docs/PIXEL_STANDARD.md`, `docs/UI_FOUND
 
 Measured, not estimated, at the time of writing.
 
-|                  | State                                                                                  |
-| ---------------- | -------------------------------------------------------------------------------------- |
-| Scale            | 32px tiles, 32×48 characters, 64×64 portraits. Done and green.                         |
-| Rebrand          | Done. No true red survives; Red is Lilac-led (333px Lilac vs 102 Aubergine per frame). |
-| Tests            | 154 core at 100% branch, 95 game, 65 end-to-end. All passing.                          |
-| Assets           | Zero partial alpha. `TILE_NAMES` frozen at 53 in order.                                |
-| Commits          | 6 ahead of `origin/main`. **Nothing pushed yet this session.**                         |
-| Art vs the board | **Not there.** This is the whole remaining problem.                                    |
+|                  | State                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| Scale            | 32px tiles, 32×48 characters, 64×64 portraits. Done and green.                            |
+| Rebrand          | Done. No true red survives; Purple is Lilac-led (333px Lilac vs 102 Aubergine per frame). |
+| Tests            | 154 core at 100% branch, 95 game, 65 end-to-end. All passing.                             |
+| Assets           | Zero partial alpha. `TILE_NAMES` frozen at 53 in order.                                   |
+| Commits          | 6 ahead of `origin/main`. **Nothing pushed yet this session.**                            |
+| Art vs the board | **Not there.** This is the whole remaining problem.                                       |
 
 **The gap, specifically.** The board is a dense storybook forest; the build is a sparse lawn with
 objects on it. Four differences carry almost all of it:
@@ -119,7 +119,7 @@ The run is not done when the agents say so. It is done when all of these are tru
 checked by someone who looked:
 
 - The forest reads as the board's forest: dense, keylined, layered.
-- Red is the most findable thing on screen, and she is Cyera purple.
+- Purple is the most findable thing on screen, and she is Cyera purple.
 - The cottage is somewhere you want to walk to.
 - The four animals are distinguishable by silhouette alone.
 - `TILE_NAMES` still holds its names in the same order, and the map is fully playable to every goal.

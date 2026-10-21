@@ -15,7 +15,7 @@ Binding for anything that is UI rather than world art: `docs/UI_FOUNDATIONS.md`.
 
 ## 1. The one decision everything waits on: 16px or 32px
 
-**Measured.** Red is **24px** tall in the game. The same character in the approved art is **60px**.
+**Measured.** Purple is **24px** tall in the game. The same character in the approved art is **60px**.
 The concept direction is drawn at **2.5× the game's current scale**. That is the whole reason the
 placeholder reads as placeholder: a 16×16 grass tile has 256 pixels to work with, and the reference
 is using roughly six times that area for the same square of ground.
@@ -25,7 +25,7 @@ is using roughly six times that area for the same square of ground.
 |               | now (16px) | proposed (32px) | **what shipped**                      |
 | ------------- | ---------- | --------------- | ------------------------------------- |
 | Tile          | 16×16      | 32×32           | 32×32                                 |
-| Red           | 16×24      | 32×48           | 32×48                                 |
+| Purple        | 16×24      | 32×48           | 32×48                                 |
 | NPCs          | 16×24      | 32×48           | 32×48                                 |
 | Portraits     | 32×32      | 64×64           | 64×64                                 |
 | Items         | 32×32      | 64×64           | 64×64                                 |
@@ -74,7 +74,7 @@ upscaled 16px art. Every frame below is drawn again.
 | Group           | Files   | Frames | Size now   | Size proposed | Reference       |
 | --------------- | ------- | ------ | ---------- | ------------- | --------------- |
 | Terrain tileset | 1       | 54     | 16×16      | 32×32         | yes, for all    |
-| Red             | 1 atlas | 16     | 16×24      | 32×48         | yes             |
+| Purple          | 1 atlas | 16     | 16×24      | 32×48         | yes             |
 | Rabbit, Owl     | 2       | 4      | 16×24      | 32×48         | yes             |
 | Lantern Keeper  | 1       | 2      | 16×24      | 32×48         | **none**        |
 | Wolf            | 1       | 4      | 16×24      | 32×48         | silhouette only |
@@ -122,11 +122,11 @@ is awning, counter, goods and a hanging sign.
 
 ---
 
-## 4. Red, 16 frames
+## 4. Purple, 16 frames
 
 16×24 → **32×48**. Four directions × (idle + 3 walk).
 
-The reference Red: a hood with a visible brim, a face with two eye pixels and a blush, a cloak that
+The reference Purple: a hood with a visible brim, a face with two eye pixels and a blush, a cloak that
 falls to the knee, blue trousers, and a basket carried in the off hand. The basket is the detail
 that makes her read as on an errand rather than just walking.
 
@@ -158,7 +158,7 @@ Do them last.
 
 ## 6. Portraits and items
 
-**Portraits**, 5 at 32×32 → 64×64. Red and the Rabbit have reference in the approved deck's dialogue
+**Portraits**, 5 at 32×32 → 64×64. Purple and the Rabbit have reference in the approved deck's dialogue
 frames. The Owl can be derived from the board. The Keeper and the Wolf cannot: they wait on section 5.
 
 **Items**, 5 at 32×32 → 64×64. The compass and the lantern have reference on the board, as the stall
@@ -175,18 +175,18 @@ path outside the door.
 
 Decided alongside the remaster. Boards: the **Rebrand** band on the canvas.
 
-**The rule.** Every asset was scanned for warm red. Red's cloak is **50 to 64 per cent of each of her
+**The rule.** Every asset was scanned for warm red. Purple's cloak is **50 to 64 per cent of each of her
 sixteen frames** and 39 per cent of her portrait; nothing else is close. That is why she is findable
 in a green forest. So she moves to purple **and everything else that is red moves off red**, or she
 stops being the one thing your eye catches.
 
 **The world stays a forest.** Cyera's palette has no green, no brown and no water blue. Brand colour
-enters through Red, the wolf, the night, the notice and the UI. Lime appears nowhere in the world: it
+enters through Purple, the wolf, the night, the notice and the UI. Lime appears nowhere in the world: it
 is one call to action per screen, per `UI_FOUNDATIONS`.
 
 | Element                         | Today                 | Becomes                                             |
 | ------------------------------- | --------------------- | --------------------------------------------------- |
-| Red's cloak                     | Scarlet               | Deep Purple → Lilac → Haze                          |
+| Purple's cloak                  | Scarlet               | Deep Purple → Lilac → Haze                          |
 | Cottage roof, 4 tiles           | Red                   | Slate with Clay highlights                          |
 | Well roof                       | Red                   | Slate                                               |
 | Stall awning, 3 tiles           | Red and white stripes | Haze and Offwhite stripes                           |
@@ -214,7 +214,7 @@ are acceptable; a squashed logo is not.
 
 1. **Settle 32px.** Everything below is blocked on it. One afternoon of code, then regenerate.
 2. **Terrain, about 76 tiles.** Largest block, most reference, and nothing can be judged without it.
-3. **Red, 20 frames.** On screen for the whole game.
+3. **Purple, 20 frames.** On screen for the whole game.
 4. **Rabbit and Owl, 8 frames.** Reference exists, so these are straight execution.
 5. **Design passes: the Lantern Keeper, then the Wolf.** These are decisions, not drawing. Do them
    while terrain is in flight so they are not on the critical path.

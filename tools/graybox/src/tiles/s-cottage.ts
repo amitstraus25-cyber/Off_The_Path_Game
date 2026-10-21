@@ -57,7 +57,7 @@
  * stonework is legible. Worked stone is `stone` here; the roof is `roof`.
  *
  * NO CYERA PURPLE IN THE WORLD. The window-box blooms were Lilac and Haze. On the board the only
- * saturated figure in the frame is Red herself, and the garden flowers are white, pink and yellow;
+ * saturated figure in the frame is Purple herself, and the garden flowers are white, pink and yellow;
  * putting her hue on the cottage is what made her hard to find. The blooms are now `fur`, `skin` and
  * `gold`, and the single warm `gold` centre stays because it is a contrast device on a dark bush.
  *
@@ -140,7 +140,7 @@
  *   3. THE WALL IS NOW THE BOARD'S HEIGHT. The roof tiles carry the top eleven rows of the wall
  *      (`EAVE_Y` puts the fascia at row 20 of `roof-l/m/r` and the overhang's shadow on plaster
  *      beneath it), so one 32-pixel course of openings under them is 42 pixels of wall, not 32.
- *      Measured against Red -- 48 pixels tall here, 162 of the mock's own pixels in its Arrive frame
+ *      Measured against Purple -- 48 pixels tall here, 162 of the mock's own pixels in its Arrive frame
  *      -- the board's cottage is 49 pixels of wall under about 48 of roof. Ours is 42 under 54.
  *      Within seven pixels on a 96-pixel elevation, where it used to be 75 under 53.
  */
@@ -1064,13 +1064,13 @@ function shingle(
    * material from its wall rather than a grey mat above a cream one."
    *
    * The board's roof is terracotta and ours cannot be -- section 6a takes the biggest red mass in the
-   * game off red so that Red stays the one saturated figure in the frame, and that decision stands.
+   * game off red so that Purple stays the one saturated figure in the frame, and that decision stands.
    * But what the board is actually doing there is not "red": it is putting a SATURATED, MID-VALUE
    * material above a DESATURATED, HIGH-VALUE one. Ours had the value half and none of the chroma
    * half, which is why two different materials read as one.
    *
    * So every slate now takes a fixed step towards `wood` before its own cast is applied. It is a
-   * warm clay-grey -- nowhere near brown, nowhere near Red's hue -- and it separates from the cream
+   * warm clay-grey -- nowhere near brown, nowhere near Purple's hue -- and it separates from the cream
    * plaster by chroma as well as by value, which is what the board's separates by.
    *
    * THE CAST STAYS SIGNED AND ITS CENTRE MOVES WARM rather than widening. The round that was pulled
@@ -1639,7 +1639,7 @@ const cottageGable: Painter = (img) => {
  * One pane: a navy sheet with the sky caught in the top of it, lit from the left.
  *
  * NAVY, and built by mixing rather than by picking a ramp, because neither ramp alone is the board's
- * colour. `night` on its own is a dark PURPLE -- it is Deep Purple and Aubergine, Red's own hues --
+ * colour. `night` on its own is a dark PURPLE -- it is Deep Purple and Aubergine, Purple's own hues --
  * and putting her colour in Grandma's windows is the inversion this file has just taken out of the
  * flower boxes. `water` on its own is a sunlit stream and far too saturated for a reflection. Mixed,
  * they run from luma 45 at the bottom of a pane to 91 at the top, which is the board's pane almost
@@ -1705,7 +1705,7 @@ function litGlass(
  *
  * `forest-map.ts` lays ONE window tile TWICE, at `cx + 1` and `cx + 4` of the same wall course. A
  * tile cannot know which of the two it is and it cannot know which ending the player reached, so a
- * wolf painted into it appeared in BOTH windows on EVERY ending -- including the endings where Red
+ * wolf painted into it appeared in BOTH windows on EVERY ending -- including the endings where Purple
  * refused every skill and the thing in the cottage is Grandma. The arrival screen gates its portrait
  * on the ending; this tile is the same thirty-two pixels every time and no amount of gating upstream
  * can reach it. It was reported and never fixed, and it was the one defect on this building that
@@ -1778,7 +1778,7 @@ const TRANSOM = 11; // rows 11..12
  *
  * NO ANIMAL IN IT. The wolf belongs to the arrival PANEL, which is gated on the ending; a tile is
  * the same thirty-two pixels on every ending, so a wolf painted here would appear in the window on
- * the endings where Red refused every skill and the thing in the cottage is Grandma. The earlier
+ * the endings where Purple refused every skill and the thing in the cottage is Grandma. The earlier
  * fix that took him out of `wall-window` was right and this is how it keeps being right: the lamp is
  * the part of that picture a tile is allowed to carry, and the Arrive panel's "The lamp is lit" --
  * protected copy, written over two dark windows until now -- is the part it has to carry.
@@ -1941,7 +1941,7 @@ function windowTile(lit: boolean): Painter {
      *
      * THEY ARE WARM NOW. They were drawn in `fur` and `skin` -- a near-white cross with a gold eye --
      * at a round when `PALETTE` held no saturated warm colour at all and the only alternative was
-     * Red's own Lilac, which is why the note above them still says "pink and red" about a pair of
+     * Purple's own Lilac, which is why the note above them still says "pink and red" about a pair of
      * white flowers. `rose` and `ember` are in `paint.ts` now, measured off the board's own blooms,
      * and the board's window box is unambiguous at `2060 1250 230 230 3`: red and pink four-petal
      * crosses with a pale eye, not white ones.
@@ -1998,7 +1998,7 @@ function windowTile(lit: boolean): Painter {
  *                     and seats the whole building on the grass
  *
  * The rebrand holds: the surround and the step are cool `stone` against the warm slate above, the
- * arch and the leaf are `wood`, the light is `gold`, and nothing here is purple -- that is Red's.
+ * arch and the leaf are `wood`, the light is `gold`, and nothing here is purple -- that is Purple's.
  */
 
 /** The opening, and the stone that frames it. */

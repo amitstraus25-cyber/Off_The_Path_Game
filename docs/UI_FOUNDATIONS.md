@@ -144,9 +144,9 @@ pills. The basket sits directly below in its own panel with a `2 of 5` count. On
 
 **04 Arrive.** Chip reads `3 of 3 skills decided`. The cottage scene carries the story: wolf
 silhouette in the lit window, paw prints on the path, smoking chimney, mailbox with the flag up. The
-dialogue has a `RED` speaker eyebrow and a circular `⌄` advance button at the right.
+dialogue has a `PURPLE` speaker eyebrow and a circular `⌄` advance button at the right.
 
-**05 Results.** Red's portrait, eyebrow `GRANDMA'S COTTAGE REACHED`, then the score as a large
+**05 Results.** Purple's portrait, eyebrow `GRANDMA'S COTTAGE REACHED`, then the score as a large
 numeral with a `points` suffix, then **a plain-language breakdown**:
 `600 from your three verdicts · 100 for asking what the compass needed`. Section heading
 `WHAT WAS hiding IN EACH SKILL` with _hiding_ as the Season Mix highlight. Recap rows, then

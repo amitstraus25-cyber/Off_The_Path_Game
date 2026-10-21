@@ -62,7 +62,7 @@ export function createInput(target: Window, options: InputOptions = {}): Input {
     }
   };
   const onKeyUp = (e: KeyboardEvent): void => void held.delete(e.code);
-  // A lost focus must not leave Red walking into a tree forever.
+  // A lost focus must not leave Purple walking into a tree forever.
   const onBlur = (): void => {
     held.clear();
     stick = { x: 0, y: 0 };

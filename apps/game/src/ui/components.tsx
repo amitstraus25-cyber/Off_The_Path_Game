@@ -330,7 +330,7 @@ function useGoalsDrop(): boolean {
  * So the bar takes the two keys out of the air before the window can see them. `stopPropagation`
  * alone is the whole fix -- the window listener never runs, so nothing calls `preventDefault`, so
  * the browser's own activation goes ahead and the `onClick` fires exactly once. It also means that
- * pressing Enter on the goals cannot additionally interact with whoever Red is standing next to.
+ * pressing Enter on the goals cannot additionally interact with whoever Purple is standing next to.
  *
  * THE MUSIC TOGGLE IN THIS FILE ALREADY DOES THIS, five hundred lines up and in the same three
  * lines; it is not a new trick, it is the house answer for a control that sits over the world

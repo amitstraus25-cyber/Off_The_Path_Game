@@ -89,7 +89,7 @@ export function score(log: readonly RunEvent[], content: Content): ScoreResult {
   const errandDone = goals.every((g) => g.met);
 
   /*
-   * The gamble pays only if nothing was taken from Red. One flag is enough to lose it, which is
+   * The gamble pays only if nothing was taken from Purple. One flag is enough to lose it, which is
    * what keeps "say yes to everything" from being the fast route to a good score: it is the fast
    * route to the worst one.
    */

@@ -15,7 +15,7 @@ research / product marketing team before launch. Items marked **[DECISION]** app
 
 | In the story                               | In the research                         | What it teaches                                                     |
 | ------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------- |
-| Red Riding Hood                            | The AI agent                            | The agent has a legitimate task and will use whatever it is handed. |
+| Little Purple Riding Hood                  | The AI agent                            | The agent has a legitimate task and will use whatever it is handed. |
 | Delivery to Grandma                        | The intended task                       | The goal stays the same while the route can be tampered with.       |
 | Forest characters and their offers         | Third-party skills and capabilities     | Useful help arrives from sources the agent did not write.           |
 | A friendly character passing a skill along | A compromised skill in the supply chain | The sender can be honest and the skill still malicious.             |
@@ -27,14 +27,14 @@ research / product marketing team before launch. Items marked **[DECISION]** app
 
 1. **Explore.** Top-down forest. Walk with keyboard (arrows/WASD) or on-screen joystick. Quest marker "Find Grandma" is always visible. Characters stand near landmarks and offer a skill.
 2. **Question.** Talk (A button / Space / Enter / tap) to a character. Dialogue offers three questions: **What does it need?**, **Who made it?**, **Show me.** The first two give flavor and clues; **Show me** opens the skill card. Asking is optional but rewarded.
-3. **Inspect.** The skill card shows the **promise** (what it says it does) and, when present, the **fine print** (a hidden action that is visible on close reading). Player chooses **Allow**, **Restrict** or **Reject**. The basket at the bottom shows what Red is carrying.
+3. **Inspect.** The skill card shows the **promise** (what it says it does) and, when present, the **fine print** (a hidden action that is visible on close reading). Player chooses **Allow**, **Restrict** or **Reject**. The basket at the bottom shows what Purple is carrying.
 4. **Arrive.** At the cottage, the wolf-as-Grandma encounter plays out according to the choices. A short recap ties each consequential choice to the hidden instruction behind it. Then results, leaderboard, and the call to action: **Read the Research**.
 
 ## 4. Verdict semantics (important to get right)
 
-- **Allow**: Red gets the skill with every permission it asks for (including the hidden one).
-- **Restrict**: Red gets the skill, scoped. The hidden action is stripped; and where a skill's _stated_ purpose is itself a capability, Restrict bounds whether that capability runs at all. On Night Light, whose purpose is to read what strangers wrote, Restrict grants nothing: the lantern lights only what Red holds it to. This is the "least privilege" move, and it is the one verdict that can express an architectural boundary rather than careful reading.
-- **Reject**: Red does not take the skill. Safe, but the benefit is lost (no route on the map, etc.).
+- **Allow**: Purple gets the skill with every permission it asks for (including the hidden one).
+- **Restrict**: Purple gets the skill, scoped. The hidden action is stripped; and where a skill's _stated_ purpose is itself a capability, Restrict bounds whether that capability runs at all. On Night Light, whose purpose is to read what strangers wrote, Restrict grants nothing: the lantern lights only what Purple holds it to. This is the "least privilege" move, and it is the one verdict that can express an architectural boundary rather than careful reading.
+- **Reject**: Purple does not take the skill. Safe, but the benefit is lost (no route on the map, etc.).
 - Each skill defines which verdict is best. **A skill with no fine print must exist** so "reject everything" is not the winning strategy. [DECISION D1, amended 2026-10-16: Night Light is still honest on inspection — it has no fine print — but it is no longer safe by default. Its best verdict is Restrict; Allow leaves it reading what strangers wrote. `docs/RESEARCH_ALIGNMENT.md` open question 4 asks research to confirm this direction and **has not been answered**.]
 - The skill card must make the right answer _discoverable_, not obvious: the fine print is real text on the card, in plain language, at the same size as the promise.
 
@@ -98,7 +98,7 @@ all, and none of them knows what it is remarking on.
 
 The Cat is the only one past the notice post, so every decision is already made before she speaks.
 She is held to the same bar as the others and it is tightest on her, because she is closest to the
-reveal: her exposed line reports a small grievance of her own, not a danger to Red. "Someone is in
+reveal: her exposed line reports a small grievance of her own, not a danger to Purple. "Someone is in
 her chair, and I do not know them" was cut for exactly that reason. A bystander who has perceived
 the threat makes the other three read as negligent rather than funny, and turns the ending from a
 surprise into a confirmation.
@@ -128,7 +128,7 @@ Two rules now hold, and both are tested:
   with `trigger-cottage` treated as a wall. A plain collision flood fill cannot see this, because
   the trigger is a terminator rather than an obstacle and its tiles are deliberately walkable.
 - **A notice, and the trigger that ends the walk, must lie on the line a due-east walker actually
-  walks.** `overlaps` is a point test on Red's feet, and a player who only holds Right keeps her
+  walks.** `overlaps` is a point test on Purple's feet, and a player who only holds Right keeps her
   feet on row 21 for the whole map. A one-row rect is invisible to that player. The first attempt
   at this fix put the trigger on the doorstep row alone, which meant she walked past the door and
   out across the lawn and the run never ended, which is worse than the bug being fixed. The note
@@ -164,7 +164,7 @@ read every permission before granting it, which is the one thing the research sa
 happen. The fortieth prompt of the day gets the same half-second as the first.
 
 **It is a gamble, not a trap.** An offer taken on trust scores nothing of its own; the whole of
-what it is worth is `scoring.trustBonus`, paid once at the end and only if Red arrived with no
+what it is worth is `scoring.trustBonus`, paid once at the end and only if Purple arrived with no
 flags. So:
 
 Every row below asks the two bonus questions; the run shape is in its own column, because two of the
@@ -203,8 +203,8 @@ anyway, which is the payoff.
 | Skill                                  | Promise (shows on card)                                         | Fine print / hidden action                                                                          | Best verdict | Why                                                                              |
 | -------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
 | Cottage Finder (compass)               | Finds the route: shows a path to Grandma's cottage on your map. | Also copies your cottage key: requests access to your key so it can keep a backup. (from the board) | **Restrict** | Take the route, refuse the key.                                                  |
-| Word Weaver (translator) [PLACEHOLDER] | Translates what forest folk say.                                | Also forwards everything Red says to a "helper" address (the wolf).                                 | **Reject**   | The hidden action is the whole point; nothing useful remains after stripping it. |
-| Night Light (lantern) [PLACEHOLDER]    | Lights what is written, so Red can read signs in the dark.      | Nothing hidden. Its stated purpose is the risk: it reads what strangers wrote.                      | **Restrict** | The one card where a boundary, not careful reading, is the answer.               |
+| Word Weaver (translator) [PLACEHOLDER] | Translates what forest folk say.                                | Also forwards everything Purple says to a "helper" address (the wolf).                              | **Reject**   | The hidden action is the whole point; nothing useful remains after stripping it. |
+| Night Light (lantern) [PLACEHOLDER]    | Lights what is written, so Purple can read signs in the dark.   | Nothing hidden. Its stated purpose is the risk: it reads what strangers wrote.                      | **Restrict** | The one card where a boundary, not careful reading, is the answer.               |
 
 Each hidden action must correspond to a real class of behavior in the research (credential access beyond purpose,
 data exfiltration, instruction hijacking). **Have the research team sign off on every line of fine print and recap.**
@@ -224,7 +224,7 @@ Amended 2026-10-17: the errand became three goals (see **The errand** below). Th
   - `sign` — read the note on Grandma's door. Needs `strangers`, and the `cottage-door` notice must have been read. This is the only thing `strangers` is good for, and it is why taking the lantern at its word is now rational rather than self-harm.
 - Maximum **1,000**. You cannot collect all three goals and keep the boundary: all three goals require all three capabilities, which is the trifecta. 300 in goals costs the 200 boundary bonus plus the per-skill price, so the full errand peaks at 750 — `restrict/restrict/allow`, both notices read, questions asked, and it draws the **close call** ending rather than a clean one, because reading the post with all three legs live is the trap firing.
 - **Totals as shipped. The run shape is part of the number** — two of the errand goals need a notice
-  read, so the same three verdicts score differently depending on where Red walked, and a table that
+  read, so the same three verdicts score differently depending on where Purple walked, and a table that
   does not say which shape it is describing is not a table. Both columns are without questions and
   (with the +100 question bonus). Printed by `pnpm sim`, which always reads both notices, so its table
   is the right-hand column.
@@ -239,7 +239,7 @@ Amended 2026-10-17: the errand became three goals (see **The errand** below). Th
   | `restrict/restrict/allow`  | 450 (550)                               | 650 (750)         |
 
   The restrict-all cell used to read 850 (950) in the straight-to-the-cottage column. That is the
-  figure from the other column: restrict-all holds `word`, so the moment Red reads the forest post it
+  figure from the other column: restrict-all holds `word`, so the moment Purple reads the forest post it
   earns a second goal. Two lines reach 1,000, both of them with questions asked: `restrict/reject/restrict`
   wherever she walks, and `restrict/reject/allow` only if she reads both notices.
 
@@ -252,8 +252,8 @@ Amended 2026-10-17: the errand became three goals (see **The errand** below). Th
 The wolf reveals consequences from flags set during the run: `keyStolen`, `messagesLeaked`, and (if a skill ever sets it) `locationLeaked`.
 
 - **Clean arrival** (no flags): the door opens, real Grandma waves from inside; the wolf slinks away. Warm.
-- **Close call** (one flag): the wolf is at the door holding the stolen thing; Red notices in time.
-- **The wolf's house** (two or more flags): the wolf is already inside. Not gory; Red steps back, the door shuts. Text: "Someone wrote those instructions. It wasn't you."
+- **Close call** (one flag): the wolf is at the door holding the stolen thing; Purple notices in time.
+- **The wolf's house** (two or more flags): the wolf is already inside. Not gory; Purple steps back, the door shuts. Text: "Someone wrote those instructions. It wasn't you."
   Each ending leads to the **recap** (one row per skill: your call, what was hiding, what it did), then the **leaderboard** and CTA.
 
 **The close ending's first line is _"Grandma, where did you get that?"_ — and the concept board's

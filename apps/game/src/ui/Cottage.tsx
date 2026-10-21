@@ -46,7 +46,7 @@ const Caret = () => (
  * The world stays on screen behind this. It used to be replaced by an opaque page, so the game's
  * climax played out as a small card on an empty field with the cottage nowhere in sight — and the
  * wolf's portrait was shown on the very first approach line, giving the reveal away before the
- * sequence had begun. Red is at the door until the reveal; only then does the portrait change.
+ * sequence had begun. Purple is at the door until the reveal; only then does the portrait change.
  *
  * Both halves of the sequence are now keyed on the ENDING, not on one flat script run for every
  * outcome (docs/UX_REVIEW.md 3). Before this a flawless run read "There are paw prints in the soft
@@ -64,7 +64,7 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
   const script =
     content.strings[`arriveLines.${chosen.id}`] ?? content.strings['arriveLines'] ?? '';
   const approach = script.split('|').filter(Boolean);
-  const face = content.strings[`arrivePortrait.${chosen.id}`] ?? 'portrait-red';
+  const face = content.strings[`arrivePortrait.${chosen.id}`] ?? 'portrait-purple';
   const beats = [
     ...approach.map((line) => ({ line, reveal: false })),
     ...chosen.lines.map((line) => ({ line, reveal: true })),
@@ -162,10 +162,10 @@ export function Cottage({ content, state, onFinish }: CottageProps) {
           <div
             class="otp-portrait"
             style={{
-              backgroundImage: `url("${assetUrl(`${revealed ? face : 'portrait-red'}.png`)}")`,
+              backgroundImage: `url("${assetUrl(`${revealed ? face : 'portrait-purple'}.png`)}")`,
             }}
             role="img"
-            aria-label={revealed ? 'At the cottage door' : 'Red on the doorstep'}
+            aria-label={revealed ? 'At the cottage door' : 'Little Purple on the doorstep'}
           />
           <div class="otp-dialogue__text otp-arrive__text" ref={text} tabIndex={-1} data-autofocus>
             {/*

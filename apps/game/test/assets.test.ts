@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import manifest from '../src/assets/manifest.json';
-import atlas from '../src/assets/red.json';
+import atlas from '../src/assets/purple.json';
 import gids from '../src/assets/tileset-forest.gids.json';
 import { TILE } from '../src/world/logic';
 import type { Facing } from '../src/world/logic';
@@ -56,8 +56,8 @@ describe('the manifest describes the files that are actually on disk', () => {
     }
   });
 
-  it("the atlas frames all fit inside Red's sheet", () => {
-    const sheet = pngSize('red.png');
+  it("the atlas frames all fit inside Purple's sheet", () => {
+    const sheet = pngSize('purple.png');
     const frames = Object.values(
       atlas.frames as Record<string, { frame: { x: number; y: number; w: number; h: number } }>,
     );
@@ -103,7 +103,7 @@ describe('the manifest describes the files that are actually on disk', () => {
 
   /*
    * The frame names are a contract across the workspace boundary and were spelled out by hand on
-   * both sides of it: graybox's sprites.ts writes `red-idle-<facing>-0` and `red-walk-<facing>-N`,
+   * both sides of it: graybox's sprites.ts writes `purple-idle-<facing>-0` and `purple-walk-<facing>-N`,
    * and forest-scene.ts asks for exactly those strings at setFrame and in its walk animations. A
    * rename on either side is a silent missing frame in the running game and reddens nothing.
    *
@@ -112,9 +112,9 @@ describe('the manifest describes the files that are actually on disk', () => {
    */
   const FACINGS = Object.keys({ down: 0, left: 0, right: 0, up: 0 } satisfies Record<Facing, 0>);
 
-  it.each(FACINGS)("Red's atlas names every frame the scene asks for, facing %s", (facing) => {
+  it.each(FACINGS)("Purple's atlas names every frame the scene asks for, facing %s", (facing) => {
     const names = Object.keys(atlas.frames);
-    expect(names).toContain(`red-idle-${facing}-0`);
-    for (const phase of [0, 1, 2]) expect(names).toContain(`red-walk-${facing}-${phase}`);
+    expect(names).toContain(`purple-idle-${facing}-0`);
+    for (const phase of [0, 1, 2]) expect(names).toContain(`purple-walk-${facing}-${phase}`);
   });
 });

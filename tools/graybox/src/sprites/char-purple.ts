@@ -1,5 +1,5 @@
 /*
- * Red, at 32 x 48: four facings by four frames, the sixteen she is on screen for the whole game.
+ * Purple, at 32 x 48: four facings by four frames, the sixteen she is on screen for the whole game.
  *
  * Redrawn against `reference/mocks/gameplay-concepts.png`. The board shows her three times -- from
  * the front on the forest path (Explore), and from behind at the stall and at the cottage door
@@ -37,7 +37,7 @@
  * `ART_PRODUCTION` section 6a offers two cloaks, "both produced by recolouring the real sprite with
  * a LUMINANCE-PRESERVING ramp", and recommends A, Lilac-led, as "easiest to find at a 26-tile
  * camera". Every previous pass in this file took the recommendation and dropped the constraint. So
- * the board's Explore frame was sampled directly -- `reference/mocks/gameplay-concepts.png`, Red at
+ * the board's Explore frame was sampled directly -- `reference/mocks/gameplay-concepts.png`, Purple at
  * (780,620), the crop around her:
  *
  *     board, measured          luma        ours before this change
@@ -46,7 +46,7 @@
  *     lawn she stands beside 166 .. 180    167 .. 179
  *     path she stands on     216           --
  *
- * The board's Red is a DARK figure on a LIGHT ground, 70 to 140 luma below everything around her.
+ * The board's Purple is a DARK figure on a LIGHT ground, 70 to 140 luma below everything around her.
  * Lilac at 175 against a lawn at 167..180 is not a findable figure, it is camouflage: identical
  * luma, and since the rebrand the same hue family as the flowers, the toadstools and the stall
  * awning. Option A's recommendation was a prediction about a camera, and the prediction is simply
@@ -80,7 +80,7 @@
  * ---
  *
  * Re-shaded 2026-10-19, and this is the change worth understanding, because it is not a redraw.
- * Measured against the board's own Red (the Explore frame, crown to sole), in luma buckets of 32:
+ * Measured against the board's own Purple (the Explore frame, crown to sole), in luma buckets of 32:
  *
  *     bucket      0-31   32-63   64-95  96-127  128-159  160-191  192-223   224+
  *     board      14.6%   15.7%   16.6%   15.3%     7.2%    11.3%    18.1%   1.2%
@@ -116,15 +116,15 @@
  * HOW TO MEASURE THIS FILE, because three rounds have measured it wrongly in two different ways.
  *
  * 1. `pnpm world` composes TILES ONLY. It imports `tiles.ts` and `forest-map.ts` and never draws a
- *    sprite; `--at spawn-red` is a camera landmark, not Red. A controlled A/B of this file against
+ *    sprite; `--at spawn-purple` is a camera landmark, not Purple. A controlled A/B of this file against
  *    the committed one, tiles held constant, moves `pnpm score` by exactly 0.000. Sprite work has
  *    to be rendered as a sheet and profiled: `node src/score.ts --profile <sheet.png>`.
  *
  * 2. `board-profile.json` is the WRONG TARGET for a sprite, and this is the more expensive mistake.
- *    It is built from board crops at roughly 2.7x our resolution. Downsample the board's own Red to
+ *    It is built from board crops at roughly 2.7x our resolution. Downsample the board's own Purple to
  *    our scale with NEAREST sampling and profile her, and two of the six axes fall apart:
  *
- *        axis        board Red @ our res    this file    verdict
+ *        axis        board Purple @ our res    this file    verdict
  *        deep                     50.00        48.90     match
  *        keyline                  35.71        35.32     match
  *        spread                   54.05        56.57     match
@@ -143,8 +143,8 @@
  *    round that chased it sanded the art smooth. Do not chase `edges` or `variety` on a sprite.
  *
  * 3. NEITHER OF THE ABOVE IS THE TEST THAT MATTERS, and this round is the first to run the one
- *    that does. Both of them measure Red against white. She is never seen against white. Composite
- *    a frame onto a real render of the map -- `pnpm world --out /tmp/w.png --at spawn-red`, then
+ *    that does. Both of them measure Purple against white. She is never seen against white. Composite
+ *    a frame onto a real render of the map -- `pnpm world --out /tmp/w.png --at spawn-purple`, then
  *    read the PNG back and blit the frame onto the grass -- and look at it. Thirty lines of
  *    throwaway script, and it answered in one glance a question four rounds of statistics had not
  *    asked: what does the eye land on first? The answer was her ankles. See below.
@@ -159,8 +159,8 @@
  *    since the previous round: #160620 at luma 14, against a lawn at 117 and her own cloth at 87.
  *    She has had a near-black outline all along. The note almost certainly described an older
  *    render -- this file's own footer claimed for two rounds that nothing imported it. THAT claim
- *    is now false too, and provably: `sprites.ts` line 14 imports `./sprites/char-red.ts`, and the
- *    committed `apps/game/src/assets/red.png` profiles at 48.81 / 35.23 / 56.52 / 27.66 / 52.03 /
+ *    is now false too, and provably: `sprites.ts` line 14 imports `./sprites/char-purple.ts`, and the
+ *    committed `apps/game/src/assets/purple.png` profiles at 48.81 / 35.23 / 56.52 / 27.66 / 52.03 /
  *    5.54, which is this file's pre-change sheet to the second decimal on all six axes. The import
  *    was moved; the footer was not. Nothing was done to the keyline this round.
  *
@@ -195,7 +195,7 @@
  *
  *    A first attempt simply darkened all five to 37..69. It measured better on every axis and it
  *    was worse: the legs became one dark block and the cool note the board genuinely has (its
- *    back-view Red is wearing visible blue jeans) went with them. Reverted by eye, against the
+ *    back-view Purple is wearing visible blue jeans) went with them. Reverted by eye, against the
  *    numbers. Recorded because the numbers will tempt the next round to do it again.
  *
  *    The colour count FELL, and that is the change working rather than a regression: what went was
@@ -203,7 +203,7 @@
  *    is three values that sit where the board's do. Variety is not worth buying at the price of a
  *    figure lit from the feet up.
  *
- * TWO NUMBERS THAT GOT WORSE, stated rather than buried. Against the board's own Red downsampled
+ * TWO NUMBERS THAT GOT WORSE, stated rather than buried. Against the board's own Purple downsampled
  * to our resolution (the table above), `deep` moves 48.81 -> 58.04 against her 50.00 and `keyline`
  * 35.23 -> 42.75 against her 35.71: both were a near-match and both now overshoot by eight points.
  * The cause is known and is not the denim -- swapping the denim between the two ladders above
@@ -213,15 +213,15 @@
  * cheaper thing to spend. If a later round wants those two axes back, the place to buy them is the
  * boots, and it should look at the composite before and after rather than at this paragraph.
  *
- * `pnpm score --world` at spawn-red is 0.177 before and 0.177 after, to three decimals. That is
+ * `pnpm score --world` at spawn-purple is 0.177 before and 0.177 after, to three decimals. That is
  * expected and is stated so the next round does not read it as a failure: see point 1 above, the
  * world render contains no sprites. PARTIAL 0 on all sixteen frames.
  */
 import { Img, keyline, lumaOf, shade, tone } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
 
-export const RED_FRAME_W = 32;
-export const RED_FRAME_H = 48;
+export const PURPLE_FRAME_W = 32;
+export const PURPLE_FRAME_H = 48;
 
 const CX = 16;
 /**
@@ -532,7 +532,7 @@ const FRINGE = [6, 6, 5, 4, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6];
  * costs nothing, fills the two empty luma buckets in the header table, and REMOVES edges rather
  * than adding them, because each neighbouring pair now differs by a few luma instead of ninety-nine.
  *
- * The band stops at CLOAK_FOLD and never reaches Deep Purple itself: on Red that value is the
+ * The band stops at CLOAK_FOLD and never reaches Deep Purple itself: on Purple that value is the
  * outline and the one line under the hood, nothing else. Letting the shader reach it put the dome's
  * whole lower-right quadrant at L43 and took half of her below L81, which is the opposite of the
  * problem she exists to solve.
@@ -935,7 +935,7 @@ function paintFace(
   img.rect(fx + 3, fy + 4, 2, 3, keyline('trunk'));
   // Cheeks and mouth, directly under the eyes. Section 10.3 takes both from the board; the palette
   // has no rose, so the blush is the warm shade of her own skin rather than a colour invented for
-  // it -- see the note in the report, this is the one place Red wants a colour no ramp holds.
+  // it -- see the note in the report, this is the one place Purple wants a colour no ramp holds.
   img.rect(fx - 5, fy + 8, 2, 1, shade('skin', 0));
   img.rect(fx + 3, fy + 8, 2, 1, shade('skin', 0));
   img.rect(fx - 1, fy + 9, 2, 1, shade('trunk', 0));
@@ -1120,7 +1120,7 @@ function paintNape(img: Img, cx: number, top: number): Set<number> {
   //    The twelve-line version is genuinely the more robust of the two -- a profile whose widest
   //    row is not its last, say [2, 4, 3, 2], leaves this cap a pixel short and opens a leak, which
   //    an outline pass cannot do -- and it is still reverted, because that exact failure is what
-  //    `assertRedReads`' first check already looks for, by population rather than by construction,
+  //    `assertPurpleReads`' first check already looks for, by population rather than by construction,
   //    and four lines that read plainly beat twelve that guard something already guarded.
   img.rect(cx - NAPE_HW[0]!, centreRow - 1, NAPE_HW[0]! * 2, 1, keyline('cloak'));
   NAPE_HW.forEach((hw, j) => {
@@ -1382,13 +1382,13 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, str
  * Shins and boots. The near leg is the lit one; the far leg drops a level so the two separate.
  *
  * Rebuilt 2026-10-19 against the board's own feet, and the fault it fixes was the loudest thing on
- * the sprite. Composited onto `pnpm world --at spawn-red` -- the first time in four rounds anyone
+ * the sprite. Composited onto `pnpm world --at spawn-purple` -- the first time in four rounds anyone
  * had put her on the grass rather than on white -- the eye went straight to her ankles: two blocks
  * of #2283d6 at luma 118, the most saturated colour anywhere on the figure, sitting under a cloak
  * whose mass is luma 87, over boots at luma 100..130 in a mid-brown. She was lit from the feet up.
  *
  * The board does the opposite and it is worth being exact about how, because "dark boots" on the
- * review sheet is half the story. Its back-view Red (Question frame, (610,520) in the mock) has
+ * review sheet is half the story. Its back-view Purple (Question frame, (610,520) in the mock) has
  * JEANS -- a real mid-blue, so the cool note the old comment defended is genuinely there -- but
  * they are three rows under a hem that comes down low, and under them sit brown boots at maybe a
  * third of their brightness, ringed in the same near-black as the rest of her. Blue over dark over
@@ -1628,7 +1628,7 @@ function paintFrame(img: Img, facing: Facing, phase: 0 | 1 | 2 | 3): void {
   const t = 1 + bob;
   const shoulder = t + HOOD_H;
 
-  const body = new Img(RED_FRAME_W, RED_FRAME_H);
+  const body = new Img(PURPLE_FRAME_W, PURPLE_FRAME_H);
   paintLegs(body, facing, stride, dir);
   paintCloak(body, shoulder, facing, dir, stride);
 
@@ -1680,7 +1680,7 @@ function paintFrame(img: Img, facing: Facing, phase: 0 | 1 | 2 | 3): void {
   //
   // This used to be `img.ellipse(CX + 1.5, FOOT + 2.5, 9, 2.4, shade('shadow', 1))` -- an OPAQUE
   // dark-green ellipse, #1f3a22, under every one of the sixteen frames. On grass it passed. The
-  // trouble is that Red walks off the grass: the map puts her on the sand path for most of the
+  // trouble is that Purple walks off the grass: the map puts her on the sand path for most of the
   // route, over the plank bridge, and onto the cottage step, and on all three she was dragging a
   // patch of lawn around with her. A sprite cannot carry its own ground.
   //
@@ -1697,7 +1697,7 @@ function paintFrame(img: Img, facing: Facing, phase: 0 | 1 | 2 | 3): void {
  * The sixteen frames, keyed `<facing>-<phase>`. Frame 0 is the idle pose; 1 to 3 are the walk.
  * The build looks these up by name, so the keys are the contract.
  */
-export const RED_FRAMES: Record<string, (img: Img) => void> = Object.fromEntries(
+export const PURPLE_FRAMES: Record<string, (img: Img) => void> = Object.fromEntries(
   FACINGS.flatMap((facing) =>
     ([0, 1, 2, 3] as const).map((phase) => [
       `${facing}-${phase}`,
@@ -1718,7 +1718,7 @@ export const RED_FRAMES: Record<string, (img: Img) => void> = Object.fromEntries
  *
  * The bound is the FRAME, deliberately, and not `FOOT`. Writing `FOOT + 2` here would be a guard
  * that agrees with whatever the file says today and therefore watches nothing: the whole fault was
- * that `FOOT` was free to sit anywhere in the frame. `RED_FRAME_H - 1` is the row her origin sits
+ * that `FOOT` was free to sit anywhere in the frame. `PURPLE_FRAME_H - 1` is the row her origin sits
  * on, which is the thing a player is looking at.
  *
  * The walk is covered too, which is the half that is easy to lose: a stride lifts ONE leg, so the
@@ -1726,36 +1726,36 @@ export const RED_FRAMES: Record<string, (img: Img) => void> = Object.fromEntries
  */
 function assertContactLine(): void {
   const faults: string[] = [];
-  for (const [name, paint] of Object.entries(RED_FRAMES)) {
-    const img = new Img(RED_FRAME_W, RED_FRAME_H);
+  for (const [name, paint] of Object.entries(PURPLE_FRAMES)) {
+    const img = new Img(PURPLE_FRAME_W, PURPLE_FRAME_H);
     paint(img);
     let lowest = -1;
-    for (let y = RED_FRAME_H - 1; y >= 0; y--) {
-      for (let x = 0; x < RED_FRAME_W; x++)
-        if (img.data[(y * RED_FRAME_W + x) * 4 + 3]! > 0) {
+    for (let y = PURPLE_FRAME_H - 1; y >= 0; y--) {
+      for (let x = 0; x < PURPLE_FRAME_W; x++)
+        if (img.data[(y * PURPLE_FRAME_W + x) * 4 + 3]! > 0) {
           lowest = y;
           break;
         }
       if (lowest >= 0) break;
     }
-    if (lowest !== RED_FRAME_H - 1)
+    if (lowest !== PURPLE_FRAME_H - 1)
       faults.push(
-        `${name}: her lowest ink is row ${lowest} of a ${RED_FRAME_H}-row frame, so she is drawn ` +
-          `${RED_FRAME_H - 1 - lowest}px clear of the ground her origin stands on`,
+        `${name}: her lowest ink is row ${lowest} of a ${PURPLE_FRAME_H}-row frame, so she is drawn ` +
+          `${PURPLE_FRAME_H - 1 - lowest}px clear of the ground her origin stands on`,
       );
   }
   if (faults.length)
-    throw new Error(`Red is not standing on the ground:\n  ` + faults.join('\n  '));
+    throw new Error(`Purple is not standing on the ground:\n  ` + faults.join('\n  '));
 }
 
 /** A frame, painted, for the guards below. */
 function frameOf(name: string): Img {
-  const img = new Img(RED_FRAME_W, RED_FRAME_H);
-  RED_FRAMES[name]!(img);
+  const img = new Img(PURPLE_FRAME_W, PURPLE_FRAME_H);
+  PURPLE_FRAMES[name]!(img);
   return img;
 }
 const isOpaque = (img: Img, x: number, y: number): boolean =>
-  x >= 0 && y >= 0 && x < RED_FRAME_W && y < RED_FRAME_H && img.get(x, y)[3] > 0;
+  x >= 0 && y >= 0 && x < PURPLE_FRAME_W && y < PURPLE_FRAME_H && img.get(x, y)[3] > 0;
 /** Her face and her hair: the warm ramps, `skin` and `trunk`, which are the only ones with R > B. */
 const isWarm = (c: RGBA): boolean => c[3] > 0 && c[0] > c[2];
 /** Her garment: the cloak's purples, which are the only ones with B > R, above outline darkness. */
@@ -1837,19 +1837,19 @@ function componentsOf(pts: readonly (readonly [number, number])[]): number {
  *    the moving pixels at keyline darkness -- so the only animated part of the protagonist was a
  *    handful of pixels inside a near-black block.
  */
-function assertRedReads(): void {
+function assertPurpleReads(): void {
   const faults: string[] = [];
   const hoodRows = HOOD_H + 1; // the hood and the line under it; the shoulder starts below.
   /** How far apart a warm pixel and a cloth pixel must be before a missing keyline is a leak. */
   const LEAK = 60;
 
-  for (const name of Object.keys(RED_FRAMES)) {
+  for (const name of Object.keys(PURPLE_FRAMES)) {
     const img = frameOf(name);
 
     // 1. No warm pixel leaking into the cloth with no keyline between them.
     const holes: string[] = [];
     for (let y = 0; y < hoodRows; y++)
-      for (let x = 0; x < RED_FRAME_W; x++) {
+      for (let x = 0; x < PURPLE_FRAME_W; x++) {
         if (!isOpaque(img, x, y)) continue;
         for (const [dx, dy] of [
           [1, 0],
@@ -1874,7 +1874,7 @@ function assertRedReads(): void {
     const ink = keyline('trunk');
     const feature: [number, number][] = [];
     for (let y = 0; y < hoodRows; y++)
-      for (let x = 0; x < RED_FRAME_W; x++) {
+      for (let x = 0; x < PURPLE_FRAME_W; x++) {
         const c = img.get(x, y);
         if (c[3] > 0 && c[0] === ink[0] && c[1] === ink[1] && c[2] === ink[2]) feature.push([x, y]);
       }
@@ -1889,7 +1889,7 @@ function assertRedReads(): void {
     if (name.startsWith('up-')) {
       let warm = 0;
       for (let y = 0; y < hoodRows; y++)
-        for (let x = 0; x < RED_FRAME_W; x++) if (isWarm(img.get(x, y))) warm++;
+        for (let x = 0; x < PURPLE_FRAME_W; x++) if (isWarm(img.get(x, y))) warm++;
       if (warm < 12)
         faults.push(
           `${name}: the back of her head is ${warm} px of anything but garment -- she reads as a ` +
@@ -1904,7 +1904,8 @@ function assertRedReads(): void {
     const b = frameOf(`${facing}-3`);
     let moved = 0;
     for (let y = 0; y < HEM; y++)
-      for (let x = 0; x < RED_FRAME_W; x++) if (a.get(x, y).join() !== b.get(x, y).join()) moved++;
+      for (let x = 0; x < PURPLE_FRAME_W; x++)
+        if (a.get(x, y).join() !== b.get(x, y).join()) moved++;
     if (moved < 20)
       faults.push(
         `${facing}: the two stride frames differ by ${moved} px above the hem -- the walk is her ` +
@@ -1912,7 +1913,7 @@ function assertRedReads(): void {
       );
   }
 
-  if (faults.length) throw new Error(`Red does not read:\n  ` + faults.join('\n  '));
+  if (faults.length) throw new Error(`Purple does not read:\n  ` + faults.join('\n  '));
 }
 
 /**
@@ -1968,13 +1969,13 @@ function assertCapeDevice(): void {
           `the hem at ${HEM} -- one of them will overwrite it and leave a clipped mark`,
       );
   }
-  if (faults.length) throw new Error(`Red's cape device is broken:\n  ` + faults.join('\n  '));
+  if (faults.length) throw new Error(`Purple's cape device is broken:\n  ` + faults.join('\n  '));
 }
 
 /**
  * THE BACK VIEW READS, 2026-10-21 -- the three things this round fixed and the sheet must not lose.
  *
- * `assertRedReads`' third check already holds a FLOOR on this view: that the back of her head
+ * `assertPurpleReads`' third check already holds a FLOOR on this view: that the back of her head
  * carries twelve pixels of something that is not the garment. That check is correct and it passed
  * on every frame the client sent back, twice, because "there is hair there" was never the question.
  * These are the three properties that were actually missing, and each one is measured on the
@@ -2063,19 +2064,19 @@ function assertBackView(): void {
     // the way worth recording: `isWarm` is R > B, which is her BOOTS (`keyline('trunk')`), her HAND
     // (`skin`) and her BASKET (`wood`) as much as her hair. It found row 42 and reported her boots
     // as a twelve-pixel panel on the back of her head. So the window is anchored the way
-    // `assertRedReads` already anchors its own -- from where she starts, plus the hood's height --
+    // `assertPurpleReads` already anchors its own -- from where she starts, plus the hood's height --
     // which also carries the one-row bob without naming it.
     let top = 0;
-    while (top < RED_FRAME_H) {
+    while (top < PURPLE_FRAME_H) {
       let any = false;
-      for (let x = 0; x < RED_FRAME_W; x++) if (isOpaque(img, x, top)) any = true;
+      for (let x = 0; x < PURPLE_FRAME_W; x++) if (isOpaque(img, x, top)) any = true;
       if (any) break;
       top++;
     }
     const hoodBottom = top + HOOD_H;
     const warmRows: number[] = [];
     for (let y = top; y <= hoodBottom; y++)
-      for (let x = 0; x < RED_FRAME_W; x++)
+      for (let x = 0; x < PURPLE_FRAME_W; x++)
         if (isWarm(img.get(x, y))) {
           warmRows.push(y);
           break;
@@ -2091,7 +2092,7 @@ function assertBackView(): void {
     const runs = new Map<number, number[]>();
     for (let y = top; y <= hoodBottom; y++) {
       const xs: number[] = [];
-      for (let x = 0; x < RED_FRAME_W; x++) if (isGarment(img.get(x, y))) xs.push(x);
+      for (let x = 0; x < PURPLE_FRAME_W; x++) if (isGarment(img.get(x, y))) xs.push(x);
       if (xs.length) runs.set(y, xs);
     }
     const widest = Math.max(...[...runs.values()].map((xs) => xs.length));
@@ -2119,7 +2120,7 @@ function assertBackView(): void {
     let hairWidth = 0;
     for (let y = top; y <= hoodBottom; y++) {
       let n = 0;
-      for (let x = 0; x < RED_FRAME_W; x++) if (isWarm(img.get(x, y))) n++;
+      for (let x = 0; x < PURPLE_FRAME_W; x++) if (isWarm(img.get(x, y))) n++;
       if (n > hairWidth) {
         hairWidth = n;
         hairRow = y;
@@ -2136,7 +2137,7 @@ function assertBackView(): void {
     // 3. The hair has a bottom edge rather than stopping.
     const meanWarm = (y: number): number => {
       const v: number[] = [];
-      for (let x = 0; x < RED_FRAME_W; x++) if (isWarm(img.get(x, y))) v.push(lumaAt(x, y));
+      for (let x = 0; x < PURPLE_FRAME_W; x++) if (isWarm(img.get(x, y))) v.push(lumaAt(x, y));
       return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
     };
     const rowsWithHair = [...new Set(warmRows)];
@@ -2153,11 +2154,11 @@ function assertBackView(): void {
     }
   }
 
-  if (faults.length) throw new Error(`Red's back view does not read:\n  ` + faults.join('\n  '));
+  if (faults.length) throw new Error(`Purple's back view does not read:\n  ` + faults.join('\n  '));
 }
 
 assertContactLine();
-assertRedReads();
+assertPurpleReads();
 assertCapeDevice();
 assertBackView();
 
@@ -2166,17 +2167,17 @@ assertBackView();
  *
  * 1. THE "NOTHING IMPORTS THIS FILE" WARNING THAT STOOD HERE IS OUT OF DATE, and it is retracted
  *    rather than deleted, because a stale warning that scares the next round off measuring is
- *    worse than no warning. `sprites.ts` now imports Red `from './sprites/char-red.ts'`, and the
- *    committed `apps/game/src/assets/red.png` profiles identically to this file's own sheet on all
- *    six axes. This file is the shipped Red; `pnpm graybox` regenerates it from here.
+ *    worse than no warning. `sprites.ts` now imports Purple `from './sprites/char-purple.ts'`, and the
+ *    committed `apps/game/src/assets/purple.png` profiles identically to this file's own sheet on all
+ *    six axes. This file is the shipped Purple; `pnpm graybox` regenerates it from here.
  *
- *    The tail of that warning asked for `red-sprite.ts`, a second and older Red imported by
- *    nothing, to be deleted. IT HAS BEEN, so there is no longer a second Red to confuse this one
+ *    The tail of that warning asked for `red-sprite.ts`, a second and older Purple imported by
+ *    nothing, to be deleted. IT HAS BEEN, so there is no longer a second Purple to confuse this one
  *    with, and this item is kept only as the retraction. The ask that outlived it is the general
  *    one: a sprite nothing imports is how the confusion happened, and `sprites.ts` is the one place
  *    that says which painter ships.
  *
- * 2. RED HAS NO CAST SHADOW ANY MORE. `paintFrame` used to bake an opaque dark-green ellipse under
+ * 2. PURPLE HAS NO CAST SHADOW ANY MORE. `paintFrame` used to bake an opaque dark-green ellipse under
  *    every frame, which travelled with her onto the sand, the bridge and the cottage step; it is
  *    removed, and the reasoning is at the call site. She is seated by `seatOutline`'s doubled
  *    bottom keyline, which is ground-neutral, but a real contact shadow still wants drawing by the
@@ -2185,7 +2186,7 @@ assertBackView();
  *
  * 3. THE COMPOSITE TEST SHOULD BE A COMMAND, not a script somebody writes again next round. Every
  *    sprite in this project is drawn, reviewed and scored against white, and every one of them is
- *    only ever seen against grass, sand or planking. Red's loudest fault survived four rounds of
+ *    only ever seen against grass, sand or planking. Purple's loudest fault survived four rounds of
  *    honest measurement purely because nobody put her on the ground. `world.ts` already renders
  *    the map from the painters and `sprites.ts` already assembles the sheets; a `--with <sheet>`
  *    flag that blits a frame onto the render at a landmark is perhaps twenty lines, and it would

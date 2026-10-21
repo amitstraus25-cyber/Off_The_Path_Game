@@ -77,7 +77,7 @@ function play(
     send({ type: 'INSPECT', s: skill.id, at: (clock += 4000) });
     send({ type: 'VERDICT', s: skill.id, v: strategy(skill, rnd), at: (clock += 6000) });
   }
-  // Red passes the post on the way to the cottage, and the note on the door as she arrives.
+  // Purple passes the post on the way to the cottage, and the note on the door as she arrives.
   if (!readFirst && post) send({ type: 'READ_NOTICE', n: post.id, at: (clock += 4000) });
   if (door) send({ type: 'READ_NOTICE', n: door.id, at: (clock += 6000) });
   send({ type: 'ENTER_COTTAGE', at: (clock += 8000) });

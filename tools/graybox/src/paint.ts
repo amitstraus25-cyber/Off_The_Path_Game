@@ -92,7 +92,7 @@ export const rgb = (hex: string, a = 255): RGBA => [
  * `shadow` is the one dusk-shadow ramp docs/ASSETS.md allows. It extends `grass` downward rather
  * than introducing a hue: the board's shadows are grass in shade, never black and never purple.
  *
- * Rebranded 2026-10-18 per docs/ART_PRODUCTION.md section 6a. Red's cloak is 50 to 64 per cent of
+ * Rebranded 2026-10-18 per docs/ART_PRODUCTION.md section 6a. Purple's cloak is 50 to 64 per cent of
  * each of her sixteen frames, which is the whole reason she is findable in a green forest, so when
  * the cloak moves to Cyera purple everything else that was red has to move off red or she stops
  * being the one thing the eye catches. Only `cloak`, `roof` and `wolf` change here. The world is
@@ -133,7 +133,7 @@ export const PALETTE = {
   wolf: ['#241632', '#441363', '#4a3a61', '#6a5789'],
   /*
    * The cottage roof is the biggest red mass in the game and the one thing that would compete with
-   * Red, so it goes neutral. Slate is deliberately not a Cyera token -- the brand does not own a
+   * Purple, so it goes neutral. Slate is deliberately not a Cyera token -- the brand does not own a
    * roof -- but it is kept warm (R > G > B, Clay's own cast) so the cottage still reads as a
    * cottage and not as rendered concrete.
    *
@@ -148,7 +148,7 @@ export const PALETTE = {
   wall: ['#c4ab8c', '#f3d9c1', '#faeada', '#fffaf0'],
   wood: ['#6b4522', '#9a6a36', '#c08f55', '#dcb882'],
   /*
-   * Red herself, option A from section 6a: Lilac-led, so she is findable at the playing camera.
+   * Purple herself, option A from section 6a: Lilac-led, so she is findable at the playing camera.
    * ART_PRODUCTION section 6a names three stops for the cloak -- Deep Purple, Lilac, Haze -- and
    * Aubergine is the midtone this table added between the first two. That addition is what went
    * wrong at 16px and again in the first 32px pass, so the roles are written down here as the
@@ -160,10 +160,10 @@ export const PALETTE = {
    *   3 Haze        #e8c6ff  a real highlight: the crown, the brim lip and the lit rim
    *
    * Level 2 carrying the mass is a deliberate departure from PIXEL_STANDARD section 2's "most of
-   * any object is level 1", and it is confined to Red. The spec picked four tokens for a four-step
+   * any object is level 1", and it is confined to Purple. The spec picked four tokens for a four-step
    * ramp with two of them at the dark end, so a Lilac-led cloak cannot also be a level-1-led one.
    * Reordering the ramp instead would silently restyle the toadstool cap, flower-red, the stall
-   * awning and the Red portrait, which paint from these same stops in their own roles.
+   * awning and the Purple portrait, which paint from these same stops in their own roles.
    *
    * Measured after the 2026-10-18 fix, per frame across all sixteen: Lilac 333 px (37.4%),
    * Aubergine 103 px (11.5%), Deep Purple 184 px (20.7%, three quarters of it the one-pixel
@@ -186,10 +186,10 @@ export const PALETTE = {
    *
    * Two hexes in this table are shared, and both are specified rather than accidental. Level 0 is
    * also `wolf` level 1 and `night` level 2; level 1 is also `night` level 3. Section 6a gives Deep
-   * Purple to Red's dark and to the wolf in the same breath, and the pair never collide because the
-   * roles differ by an order of magnitude in area: on Red it is a one-pixel rim around an L*70 body,
+   * Purple to Purple's dark and to the wolf in the same breath, and the pair never collide because the
+   * roles differ by an order of magnitude in area: on Purple it is a one-pixel rim around an L*70 body,
    * on the wolf it is the body itself at L*18. `night` only ever appears behind a portrait, in the
-   * DOM, where Red is not standing on it. Left alone on purpose; see the note on `night` below.
+   * DOM, where Purple is not standing on it. Left alone on purpose; see the note on `night` below.
    */
   cloak: ['#441363', '#6d2d93', '#d28eff', '#e8c6ff'],
   skin: ['#c98f63', '#f0c9a0', '#ffe0c0', '#fff0e0'],
@@ -202,7 +202,7 @@ export const PALETTE = {
    * Two things it is now worth knowing, both of which have to be fixed where the pixels are placed
    * rather than here. Its level 1 to level 2 step is 6 levels of luma, the flattest in this table,
    * which is why the Lantern Keeper's spines (level 1) barely separate from his body (level 2).
-   * And `portraitRed` paints the hood in cloak level 1 directly onto a level 2 backdrop: that was
+   * And `portraitPurple` paints the hood in cloak level 1 directly onto a level 2 backdrop: that was
    * 53 levels and a red-against-purple hue flip, and with the rebrand it is 33 levels of the same
    * hue. Moving this ramp would silently restyle all five portrait backdrops and the interact
    * prompt, so the backdrop choice belongs to whoever owns the portrait painters.
@@ -252,7 +252,7 @@ export const lumaOf = (c: RGBA): number => 0.299 * c[0] + 0.587 * c[1] + 0.114 *
  * Scaled rather than subtracted, so a brown stays brown instead of sliding towards black.
  *
  * The floor is applied to the SCALE, not to each channel. Clamping channels independently is what
- * a first version did, and on an already-dark ramp it turned Red's #441363 into a neutral #060606:
+ * a first version did, and on an already-dark ramp it turned Purple's #441363 into a neutral #060606:
  * every channel hit the same floor, so the hue was gone and the protagonist would have been
  * outlined in the same grey as a rock. Flooring the scale keeps the ratios exactly, so a dark
  * purple outlines in dark purple and only its brightness moves.

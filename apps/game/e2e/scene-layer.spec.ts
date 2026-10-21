@@ -20,14 +20,14 @@ import type { Page } from '@playwright/test';
 import { startGame } from './helpers';
 import { TILE } from '../src/world/logic';
 
-/** Puts Red at an offset inside a named map object, and snaps the camera to her. */
+/** Puts Purple at an offset inside a named map object, and snaps the camera to her. */
 async function standOn(page: Page, object: string, dx: number, dy: number): Promise<void> {
   await page.evaluate(
     ({ object, dx, dy }) => {
       const scene = window.__otp!.scene as unknown as {
         position: { x: number; y: number };
         camera: { x: number; y: number };
-        red: { setPosition(x: number, y: number): void; setDepth(d: number): void; y: number };
+        purple: { setPosition(x: number, y: number): void; setDepth(d: number): void; y: number };
         focus(): { x: number; y: number };
         syncCamera(): void;
       };
@@ -36,8 +36,8 @@ async function standOn(page: Page, object: string, dx: number, dy: number): Prom
       const x = o.x + dx;
       const y = o.y + dy;
       scene.position = { x, y };
-      scene.red.setPosition(Math.round(x), Math.round(y));
-      scene.red.setDepth(scene.red.y);
+      scene.purple.setPosition(Math.round(x), Math.round(y));
+      scene.purple.setDepth(scene.purple.y);
       scene.camera = scene.focus();
       scene.syncCamera();
     },
@@ -53,7 +53,7 @@ test.beforeEach(async ({ page }) => {
 /*
  * 1. THE LOCKED DOOR SAYS ITS PIECE ONCE.
  *
- * `checkCottage` tested `overlaps` and emitted every frame Red stood on the step -- 181 emissions
+ * `checkCottage` tested `overlaps` and emitted every frame Purple stood on the step -- 181 emissions
  * in 181 frames -- and `main.ts` only suppresses a second toast while one is still up. So the line
  * "I should hear all three travellers first." timed out after a couple of seconds, was re-emitted
  * on the very next frame and came straight back: a caption flashing on and off for as long as the
@@ -87,7 +87,7 @@ test('the locked-cottage line is said once, not every two and a half seconds', a
   const rises = await page.evaluate(
     () => (window as unknown as { __otpRises?: number }).__otpRises ?? -1,
   );
-  expect(rises, 'the door re-announced itself while Red stood on the step').toBe(1);
+  expect(rises, 'the door re-announced itself while Purple stood on the step').toBe(1);
 });
 
 /*
@@ -96,7 +96,7 @@ test('the locked-cottage line is said once, not every two and a half seconds', a
  * `npcSpawns`/`bystanderSpawns` hand back the CENTRE of the spawn tile and the sprite origin is
  * its feet, so the feet belong half a TILE lower. The scene added half the FRAME (24) instead, and
  * all eight characters stood 8px into the tile below their own -- past the verge of the path they
- * are meant to be standing on, and 10px below Red's own contact line on the same row of ground.
+ * are meant to be standing on, and 10px below Purple's own contact line on the same row of ground.
  *
  * The bound is the spawn object's own bottom edge, read from the map. It is deliberately not half
  * a tile measured the way the scene measures it, because that is the number under test.
@@ -216,7 +216,7 @@ test('the prompt bubble clears every head by the same margin, tall or short', as
 });
 
 /*
- * 4. RED IS IN FRONT OF THE FOREST BEFORE THE PLAYER TOUCHES ANYTHING.
+ * 4. PURPLE IS IN FRONT OF THE FOREST BEFORE THE PLAYER TOUCHES ANYTHING.
  *
  * Three places set her depth from her feet -- the replay, the arrival and every step of the walk --
  * and the line that CREATES her did not, so she was born at depth 0. At 0 she sorts under the decor
@@ -225,20 +225,20 @@ test('the prompt bubble clears every head by the same margin, tall or short', as
  * for the whole of the opening shot.
  *
  * Asserted against the cast and the canopy rather than against her own y: anyone standing further
- * up the path than Red is behind her and the tree tops are in front, which is the sort order a
+ * up the path than Purple is behind her and the tree tops are in front, which is the sort order a
  * player reads off the screen. `depth === y` would only restate the fix.
  */
-test('Red is sorted by her feet from the moment the forest appears', async ({ page }) => {
+test('Purple is sorted by her feet from the moment the forest appears', async ({ page }) => {
   const order = await page.evaluate(() => {
     const scene = window.__otp!.scene as unknown as {
-      red: { y: number; depth: number };
+      purple: { y: number; depth: number };
       npcs: { id: string; sprite: { y: number; depth: number } }[];
       children: { list: { depth: number; type: string }[] };
     };
     return {
-      depth: scene.red.depth,
+      depth: scene.purple.depth,
       uphill: scene.npcs
-        .filter((n) => n.sprite.y < scene.red.y)
+        .filter((n) => n.sprite.y < scene.purple.y)
         .map((n) => ({ id: n.id, depth: n.sprite.depth })),
       canopy: Math.max(
         ...scene.children.list.filter((c) => c.type === 'TilemapLayer').map((c) => c.depth),
@@ -253,9 +253,9 @@ test('Red is sorted by her feet from the moment the forest appears', async ({ pa
   for (const who of order.uphill)
     expect(
       order.depth,
-      `Red draws behind ${who.id}, who is standing further up the path than she is`,
+      `Purple draws behind ${who.id}, who is standing further up the path than she is`,
     ).toBeGreaterThan(who.depth);
-  expect(order.depth, 'Red draws over the tree tops she should walk behind').toBeLessThan(
+  expect(order.depth, 'Purple draws over the tree tops she should walk behind').toBeLessThan(
     order.canopy,
   );
 });

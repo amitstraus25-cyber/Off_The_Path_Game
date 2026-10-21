@@ -44,7 +44,7 @@ about reading and becomes about hovering. That is the thing that was removed.
 is skill-specific in a way no generic sentence can carry. `GAME_DESIGN.md` §4 admits this itself:
 
 > On Night Light, whose purpose is to read what strangers wrote, Restrict grants nothing: the
-> lantern lights only what Red holds it to.
+> lantern lights only what Purple holds it to.
 
 So Restrict means "strip the hidden extra" on the Cottage Finder, and "bound the stated purpose" on
 Night Light. Those are different operations wearing one word. A player cannot deduce that, and the

@@ -112,6 +112,60 @@
   margin: calc(10px * var(--otp-ui)) 0 0;
 }
 
+/*
+ * HOW TO PLAY: three numbered lines on the title card, under the intro paragraph.
+ *
+ * The browser's own `<ol>` defaults are what this rule exists to undo. Unset, a list inside the
+ * title column takes `padding-inline-start: 40px` -- forty of the 306px column's two hundred and
+ * ninety usable pixels, the same default that was found indenting Grandma's note eighty pixels and
+ * wrapping five words onto five lines (see `.otp-title-panel .otp-note` below). So the marker is
+ * drawn by this file instead of the browser: `list-style: none` and a counter, at a 22px indent
+ * that the number sits inside rather than beside.
+ *
+ * `::marker` is not used, because a marker cannot be coloured separately from its item's text in
+ * every engine this ships to and these two ARE different colours -- the numeral is Deep Purple, the
+ * heading role on this light card, and the step is body text. A `::before` with a counter is the
+ * one form of that which needs no engine support.
+ *
+ * `font-variant-numeric: tabular-nums` so the numerals share a width: Haffer's proportional 1 is
+ * narrower than its 2 and 3, which left the three steps' text starting at three different x values
+ * in a column 290px wide. Haffer carries the `tnum` feature; where it does not resolve the rule is
+ * inert and the list is as it was.
+ *
+ * No Lime and no Season Mix anywhere in here. The card's single Lime is `.otp-cta` in the foot
+ * (UI_FOUNDATIONS: one per screen) and this is body copy, which the brand book bars Season Mix from.
+ */
+.otp-howto {
+  list-style: none;
+  counter-reset: otp-howto;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: calc(7px * var(--otp-ui));
+  font-size: calc(17px * var(--otp-ui));
+  line-height: 1.35;
+}
+
+.otp-howto > li {
+  counter-increment: otp-howto;
+  position: relative;
+  padding-left: calc(22px * var(--otp-ui));
+}
+
+.otp-howto > li::before {
+  content: counter(otp-howto) '.';
+  position: absolute;
+  left: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--cyera-ash);
+}
+
+/* The eyebrow's standing margin is sized for a long screen; on a short card it is most of a line. */
+.otp-howto__label {
+  margin-top: calc(16px * var(--otp-ui));
+}
+
 /* The one Lime on the Title and Results screens. */
 .otp-cta {
   display: inline-flex;
@@ -761,7 +815,7 @@ h2.otp-section-label {
 .otp-title-panel {
   box-sizing: border-box;
   /*
-   * 340, not 430. At 430 the column's right edge landed 46px PAST Red's left edge, so the first
+   * 340, not 430. At 430 the column's right edge landed 46px PAST Purple's left edge, so the first
    * thing a visitor sees on the hero screen is a cottage path with nobody on it -- she was
    * rendering behind 88%-black at about 1.1:1, which is invisible. The camera cannot help: scrollX
    * is already clamped at the map's left bound, so the only lever is the column. 340px is the
@@ -774,7 +828,7 @@ h2.otp-section-label {
    * under the column. Clearing the whole sprite wants 300px or less, which no longer holds the
    * heading on one line, so that is a call for the title's owner and not a silent widening here.
    */
-  /* 306, not 340. Measured on the built preview, Red's painted pixels run x 349..396 at every
+  /* 306, not 340. Measured on the built preview, Purple's painted pixels run x 349..396 at every
      landscape size from 1280x800 to 1920x1080 -- the camera anchors her identically, because
      scrollX is already clamped at the map's left bound -- and her 32px sprite box starts at 339,
      the first 10px of it being transparent. A 340px column ended at 359, covering her left side.
@@ -788,7 +842,7 @@ h2.otp-section-label {
      and scrollX is clamped at 0 on every one of them:
 
        canvas starts at x 19      column 306 x 0.7 = 214px, ending at 233
-       Red's sprite box at 179    her painted cloak at 184..206
+       Purple's sprite box at 179    her painted cloak at 184..206
        she is covered by 54px of box, 49px of paint: ALL of her
 
      To leave her the 12px of air the landscape guard asks for, the column would have to end at
@@ -889,6 +943,23 @@ h2.otp-section-label {
   font-size: max(14px, calc(18.5px * var(--otp-ui)));
   color: var(--cyera-ash);
 }
+/*
+ * The light-ground half of the how-to-play, on the same terms as the four colours above: Black is
+ * the text role on Shell and Deep Purple is the heading role, so the steps read as copy and the
+ * numerals as structure. Ash is NOT used for the numeral here, although the base rule sets it --
+ * these three lines are the one place on the card that tells a player which buttons to press, and
+ * Ash at this size on Shell is the muted role, which is the wrong thing to say about them.
+ *
+ * Stone was tried and is forbidden: UI_FOUNDATIONS section 5 measures it at 4.1:1 on Shell and
+ * fails it for body text, which is what this is.
+ */
+.otp-title-panel .otp-howto {
+  font-size: max(13px, calc(17px * var(--otp-ui)));
+  color: var(--cyera-black);
+}
+.otp-title-panel .otp-howto > li::before {
+  color: var(--cyera-deep-purple);
+}
 /* Ash, not Stone: Stone is 3.6:1 on this ground and the hint is the smallest type on the card. */
 .otp-title-panel .otp-hint {
   color: var(--cyera-ash);
@@ -941,7 +1012,7 @@ h2.otp-section-label {
   padding-top: calc(16px * var(--otp-ui));
   /*
    * NOT STICKY, AND THE REASON IS WORTH KEEPING -- it is why the fix is a wrapper and not a pin.
-   * Capping the card against the camera (the portrait block below) buys Red her feet back by
+   * Capping the card against the camera (the portrait block below) buys Purple her feet back by
    * letting the copy scroll on a short phone, and the first thing to scroll out of a card is its
    * last child -- here, the primary call to action. Measured with the cap in and the foot still
    * inside the scroller: "Begin the walk" had 34 of its 56 rows visible at 320x568, 47 of 58 at
@@ -961,8 +1032,189 @@ h2.otp-section-label {
    */
 }
 
+/* ===========================================================================
+   THE FIT LADDER: how the title card gives up room so the how-to-play is never under a fold.
+
+   ui/Title.tsx's useTitleFit applies the rungs below by writing `data-fit="0".."4"` to the card
+   (and `data-scrolls` when even the last rung is not enough), loosest first, and stops on the first
+   one at which `.otp-title__scroll` shows all of its copy. This file only says what each rung
+   means; WHICH rung a window gets is the browser's answer to "do the steps fit?", never a
+   breakpoint written here -- see useTitleFit for why a breakpoint was the wrong tool.
+
+   WHAT WAS WRONG, measured on the working tree at DPR 1 and DPR 3 (identical), before the ladder.
+   Clearance of the third step to the edge of the scroll box that clips it; negative is cut off:
+
+       320x568   label and all three steps invisible       scroll box 170px (kbd) / 151px (touch)
+                                                           against 338px of copy
+       375x812   all inside, flush        390x844  step 3 clipped 3.9px     414x896  all inside, flush
+       768x800   0 rows of the steps; a 4px sliver of the heading, nothing under it
+       768x1024  all inside, flush        1280x800  kbd flush; TOUCH step 3 clipped 7.3px
+       1920x1080 all inside, flush        640x400 (1280x800 at 200% zoom)  all invisible
+
+   There is no scrollbar, no fade and no caret, so a player had no cue that anything was there.
+
+   THE RULES THE RUNGS KEEP.
+   - Each rung is the one before it plus more, so a rung is written as the SET of rungs it applies
+     at (`:is([data-fit='2'], [data-fit='3'], ...)`), never as a delta a reader has to add up.
+   - Nothing on any rung touches the card's WIDTH. That is the Purple-visibility column
+     (`.otp-title-panel`'s `min(306px * --otp-ui, 62%)`, guarded by e2e/css-contract.spec.ts), and a
+     rung that bought height by widening the card would be buying it from the world.
+   - Everything stays a multiple of --otp-ui or a floor taken from the floor rule in panels.css:
+     12px for sentences, 11px for the uppercase eyebrow. The tiny rung is the first to sit ON the
+     floor rather than above it.
+   - The two paragraphs that yield are not removed. They are set to the visually-hidden treatment
+     (tokens.css `.otp-visually-hidden`), so a screen reader still reads Grandma's note and the
+     thesis line in order. Removing them from the tree would make the screen reader's card a
+     shorter card than the one a sighted player reads, on exactly the phones that read a short one.
+   =========================================================================== */
+
+/* Rung 1 -- SNUG: spacing only. Nothing a player can read changes; only the air between the blocks.
+   Worth 84px at --otp-ui 1 and 59px at 0.7, which is what 1280x800 (7.3px over) and 390x844
+   (3.9px over) needed, and which is why those two keep every word they had. */
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4']) {
+  padding-block: calc(14px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4'])
+  .otp-title__sub {
+  margin-bottom: calc(8px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-note {
+  margin-block: calc(2px * var(--otp-ui)) calc(4px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4'])
+  .otp-note__from {
+  margin-top: calc(4px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-body-text {
+  margin-block: calc(8px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4'])
+  .otp-howto__label {
+  margin-block: calc(8px * var(--otp-ui)) calc(6px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-howto {
+  gap: calc(4px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4'])
+  .otp-title__foot {
+  padding-top: calc(10px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-hint {
+  margin-top: calc(6px * var(--otp-ui));
+}
+
+/* Rung 2 -- COMPACT: the thesis paragraph yields, and the call to action stops being taller than
+   it needs to be.
+
+   `.otp-cta` is 55.6px tall at --otp-ui 0.7 and not because of its type: its 30px arrow disc plus
+   two 9.8px paddings plus the 3px border is what sets the height, and `min-height` (44px, the touch
+   target) is nowhere near binding. A 26px disc and 4px of padding reaches 44 exactly, so the button
+   keeps the whole of its touch target and loses only the 11.6px of padding that was never part of
+   it. Scoped to the title's foot: `.otp-cta` is also the Results screen's call to action. */
+.otp-title-panel:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-body-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.otp-title-panel:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-cta {
+  padding-block: calc(4px * var(--otp-ui));
+}
+.otp-title-panel:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-cta__disc {
+  width: 26px;
+  height: 26px;
+}
+
+/* Rung 3 -- TIGHT: Grandma's note yields as well. The same treatment as the paragraph, because it
+   is the same decision: it is the prose AROUND the screen, and it is still read aloud. */
+.otp-title-panel:is([data-fit='3'], [data-fit='4']) .otp-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Rung 4 -- TINY: the last thing that can give. The steps, the hint and the label sit on the
+   floor rule's 12px / 11px, the indent loses six pixels, and the card's padding and the subtitle's
+   margin shrink again. Only a card shorter than a landscape phone at 292px reaches it. */
+.otp-title-panel[data-fit='4'] {
+  padding-block: calc(10px * var(--otp-ui));
+}
+.otp-title-panel[data-fit='4'] .otp-title__sub {
+  margin-bottom: calc(6px * var(--otp-ui));
+}
+.otp-title-panel[data-fit='4'] .otp-howto {
+  font-size: 12px;
+  line-height: 1.25;
+  gap: 3px;
+}
+.otp-title-panel[data-fit='4'] .otp-howto > li {
+  padding-left: 17px;
+}
+.otp-title-panel[data-fit='4'] .otp-howto__label {
+  font-size: 11px;
+  margin-block: 6px 4px;
+}
+.otp-title-panel[data-fit='4'] .otp-title__foot {
+  padding-top: 8px;
+}
+.otp-title-panel[data-fit='4'] .otp-hint {
+  font-size: 12px;
+  line-height: 1.25;
+  margin-top: 4px;
+}
+
+/* NOT EVEN THAT FITS -- `data-scrolls`. The honest end of the ladder, and it must not be a quiet
+   one: the steps are below a fold, so the fold has to say so. Two cues, either of which is enough:
+
+   A scrollbar that is always drawn. A styled ::-webkit-scrollbar is, on every Chromium and WebKit
+   including a phone's, where the native overlay bar is hidden until a finger moves. Firefox gets
+   its own thin bar from `scrollbar-width`, which sits behind the selector test below because
+   Chromium 121+ ignores ::-webkit-scrollbar outright once either standard property is set.
+
+   And a shadow along the BOTTOM edge only. The classic scroll-shadow draws two, with covers that
+   `local`-scroll to hide each at its own end; the top one is left out on purpose. Its cover is
+   Shell, painted over a card whose ground is Shell at 94% so that a little forest moves behind it,
+   and a 100% Shell strip over a 94% one is a visibly lighter rectangle -- measured as a light band
+   behind the wordmark at the scroll position every visitor opens the screen at. The bottom cover
+   fades in over 18px and is only ever seen when the reader has already reached the end, which is
+   where a seam costs nothing. */
+.otp-title-panel[data-scrolls] .otp-title__scroll {
+  background:
+    linear-gradient(transparent, var(--cyera-shell) 70%) bottom / 100% 18px no-repeat local,
+    linear-gradient(transparent, color-mix(in srgb, var(--cyera-deep-purple) 22%, transparent))
+      bottom / 100% 10px no-repeat scroll;
+}
+.otp-title-panel[data-scrolls] .otp-title__scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.otp-title-panel[data-scrolls] .otp-title__scroll::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--cyera-deep-purple) 12%, transparent);
+  border-radius: 3px;
+}
+.otp-title-panel[data-scrolls] .otp-title__scroll::-webkit-scrollbar-thumb {
+  background: var(--cyera-deep-purple);
+  border-radius: 3px;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .otp-title-panel[data-scrolls] .otp-title__scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cyera-deep-purple) transparent;
+  }
+}
+
 /*
- * No .otp-title__standing rule. The chip that claimed "Red is already standing on the path" was
+ * No .otp-title__standing rule. The chip that claimed "Purple is already standing on the path" was
  * removed with the claim (docs/UX_REVIEW.md finding 11): it was shown on exactly the landscape
  * widths where the column hid her and suppressed in the portrait one where she was visible. Its
  * styling and its portrait `display: none` outlived it by a round.
@@ -976,7 +1228,7 @@ h2.otp-section-label {
  * asserts its own predicate still matches something before trusting it.
  */
 
-/* Portrait docks the column under the world rather than beside it, so Red stays visible above it
+/* Portrait docks the column under the world rather than beside it, so Purple stays visible above it
    (decision D5: canvas on top, panels below, never require rotation).
 
    It docks to the viewport, not to the canvas box, because the world is capped at 400 logical
@@ -998,7 +1250,7 @@ h2.otp-section-label {
     width: 100%;
     height: auto;
     /*
-     * THE PORTRAIT TWIN OF THE COLUMN FIX ABOVE: a card docked to the bottom hides Red's FEET the
+     * THE PORTRAIT TWIN OF THE COLUMN FIX ABOVE: a card docked to the bottom hides Purple's FEET the
      * way a column docked to the left hid her left side, and portrait was never checked.
      *
      * 64vh alone never bound -- the copy is 342-384px tall at every phone size -- so the only
@@ -1018,7 +1270,7 @@ h2.otp-section-label {
      * camera moves instead of quoting a rectangle at it -- which is the whole lesson of the round
      * the camera turned out to be 19.41 x 11.22 tiles and not 26 x 15.
      *
-     * Why three fifths of the canvas. The camera is centred on Red: forest-scene.ts focuses
+     * Why three fifths of the canvas. The camera is centred on Purple: forest-scene.ts focuses
      * `position.y + CAMERA_FOCUS_Y`, and CAMERA_FOCUS_Y is -TILE * 5/8, so her feet -- which are
      * the bottom of her sprite box, the edge a bottom-docked card can cover -- sit five eighths of
      * a tile BELOW the camera's midline, at every zoom. Three fifths leaves a tenth of the camera
@@ -1028,7 +1280,7 @@ h2.otp-section-label {
      *
      * 64vh stays as the floor of the min() so a renderer that has not published the canvas box yet
      * -- a test harness, the first frame -- gets the old cap rather than no cap at all.
-     * e2e/css-contract.spec.ts measures the air against Red's real position, not against this rule.
+     * e2e/css-contract.spec.ts measures the air against Purple's real position, not against this rule.
      */
     max-height: min(
       64vh,

@@ -174,7 +174,7 @@ Every skill card gains three capability marks, and this is what the player is re
 | **Sends word ahead**         | it can send a message, leave a mark, call a bird | external communication |
 
 No single mark is dangerous. The wolf can only act when **all three are live at once** across
-everything Red is carrying. A running indicator in the HUD shows which legs are lit; when the third
+everything Purple is carrying. A running indicator in the HUD shows which legs are lit; when the third
 one lights, the forest quietly changes (colour grade, the music thins, paw prints appear).
 
 - **As a game:** this turns three independent multiple-choice questions into one combinatorial puzzle
@@ -188,7 +188,7 @@ one lights, the forest quietly changes (colour grade, the music thins, paw print
 Night Light stays genuinely clean on inspection, because it genuinely is. But it **listens to
 strangers**: its whole job is to light up what is written on things in the dark.
 
-Later, off the path, there is a notice nailed to a tree. If Red is carrying Night Light _and_
+Later, off the path, there is a notice nailed to a tree. If Purple is carrying Night Light _and_
 something that reaches into the basket _and_ something that sends word ahead, the notice's hidden
 line executes. No card could have warned the player. They did everything the fine-print lesson asked.
 
@@ -234,7 +234,7 @@ sentence we want a security leader to repeat.
 
 ### 4.6 Something that persists across the run
 
-One skill quietly edits **Grandma's note** — Red's own instructions, the thing in the basket the
+One skill quietly edits **Grandma's note** — Purple's own instructions, the thing in the basket the
 player read on the title screen. Drop the skill later and the edit stays. On the results screen the
 note is shown again with the changed line highlighted.
 
@@ -252,7 +252,7 @@ tag-character trick from the research made physical.
 
 ### 4.8 The cottage door is the human-in-the-loop gate
 
-At the door, Red is about to hand the basket over. One confirmation: _"Give the basket to Grandma?"_
+At the door, Purple is about to hand the basket over. One confirmation: _"Give the basket to Grandma?"_
 If the player kept their boundaries, they get a tell (the paw prints, the voice is wrong, the lamp is
 lit when it should not be) and can still refuse. If all three legs were lit, the handover already
 happened and the prompt never appears.

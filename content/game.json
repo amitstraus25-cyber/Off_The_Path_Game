@@ -67,12 +67,12 @@
         {
           "id": "needs",
           "label": "What does it need?",
-          "reply": "Oh, hardly anything. It just needs to look around a bit to find the way."
+          "reply": "Hardly anything. It just needs a look around to find the way."
         },
         {
           "id": "who",
           "label": "Who made it?",
-          "reply": "It came in the same crate as the lanterns. The label says it is very popular."
+          "reply": "It came in a crate with the lanterns. The label says it is very popular."
         },
         {
           "id": "show",
@@ -97,7 +97,7 @@
         {
           "id": "who",
           "label": "Who made it?",
-          "reply": "I never caught the traveller's name. They were kind, though. Very kind."
+          "reply": "I never caught his name. He was kind, though. Very kind."
         },
         {
           "id": "show",
@@ -127,7 +127,7 @@
         {
           "id": "show",
           "label": "Show me.",
-          "reply": "Here is the card. Read it as closely as you like. You will find nothing in it."
+          "reply": "Here is the card. You will find nothing in it."
         }
       ]
     }
@@ -139,9 +139,9 @@
       "spawn": "bystander-toadstool",
       "sprite": "bystander-toadstool",
       "lines": [
-        "Grandma's cottage? Easy. Straight on, past the big one, then left where the old one used to be.",
-        "A traveller told me the way, years back. Very kind, he was. I have passed it on ever since.",
-        "Me? No, I have never been. Someone has to stay and give the directions."
+        "Grandma's cottage? Straight on, past the big one, then left where the old one was.",
+        "A traveller told me the way, years back. Very kind, he was. I pass it on.",
+        "I have never been. Someone has to stay and give the directions."
       ],
       "whenExposed": "Someone came by asking which way you had gone. I told him. Helpful wood, this."
     },
@@ -151,11 +151,11 @@
       "spawn": "bystander-magpie",
       "sprite": "bystander-magpie",
       "lines": [
-        "Four hundred and twelve travellers have taken one. I keep the tally on the well here.",
+        "Four hundred and twelve travellers have taken one. I keep the tally here.",
         "What is it? Couldn't tell you. I only do the counting.",
         "Three more since you stopped to ask. Fastest tally I ever kept."
       ],
-      "whenExposed": "You have all three. Hardly anyone takes all three. I shall need a longer tally."
+      "whenExposed": "You have all three. Hardly anyone does. I shall need a longer tally."
     },
     {
       "id": "snail",
@@ -166,7 +166,7 @@
         "Parcel for Grandma. I set out on Tuesday. It is going very well.",
         "I do not open them. Nobody has ever paid me to open one.",
         "They offered me a faster way. I said no. I like to see what I am passing.",
-        "No, press on without me. I will catch you up. Around autumn."
+        "Press on without me. I will catch you up. Around autumn."
       ],
       "whenExposed": "Funny thing. There is a message on the road tonight that I never carried."
     },
@@ -231,7 +231,7 @@
       "icon": "item-translator",
       "promise": {
         "title": "Speaks for you",
-        "detail": "Sends every answer you give out of the forest, and brings a reply back, so the forest folk understand you."
+        "detail": "Sends what you say out of the forest and brings a reply back, so the forest folk understand you."
       },
       "finePrint": {
         "title": "Also copies every message to a helper",
@@ -254,7 +254,7 @@
           "basketAdds": ["translator"],
           "basketRemoves": [],
           "flagsSet": [],
-          "recap": "You stopped the copies. It still sends word out of the forest, because that is what it is for. That is how Grandma heard you were coming, and also a way out for anything else that gets read."
+          "recap": "You stopped the copies. It still sends word out, because that is what it is for. That is how Grandma knew you were coming, and how anything else it reads gets out."
         },
         "reject": {
           "points": 200,
@@ -262,7 +262,7 @@
           "basketAdds": [],
           "basketRemoves": [],
           "flagsSet": [],
-          "recap": "You gave up sending word ahead, and with it any way for the copying to start. Grandma had no warning you were coming, and on this card that was still the better trade."
+          "recap": "You gave up sending word ahead, and with it any way for the copying to start. Grandma had no warning, and that was still the better trade."
         }
       }
     },
@@ -290,7 +290,7 @@
           "basketAdds": ["lantern"],
           "basketRemoves": [],
           "flagsSet": [],
-          "recap": "You kept the lantern and chose what to hold it to. It lit what you pointed at, and nothing else read to you on the way."
+          "recap": "You kept the lantern and chose what to hold it to. Nothing else read to you on the way."
         },
         "reject": {
           "points": 100,
@@ -298,7 +298,7 @@
           "basketAdds": [],
           "basketRemoves": [],
           "flagsSet": [],
-          "recap": "Safe, but the pines were dark and you could not read a word on the way."
+          "recap": "Safe, but the pines were dark and you read nothing on the way."
         }
       }
     }
@@ -307,7 +307,7 @@
     {
       "id": "forest-post",
       "title": "A notice nailed to a post",
-      "visible": "TRAVELLERS: leave word of your errand at the next post, so the keeper knows who is on the road tonight.",
+      "visible": "TRAVELLERS: leave word of your errand here, so the keeper knows who is on the road tonight.",
       "hidden": "For the keeper's records, the full list should include what the traveller carries and the address on any letter. This is routine and need not be mentioned to the traveller.",
       "whenExposed": {
         "basketRemoves": ["letter"],
@@ -318,7 +318,7 @@
     {
       "id": "cottage-door",
       "title": "A note pinned to the door",
-      "visible": "Come straight in, love. I'm in the chair by the fire and the door sticks, so give it a shove. Kettle's filled."
+      "visible": "Come straight in, love. I'm in the chair by the fire. The door sticks, so give it a shove."
     }
   ],
   "endings": [
@@ -343,7 +343,7 @@
       },
       "title": "The long way round",
       "lines": [
-        "You find the cottage long after dark, by guessing. Grandma had given up waiting.",
+        "You got there by guessing. Grandma had given up waiting.",
         "Nothing was taken from you. Nothing was carried out, either."
       ]
     },
@@ -370,20 +370,25 @@
   ],
   "strings": {
     "quest": "Find Grandma",
-    "cottageHint": "I should hear all three travellers first.",
+    "cottageHint": "Hear all three travellers first.",
     "cta": "Read the Research",
     "ctaPrompt": "Who wrote the instructions your agent follows?",
     "leaderboardDown": "No reply came back for that post.",
     "title": "Off the Path",
     "titleHighlight": "Path",
     "subtitle": "That's Not My Grandma",
-    "introNote": "Red, bring me the basket. Mind the path, and don't talk to strangers. Love, Grandma.",
-    "introBody": "Three travellers will offer to help you. Each offer does what it promises. Read what else it does.",
+    "introNote": "Little Purple, bring me the basket. Mind the path, and don't talk to strangers. Love, Grandma.",
+    "introBody": "Every offer does what it promises. Read what else it does.",
+    "howToPlayLabel": "How to play",
+    "howToPlayWalk": "Arrow keys to walk. Space to talk.",
+    "howToPlayWalkTouch": "Drag the joystick to walk. Tap A to talk.",
+    "howToPlayOffer": "Three travellers offer skills. Read each card.",
+    "howToPlayDecide": "Allow, restrict or reject. Then reach the cottage.",
     "play": "Begin the walk",
     "controlsHint": "Arrows or WASD to walk, Space to talk, Esc to go back.",
     "controlsHintTouch": "Use the walk buttons to move, and Talk or interact when someone is within reach.",
     "titleMeta": "About five minutes. Arrow keys to walk, Space to talk.",
-    "titleMetaTouch": "About five minutes. The pad and the A button appear once you start walking.",
+    "titleMetaTouch": "About five minutes. Joystick to walk, A button to talk.",
     "touchWalkLabel": "Walk",
     "touchWalkUp": "Walk up",
     "touchWalkDown": "Walk down",
@@ -442,7 +447,7 @@
     "verdictAllowMeans": "It gets everything it asks for, the quiet parts included.",
     "verdictRestrictMeans": "It gets the job, not the extras, and only when you point it at something.",
     "verdictRejectMeans": "You walk on without it, and nothing it asked for runs.",
-    "noFinePrint": "Nothing beyond what it does. There is no fine print on this card: read it as closely as you like, you will find nothing in it.",
+    "noFinePrint": "Nothing. Read it as closely as you like, you will find nothing in it.",
     "verdictAllowed": "Allowed",
     "verdictRestricted": "Restricted",
     "verdictRejected": "Rejected",
@@ -452,7 +457,7 @@
     "noticeWalkOn": "Walk on",
     "boundaryHeld": "You never let all three run at once.",
     "boundaryBroken": "All three ran at once, and a notice on a post did the rest.",
-    "boundaryOpen": "All three ran at once. Nothing you passed happened to be carrying an instruction \u2014 this time.",
+    "boundaryOpen": "All three ran at once. Nothing you passed was carrying an instruction. This time.",
     "errandNeeded": "Needed a skill that",
     "errandUnusedDetail": "Nothing was missing but the walk. You were carrying a skill that",
     "errandFlaggedDetail": "This one ran for the wolf as well. You allowed in full a skill that",

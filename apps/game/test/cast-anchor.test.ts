@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
  * 8px north. The helper was not touched.
  *
  * EIGHT PIXELS. `walkTo`'s tolerance is `TILE * 1.25` = 40, and the north approach to a cast member
- * is EXACTLY 40.00px -- margin zero. Red landing 3px off centre measured 40.11 to the stale target
+ * is EXACTLY 40.00px -- margin zero. Purple landing 3px off centre measured 40.11 to the stale target
  * and threw "Something is in the corridor." `INTERACT_RADIUS` is 48, so she could always talk; the
  * walk helper simply refused to believe it had arrived. A whole round went into hunting a collision
  * tile at (10,22), which turned out to be the toadstool's own spawn cell, deliberately solid under

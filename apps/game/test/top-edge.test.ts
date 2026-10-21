@@ -7,7 +7,7 @@ import { CAMERA_DEADZONE, cameraFollow, cameraTopLeft, TILE, WALK_SPEED } from '
 import {
   cameraFor,
   CAMERA_FOCUS_Y,
-  RED_FEET_BELOW_SPAWN,
+  PURPLE_FEET_BELOW_SPAWN,
   REFERENCE_VIEWPORTS,
   snapCentreToRow,
 } from '@otp/core';
@@ -46,7 +46,7 @@ import type { ForestMap } from '../src/world/map';
  *
  *   The LIFETIME: the lift is chosen at a placement and dropped on the first frame the camera
  *   moves, and both halves of that are run through the REAL `cameraFollow` here rather than argued
- *   about. A lift left in for the whole run frames Red eleven pixels below her own feet at 375x812
+ *   about. A lift left in for the whole run frames Purple eleven pixels below her own feet at 375x812
  *   and 768x1024 -- the review that sent the first version of this fix back found exactly that,
  *   and nothing in this file would have.
  *
@@ -61,25 +61,25 @@ import type { ForestMap } from '../src/world/map';
  */
 
 const forest: ForestMap = readForestMap(map);
-const spawn = forest.objects.find((o) => o.name === 'spawn-red');
-if (!spawn) throw new Error('map has no "spawn-red"');
+const spawn = forest.objects.find((o) => o.name === 'spawn-purple');
+if (!spawn) throw new Error('map has no "spawn-purple"');
 const world = { width: forest.widthInPixels, height: forest.heightInPixels };
 
 /**
  * The camera's centre at the opening shot, term for term as `forest-scene.ts` builds it.
  *
- * `create()` puts Red's feet at `spawn.y + RED_FEET_BELOW_SPAWN` and `redFocus()` frames
+ * `create()` puts Purple's feet at `spawn.y + PURPLE_FEET_BELOW_SPAWN` and `purpleFocus()` frames
  * `position.y + CAMERA_FOCUS_Y`. Both terms come from @otp/core rather than being written down
  * again here: a camera this project writes down drifts from the camera it draws, which is the
  * whole argument camera.ts opens with.
  */
 const centre = {
   x: spawn.x + TILE / 2,
-  y: spawn.y + RED_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y,
+  y: spawn.y + PURPLE_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y,
 };
 
-/** Red herself, which is what the framing is measured against. */
-const feet = { x: centre.x, y: spawn.y + RED_FEET_BELOW_SPAWN };
+/** Purple herself, which is what the framing is measured against. */
+const feet = { x: centre.x, y: spawn.y + PURPLE_FEET_BELOW_SPAWN };
 
 /**
  * Every viewport the opening shot is checked at: the four the project reviews on, the client's own
@@ -176,11 +176,11 @@ describe('the opening shot does not open on a slice of a canopy row', () => {
   /*
    * THE LIFT IS BIGGER THAN THE DEADZONE, WHICH IS WHY IT CANNOT BE APPLIED AFTER THE FOLLOW.
    *
-   * The first version of this fix moved `this.camera.y` and left `redFocus` alone. On the next
+   * The first version of this fix moved `this.camera.y` and left `purpleFocus` alone. On the next
    * frame `cameraFollow` measured the camera against its target, found it further away than
    * `CAMERA_DEADZONE.y`, and eased the snap back out -- so the frame a player sees a third of a
    * second after loading is not the frame the fix produced. Run through sixty frames of the real
-   * follow with Red standing still:
+   * follow with Purple standing still:
    *
    *     1673x449   lift 11px   row 15.000 -> 15.000  holds
    *     390x844    lift 10px   row 12.000 -> 12.000  holds
@@ -218,8 +218,8 @@ describe('the opening shot does not open on a slice of a canopy row', () => {
  * ------------------------------------------------------------------------------------------
  *
  * THE FIRST VERSION OF THIS FIX WAS SENT BACK HERE, and nothing in this file noticed. The lift
- * went into `redFocus` and stayed there for the whole run; `CAMERA_FOCUS_Y` is -20 and the lift is
- * 31 at 375x812 and 768x1024, so the camera aimed eleven pixels BELOW Red's feet -- out of the
+ * went into `purpleFocus` and stayed there for the whole run; `CAMERA_FOCUS_Y` is -20 and the lift is
+ * 31 at 375x812 and 768x1024, so the camera aimed eleven pixels BELOW Purple's feet -- out of the
  * method whose docstring says it frames her chest -- from the title card to the cottage door, on
  * the project's own phone and tablet. The geometry above passed every assertion while that was
  * true, because every assertion above is about one frame.
@@ -249,8 +249,8 @@ function place(
 }
 
 /**
- * The scene's camera loop, run for real from the opening placement: Red walks at `WALK_SPEED` in
- * `dirY`, the camera eases after `redFocus`'s target every frame, and the lift is either released
+ * The scene's camera loop, run for real from the opening placement: Purple walks at `WALK_SPEED` in
+ * `dirY`, the camera eases after `purpleFocus`'s target every frame, and the lift is either released
  * on the first frame the camera's own centre moves or held for ever.
  */
 function walk(
@@ -269,16 +269,16 @@ function walk(
 } {
   const chosen = openingEdge(viewport);
   let lift = chosen.lift;
-  let red = feet.y;
+  let purple = feet.y;
   let cameraY = centre.y + chosen.lift;
   const dy: number[] = [];
   let releasedAt = -1;
   for (let i = 0; i < frames; i++) {
-    red += dirY * STRIDE;
+    purple += dirY * STRIDE;
     const before = cameraY;
     cameraY = cameraFollow(
       { x: centre.x, y: cameraY },
-      { x: centre.x, y: red + CAMERA_FOCUS_Y + lift },
+      { x: centre.x, y: purple + CAMERA_FOCUS_Y + lift },
       FRAME_MS,
     ).y;
     if (release && releasedAt < 0 && cameraY !== before) {
@@ -293,7 +293,7 @@ function walk(
     releasedAt,
     cameraY,
     top,
-    feetInFrame: red - top,
+    feetInFrame: purple - top,
     lift: chosen.lift,
     view: chosen.view,
   };
@@ -305,9 +305,9 @@ const BIG_LIFT = [REFERENCE_VIEWPORTS.phone, REFERENCE_VIEWPORTS.tablet];
 describe('the lift lives exactly as long as the camera stands still', () => {
   /*
    * Three seconds of the real follow with the camera's own target not moving on this axis, which
-   * is the opening shot and is also a walk straight along the X axis: `redFocus`'s Y does not
+   * is the opening shot and is also a walk straight along the X axis: `purpleFocus`'s Y does not
    * change, so the camera's does not either and the row it was placed on survives. That is why the
-   * release reads `this.camera.y` and not `this.walking` -- Red moving is not the question, and
+   * release reads `this.camera.y` and not `this.walking` -- Purple moving is not the question, and
    * inside the deadzone she can move 20px without the camera following at all.
    */
   it('is never given back while the camera has not moved, so the opening frame keeps its row', () => {
@@ -341,7 +341,7 @@ describe('the lift lives exactly as long as the camera stands still', () => {
   });
 
   /*
-   * And what it charges, in the only unit anybody looks at: where Red sits down the frame. Held,
+   * And what it charges, in the only unit anybody looks at: where Purple sits down the frame. Held,
    * the camera is a whole lift lower in the world than `CAMERA_FOCUS_Y` asks, which puts her a
    * whole lift higher up the picture, for ever.
    */
@@ -355,14 +355,14 @@ describe('the lift lives exactly as long as the camera stands still', () => {
       );
       expect(
         Math.round(released.feetInFrame - held.feetInFrame),
-        `holding the lift at ${where} moves Red ${Math.round(released.feetInFrame - held.feetInFrame)}px up the frame instead of ${held.lift}`,
+        `holding the lift at ${where} moves Purple ${Math.round(released.feetInFrame - held.feetInFrame)}px up the frame instead of ${held.lift}`,
       ).toBe(held.lift);
     }
   });
 
   /*
    * SOUTHBOUND IT IS FREE, and that is the whole reason the release is keyed on the camera moving
-   * rather than on Red moving. She leaves the deadzone after 22px; dropping a 31px lift at that
+   * rather than on Purple moving. She leaves the deadzone after 22px; dropping a 31px lift at that
    * instant puts the target 9px INSIDE the deadzone, so the camera holds a little longer instead
    * of reversing. The world never moves the wrong way and never moves faster than the walk.
    */
@@ -380,7 +380,7 @@ describe('the lift lives exactly as long as the camera stands still', () => {
         Math.max(...released.dy),
         `the camera at ${where} travels further in a frame than it does with the lift held`,
       ).toBeLessThanOrEqual(Math.max(...held.dy));
-      // And neither of them outruns Red, which is what "the world scrolls with her" means.
+      // And neither of them outruns Purple, which is what "the world scrolls with her" means.
       expect(
         Math.max(...released.dy),
         `the camera at ${where} outruns the walk itself`,
@@ -670,7 +670,7 @@ describe('forest-scene snaps the camera where it may and nowhere else', () => {
    * for the one frame it aligns and nothing at all afterwards (measured above, both ways, through
    * the real follow). Three things have to hold and each one is a way of getting it wrong:
    *
-   *   it is released when the CAMERA has moved, not when RED has -- she moves inside the deadzone
+   *   it is released when the CAMERA has moved, not when PURPLE has -- she moves inside the deadzone
    *   without moving it, and the row survives that;
    *   the comparison is made BEFORE the follow runs, or there is nothing to compare against;
    *   and the release is the ELSE of the placement. As a separate `if` before it, the placement
@@ -681,9 +681,9 @@ describe('forest-scene snaps the camera where it may and nowhere else', () => {
     const body = bodyOf(SCENE, 'private syncCamera(');
     expect(
       body,
-      'nothing releases the lift any more, so it is added to `redFocus` for the whole run: at ' +
+      'nothing releases the lift any more, so it is added to `purpleFocus` for the whole run: at ' +
         '375x812 and 768x1024 the lift is 31 and CAMERA_FOCUS_Y is -20, so the camera aims ' +
-        "eleven pixels BELOW Red's feet from the title card to the cottage door",
+        "eleven pixels BELOW Purple's feet from the title card to the cottage door",
     ).toContain('this.snapLift = 0');
     expect(
       body,
@@ -692,7 +692,7 @@ describe('forest-scene snaps the camera where it may and nowhere else', () => {
     expect(
       body,
       'the release is no longer keyed on the camera having moved: a lift chosen at the opening ' +
-        'shot now frames Red eleven pixels below her own feet for the rest of the run at 375x812 ' +
+        'shot now frames Purple eleven pixels below her own feet for the rest of the run at 375x812 ' +
         'and 768x1024',
     ).toMatch(/const\s+moved\s*=\s*this\.camera\.y\s*!==\s*[A-Za-z_$][\w$]*;/);
     expect(conditionAround(SCENE, 'this.snapLift = 0'), 'the release is unconditional').toContain(
@@ -743,12 +743,12 @@ describe('forest-scene snaps the camera where it may and nowhere else', () => {
    * The other half of the drift finding above. A lift applied to the camera after `cameraFollow`
    * has run is a lift `cameraFollow` will take back out on the next frame, at any viewport whose
    * lift exceeds the deadzone -- which is two of the four the project reviews on. So it has to be
-   * in what the camera is AIMING at, and `redFocus` is the only thing that says that.
+   * in what the camera is AIMING at, and `purpleFocus` is the only thing that says that.
    */
   it('carries the lift in the follow target, where the deadzone cannot undo it', () => {
     expect(
-      bodyOf(SCENE, 'private redFocus('),
-      'redFocus no longer carries snapLift, so the camera eases the snap back out within about ' +
+      bodyOf(SCENE, 'private purpleFocus('),
+      'purpleFocus no longer carries snapLift, so the camera eases the snap back out within about ' +
         'a third of a second at 375x812 and 768x1024 and the band returns',
     ).toContain('this.snapLift');
     expect(

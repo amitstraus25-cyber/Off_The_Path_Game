@@ -39,7 +39,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CAST_FRAMES } from '../src/sprites/cast.ts';
-import { RED_FRAMES } from '../src/sprites/char-red.ts';
+import { PURPLE_FRAMES } from '../src/sprites/char-purple.ts';
 import { NPC_PAINTERS } from '../src/sprites.ts';
 import { CROWNS, TREE_TILES } from '../src/tiles/w-trees.ts';
 import { UNDERGROWTH_TILES } from '../src/tiles/w-undergrowth.ts';
@@ -88,16 +88,16 @@ describe('the cast and its faces', () => {
   });
 });
 
-describe('Red', () => {
+describe('Purple', () => {
   /*
-   * RED IS IMPORTED DIRECTLY, and that is the point of the line rather than the expectation below.
+   * PURPLE IS IMPORTED DIRECTLY, and that is the point of the line rather than the expectation below.
    *
-   * `sprites/char-red.ts` arms FOUR module-scope guards -- `assertContactLine`, `assertRedReads`,
+   * `sprites/char-purple.ts` arms FOUR module-scope guards -- `assertContactLine`, `assertPurpleReads`,
    * `assertCapeDevice` and, since 2026-10-21, `assertBackView`. Until this round the only thing
    * loading that module in CI was `../src/sprites.ts`, imported three lines up for `NPC_PAINTERS`,
-   * which reaches Red transitively. That worked, and it is exactly the fragility the header of this
-   * file warns about one level down: Red's guards were armed by a side effect of somebody else's
-   * import, and dropping `char-red` from `sprites.ts` -- or narrowing that import -- would have
+   * which reaches Purple transitively. That worked, and it is exactly the fragility the header of this
+   * file warns about one level down: Purple's guards were armed by a side effect of somebody else's
+   * import, and dropping `char-purple` from `sprites.ts` -- or narrowing that import -- would have
    * disarmed all four of them while every test here stayed green. The protagonist's own painter
    * should not be loaded by accident.
    *
@@ -108,7 +108,7 @@ describe('Red', () => {
    * numbers; they are stated, with the measurements that chose them, on the guards themselves.
    */
   it('keys all sixteen frames the scene animates her from', () => {
-    expect(Object.keys(RED_FRAMES).sort()).toEqual([
+    expect(Object.keys(PURPLE_FRAMES).sort()).toEqual([
       'down-0',
       'down-1',
       'down-2',

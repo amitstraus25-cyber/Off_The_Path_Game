@@ -11,7 +11,7 @@
  * turn those into one image per texture, in the frame order the scene's animations index into.
  */
 import { Img } from './paint.ts';
-import { RED_FRAMES, RED_FRAME_H, RED_FRAME_W } from './sprites/char-red.ts';
+import { PURPLE_FRAMES, PURPLE_FRAME_H, PURPLE_FRAME_W } from './sprites/char-purple.ts';
 import { CAST_FRAMES } from './sprites/cast.ts';
 import { BYSTANDER_FRAMES } from './sprites/bystanders.ts';
 import {
@@ -22,43 +22,43 @@ import {
   paintPawprintsFrame,
 } from './sprites/faces.ts';
 
-/** One character frame. Red, the cast and the bystanders are all drawn on the same footprint. */
-export const RED_W = RED_FRAME_W;
-export const RED_H = RED_FRAME_H;
+/** One character frame. Purple, the cast and the bystanders are all drawn on the same footprint. */
+export const PURPLE_W = PURPLE_FRAME_W;
+export const PURPLE_H = PURPLE_FRAME_H;
 
 /** Portraits and items, in the DOM and never scaled. */
 export const PORTRAIT_SIZE = FACE_SIZE;
 
 type Facing = 'down' | 'left' | 'right' | 'up';
-/** Row order on Red's sheet. */
+/** Row order on Purple's sheet. */
 export const FACINGS: Facing[] = ['down', 'left', 'right', 'up'];
 
 /**
- * Red's atlas: four rows of four, one row per facing.
+ * Purple's atlas: four rows of four, one row per facing.
  *
- * Column 0 is the idle pose and columns 1 to 3 are the walk, which is how `RED_FRAMES` is keyed
+ * Column 0 is the idle pose and columns 1 to 3 are the walk, which is how `PURPLE_FRAMES` is keyed
  * (`<facing>-0` idle, `<facing>-1..3` walk). The atlas frame NAMES are a separate contract, held by
- * `forest-scene.ts`: it sets `red-idle-<facing>-0` when Red stops and plays `red-walk-<facing>`
+ * `forest-scene.ts`: it sets `purple-idle-<facing>-0` when Purple stops and plays `purple-walk-<facing>`
  * over frames 0, 1, 2, 1. Renaming either side breaks the other silently, so the mapping lives
  * here, once.
  */
-export function paintRedSheet(): { sheet: Img; frames: Record<string, unknown> } {
-  const sheet = new Img(RED_W * 4, RED_H * 4);
+export function paintPurpleSheet(): { sheet: Img; frames: Record<string, unknown> } {
+  const sheet = new Img(PURPLE_W * 4, PURPLE_H * 4);
   const frames: Record<string, unknown> = {};
   FACINGS.forEach((facing, row) => {
     ([0, 1, 2, 3] as const).forEach((phase, col) => {
-      const x = col * RED_W;
-      const y = row * RED_H;
-      const frame = new Img(RED_W, RED_H);
-      RED_FRAMES[`${facing}-${phase}`]!(frame);
+      const x = col * PURPLE_W;
+      const y = row * PURPLE_H;
+      const frame = new Img(PURPLE_W, PURPLE_H);
+      PURPLE_FRAMES[`${facing}-${phase}`]!(frame);
       sheet.blit(frame, x, y);
-      const name = phase === 0 ? `red-idle-${facing}-0` : `red-walk-${facing}-${phase - 1}`;
+      const name = phase === 0 ? `purple-idle-${facing}-0` : `purple-walk-${facing}-${phase - 1}`;
       frames[name] = {
-        frame: { x, y, w: RED_W, h: RED_H },
+        frame: { x, y, w: PURPLE_W, h: PURPLE_H },
         rotated: false,
         trimmed: false,
-        spriteSourceSize: { x: 0, y: 0, w: RED_W, h: RED_H },
-        sourceSize: { w: RED_W, h: RED_H },
+        spriteSourceSize: { x: 0, y: 0, w: PURPLE_W, h: PURPLE_H },
+        sourceSize: { w: PURPLE_W, h: PURPLE_H },
       };
     });
   });
@@ -110,15 +110,15 @@ export function paintNpcSheet(name: string): Img {
     name === 'npc-wolf'
       ? ['npc-wolf-0', 'npc-wolf-1', 'npc-wolf-2', 'npc-wolf-3']
       : [`${name}-0`, `${name}-1`];
-  const sheet = new Img(RED_W * frames.length, RED_H);
+  const sheet = new Img(PURPLE_W * frames.length, PURPLE_H);
   frames.forEach((key, i) => {
     const painter = CHARACTER_FRAMES[key];
     if (!painter) throw new Error(`No painter for ${name}`);
     // Painted on its own canvas first: these painters finish with `outline()`, which would
     // otherwise trace the neighbouring frame already on the sheet.
-    const frame = new Img(RED_W, RED_H);
+    const frame = new Img(PURPLE_W, PURPLE_H);
     painter(frame);
-    sheet.blit(frame, i * RED_W, 0);
+    sheet.blit(frame, i * PURPLE_W, 0);
   });
   return sheet;
 }

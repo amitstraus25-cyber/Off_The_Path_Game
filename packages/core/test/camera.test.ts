@@ -12,7 +12,7 @@ import {
   pixelSnap,
   PORTRAIT_WORLD,
   PORTRAIT_WORLD_BAND,
-  RED_FEET_BELOW_SPAWN,
+  PURPLE_FEET_BELOW_SPAWN,
   REFERENCE_VIEWPORTS,
   snapCentreToRow,
   snapTopEdge,
@@ -187,7 +187,7 @@ describe('pixelSnap', () => {
 describe('cameraCentreTiles', () => {
   /*
    * THE ONE-TILE TERM. The art tooling pointed its frames at `spawn.y - 5/8` while the game points
-   * at `spawn.y + 1 - 5/8`, because Red's feet are one tile BELOW her spawn object and only the
+   * at `spawn.y + 1 - 5/8`, because Purple's feet are one tile BELOW her spawn object and only the
    * game knew it. A whole round of framing was composed and guarded one row too high, and the cost
    * showed on the landing screen as crown keylines ruled across open lawn. This test is the term.
    */
@@ -196,7 +196,7 @@ describe('cameraCentreTiles', () => {
   });
 
   it('is the feet offset plus the focus lift, in tiles', () => {
-    const expected = (RED_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y) / TILE;
+    const expected = (PURPLE_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y) / TILE;
     expect(expected).toBeCloseTo(0.375, 10);
     expect(cameraCentreTiles({ x: 0, y: 0 }).y).toBeCloseTo(expected, 10);
   });

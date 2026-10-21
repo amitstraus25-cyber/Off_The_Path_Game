@@ -1,5 +1,5 @@
 /*
- * The cast: the four characters who offer Red something, drawn at 32 x 48.
+ * The cast: the four characters who offer Purple something, drawn at 32 x 48.
  *
  * Revised 2026-10-19 against the approved board (reference/mocks/gameplay-concepts.png) and the
  * director's review of the previous pass. The previous pass was right about the palette and wrong
@@ -210,7 +210,7 @@ function base(img: Img, x0: number, x1: number, y: number, c: RGBA): void {
  *   `top + 1` and 46 and lets `base()` and the outline reach rows 47 and `top`.
  * - **`w` is the whole figure**, signature feature included. Section 10.2 quotes the keeper's body
  *   at 24 and then hangs a lantern off it, and the two numbers cannot both be the bbox. The bbox is
- *   what separates him from Red, so the bbox is what is written down here, with the body width in
+ *   what separates him from Purple, so the bbox is what is written down here, with the body width in
  *   the note beside it.
  *
  * `h` is held to the section 10.2 figure exactly. `w` is held to it except where a breaking feature
@@ -310,7 +310,7 @@ const RABBIT_MUZZLE: RGBA = rose(0);
  * not `cloak`.
  *
  * The board puts a red garment on him and we had nothing on him at all, which is how a white animal
- * with one tan dash became the brightest object in the title frame. Aubergine is Red's and must stay
+ * with one tan dash became the brightest object in the title frame. Aubergine is Purple's and must stay
  * hers; warm red is already sanctioned world colour in this build, so the answer was never "leave
  * him white". `RABBIT_CLOTH_SEAT` is its keyline, pulled from `gold`'s own outline value by the same
  * transform, so the cloth is ringed the way the basket beside it is ringed and does not bleed into
@@ -328,8 +328,8 @@ const RABBIT_CLOTH_SEAT: RGBA = pull(keyline('gold', 70), 0.32, 0.24);
  * leaning apart with a wide pink inner, two paws, two feet, a round tail, and a face of black oval
  * eyes, a warm nose, a small "w" mouth and a blush on each cheek. All of that is kept. What
  * changed on 2026-10-19 is the PROPORTION, and it is the only thing the playing camera reads: he was
- * 22 x 44, which put him in the same box as the cat and within three rows of Red, so the forest
- * held three upright figures of one size. At 21 x 34 he is two thirds of Red's height and the
+ * 22 x 44, which put him in the same box as the cat and within three rows of Purple, so the forest
+ * held three upright figures of one size. At 21 x 34 he is two thirds of Purple's height and the
  * tallest thing on him is a pair of ears with sky between them.
  *
  * THE GAP IS THE SIGNATURE and it has to survive the outline. Section 10.2 asks for 4 px of sky
@@ -364,9 +364,9 @@ const RABBIT_CLOTH_SEAT: RGBA = pull(keyline('gold', 70), 0.32, 0.24);
  *   a lump on the near hip reads at 1x as a wound. The board gives him a woven warm-gold basket on
  *   the BACK, so it is now a `gold` basket behind the far hip, drawn before the body so the body
  *   overlaps it -- the one warm mass on him, and still the point of him: he is the character who
- *   hands Red a thing.
+ *   hands Purple a thing.
  *
- * What is NOT changed, because it was right: 21 x 34 and two thirds of Red; thirteen rows of ear
+ * What is NOT changed, because it was right: 21 x 34 and two thirds of Purple; thirteen rows of ear
  * with four px of surviving sky; the splayed feet that make him widest at the base; and the breath,
  * which moves the head, ears and face only -- the body, paws and feet stay planted, which is what
  * makes a one-pixel bob look like breathing rather than like the sprite sliding.
@@ -530,7 +530,7 @@ function paintRabbit(img: Img, blink: boolean): void {
    * brightest object in the title frame -- the client's eye went to the first living thing on the
    * landing screen and found nothing in it.
    *
-   * `ember`, not `cloak`. Aubergine is Red's and is the one colour on this sprite that could make a
+   * `ember`, not `cloak`. Aubergine is Purple's and is the one colour on this sprite that could make a
    * player wonder which of them is the protagonist. Warm red is already sanctioned world colour here
    * -- the toadstool caps and `flower-red` are this same family -- so the answer was never "nothing".
    *
@@ -910,9 +910,9 @@ const KEEPER_CATCH_FAR: RGBA = tone('gold', 0.08);
  * the eight, which is the second half of the read: he fills the frame where the owl fills a corner.
  *
  * LANTERN HAND, NOT LANTERN SIDE. Section 10.2 puts the lantern off the RIGHT edge, as it does
- * Red's basket. It stays on the left here, deliberately and against the letter of that line: with
+ * Purple's basket. It stays on the left here, deliberately and against the letter of that line: with
  * both on the right the two tallest figures in the game break their outline on the same side at
- * roughly the same height, and the keeper's one job is to not be mistaken for Red. Flipping him is
+ * roughly the same height, and the keeper's one job is to not be mistaken for Purple. Flipping him is
  * a one-line change to the pole, the hand and the rim loop if a director would rather have the
  * letter.
  *
@@ -975,7 +975,7 @@ const KEEPER_CATCH_FAR: RGBA = tone('gold', 0.08);
  *   because nine pixels of it ringed by its own garment is not a mass.
  *
  * MEASURED AGAINST THE BOARD, which never drew this character, so the comparison is to the only
- * hooded figure it does draw -- Red, crop `770 625 110 130 8`. Hers is the relationship to copy: a
+ * hooded figure it does draw -- Purple, crop `770 625 110 130 8`. Hers is the relationship to copy: a
  * mid-value hood and a face at a similar value above it, separated as much by HUE as by brightness,
  * with no dark ring between them. On the board her hood peaks at luma 187 and her face at 221, a
  * gap of 34; here the hood peaks at 156 and the lit fur at 178, a gap of 22, with the rest of the
@@ -985,7 +985,7 @@ const KEEPER_CATCH_FAR: RGBA = tone('gold', 0.08);
  *
  * COAT COLOUR. He is painted from `roof`, the one ramp in the palette no character owns and a warm
  * neutral, which is what makes gold the only saturated colour on him. He was once `night`, whose
- * top two steps are byte-identical to Red's cloak, so the forest held two purple-hooded figures.
+ * top two steps are byte-identical to Purple's cloak, so the forest held two purple-hooded figures.
  */
 function paintKeeper(img: Img, blink: boolean): void {
   const b = blink ? 1 : 0;
@@ -1228,7 +1228,7 @@ function paintKeeper(img: Img, blink: boolean): void {
  * The predator, and the title of the game. LOW AND LONG: 30 x 30, and the only horizontal back
  * line in the cast.
  *
- * He was 32 x 41 -- as tall as Red and almost as tall as the keeper -- which is a dog standing up,
+ * He was 32 x 41 -- as tall as Purple and almost as tall as the keeper -- which is a dog standing up,
  * not a wolf stalking. Section 10.2 gives him a square box and the reason is in the same row:
  * "widest at the shoulder; head carried forward and below the shoulder". Taking eleven rows out of
  * him and leaving the width alone is what turns a vertical animal into a horizontal one, and the
@@ -1613,7 +1613,7 @@ function silhouette(paint: (img: Img) => void): {
  *   2. no two silhouettes share BOTH a width band (+-4) and a height band (+-6), which is section
  *      10.2's assignment rule and the mechanical half of 10.1's "name each one".
  *
- * Red is deliberately NOT in the set. She is painted in `char-red.ts`, which this pass does not
+ * Purple is deliberately NOT in the set. She is painted in `char-purple.ts`, which this pass does not
  * own, and a guard that fails on somebody else's file is a guard that gets deleted. Her own
  * proximity to the keeper is reported up rather than enforced here.
  */

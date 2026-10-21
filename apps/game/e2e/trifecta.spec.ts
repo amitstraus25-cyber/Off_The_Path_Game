@@ -23,7 +23,7 @@ async function decide(page: Page, verdicts: Record<string, Verdict>): Promise<vo
   );
 }
 
-/** Puts Red at the notice post without walking the whole map. */
+/** Puts Purple at the notice post without walking the whole map. */
 async function atNotice(page: Page): Promise<void> {
   await page.evaluate(() => window.__otp!.bus.emit('reachedNotice', { noticeId: 'forest-post' }));
   await expect(page.locator('.otp-notice')).toBeVisible();
@@ -93,7 +93,7 @@ test('the skill card does not forecast what each verdict would leave running', a
 /*
  * The verb primer -- that it defines Restrict, that it says "not the extras", and that it lands on
  * the first card opened and no other -- is asserted once, in e2e/ui.spec.ts, by "the verb primer
- * lands on the first card opened, whoever Red meets first". A near-identical test lived here and
+ * lands on the first card opened, whoever Purple meets first". A near-identical test lived here and
  * was the weaker of the two: it met the Rabbit first, and the Rabbit is Skill 1 of 3, so it passed
  * even while the primer was rendering on `index === 1` and the player who met the Owl first never
  * saw the rules at all. The ui.spec version meets the Owl, which is the ordering that was the
@@ -147,7 +147,7 @@ test('reading the notice before the third leg is granted stays safe', async ({ p
   expect((await probe(page)).flags).toEqual([]);
 });
 
-test('Red stops walking while a notice is open', async ({ page }) => {
+test('Purple stops walking while a notice is open', async ({ page }) => {
   await atNotice(page);
   const before = await probe(page);
   await page.keyboard.down('ArrowRight');

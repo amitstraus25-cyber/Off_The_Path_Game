@@ -16,14 +16,31 @@
  *    canvas had to sweep 1,495 walkable tiles to find three people.
  *
  * The bearing half is a channel with a producer that has not landed yet: `world/forest-scene.ts`
- * is the only thing that knows where Red is standing. So this file DISPATCHES THE EVENT ITSELF and
+ * is the only thing that knows where Purple is standing. So this file DISPATCHES THE EVENT ITSELF and
  * asserts the consumer end of the contract -- the words it picks, and the words it refuses. When
  * the scene starts dispatching for real these assertions do not change; they stop needing the
  * `page.evaluate` that fakes it.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { startGame } from './helpers';
+
+/**
+ * The shipped copy, read rather than repeated, exactly as e2e/card-rulebook.spec.ts reads it and
+ * for the reason that file states: a sentence pasted into a browser test reddens the suite the day
+ * somebody rewords it in content/game.json, which CLAUDE.md rule 3 says is where it lives.
+ *
+ * It is the SENTENCE this is used for and not the NAMES. The names below stay literals, and the
+ * note on them says why: asserting them against the same `content.characters` the component maps
+ * over would pass even if the component printed the wrong three, which is the whole failure being
+ * guarded. The sentence is the opposite case -- what is being asserted is that content's own line
+ * reached the pill at all, so content is the right side to read it from.
+ */
+const content = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../../../content/game.json', import.meta.url)), 'utf8'),
+) as { strings: Record<string, string> };
 
 /**
  * The consumer's event name. Spelled here and in `ui/App.tsx`, and -- once the producer lands --
@@ -40,7 +57,7 @@ const roster = (page: Page): Promise<string[]> =>
   page.$$eval('.otp-visually-hidden li', (nodes) => nodes.map((n) => n.textContent ?? ''));
 
 /**
- * Red, one verdict in: Rabbit answered, Owl and the Lantern Keeper outstanding. Driven through the
+ * Purple, one verdict in: Rabbit answered, Owl and the Lantern Keeper outstanding. Driven through the
  * store rather than walked, because what is under test is what the screen SAYS in that state and a
  * twenty-second walk to get there would only make the test slower and flakier.
  */
@@ -56,7 +73,7 @@ async function oneVerdictIn(page: Page): Promise<void> {
 }
 
 /**
- * Walks Red into the cottage trigger and waits for the door's own line.
+ * Walks Purple into the cottage trigger and waits for the door's own line.
  *
  * The wait for an EMPTY toast first is not politeness: `main.ts` refuses to show the locked-door
  * hint while another hint is still up (`if (!hint) showHint(...)`), so firing this straight after
@@ -95,7 +112,9 @@ test.describe('held at the locked door', () => {
 
     // The shipped sentence is still the sentence. The names are an addition to content's copy,
     // never a replacement for it.
-    expect(toast).toContain('I should hear all three travellers first.');
+    const sentence = content.strings['cottageHint']!;
+    expect(sentence, 'content/game.json still carries the locked-door line').toMatch(/\S/);
+    expect(toast).toContain(sentence);
   });
 
   test('the live region says the same words as the pill, not fewer', async ({ page }) => {

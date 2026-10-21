@@ -253,16 +253,16 @@ export const REFERENCE_VIEWPORTS = {
  */
 
 /**
- * Red's feet sit one tile BELOW the `spawn-red` object's own origin.
+ * Purple's feet sit one tile BELOW the `spawn-purple` object's own origin.
  *
  * The map's objects are addressed from their top-left corner and her sprite's origin is at her
  * feet, so the scene does `spawn.y + TILE`. This is that `+ TILE`, named, because it is the term
  * the art tooling left out.
  */
-export const RED_FEET_BELOW_SPAWN = TILE;
+export const PURPLE_FEET_BELOW_SPAWN = TILE;
 
 /**
- * How far above her feet the camera frames Red, in game pixels. Centring on the feet puts her
+ * How far above her feet the camera frames Purple, in game pixels. Centring on the feet puts her
  * head in the middle of the shot and wastes the top of the screen on sky.
  */
 export const CAMERA_FOCUS_Y = -TILE * (5 / 8);
@@ -285,7 +285,7 @@ export const PORTRAIT_WORLD_BAND = 0.6;
 export function cameraCentreTiles(spawn: { x: number; y: number }): { x: number; y: number } {
   return {
     x: spawn.x + 0.5,
-    y: spawn.y + (RED_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y) / TILE,
+    y: spawn.y + (PURPLE_FEET_BELOW_SPAWN + CAMERA_FOCUS_Y) / TILE,
   };
 }
 
@@ -317,7 +317,7 @@ export function topEdgeRows(y0: number, count = 2): number[] {
  * fifth of a row of crowns.
  *
  * Causation was proved before any code moved, by rendering the real map through the real camera and
- * moving RED while leaving the world alone: at 1673x449 the first eight rows go from 25.1% deep
+ * moving PURPLE while leaving the world alone: at 1673x449 the first eight rows go from 25.1% deep
  * shade to 8.0%, and at 390x844 from 48.1% to 19.2%, with not one pixel of the map repainted. So
  * the band is where the camera sits, not what the painters put there.
  *
@@ -329,11 +329,11 @@ export function topEdgeRows(y0: number, count = 2): number[] {
  * WHAT WAS TRIED AND REJECTED, so that nobody spends a round re-running it:
  *
  *   1. SNAPPING EVERY FRAME. The obvious version: quantise the scroll in `syncCamera` on every
- *      tick. It judders. The camera scrolls continuously while Red walks, so quantising the scroll
+ *      tick. It judders. The camera scrolls continuously while Purple walks, so quantising the scroll
  *      turns vertical movement into a 32px staircase -- the world jumps a whole tile instead of
  *      sliding. That is a worse defect than the band and the client would report it as a new bug.
  *   2. EASING TOWARD A SNAPPED TARGET. Keeps the motion continuous but makes the TARGET jump by a
- *      whole tile as Red walks, so the camera rubber-bands: it accelerates and decelerates in 32px
+ *      whole tile as Purple walks, so the camera rubber-bands: it accelerates and decelerates in 32px
  *      chunks against an exponential ease that never actually arrives, so the resting edge is only
  *      approximately on a row. Both halves of the idea fail.
  *   3. SNAPPING WHEN THE CAMERA SETTLES. Defers the jump rather than removing it: stop walking and
@@ -342,7 +342,7 @@ export function topEdgeRows(y0: number, count = 2): number[] {
  *      which is already a whole row. The band is measured in open forest, nowhere near a bound.
  *
  * SO THE SNAP BELONGS AT A CUT. `forest-scene.ts` moves its camera in exactly two ways: it EASES
- * after Red every frame (`syncCamera(deltaMs)` out of `update`), and it CUTS -- a hard placement
+ * after Purple every frame (`syncCamera(deltaMs)` out of `update`), and it CUTS -- a hard placement
  * with no motion at all -- in three places, the opening shot in `create`, the replay's opening shot
  * in `resetToSpawn`, and the payoff shot in `stageArrival`, which its own docstring already calls
  * "a CUT, not a pan". A cut has no frame before it to judder against, so a snapped cut costs
@@ -356,7 +356,7 @@ export function topEdgeRows(y0: number, count = 2): number[] {
  * camera is against the bottom of the world and snapping down would open a strip of backdrop under
  * the map, so it snaps UP to the row below instead: a whole row of crown at the top is what the
  * framing passes plant for, and it is in-world, which a strip of backdrop is not. On this map no
- * cut is anywhere near that bound -- the spawn object is row 20 of 42, Red's feet row 21, and the
+ * cut is anywhere near that bound -- the spawn object is row 20 of 42, Purple's feet row 21, and the
  * opening camera's top edge lands on rows 9.78 to 15.56 depending on the viewport with 353 to 538px
  * of room left below it (narrowest at 2560x1440, widest at 844x390) -- so the fallback is
  * correctness insurance for a future map and not a live path. THIS PARENTHESIS READ "the spawn sits

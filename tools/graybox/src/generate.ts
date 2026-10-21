@@ -17,9 +17,9 @@ import {
   paintInteractPrompt,
   paintNpcSheet,
   paintPawprints,
-  paintRedSheet,
-  RED_H,
-  RED_W,
+  paintPurpleSheet,
+  PURPLE_H,
+  PURPLE_W,
 } from './sprites.ts';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../../apps/game/src/assets');
@@ -41,16 +41,16 @@ write(
 const map = generateForestMap();
 write('map-forest.json', map.json);
 
-const red = paintRedSheet();
-write('red.png', red.sheet.png());
+const purple = paintPurpleSheet();
+write('purple.png', purple.sheet.png());
 write(
-  'red.json',
+  'purple.json',
   JSON.stringify({
-    frames: red.frames,
+    frames: purple.frames,
     meta: {
-      image: 'red.png',
+      image: 'purple.png',
       format: 'RGBA8888',
-      size: { w: RED_W * 4, h: RED_H * 4 },
+      size: { w: PURPLE_W * 4, h: PURPLE_H * 4 },
       scale: '1',
     },
   }),
@@ -81,12 +81,12 @@ write(
       placeholder: true,
       tilesets: ['tileset-forest.png'],
       maps: ['map-forest.json'],
-      atlases: [{ image: 'red.png', data: 'red.json' }],
+      atlases: [{ image: 'purple.png', data: 'purple.json' }],
       spritesheets: [
         ...[...NPCS, ...BYSTANDERS].map((key) => ({
           key,
-          frameWidth: RED_W,
-          frameHeight: RED_H,
+          frameWidth: PURPLE_W,
+          frameHeight: PURPLE_H,
         })),
         ...Object.entries(FX_SIZES).map(([key, size]) => ({
           key,

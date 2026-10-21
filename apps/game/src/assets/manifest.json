@@ -8,8 +8,8 @@
   ],
   "atlases": [
     {
-      "image": "red.png",
-      "data": "red.json"
+      "image": "purple.png",
+      "data": "purple.json"
     }
   ],
   "spritesheets": [
@@ -70,7 +70,7 @@
     }
   ],
   "images": [
-    "portrait-red.png",
+    "portrait-purple.png",
     "portrait-rabbit.png",
     "portrait-owl.png",
     "portrait-keeper.png",

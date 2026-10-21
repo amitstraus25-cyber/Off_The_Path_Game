@@ -73,7 +73,7 @@ dramatised is _"The user never asks for anything."_ The game makes the user ask.
    you a sender. That is a genuinely good beat the card currently spoils.
 2. **Delete `trifectaWarning` from the HUD.** Move it to Results. When the third mark fills, go
    quiet: fill the mark, change nothing else, say nothing.
-3. **No modal on the notice.** Red walks past the post and the lantern reads it, because that is
+3. **No modal on the notice.** Purple walks past the post and the lantern reads it, because that is
    what the lantern is for. The visible line appears in the world; the consequence happens silently
    and the player either notices the empty basket slot or does not.
 4. Move `whenExposed.recap` ("Nothing warned you, because nothing on any card was false") off the
@@ -135,7 +135,7 @@ Two causes, both in content:
 - `errandItem` is only `route`, so Word Weaver and Night Light carry no errand cost. Refusing them
   is free.
 - `errandBonus: 100` is too small to express failure. **Arriving with no route should change the
-  ending**, not deduct 10%: a fourth ending where Red is still in the woods at dark and the door is
+  ending**, not deduct 10%: a fourth ending where Purple is still in the woods at dark and the door is
   never reached.
 
 **Proposed: split the errand into three goals, one per capability**, so lighting a leg is how you
@@ -154,12 +154,12 @@ afford", which is the research, and it is a budget instead of a quiz.
 
 ## 5. Dramatic irony, for the price of one string
 
-When the third mark fills, instead of the warning banner, give **Red** a line, in character and
+When the third mark fills, instead of the warning banner, give **Purple** a line, in character and
 wrong:
 
 > "Good. Now I can tell Grandma I'm on my way."
 
-The player sees the third mark fill. Red is pleased. That is the irony the brief asked for.
+The player sees the third mark fill. Purple is pleased. That is the irony the brief asked for.
 
 Two threads already in the content pay off for two more strings: Rabbit says the compass "came in
 the same crate as the lanterns", so if the player takes both, the Keeper says _"Funny. I never
@@ -194,13 +194,13 @@ All the personality is inside modals. The diagnosis, and the cheapest high-value
   slow push-in that stays when the third leg lights. Keep the final rounding so tiles do not
   shimmer.
 - **NPCs alive before you reach them.** Two-frame idle bob with a per-NPC phase offset, turning to
-  face Red at twice the interact radius, a world-space bark if she comes near and does not talk.
+  face Purple at twice the interact radius, a world-space bark if she comes near and does not talk.
 - **Put the basket in the HUD** (the deck requires it) **and animate what enters and leaves it.**
   The moment a player loses their key should be something they watch, not a toast reading
   "Allowed: Cottage Finder". Retire that toast.
 - **Hold to read, instead of a modal.** Standing near the post shows the visible line in a world
   bubble; the hidden line needs a one-second hold with a filling ring. **If the trifecta is live the
-  ring fills on its own, while Red is still walking.** This is the best single idea in the review:
+  ring fills on its own, while Purple is still walking.** This is the best single idea in the review:
   the zero-click attack becomes an input event, which is the only way a player will describe it to
   a colleague.
 - **The lantern as a held tool.** If Night Light is in the basket, holding interact near writing

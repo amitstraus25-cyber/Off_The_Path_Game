@@ -27,7 +27,7 @@ export interface GameState {
   met: CharacterId[];
   asked: Record<CharacterId, string[]>;
   inspected: SkillId[];
-  /** Notices Red has read, in order. */
+  /** Notices Purple has read, in order. */
   read: string[];
   verdicts: Record<SkillId, Verdict>;
   basket: string[];

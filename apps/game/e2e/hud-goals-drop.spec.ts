@@ -217,7 +217,7 @@ test.describe('the errand goals on a touch screen', () => {
     await expect(bar).toHaveAttribute('aria-expanded', 'false');
 
     /*
-     * And opening the goals must not also talk to whoever Red is standing next to: the bar stops
+     * And opening the goals must not also talk to whoever Purple is standing next to: the bar stops
      * the two keys propagating rather than letting the world see them as well.
      */
     await page.keyboard.press('Enter');

@@ -35,14 +35,14 @@ test.beforeEach(async ({ page }) => {
   await startGame(page);
 });
 
-test('the run starts in explore with Red at the spawn', async ({ page }) => {
-  const spawn = await mapObject(page, 'spawn-red');
+test('the run starts in explore with Purple at the spawn', async ({ page }) => {
+  const spawn = await mapObject(page, 'spawn-purple');
   const start = await probe(page);
   expect(start.phase).toBe('explore');
   expect(Math.abs(start.position.x - spawn.x)).toBeLessThan(64);
 });
 
-test('Red walks east along the path and the camera follows', async ({ page }) => {
+test('Purple walks east along the path and the camera follows', async ({ page }) => {
   const before = await probe(page);
   await hold(page, 'ArrowRight', 800);
   const after = await probe(page);
@@ -56,12 +56,12 @@ test('WASD works as well as the arrows', async ({ page }) => {
   expect((await probe(page)).position.x).toBeGreaterThan(before.position.x + 20);
 });
 
-test('the forest border holds Red inside the map', async ({ page }) => {
+test('the forest border holds Purple inside the map', async ({ page }) => {
   await hold(page, 'ArrowUp', 6000);
   expect((await probe(page)).position.y).toBeGreaterThan(32);
 });
 
-test('Red never stands inside a solid tile, whatever route she takes', async ({ page }) => {
+test('Purple never stands inside a solid tile, whatever route she takes', async ({ page }) => {
   const legs = [
     ['ArrowRight', 3000],
     ['ArrowUp', 1500],
@@ -76,10 +76,10 @@ test('Red never stands inside a solid tile, whatever route she takes', async ({ 
     await hold(page, key, ms);
     const solid = await page.evaluate(() => {
       const otp = window.__otp!;
-      const { x, y } = otp.scene!.redPosition;
+      const { x, y } = otp.scene!.purplePosition;
       return otp.isSolidAt!(x, y);
     });
-    expect(solid, `Red stood inside a solid tile after holding ${key}`).toBe(false);
+    expect(solid, `Purple stood inside a solid tile after holding ${key}`).toBe(false);
   }
 });
 
@@ -101,7 +101,7 @@ test('the interact prompt leads to a dialogue, which swallows the walk keys, and
   expect(talking.activeCharacter).toBe('rabbit');
   expect(talking.log.map((e) => e.t)).toContain('met');
 
-  // The world stops listening while a panel owns the screen: Red must not walk out from under it.
+  // The world stops listening while a panel owns the screen: Purple must not walk out from under it.
   await hold(page, 'ArrowRight', 600);
   expect((await probe(page)).position.x).toBeCloseTo(talking.position.x, 0);
 
@@ -144,7 +144,7 @@ test('the cottage door stays shut until all three skills have a verdict', async 
     }
   });
 
-  // Red is beside the trigger; nudge back and forth until she steps on it.
+  // Purple is beside the trigger; nudge back and forth until she steps on it.
   await expect
     .poll(
       async () => {
@@ -158,7 +158,7 @@ test('the cottage door stays shut until all three skills have a verdict', async 
   expect((await probe(page)).log.map((e) => e.t)).toContain('arrived');
 });
 
-test('touch controls move Red and stop her on release', async ({ browser }) => {
+test('touch controls move Purple and stop her on release', async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
@@ -712,7 +712,7 @@ test('no backdrop shows at any of the four map bounds', async ({ page }) => {
    * printed ONLY at a bound -- with map on both sides the neighbouring column just slides in -- so
    * a sweep that never reaches one is measuring the easy case. The first attempt here held
    * ArrowUp for six seconds and got as far as scrollY 406 of a possible 0: the forest border stops
-   * Red a long way short, which is exactly what e2e/world.spec.ts's border test asserts. So Red is
+   * Purple a long way short, which is exactly what e2e/world.spec.ts's border test asserts. So Purple is
    * placed rather than walked, and the camera is allowed to ease after her.
    *
    * The top bound is the one the client described -- "a dark rule across the very top of the world
@@ -744,7 +744,7 @@ test('no backdrop shows at any of the four map bounds', async ({ page }) => {
             x: x * scene.map.widthInPixels + (x ? 400 : -400),
             y: y * scene.map.heightInPixels + (y ? 400 : -400),
           };
-          // The camera eases after Red rather than snapping, so give it frames to arrive.
+          // The camera eases after Purple rather than snapping, so give it frames to arrive.
           let frames = 0;
           const tick = (): void => {
             if (++frames > 120) {

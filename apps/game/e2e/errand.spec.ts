@@ -80,7 +80,7 @@ test('the errand line can read the note on the door and still reach the cottage'
 
   // East along the track, through the forest post and up to the door.
   await walkEastReadingNotices(page, readBoth, 60_000);
-  expect(await readBoth(), 'Red never reached both notices walking east').toBe(true);
+  expect(await readBoth(), 'Purple never reached both notices walking east').toBe(true);
 
   // The doorstep is the row above the approach, so the last step is north.
   await expect

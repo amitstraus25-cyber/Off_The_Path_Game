@@ -43,13 +43,13 @@ const STICK_RADIUS = 36;
 
 /**
  * The scene saying someone has come within reach. Declared in `world/forest-scene.ts`; the walk
- * buttons below stop Red when it arrives, so she is never walked past the person she was looking
+ * buttons below stop Purple when it arrives, so she is never walked past the person she was looking
  * for. See the note on it there for why it is a DOM event and not the typed bus.
  */
 const WITHIN_REACH = 'otp:within-reach';
 
 /**
- * How far one press of a walk button carries Red: four tiles, which is about a second of walking.
+ * How far one press of a walk button carries Purple: four tiles, which is about a second of walking.
  *
  * Derived from the two real constants rather than written as a millisecond count, so the next
  * change to WALK_SPEED cannot silently turn a four-tile step into a two-tile one. Four because it
@@ -65,7 +65,7 @@ const STEP_MS = Math.round((TILE * STEP_TILES * 1000) / WALK_SPEED);
  *
  * The joystick derives its vector from how far the pointer sits from the stick's centre, so ANY
  * point activation -- a real `touchscreen.tap`, or the single synthesised activation a screen
- * reader sends -- yields (0, 0) and moves Red exactly 0px (docs/UX_REVIEW.md 16, measured). The
+ * reader sends -- yields (0, 0) and moves Purple exactly 0px (docs/UX_REVIEW.md 16, measured). The
  * drag is a fine control for a thumb and no control at all for anything else, so it keeps the
  * stick and these keep the game playable.
  *
@@ -105,7 +105,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   /*
    * Hidden from assistive technology, because to assistive technology it is not a control: a
    * `role="application"` div whose vector comes from pointer offset answers an activation with
-   * (0, 0). It was the only thing in the pad that claimed to move Red, and it is the one thing
+   * (0, 0). It was the only thing in the pad that claimed to move Purple, and it is the one thing
    * that cannot. The buttons below are what is exposed; the drag is for thumbs.
    */
   stick.setAttribute('aria-hidden', 'true');
@@ -161,7 +161,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   root.append(pad, stick, button);
 
   let stickPointer: number | null = null;
-  /** Running while a pressed walk button is still carrying Red. */
+  /** Running while a pressed walk button is still carrying Purple. */
   let walkTimer: ReturnType<typeof setTimeout> | undefined;
 
   const stopWalking = (): void => {
@@ -192,7 +192,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
    * takes `keydown` on the WINDOW and calls `preventDefault` on Space and Enter whenever the world
    * owns input -- which on Explore it always does. A button's activation is a DEFAULT ACTION, so
    * cancelling it up there cancels it down here: measured at 1280x800, every one of the five, both
-   * keys, 0 `click` events and Red moved 0.0px, while a pointer click on the same button moved her
+   * keys, 0 `click` events and Purple moved 0.0px, while a pointer click on the same button moved her
    * 78px. Ten dead presses and one live one.
    *
    * The remedy is the one `MusicToggle` already carries against the same window listener: stop the
@@ -221,7 +221,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   stop.addEventListener('keydown', keepActivationLocal);
   pad.append(stop);
 
-  /** Red stops the moment she reaches someone, rather than walking straight past them. */
+  /** Purple stops the moment she reaches someone, rather than walking straight past them. */
   const onWithinReach = (event: Event): void => {
     const detail: unknown = (event as CustomEvent<unknown>).detail;
     const id =
@@ -246,7 +246,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
     const nx = (dx / distance) * (clamped / STICK_RADIUS);
     const ny = (dy / distance) * (clamped / STICK_RADIUS);
     knob.style.transform = `translate(${nx * STICK_RADIUS}px, ${ny * STICK_RADIUS}px)`;
-    // A small dead zone stops a resting thumb from nudging Red.
+    // A small dead zone stops a resting thumb from nudging Purple.
     input.setStick(Math.abs(nx) < 0.2 ? 0 : nx, Math.abs(ny) < 0.2 ? 0 : ny);
   };
 

@@ -12,7 +12,7 @@
  *
  * What was measured on the build before the fix, so a later reader can tell a regression from a
  * tightening:
- *   - after "Walk it again", `facing` was 'down' and the sprite was rendering `red-idle-up-0`:
+ *   - after "Walk it again", `facing` was 'down' and the sprite was rendering `purple-idle-up-0`:
  *     every second run opened on the back of the heroine's head, and it healed on the player's
  *     first keypress -- exactly late enough to spoil the opening shot and nothing else.
  *   - standing by the Rabbit with a notice post open: `hasInput()` false, phase still 'explore',
@@ -24,7 +24,7 @@
  * NOTHING HERE IS TOLD A CONSTANT FROM THE SCENE. The replay's frame is judged against the frame
  * the game's OWN first run opened on; the bubble is judged against whether the interact key is
  * live; and the payoff's shape is judged against the canvas's own aspect, to a tolerance derived
- * from the one pixel each axis is rounded to. A guard that quoted `red-idle-down-0`, or 608, would
+ * from the one pixel each axis is rounded to. A guard that quoted `purple-idle-down-0`, or 608, would
  * pass by agreeing with whatever the file says today.
  */
 import { expect, test } from '@playwright/test';
@@ -39,7 +39,7 @@ interface SceneProbe {
   walking: boolean;
   hasInput(): boolean;
   position: { x: number; y: number };
-  red: {
+  purple: {
     frame: { name: string | number };
     setPosition(x: number, y: number): void;
     setDepth(d: number): void;
@@ -83,12 +83,12 @@ async function reachTheDoor(page: Page): Promise<void> {
   await settle(page);
 }
 
-/** What Red is wearing and where she is pointed, as the renderer has it this frame. */
-const redNow = (page: Page): Promise<{ frame: string; facing: string; walking: boolean }> =>
+/** What Purple is wearing and where she is pointed, as the renderer has it this frame. */
+const purpleNow = (page: Page): Promise<{ frame: string; facing: string; walking: boolean }> =>
   page.evaluate(() => {
     const scene = window.__otp!.scene as unknown as SceneProbe;
     return {
-      frame: String(scene.red.frame.name),
+      frame: String(scene.purple.frame.name),
       facing: scene.facing,
       walking: scene.walking,
     };
@@ -109,7 +109,7 @@ test('a replay opens on the frame the first run opened on, before any key is pre
    * nobody has ever complained about. Judging the replay against this rather than against a frame
    * name means a guard that cannot be satisfied by agreeing with the scene's own spelling.
    */
-  const opening = await redNow(page);
+  const opening = await purpleNow(page);
   expect(opening.walking, 'she is already walking on the opening frame').toBe(false);
 
   // Point her somewhere else, so the replay has something real to put back.
@@ -117,13 +117,13 @@ test('a replay opens on the frame the first run opened on, before any key is pre
   await page.waitForTimeout(400);
   await page.keyboard.up('ArrowLeft');
   await settle(page);
-  const walked = await redNow(page);
+  const walked = await purpleNow(page);
   expect(walked.frame, 'walking left did not change the frame she stands in').not.toBe(
     opening.frame,
   );
 
   await reachTheDoor(page);
-  const arrival = await redNow(page);
+  const arrival = await purpleNow(page);
   /*
    * The arrival is the whole reason this can go wrong: it is the one place the scene sets a frame
    * without walking there, so it is the frame a replay inherits. If it ever stops differing from
@@ -139,7 +139,7 @@ test('a replay opens on the frame the first run opened on, before any key is pre
   await page.waitForFunction(() => window.__otp!.store.getState().phase === 'explore');
   await settle(page);
 
-  const replay = await redNow(page);
+  const replay = await purpleNow(page);
   console.log(
     `replay frame\n  opening ${opening.frame} (facing ${opening.facing})\n` +
       `  at the door ${arrival.frame} (facing ${arrival.facing})\n` +
@@ -160,7 +160,7 @@ test('a replay opens on the frame the first run opened on, before any key is pre
   await page.waitForTimeout(150);
   await page.keyboard.up('ArrowDown');
   await settle(page);
-  const healed = await redNow(page);
+  const healed = await purpleNow(page);
   expect(
     replay.frame,
     `the opening frame of the replay ("${replay.frame}") only agreed with her facing ` +
@@ -199,8 +199,8 @@ test('the bubble and the live region go down with the key that answers them', as
     const x = spot.x + tile / 2;
     const y = spot.y + tile + tile / 4;
     scene.position = { x, y };
-    scene.red.setPosition(Math.round(x), Math.round(y));
-    scene.red.setDepth(scene.red.y);
+    scene.purple.setPosition(Math.round(x), Math.round(y));
+    scene.purple.setDepth(scene.purple.y);
     scene.camera = scene.focus();
     scene.syncCamera();
   }, TILE);

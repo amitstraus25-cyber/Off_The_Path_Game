@@ -14,7 +14,7 @@
  * The numbers these were written against, measured on the build before the fix:
  *   - standing inside INTERACT_RADIUS of the Rabbit, every live region on the page was empty and
  *     no region on the page contained the word "Rabbit";
- *   - one `touchscreen.tap` on the joystick moved Red 0.0px, because the stick takes its vector
+ *   - one `touchscreen.tap` on the joystick moved Purple 0.0px, because the stick takes its vector
  *     from pointer OFFSET and a point activation has none;
  *   - the only element in the pad exposed to assistive technology as a control was a
  *     `role="application"` div, and the A button listened for `pointerdown` only, so a
@@ -137,7 +137,7 @@ test('the pad offers real controls, not a drag surface', async ({ browser }) => 
   await touch.context().close();
 });
 
-test('one activation of a walk button carries Red, and stops by itself', async ({ browser }) => {
+test('one activation of a walk button carries Purple, and stops by itself', async ({ browser }) => {
   const touch = await touchPage(browser);
 
   const before = await probe(touch);
@@ -173,7 +173,7 @@ test('the walk stops the moment someone comes within reach', async ({ browser })
   /*
    * She has to be WALKING before the stop can mean anything. Without this the test passes on a pad
    * whose buttons do nothing at all -- which it did, the first time this fix was broken on purpose
-   * to check the guard: a Red who never set off is trivially a Red who did not overshoot.
+   * to check the guard: a Purple who never set off is trivially a Purple who did not overshoot.
    */
   const underway = await probe(touch);
   expect(underway.position.x - before.position.x, 'underway before the event').toBeGreaterThan(5);

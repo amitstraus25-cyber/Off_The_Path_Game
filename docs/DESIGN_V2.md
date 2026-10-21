@@ -24,7 +24,7 @@ game its actual point.
 
 `Title.tsx` is 45 lines of centred panel on an empty background. The player decides whether to spend
 five minutes here, and we show them no game. On the board, the world runs behind a 430px blurred
-column on the left, with Red already standing on the path and a chip that says so. You can see the
+column on the left, with Purple already standing on the path and a chip that says so. You can see the
 game before you commit to it.
 
 This is the single highest-leverage change on the list and it touches one component.
@@ -96,7 +96,7 @@ sentence; "I got 700" is not.
 
 One phase per commit unless noted. Each ticks here and in `docs/PLAN.md`.
 
-- [ ] **A. Title cold open** — world renders behind a docked blurred column; Red idles on the path;
+- [ ] **A. Title cold open** — world renders behind a docked blurred column; Purple idles on the path;
       `otp-screen` centring replaced by the canvas anchor the other screens already use.
       _Files: `Title.tsx`, `screens.css`. One commit._
 
@@ -252,5 +252,5 @@ The ceiling is still exactly 1,000, so `scoreOutOf` and the "out of 1,000" copy 
   correct, so the score is defensible, but it is the highest "did nothing" line. The ending (_The
   long way round_) is what carries the judgement.
 - The notice is still a modal with a "Read the notice" button. The zero-click beat
-  (`NoticeFires` on the design board) is not built: the post should read itself while Red walks,
+  (`NoticeFires` on the design board) is not built: the post should read itself while Purple walks,
   with no panel and no explanation.

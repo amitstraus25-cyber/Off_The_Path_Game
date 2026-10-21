@@ -102,7 +102,7 @@ In `Results.tsx`: the `.otp-recap__row--boundary` row, the `recapHeading` block,
 **2. The one demonstration of the lesson can be spent before it fires, and is withheld from anyone who
 plays well.** `whenExposed` is evaluated once, at read time, against the verdicts held then
 (the `READ_NOTICE` case in `reducer.ts`), behind two independent one-shot latches — that case's
-`already-read` rejection, and the `dismissed` set in `main.ts`'s `reachedNotice` handler, cleared only on replay. Red spawns on tile row 21, the only clear lane runs
+`already-read` rejection, and the `dismissed` set in `main.ts`'s `reachedNotice` handler, cleared only on replay. Purple spawns on tile row 21, the only clear lane runs
 due east along it, and the post spans x 1344–1472: a held-Right player arrives after 9.75s with `read=[]`
 and zero verdicts. Reading it there, or choosing "Walk on," kills the beat. The careful player loses it
 too — all four texts explaining the injection are gated on the trifecta, so a 1,000-point run reads none.
@@ -194,25 +194,25 @@ Explore.
 and which measures 2.53:1 here — and the world input skipping its preventDefault when focus is inside
 `.otp-ui`.
 
-**11. Three of the title screen's four sentences are false where they are read.** "Red is already
+**11. Three of the title screen's four sentences are false where they are read.** "Purple is already
 standing on the path" — she renders _behind_ the 88%-black copy column at about 1.1:1, i.e. invisible, at
 every landscape width (1280, 1440, landscape phone); the chip is suppressed in portrait, so it shows on
 exactly the viewports where she is hidden and hides on the two where she is visible. The camera cannot fix
 it — `scrollX` is already clamped at the map's left bound. "Arrows to walk and Space to talk" is keyboard
-copy shown unchanged on touch. "or just tap on a phone" over-promises: a tap moves Red 4px, only a
+copy shown unchanged on touch. "or just tap on a phone" over-promises: a tap moves Purple 4px, only a
 sustained hold walks, and the pad is not drawn on the title screen at all. Separately the Cyera wordmark
 is `display: none` below 560px, so the hero screen of a marketing asset carries no brand on a phone.
 → _Right:_ delete `titleStanding` (`Title.tsx` already guards it) or narrow the column from 430px to
 340px; a coarse-pointer variant of `titleMeta`; the mark in the title card itself, where the deck puts it.
 
 > **The 340px in that recommendation was wrong, and the test written to enforce it agreed with it.**
-> Measured on the built preview, Red's painted pixels run x 349..396 at every landscape size from
+> Measured on the built preview, Purple's painted pixels run x 349..396 at every landscape size from
 > 1280×800 to 1920×1080, and her 32px sprite box starts at 339 — a 340px column ends at 359 and
 > covers her. The column is **306px**. The guard that was supposed to catch this compared her sprite
 > box's _right_ edge to the column's, which stays comfortably positive while her left side is buried,
 > so it passed for the whole time she was hidden; it measures the left edge now. The 88%-black column
 > is gone too — the card is Shell, which took the landing screen from 41% near-black to 12%.
-> Still open and not fixable from the stylesheet: at **844×390** the camera puts Red at x 183..206
+> Still open and not fixable from the stylesheet: at **844×390** the camera puts Purple at x 183..206
 > behind a 218px column, so a short landscape phone hides her completely. Only a 156px column would
 > clear her there, which the copy cannot live in. That one needs the camera.
 
@@ -256,7 +256,7 @@ payoff screen.
 → _Right:_ a third, neutral state for a goal forgone to keep the boundary — Natural ground, no "!",
 wording like "traded for the boundary" — with Haze kept for the per-skill reveal, where it is the payoff.
 
-**16. The world has no accessible equivalent, and on touch a screen-reader user cannot move Red.**
+**16. The world has no accessible equivalent, and on touch a screen-reader user cannot move Purple.**
 Known-unfinished Phase 7 work (the accessibility audit item in PLAN Phase 7), so not a regression, but worth stating before publication.
 Nothing announces that a traveller is in range, and the only spoken world content, `.otp-say`, sits
 outside every live region. The joystick derives its vector from pointer offset, so any point activation —
@@ -282,7 +282,7 @@ role with tracking in `em`, and §4 amended so the next person does not re-deriv
 
 **19. The cast has one body plan.** Spec spans 14–48px (3.4:1); the build delivers 33–46px (1.4:1). The
 snail, specified lowest in the cast at 14px, is 40px and taller than the magpie; the owl, a specified 26px
-squat barrel, is 45px and within 1px of Red. Thirteen of 36 pairs break §10.2's width-and-height band,
+squat barrel, is 45px and within 1px of Purple. Thirteen of 36 pairs break §10.2's width-and-height band,
 including rabbit and cat at an identical 22×44. §10.1's silhouette test still passes, so this is
 assignment, not legibility. → _Right:_ hold the specified heights; run §10.1 at 24px first.
 
@@ -360,14 +360,14 @@ buys the most per hour.
 
 **Decisions for a human, not defects.**
 
-| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                            | Owner                  |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| A   | **Do the flowers stay warm?** §6a moved everything off red; `w-undergrowth.ts` put the flowers and toadstool caps back to rose/ember/rust because painting the undergrowth in Red's hue made her the _least_ findable — her cloak body is L175 against a L167–179 lawn, so hue was all she had left. The painter flags it as unresolvable in one file: those three warm ramps join `PALETTE`, or the flowers go back to Lilac/Haze. | Brand + art direction  |
-| B   | **Does Red go back to the brighter Lilac-led cloak?** §6a recommends option A, Lilac-led, as easiest to find at the game's camera. `char-red.ts` inverted it — Aubergine holds the mass, Lilac is rim light only — on measured grounds that Lilac at L175 on this lawn is camouflage. Brand recommendation against measured findability; pick one and record it.                                                                    | Brand + art direction  |
-| C   | **Is asking a budget or a record?** §9 open question 2, shipped unresolved: "Asking costs nothing" sits 174px above a depleting "2 questions left", and after the scoring-optimal play it reads "0 questions left." There is no budget in the reducer — the counter just counts the unticked rows two inches above it. Drop the counter, or say what the budget buys.                                                               | Design + game design   |
-| D   | **Night Light's direction.** `PLAN.md` D1 was amended 2026-10-16 (honest on inspection, best verdict Restrict), but `RESEARCH_ALIGNMENT` open question 4 is still unconfirmed by research — and this is the card that carries the thesis. It should not publish unconfirmed.                                                                                                                                                        | Game design + research |
-| E   | **Does the Post form ship before the API?** It is live, honest about failing, and sits between the recap and the one CTA. Hide it, or label it "Scores open at launch."                                                                                                                                                                                                                                                             | Marketing + eng        |
-| F   | **Em dashes in player copy**, and whether `scoreLabel` returns to the deck's "GRANDMA'S COTTAGE REACHED". §9 open question 1, still open.                                                                                                                                                                                                                                                                                           | Copy + brand           |
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                               | Owner                  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| A   | **Do the flowers stay warm?** §6a moved everything off red; `w-undergrowth.ts` put the flowers and toadstool caps back to rose/ember/rust because painting the undergrowth in Purple's hue made her the _least_ findable — her cloak body is L175 against a L167–179 lawn, so hue was all she had left. The painter flags it as unresolvable in one file: those three warm ramps join `PALETTE`, or the flowers go back to Lilac/Haze. | Brand + art direction  |
+| B   | **Does Purple go back to the brighter Lilac-led cloak?** §6a recommends option A, Lilac-led, as easiest to find at the game's camera. `char-purple.ts` inverted it — Aubergine holds the mass, Lilac is rim light only — on measured grounds that Lilac at L175 on this lawn is camouflage. Brand recommendation against measured findability; pick one and record it.                                                                 | Brand + art direction  |
+| C   | **Is asking a budget or a record?** §9 open question 2, shipped unresolved: "Asking costs nothing" sits 174px above a depleting "2 questions left", and after the scoring-optimal play it reads "0 questions left." There is no budget in the reducer — the counter just counts the unticked rows two inches above it. Drop the counter, or say what the budget buys.                                                                  | Design + game design   |
+| D   | **Night Light's direction.** `PLAN.md` D1 was amended 2026-10-16 (honest on inspection, best verdict Restrict), but `RESEARCH_ALIGNMENT` open question 4 is still unconfirmed by research — and this is the card that carries the thesis. It should not publish unconfirmed.                                                                                                                                                           | Game design + research |
+| E   | **Does the Post form ship before the API?** It is live, honest about failing, and sits between the recap and the one CTA. Hide it, or label it "Scores open at launch."                                                                                                                                                                                                                                                                | Marketing + eng        |
+| F   | **Em dashes in player copy**, and whether `scoreLabel` returns to the deck's "GRANDMA'S COTTAGE REACHED". §9 open question 1, still open.                                                                                                                                                                                                                                                                                              | Copy + brand           |
 
 ---
 

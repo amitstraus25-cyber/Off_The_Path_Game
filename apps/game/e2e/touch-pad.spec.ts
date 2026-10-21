@@ -12,7 +12,7 @@ import type { CDPSession, Page } from '@playwright/test';
 import { probe, startGame } from './helpers';
 
 /**
- * Parks Red where a named map object can be talked to, without walking there.
+ * Parks Purple where a named map object can be talked to, without walking there.
  *
  * `walkTo` is the honest route and several specs take it; it costs seconds per encounter, and
  * neither defect here is about walking. The offsets are the ones `talkingDistance` derives: half a
@@ -175,7 +175,7 @@ test('the walk buttons answer the keys that activate them', async ({ page }) => 
   /*
    * `world/input.ts` takes `keydown` on the window and cancels Space and Enter whenever the world
    * owns input, which on Explore it always does. A button's activation is a DEFAULT ACTION, so
-   * that cancelled these five as well: focused, both keys, all five, 0 click events and Red moved
+   * that cancelled these five as well: focused, both keys, all five, 0 click events and Purple moved
    * 0.0px, while a pointer click on the same button moved her 78px. They are the only controls a
    * player without sight has on a desktop, and the only input that can reach them could not work
    * them.

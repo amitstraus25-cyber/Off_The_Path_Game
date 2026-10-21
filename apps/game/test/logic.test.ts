@@ -30,7 +30,7 @@ const map: CollisionMap = {
  * nothing here. The art moved from 16px tiles to 32px and every number below followed for free.
  */
 const mid = (tile: number) => tile * TILE + TILE / 2;
-/** Stands Red so her foot box sits squarely inside the row, rather than straddling the one below. */
+/** Stands Purple so her foot box sits squarely inside the row, rather than straddling the one below. */
 const foot = (tile: number) => mid(tile) - FOOT_BOX.offsetY;
 /** The world-x of the solid block's left edge. */
 const WALL_X = 2 * TILE;
@@ -245,7 +245,7 @@ describe('cameraFollow', () => {
     expect(next.y).toBe(centre.y);
   });
 
-  it('settles a deadzone-width behind the target, so Red keeps her lead', () => {
+  it('settles a deadzone-width behind the target, so Purple keeps her lead', () => {
     const target = { x: 400, y: 600 };
     let c = centre;
     for (let i = 0; i < 600; i++) c = cameraFollow(c, target, 16);

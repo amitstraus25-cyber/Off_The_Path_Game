@@ -412,7 +412,7 @@ body {
  * This block used to set the pad itself to display-none, which took the whole pad out of the
  * document -- and the pad is where `ui/touch-controls.ts` puts the five named walk buttons that
  * stand behind the joystick, because a joystick answers an activation with a (0, 0) vector and moves
- * Red exactly 0px. (Written in prose rather than as a selector and a declaration: `test/title.test.ts`
+ * Purple exactly 0px. (Written in prose rather than as a selector and a declaration: `test/title.test.ts`
  * greps this file for that pair, and a comment that spells it out is a guard matching a sentence --
  * which is how that test came to report the reduced-motion block as the rule that hides the pad.)
  * Enumerating the focusable controls on Explore at 1280x800 therefore returned exactly ONE:

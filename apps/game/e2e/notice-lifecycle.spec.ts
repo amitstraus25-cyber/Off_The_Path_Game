@@ -44,7 +44,7 @@ const decide = (page: Page): Promise<void> =>
 /**
  * Plays a whole run to the results card and returns the score it prints.
  *
- * `wavedAwayFirst` is the reflex under test: Red meets the post on her way east before a single
+ * `wavedAwayFirst` is the reflex under test: Purple meets the post on her way east before a single
  * verdict exists -- which the map makes the natural first act -- and closes it without reading.
  * The run then goes on to earn the capability the post's goal needs. A player who does that must
  * still be able to come back for it, so the two runs have to print the SAME score. The expected
@@ -153,13 +153,13 @@ test('a single click on Read leaves focus on the control that is still live', as
   await expect(page.getByRole('button', { name: /Walk on/ })).toBeFocused();
 });
 
-test('a notice the content does not define cannot strand Red', async ({ page }) => {
+test('a notice the content does not define cannot strand Purple', async ({ page }) => {
   await page.goto('/');
   await startGame(page);
 
   /*
    * A `notice-<id>` object on the map with no entry in content/game.json. This used to take the
-   * world's input away -- a notice is open, so Red stops walking -- while App had nothing to
+   * world's input away -- a notice is open, so Purple stops walking -- while App had nothing to
    * render, so there was no panel, no Walk on and no Esc. The run was over with no way to say so.
    */
   const before = (await probe(page)).position;
@@ -173,7 +173,7 @@ test('a notice the content does not define cannot strand Red', async ({ page }) 
    *
    * The walk below is the consequence a player would feel, and it is the half that CAN race: one
    * `keyboard.down` is a single keydown with no repeat behind it, so a press that lands in the
-   * frame before the world takes input away leaves `held` set and Red walking anyway. That makes
+   * frame before the world takes input away leaves `held` set and Purple walking anyway. That makes
    * the walk a check that can come back green on a broken build; this line cannot.
    */
   expect(
@@ -187,7 +187,7 @@ test('a notice the content does not define cannot strand Red', async ({ page }) 
   const after = (await probe(page)).position;
   expect(
     after.x,
-    `Red was stranded at x=${String(Math.round(before.x))} and could not walk away`,
+    `Purple was stranded at x=${String(Math.round(before.x))} and could not walk away`,
   ).toBeGreaterThan(before.x);
 });
 
@@ -240,7 +240,7 @@ test('the world chrome says what is on screen, and the bed comes back up', async
   const loudest = (): Promise<number> =>
     page.evaluate(() => Math.max(...(window as unknown as { __gain: number[] }).__gain));
 
-  // The level the bed is asked for while Red is walking: the first ramp the player ever hears.
+  // The level the bed is asked for while Purple is walking: the first ramp the player ever hears.
   const walking = await loudest();
   expect(walking, 'no master ramp was recorded, so this test is watching nothing').toBeGreaterThan(
     0,

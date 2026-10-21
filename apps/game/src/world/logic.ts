@@ -13,7 +13,7 @@ export interface Vec {
 export {
   TILE,
   CAMERA_FOCUS_Y,
-  RED_FEET_BELOW_SPAWN,
+  PURPLE_FEET_BELOW_SPAWN,
   MIN_VIEW,
   MAX_ZOOM,
   stageFit,
@@ -23,7 +23,7 @@ export {
 import { TILE } from '@otp/core';
 
 /**
- * Red's collision box, in pixels relative to her position (feet centre).
+ * Purple's collision box, in pixels relative to her position (feet centre).
  * Five-eighths of a tile wide and three-eighths tall: narrower than her sprite, so she can stand
  * in a gap her shoulders would not fit through.
  */
@@ -34,7 +34,7 @@ export const FOOT_BOX = {
 } as const;
 /** Logical pixels per second: three and three-quarter tiles, so the crossing time never moved. */
 export const WALK_SPEED = TILE * 3.75;
-/** How close Red must stand to talk to someone, centre to centre: a tile and a half. */
+/** How close Purple must stand to talk to someone, centre to centre: a tile and a half. */
 export const INTERACT_RADIUS = TILE * 1.5;
 
 export interface CollisionMap {
@@ -47,7 +47,7 @@ export interface CollisionMap {
 export const isSolidTile = (map: CollisionMap, tx: number, ty: number): boolean =>
   tx < 0 || ty < 0 || tx >= map.width || ty >= map.height || map.tiles[ty * map.width + tx] !== 0;
 
-/** True when Red's foot box at this position overlaps any solid tile. */
+/** True when Purple's foot box at this position overlaps any solid tile. */
 export function blocked(map: CollisionMap, x: number, y: number): boolean {
   const left = x - FOOT_BOX.width / 2;
   const right = x + FOOT_BOX.width / 2;
@@ -62,7 +62,7 @@ export function blocked(map: CollisionMap, x: number, y: number): boolean {
 }
 
 /**
- * Moves along each axis separately so Red slides along a wall instead of sticking.
+ * Moves along each axis separately so Purple slides along a wall instead of sticking.
  * Mutates nothing; returns the new position.
  */
 export function moveWithCollision(map: CollisionMap, from: Vec, dx: number, dy: number): Vec {
@@ -125,7 +125,7 @@ export const overlaps = (point: Vec, rect: Rect): boolean =>
   point.y < rect.y + rect.height;
 
 /**
- * Half-size of the box Red moves inside before the camera takes any notice, in game pixels.
+ * Half-size of the box Purple moves inside before the camera takes any notice, in game pixels.
  * Wider than tall: sideways drift reads as natural framing, vertical drift reads as the camera
  * being late.
  */
@@ -159,7 +159,7 @@ export function ease(current: number, target: number, tau: number, deltaMs: numb
 /**
  * Where the camera's centre should be this frame.
  *
- * It holds completely still while Red stays inside the deadzone, and when she leaves it the camera
+ * It holds completely still while Purple stays inside the deadzone, and when she leaves it the camera
  * eases after her rather than snapping. The camera used to be pinned exactly to her position every
  * frame, which is what made walking feel like dragging the world around behind her instead of
  * moving through it.
@@ -174,7 +174,7 @@ export function cameraFollow(
   const pull = (c: number, t: number, half: number): number => {
     const delta = t - c;
     if (Math.abs(delta) <= half) return c;
-    // Ease toward the edge of the deadzone, not to Red herself, so she keeps her lead.
+    // Ease toward the edge of the deadzone, not to Purple herself, so she keeps her lead.
     return ease(c, t - Math.sign(delta) * half, tau, deltaMs);
   };
   return { x: pull(centre.x, target.x, deadzone.x), y: pull(centre.y, target.y, deadzone.y) };
