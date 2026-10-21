@@ -7944,7 +7944,25 @@ export function generateForestMap(): GeneratedMap {
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++) {
         const over = nameAt(above, x, y);
-        if (over === '' || !walkableAt(x, y)) continue;
+        /*
+         * REACHABLE, not merely walkable -- and this axis was blind until 2026-10-21.
+         *
+         * The test was `walkableAt(x, y)`, which asks whether the collision layer would let a foot
+         * stand there, not whether a foot can ever GET there. Those differ: audit 2 above exists
+         * precisely because walkable tiles can be stranded, and it floods from `spawn-red` to find
+         * them. So this counted cells a player cannot reach, and it would have gone on passing
+         * unchanged if a future map sealed every blind cell off -- which would be a real
+         * improvement it could not see, in either direction.
+         *
+         * It matters for the BOUND and not just for the report. 101 is a ratchet, and it is only
+         * the right number because all 101 happen to be reachable; had some been enclosed, the
+         * honest ratchet would have been lower and tightening to 101 would have set it too high.
+         * The count is unchanged by this line today, which is the measurement that says the two
+         * readings agree right now, not a reason the line is unnecessary.
+         *
+         * `reached` is audit 2's own flood, reused rather than re-derived, so the two cannot drift.
+         */
+        if (over === '' || !walkableAt(x, y) || !reached.has(y * MAP_W + x)) continue;
         if (hidesHer(over)) blindCells.push([x, y]);
       }
     if (blindCells.length > OPEN_ENOUGH)
