@@ -103,11 +103,40 @@ describe('the services vercel.json declares', () => {
   /** The count, spelled the way prose spells it -- so the wrong counts are derived too. */
   const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five'];
 
-  it('is a count the documents do not contradict', () => {
+  /*
+   * THIS USED TO ASSERT THAT SERVICES EXIST, and that was a guard taking sides in a question it was
+   * only supposed to referee.
+   *
+   * `vercel.json` has now been through three arrangements -- two services, one service, and none at
+   * all -- because neither services form ever produced a Vercel Function. In services mode each
+   * service is built by its own framework with no project-level build and no project-level scan,
+   * and the zero-config `api/` convention is documented for the PROJECT ROOT rather than a service
+   * root, so a `framework: "vite"` service gets a static build and its `api/` directory is never
+   * read. The shipped answer is no services, top-level build fields, and `api/` at the repo root.
+   *
+   * `toBeGreaterThan(0)` made the correct config fail. A guard whose own premise is one of the
+   * options under test is not a referee; it is a vote. So it now checks the documents against
+   * WHATEVER MODE IS CONFIGURED, including none, and the vacuity check moved to the thing that is
+   * true either way: `vercel.json` parses and declares a way to build something.
+   */
+  it('declares a build, in one mode or the other', () => {
+    const config = JSON.parse(read('vercel.json')) as Record<string, unknown>;
+    const topLevelBuild = 'buildCommand' in config && 'outputDirectory' in config;
     expect(
-      declared.length,
-      'no services in vercel.json -- is this the right file?',
-    ).toBeGreaterThan(0);
+      declared.length > 0 || topLevelBuild,
+      'vercel.json declares neither a service nor a top-level buildCommand and outputDirectory, ' +
+        'so nothing says how this project is built -- is this the right file?',
+    ).toBe(true);
+    // The two modes are exclusive: Vercel rejects build fields at the top level in services mode.
+    expect(
+      declared.length > 0 && topLevelBuild,
+      'vercel.json mixes a services block with top-level build fields. Vercel treats build and ' +
+        'runtime keys as invalid at the top level in services mode, because their owner would be ' +
+        'ambiguous, so this fails validation and with it the whole deployment.',
+    ).toBe(false);
+  });
+
+  it('is a count the documents do not contradict', () => {
     const right = WORDS[declared.length];
     const wrong = WORDS.filter((w, i) => i !== declared.length && i > 0);
 

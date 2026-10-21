@@ -37,7 +37,7 @@
  * the platform is not bundling. See apps/game/api/top.ts; that one is still held by a comment.
  */
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": { "types": ["node"], "erasableSyntaxOnly": true },
   "include": ["api"]
 }

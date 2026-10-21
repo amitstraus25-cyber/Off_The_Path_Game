@@ -1,20 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "game": {
-      "root": "apps/game",
-      "framework": "vite",
-      "outputDirectory": "dist"
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": {
-        "service": "game"
-      }
-    }
-  ],
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm exec tsc -p tsconfig.api.json && pnpm --filter @otp/game build",
+  "outputDirectory": "apps/game/dist",
   "headers": [
     {
       "source": "/(.*)",
@@ -34,6 +22,10 @@
         {
           "key": "Permissions-Policy",
           "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "X-OTP-Config",
+          "value": "root-api-1"
         }
       ]
     }

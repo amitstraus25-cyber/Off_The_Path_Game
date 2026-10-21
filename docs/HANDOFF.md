@@ -79,12 +79,26 @@ not exist.
 
 ## Deployment
 
-`vercel.json` declares **one service**: `game`, rooted at `apps/game`. It did declare two, with
-`api` rooted at `apps/api`, and that arrangement **never once served a function** — `GET /api/top`
-returned Vercel's own 404, not a 500 from our code, which is the difference between "the route
-failed" and "the route was never created". The two routes now live inside the game service as
-`apps/game/api/score.ts` and `top.ts`, thin re-exports of the handlers in `apps/api`, which is the
-oldest and most widely supported Vercel convention. One catch-all rewrite remains.
+`vercel.json` declares **no services at all** — top-level `installCommand`, `buildCommand` and
+`outputDirectory`, with the two live routes at `api/score.ts` and `api/top.ts` in the **repository
+root**, thin re-exports of the handlers in `apps/api`. No rewrites: there is no SPA fallback and
+unknown paths 404, which is unchanged from every arrangement before it.
+
+**Two earlier arrangements served no functions and neither should be tried again.** Two services
+(`game` + `api`, with an `/api/(.*)` rewrite) produced none. Moving the routes inside the game
+service produced none either. Vercel's docs account for both: in services mode each service is
+built by its own framework or runtime with no project-level build and no project-level scan, and
+the zero-config `api/` convention is documented for the **project root** rather than a service
+root — so a service declaring `framework: "vite"` gets a static build and its `api/` directory is
+never read. `GET /api/top` returned Vercel's own 404 throughout, not a 500 from our code, which is
+the difference between "the route failed" and "the route was never created".
+
+Three things this arrangement needs that the previous ones did not, each of which will break the
+deploy quietly if it is undone: the root `package.json` depends on `@otp/api` as `workspace:*`, so
+pnpm links it where root `api/` can resolve it; `tsconfig.api.json` lives at the root and is wired
+into the root `build` as well as `typecheck`, because the platform runs `build` and never runs
+`typecheck`; and the routes `export default { fetch }` rather than a bare default function, which
+is not a shape Vercel documents.
 
 Security headers stay at the top level so the strict CSP applies to every response; `connect-src`
 stays `'self'` because the board is same-origin (D3) and widening it would be the wrong fix for

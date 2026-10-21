@@ -74,48 +74,101 @@ indexes, grants and RLS state, which is the first thing to run when the board mi
 
 ## Vercel settings
 
-**As committed at `9aa7968`, `vercel.json` declares ONE service.** The routes are ordinary Vercel
-Functions of the _game_ service, in `apps/game/api/`, re-exporting the handlers from this package:
+**Since 2026-10-21, `vercel.json` declares TWO services**, and `/api/(.*)` is routed into this one:
 
 ```json
 "services": {
-  "game": { "root": "apps/game", "framework": "vite", "outputDirectory": "dist" }
+  "game": { "root": "apps/game", "framework": "vite", "outputDirectory": "dist" },
+  "api": { "root": "apps/api" }
 },
 "rewrites": [
+  { "source": "/api/(.*)", "destination": { "service": "api" } },
   { "source": "/(.*)", "destination": { "service": "game" } }
 ]
 ```
 
-The CSP is **unchanged** — `connect-src` stays `'self'` because the browser only ever calls our own
-origin. Widening it would be the wrong fix for anything.
+The `game` service is **byte-identical** to the one-service config it replaces, so the page cannot
+regress on this change: the only new things are a service and a rewrite above the catch-all. The
+rewrite order is load-bearing — `/api/(.*)` must stay above `/(.*)` or every API request is served
+the game. The CSP is **unchanged** — `connect-src` stays `'self'` because the browser only ever
+calls our own origin. Widening it would be the wrong fix for anything.
 
-**The two-service arrangement this section used to describe is gone, and why it failed is worth
-keeping.** It declared `"api": { "root": "apps/api" }` and routed `/api/(.*)` into it. That service
-set no `framework` (so no preset to trigger zero-config `api/` detection), no `entrypoint`, no
-`runtime` and no `functions` glob: it was told to produce nothing and it produced nothing, so
-`/api/*` was rewritten into an empty service and Vercel answered with its own NotFound page. An
-earlier form of it set `"framework": null`, which is invalid for a _service_ (it is only valid at
-the top level) and failed every deployment for six hours.
+**Why this arrangement, when this section used to record it as tried and failed.** The one-service
+form was the thing that had never been measured properly, and now it has been. Production serves
+`/assets/index-D8dTGUjT.css`, which is exactly the file a clean `pnpm build` of this tree produces,
+and `811d2ca` ("a leaderboard a player can actually see") is the **only** commit after `9aa7968` that
+touches any CSS. So the live deployment was built at or after `811d2ca` — six commits after the
+one-service config landed — and today's `404` on `GET /api/score` is that config's own answer, not a
+stale build's. **The one-service form is measured and dead: a service with `framework: "vite"` and
+`outputDirectory: "dist"` is built as a static app, and nothing scans `apps/game/api/`.**
+`apps/game/dist` has no `api` directory, which is the same fact from the other side.
 
-`apps/api/api/score.ts` and `api/top.ts` remain, unchanged and tested, so this package is still
-deployable on its own if the routing question is ever reopened.
+The condemnation of the two-service form, by contrast, does not survive its own timeline.
+`"framework": null` inside the `api` service failed schema validation and with it **every deploy
+from Phase 6 (`3dc0357`) onward**; `d7908ce` removed that key at 23:52:37 and `9aa7968` deleted the
+service at 00:20:49. **The valid two-service config existed for twenty-eight minutes**, inside an
+evening when production was serving a build from before the leaderboard existed — and "Vercel's own
+404" is exactly what that stale build returns for `/api/*`. Nobody waited for a deployment in those
+twenty-eight minutes, because `9aa7968`'s own round was being written in them. The 404 that killed
+the second service is indistinguishable from the 404 the six-hour outage was already producing, so
+this is the first real test of the arrangement, not a repeat of a disproven one.
+
+What the live docs say about it, read 2026-10-21 rather than remembered:
+
+- `https://vercel.com/docs/services`: "Services are available in Beta on all plans." Not gated.
+- `https://vercel.com/docs/services/config-reference`: "A service is configured like any standalone
+  Vercel project, using the same build and runtime settings", and both `framework` and `runtime` are
+  "detected automatically" when unset. A service rooted at `apps/api` therefore detects no framework
+  — and `https://vercel.com/docs/functions/quickstart` says that "for projects without a framework,
+  Vercel creates a separate function for each supported source file in the root `api/` directory",
+  which is `apps/api/api/score.ts` and `top.ts` exactly.
+- `https://vercel.com/docs/services/routing`: "The service receives the original request path.
+  `GET /api/users` reaches `my_backend` as `/api/users`, not `/users`." The old worry that the
+  service would see `/score` and miss is answered: it sees `/api/score`, which is the file.
+- Same page: "Routing into a service is final. If no route matches inside the service, Vercel does
+  not fall back to your other top-level rewrites." That is the mechanism of today's 404, stated by
+  the platform.
+
+**`X-OTP-Config` is in the headers block on purpose, and it is the cheapest thing in this file.**
+A failed deploy and a succeeded-but-still-404 deploy answer every probe identically — `GET /` 200,
+`GET /api/score` 404, both times — and that ambiguity is what has cost this project the most hours.
+The protocol, per attempt: **bump the value, deploy, then `curl -sI https://off-the-path-game.vercel.app/`
+and read it back before believing any `/api` probe.** Absent or the old value means the deploy did
+not land or was not promoted — go and read the build log, and change nothing. The new value means
+the config is live, and only then does `curl -sI .../api/score` mean anything. It is `"1"` as
+shipped, and the header did not exist in production before, so for this first attempt its mere
+presence is the proof.
+
+`apps/api/api/score.ts` and `api/top.ts` are the copy this routes to, and they are the copy
+`test/routes.test.ts` already executes — see the table below, which this change inverts.
 
 ### The two copies of the routes, and whether the dead one should go
 
 **State of it, measured 2026-10-21 against the working tree.** There are two copies:
 
-| Copy                 | Imports via                | Served?                                        | Executed by a test?                      | Typechecked by           |
-| -------------------- | -------------------------- | ---------------------------------------------- | ---------------------------------------- | ------------------------ |
-| `apps/api/api/*.ts`  | `../src/*.ts` (relative)   | **No** — outside the one service root          | **Yes** — `apps/api/test/routes.test.ts` | `apps/api/tsconfig.json` |
-| `apps/game/api/*.ts` | `@otp/api/src/*.ts` (deep) | **Yes** — the only copy the platform ever runs | **No** — nothing imports it              | `tsconfig.api.json`      |
+| Copy                 | Imports via                | Served?                                          | Executed by a test?                      | Typechecked by           |
+| -------------------- | -------------------------- | ------------------------------------------------ | ---------------------------------------- | ------------------------ |
+| `apps/api/api/*.ts`  | `../src/*.ts` (relative)   | **Yes** — the copy `/api/(.*)` is routed to      | **Yes** — `apps/api/test/routes.test.ts` | `apps/api/tsconfig.json` |
+| `apps/game/api/*.ts` | `@otp/api/src/*.ts` (deep) | **No** — inside a static Vite service, unscanned | **No** — nothing imports it              | `tsconfig.api.json`      |
 
-`vercel.json` declares one service, `game`, rooted at `apps/game`. A path outside a service root is
-not deployed, so `apps/api/api/` cannot be reached on the platform under the current config.
+**This table inverted on 2026-10-21 and the inversion is the point.** With `/api/(.*)` routed into
+the `api` service, the copy that ships is the copy `routes.test.ts` already executes, and the copy
+with the deep `@otp/api/src/*.ts` path — where the missing `exports` map, the load-bearing `.ts`
+extension and the cross-root reach all live — is the one that no longer serves traffic. "The copy
+that is tested is not the copy that ships" was the standing defect of the one-service config; this
+change closes it from the routing side rather than by moving a test.
 
-**Recommendation: do not delete it yet, and do not leave it as it is either.** It is not a harmless
-duplicate and it is not disposable; it is both load-bearing and misleading at once.
+`apps/game/api/*.ts` is now the dead copy. Do not delete it on the strength of one deploy: if the
+`api` service turns out to produce no functions either, those two files are where the next attempt
+starts, and `apps/game/tsconfig.api.json` is the only thing standing between a broken import there
+and a silent dead board.
 
-What breaks if it is deleted, exactly:
+**Recommendation: delete nothing this round.** Until a deployment has answered `405` on
+`GET /api/score`, both copies are evidence. What follows was written when `apps/api/api/` was the
+dead copy; read it as the case for keeping it, which the routing change has only strengthened —
+it is now the copy that ships _and_ the copy that is tested.
+
+What breaks if `apps/api/api/` is deleted, exactly:
 
 1. **`apps/api/test/routes.test.ts` stops resolving.** It imports `../api/score.ts` and
    `../api/top.ts` at lines 42–43. That file is the _only_ test anywhere that executes a route entry
@@ -126,32 +179,34 @@ What breaks if it is deleted, exactly:
    sets `coverage.include: ['src/**/*.ts', 'api/**/*.ts']`, with a comment saying leaving `api/` out
    is how a route entry point sits at 0% while the summary looks respectable. Delete the directory
    and that half of the glob matches nothing; the gate goes quiet instead of going red.
-3. **Nothing else.** No import outside that one test file, no script, and no build step references
-   it. Deleting it does not touch the deployment, because the deployment never had it.
+3. **And now the deployment itself.** `/api/(.*)` is routed into this service, so `apps/api/api/` is
+   what answers it. Deleting it deletes the routes.
 
-The part worth saying plainly: **the copy that is tested is not the copy that ships, and the copy
-that ships is tested by nothing.** The two differ only in their import specifiers — relative versus
-the `@otp/api/src/*.ts` deep path — and the specifier is precisely where this service's known
-failure modes live (the missing `exports` map, the load-bearing `.ts` extension, the cross-root
-reach documented in `test/cross-root.test.ts`). So `routes.test.ts` proves the wiring _pattern_ and
-cannot prove the deployed file, which is the one thing its name suggests it does.
+The part worth saying plainly: **the copy that is tested is now the copy that ships.** The two
+differ only in their import specifiers — relative versus the `@otp/api/src/*.ts` deep path — and the
+specifier is precisely where this service's known failure modes live (the missing `exports` map, the
+load-bearing `.ts` extension, the cross-root reach documented in `test/cross-root.test.ts`). Routing
+to the relative-import copy takes that whole class of failure out of the live path; it does not take
+out `src/content.ts`'s reach for `../../../content/game.json`, which is still outside the service
+root and still unproven against the platform's bundler. **If that one bites it is a `500` at cold
+start with `ERR_MODULE_NOT_FOUND` in the function log, never a `404`** — so it is distinguishable
+from what we have now, which is the only property that matters tonight.
 
-That makes a straight deletion a net loss of coverage for a gain in tidiness. The sequenced fix, for
-whoever takes it: point `routes.test.ts` at `apps/game/api/*.ts`, extend the coverage include to
-reach them (or move the test into `apps/game`), watch it stay green, and only then delete
-`apps/api/api/`. Doing it in the other order deletes the test's subject and the gate's blind spot on
-the same commit. Both halves cross an ownership line, so it is one task for one owner, not two.
-
-**`services` is a real key and a gated one.** `vercel.json`'s own schema
-(<https://openapi.vercel.sh/vercel.json>, the `$schema` that file points at) does define a top-level
+**`services` is a real key, and it is Beta rather than gated.** `vercel.json`'s own schema
+(<https://openapi.vercel.sh/vercel.json>, the `$schema` that file points at) defines a top-level
 `services` map — service names match `^[a-z]([a-z_-]*[a-z])?$`, `root` is the only required key, and
-`rewrites[].destination` may be `{ "service": "<name>" }` — so the block above is not invented. But
-the schema marks `services` **`"private": true`** (re-verified against the live schema on
-2026-10-21, along with the allowed per-service keys: `root`, `framework`, `runtime`, `entrypoint`,
-`installCommand`, `buildCommand`, `devCommand`, `ignoreCommand`, `outputDirectory`, `bindings`,
-`functions`, `headers`, and `additionalProperties: false`). `"private"` on past form means a
-feature that is not on for every account. Nobody here can tell from a checkout whether this project
-has it.
+`rewrites[].destination` may be `{ "service": "<name>" }` — so the block above is not invented. The
+schema does mark it **`"private": true`** (re-verified 2026-10-21, along with the allowed
+per-service keys: `root`, `framework`, `runtime`, `entrypoint`, `installCommand`, `buildCommand`,
+`devCommand`, `ignoreCommand`, `outputDirectory`, `bindings`, `functions`, `headers`, `redirects`,
+`rewrites`, `routes`, `cleanUrls`, `trailingSlash`, and `additionalProperties: false`). **This
+section used to read `"private"` as "not on for every account", and the live docs refute it:**
+`https://vercel.com/docs/services` opens "Services are available in Beta on all plans." Private in
+that schema means undocumented-in-schema, not off. The same page also settles the top-level split —
+`functions`, `installCommand`, `buildCommand`, `devCommand`, `ignoreCommand`, `outputDirectory` and
+`framework` "are not valid at the top level" in services mode and must sit inside a service, while
+headers and the public route table stay where they are, which is why the security headers have not
+moved.
 
 **The prediction that used to sit here was wrong, and production falsified it.** It said that a
 deploy ignoring `services` would answer `200` with the game's `index.html`, because "the catch-all
@@ -168,6 +223,13 @@ discriminate the two cases. Measured on production, 2026-10-21:
 | `GET /api/score`                  | `404`, Vercel's own NotFound page           |
 | `GET /api/definitely-not-a-route` | `404`, Vercel's own NotFound page           |
 
+Re-measured 2026-10-21, after the one-service config had been live for hours: `GET /` still `200`
+with the title `Off the Path: That's Not My Grandma`, `GET /api/top` and `GET /api/score` still
+`404`. **Two cells in that table are inherited rather than re-measured, and they are the two that
+need a header:** "with this file's CSP live", and "Vercel's own NotFound page" as against a static 404. Response headers and 404 bodies cannot be read from this checkout — `curl` is denied in the
+sandbox and the fetch tool returns neither — so the next person at a terminal should run
+`curl -sI https://off-the-path-game.vercel.app/` once and settle both, along with `X-OTP-Config`.
+
 **The discriminator is `GET /api/score`, not `GET /api/top`.** `handleScore` answers any non-POST
 with `405 {"error":"method not allowed"}` and an `Allow: POST` header. A `GET` that comes back `404`
 therefore proves no function is mounted at that path at all — the request never reaches a line of
@@ -181,9 +243,20 @@ because it separates "nothing is routed" from "something is routed and failing" 
 - **Environment variables:** the two above, on Production and Preview, marked sensitive. There is no
   `.env.example` entry for them: that file is owned elsewhere this round, which is why they are
   documented here.
-- **Functions:** `api/score.ts` and `api/top.ts` — both here and, as shipped, in `apps/game/api/` —
-  are Node functions using the Web handler signature (`(request: Request) => Promise<Response>`),
-  so they need no runtime types and no framework.
+- **Functions:** `api/score.ts` and `api/top.ts` — this package's copy is the one `/api/(.*)` now
+  routes to; `apps/game/api/` holds the same pair — are Node functions using the Web handler
+  signature (`(request: Request) => Promise<Response>`), so they need no runtime types and no
+  framework.
+- **The export SHAPE is the next thing to suspect if step 3 below answers anything but `405`.** All
+  four files use a bare `export default function handler(request: Request)`. Read 2026-10-21,
+  `https://vercel.com/docs/functions/functions-api-reference` documents exactly two shapes for a
+  non-Next project — named method exports (`export function GET(request: Request)`) and
+  `export default { fetch(request) {…} }` — and the bare default function appears in neither it nor
+  the quickstart. That is not proof it is unsupported (it is the oldest shape on the platform), and
+  **it cannot be the cause of a `404`**, which is why it is filed here rather than treated as the
+  bug. If a mounted route misbehaves, `export default { fetch: (request) => handleScore(request,
+deps) }` suits these handlers exactly, since they already branch on `request.method` internally.
+  Changing it touches four files in two workspaces and belongs to whoever owns them.
 - **`apps/game/api/` is typechecked now, by `apps/game/tsconfig.api.json`** (added 2026-10-21), and
   since 2026-10-21 it is run by **both** of `apps/game`'s scripts — `typecheck` and `build` — as a
   second `tsc` after the game's own. **What it was before is worth keeping**: that `include` had no
@@ -325,13 +398,16 @@ These are the measurements, not the intentions.
 **Not run, and not runnable from here:** anything against Supabase. The PostgREST request shapes are
 asserted against a fake `fetch`. There are no credentials in this checkout and none were sought.
 
-## `GET /api/top` has no caller in the game
+## `GET /api/top` has a caller now — this section said otherwise until 2026-10-21
 
-Worth saying plainly, because it is the difference between a board and a write-only list: nothing in
-`apps/game/src` calls `LeaderboardClient.top()`. The reducer has a `leaderboard` phase, but no
-action dispatches `LEADERBOARD`, and `App.tsx` renders `Results` for that phase anyway. So a player
-can post a score and never see the list — the route works, is cached and is tested, and the screen
-that would show it has not been built. That is a Results/App change, not an API one.
+It used to read "nothing in `apps/game/src` calls `LeaderboardClient.top()`", and treat the board as
+a write-only list whose screen had not been built. **That landed in `811d2ca` and the sentence is
+dead.** `apps/game/src/ui/Results.tsx` imports `readTop` (line 20), calls it on mount through
+`readBoard`'s effect and again at the end of every `submit`, and renders the rows into
+`.otp-board__rows`; `apps/game/e2e/leaderboard.spec.ts` drives `**/api/top*` in a real browser. The
+narrow old claim is still true and now irrelevant — the screen calls `readTop` directly rather than
+`LeaderboardClient.top()` — so do not let it stand in for "the read half is unmounted". Both halves
+of the board are wired, and both are waiting on the same thing: a function at `/api/*`.
 
 ## What a hostile caller sends, and what happens
 
@@ -352,30 +428,48 @@ that would show it has not been built. That is a Results/App change, not an API 
 
 ## Turning it on, in order
 
-The table and the two variables already exist. What is left is a deploy and four checks, and the
-first three take a minute each.
+The table and the two variables already exist. What is left is a deploy and five checks. **Run them
+in this order and do not skip step 2**, which is the one that has been skipped every round: four
+reviewers have read a probe against a deployment that was never built.
 
-1. **Deploy a preview** of this branch. Nothing here needs a build step.
-2. **`GET /api/top` on the preview URL.** This is the whole test of whether the two-service routing
-   worked.
-   - `{"entries":[]}` with `content-type: application/json` — the service is live and the table is
-     empty. Go on.
-   - `503 {"error":"the leaderboard is unavailable"}` — routing worked, the environment did not.
-     The Vercel runtime log names the variable: `[leaderboard] not configured: SUPABASE_URL is not
-set`. Values are never logged.
-   - **`404`, Vercel's own NotFound page** — no function was created, and nothing of ours ran.
-     This is the failure to expect first, and it is what production answers today. It is **not**
-     the game's `index.html`: `{ "service": "game" }` delegates the path into the service, which
-     does its own filesystem lookup against a static Vite `dist`, and there is no SPA-fallback
-     rewrite anywhere in `vercel.json`.
-   - `500` — the service is running and threw at cold start, which is almost certainly one of the
-     two cross-root imports named above. The Vercel log has the stack.
-3. **Play a run on the preview and press Post once.** "Posted to the board as …" means a row was
-   written and the score on it was computed by the server. "Leaderboard unavailable right now."
-   means it was not, and step 2 says why.
-4. **`GET /api/top` again.** The handle from step 3 should be rank 1. If step 3 said it posted and
-   this does not show it, the table is written but the read path is not — that has never happened
-   here, and it would be the one thing a fake `fetch` could not have caught.
+1. **Deploy a preview** of this branch. Nothing here needs a build step. If the build fails,
+   production is untouched — "a deployment on Vercel is the result of a successful build", and this
+   project's own six-hour outage proved it: production went stale, not down. Read the log and stop.
+2. **Prove the config is live before believing any probe.** `curl -sI <preview>/` and read
+   `X-OTP-Config` back, then `echo $?` on its own line — never through a pipe, which reports the
+   pipe's status. Absent or the previous value → this deployment is not the config you just wrote;
+   everything below would be measuring the old one. New value → go on. Then check the deployment's
+   **Resources → Functions** list (PAUL_BRIEF §5 calls it the Functions tab): empty means zero
+   functions were produced, which is the whole answer in one click.
+3. **`GET /api/score` on the preview URL — a GET, deliberately.** This is the discriminator, not
+   `GET /api/top`.
+   - **`405` with `Allow: POST`** — a function is mounted and the routing works. This is the first
+     thing that has ever reached a line we wrote. Go on.
+   - **`404`** — no function is mounted and nothing of ours ran; `fail()` cannot emit a 404. Stop:
+     this is `vercel.json`, not the database, and nothing below can be tested. It is **not** the
+     game's `index.html` — a service rewrite delegates the path into the service, which does its own
+     filesystem lookup, and there is no SPA-fallback rewrite anywhere in `vercel.json`.
+   - **`500`** — mounted, and threw at cold start: one of the two cross-root imports, almost
+     certainly `src/content.ts`'s reach for `../../../content/game.json`. The function log has the
+     module name.
+   - **`503` is impossible here** and that is useful: the method check returns `405` before the
+     store is ever consulted.
+4. **`GET /api/top` on the preview URL.** The first request that reaches Supabase.
+   - `{"entries":[]}` with `content-type: application/json` — live, and the table is empty. Go on.
+   - `503 {"error":"the leaderboard is unavailable"}` — routed and running; the environment or the
+     database is not. The runtime log names which: `[leaderboard] not configured: SUPABASE_URL is
+not set` is a variable (set it, then **redeploy** — variables are read once per cold start),
+     `select refused with 401` is a wrong or rotated key, `403` a missing grant, `404` PostgREST's
+     stale schema cache, `5xx` a paused project. Values are never logged.
+   - **Read the log even on a 2xx.** No `[leaderboard]` line beside a non-2xx means nothing of ours
+     ran, whatever the status said.
+5. **Play a run on the preview, press Post once, then `GET /api/top` again.** "Posted to the board
+   as …" means a row was written and the number on it was computed by the server from the replayed
+   log. The handle should come back rank 1 — but `handleTop` sets `s-maxage=60`, so wait a minute
+   before concluding. If step 5 said posted and the row never appears, the write path works and the
+   read path does not: the one failure a fake `fetch` could not have caught. Press Post a second
+   time for `409` and "That run is already on the board." — which also proves the first write
+   landed.
 
 Then do the four things under "What is NOT done" below, of which **turning on Vercel's rate
 limiting for `/api/*` is the one that cannot wait**: until it is on, the per-instance budget in

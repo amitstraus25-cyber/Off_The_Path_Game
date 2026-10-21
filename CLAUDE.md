@@ -57,16 +57,33 @@ pnpm audit              # high-severity dependency audit (also runs in CI)
 Workspaces, five: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + Preact),
 `apps/api` (the leaderboard functions), `tools/graybox` (placeholder art generator),
 `tools/sim` (strategy simulator).
-**Phase 6 landed, so `apps/api` exists** — it holds the leaderboard logic, the schema and 53 tests —
-**but `vercel.json` declares ONE service, `game`.** A second service produced no functions and
-`GET /api/top` answered with Vercel's own 404 for days, so the two routes now live inside the game
-service as ordinary `apps/game/api/score.ts` and `top.ts`, thin re-exports of the handlers in
-`apps/api`. The logic has one home; only the hosting moved. `apps/api/README.md` is the source of
-truth for the service and lists what still has to be done by hand before the board is believed.
-**Do not reintroduce a second service without a deploy that proves it serves functions** — and never
-a `"framework": null`, which fails schema validation and with it every deployment, silently, for as
-long as nobody looks past CI. This paragraph has been wrong in both directions now; measure the
-deployment before you trust it.
+**Phase 6 landed, so `apps/api` exists** — it holds the leaderboard logic, the schema and its tests —
+**and `vercel.json` now declares NO `services` block at all.** It uses top-level `installCommand`,
+`buildCommand` and `outputDirectory`, and the two live routes are `api/score.ts` and `api/top.ts`
+**at the repository root**, thin re-exports of the handlers in `apps/api`. The logic has one home;
+only the hosting has moved, three times.
+
+**Why, and do not re-run either of the two things that failed.** Two services (`game` + `api` with
+an `/api/(.*)` rewrite) served no functions. Moving the routes inside the game service served no
+functions either. Vercel's own docs explain both: in services mode there is no project-level build
+and no project-level scan, each service is built by its own framework or runtime, and the
+zero-config `api/` convention is documented for **the project root**, not a service root — so a
+service declaring `framework: "vite"` gets a static build and its `api/` directory is never looked
+at. `services` is Beta on all plans, not gated; the `"private": true` in Vercel's schema means
+undocumented, not unavailable.
+
+**The discriminator, which cost days to find and is worth one line here.** `GET /api/score` on a
+mounted function answers **405 with `Allow: POST`**, because `handleScore` branches on the method
+itself. A **404** there means no function exists and the request never reached our code. 500 means
+it reached us and the cross-root import or the content import broke. Check that, not `/api/top`,
+which cannot tell the two apart. The routes `export default { fetch }` to keep that branch ours.
+
+**Never a `"framework": null`** — it fails schema validation and with it every deployment, silently,
+for as long as nobody looks past CI. `X-OTP-Config` on a response says which config is actually
+live, so a stale deploy can be told from a landed one. `apps/api/README.md` is the source of truth
+for the service and lists what must still be done by hand before the board is believed.
+
+This paragraph has now been wrong in three directions. Measure the deployment before you trust it.
 The Phase 0 renderer spike has been removed now that its result is recorded in
 `docs/ARCHITECTURE.md` section 2a.
 Pinned: TypeScript 6.0.3, Vite 7.3.7, Vitest 4.1.11, Phaser 3.90.0, Preact 10.29.8, zod 4.6.5, Playwright 1.63.0.

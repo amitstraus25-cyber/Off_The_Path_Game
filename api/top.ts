@@ -59,6 +59,21 @@
 import { deps } from '@otp/api/src/deps.ts';
 import { handleTop } from '@otp/api/src/handlers.ts';
 
-export default function handler(request: Request): Promise<Response> {
-  return handleTop(request, deps);
-}
+/*
+ * `export default { fetch }`, NOT `export default function handler(request)`.
+ *
+ * The bare default function is a shape Vercel's own functions reference does not document for a
+ * project without a framework. It documents exactly two: named method exports
+ * (`export function GET(request)`) and this one, an object carrying `fetch`. The bare function was
+ * what shipped first, and it is the kind of mistake that cannot fail in CI -- it typechecks, it
+ * lints, and it is wrong only on the platform, as a 500 or a route that answers nothing.
+ *
+ * `fetch` rather than named methods because `handleTop` and `handleScore` already branch on
+ * `request.method` themselves, and that branch is load-bearing: `handleScore` answers a non-POST
+ * with `405` and an `Allow: POST` header, which is the ONLY way this project can tell "no function
+ * is mounted" (404) from "a function is mounted and refused the method" (405). Named exports would
+ * hand method routing to the platform and take that instrument away.
+ */
+export default {
+  fetch: (request: Request): Promise<Response> => handleTop(request, deps),
+};
