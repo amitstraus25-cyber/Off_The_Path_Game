@@ -268,6 +268,87 @@ export const pointerCanLandOn = (locator: Locator): Promise<boolean> =>
   });
 
 /**
+ * THE CONTROL: can this browser turn a synthetic touch gesture into scrolling AT ALL?
+ *
+ * CI's Linux runner could not, and that cost a red pipeline that looked like a product defect.
+ * Measured there with the diagnostics in `reachByGesture`: the modal scroller was `overflow: auto`
+ * with 563px to scroll, `touch-action` was `auto` on every element up to the root, the finger was
+ * on the panel's own content, and `(pointer: coarse)` matched -- and sixteen touch gestures moved it
+ * zero pixels. The same gesture scrolls it on macOS under Chromium 1228 and 1243. So the page was
+ * right and the HARNESS could not synthesize touch scrolling on that platform.
+ *
+ * This injects a plain box that nothing in the game styles -- fixed, `overflow: auto`, ten times
+ * taller inside than out, on top of everything -- runs the SAME gesture `reachByGesture` uses over
+ * it, and asks whether it moved. If a box with no game CSS at all will not scroll, no failure on the
+ * panel can be blamed on the panel; if it does scroll and the panel does not, the panel is broken.
+ * That is the line between a skip and a defect, and it is drawn by measurement, not by platform name.
+ */
+export async function touchScrollSynthesizes(page: Page): Promise<boolean> {
+  const cdp = await page.context().newCDPSession(page);
+  const at = await page.evaluate(() => {
+    const box = document.createElement('div');
+    box.id = '__touch-control';
+    Object.assign(box.style, {
+      position: 'fixed',
+      left: '10px',
+      top: '10px',
+      width: '120px',
+      height: '120px',
+      overflowY: 'auto',
+      zIndex: '2147483647',
+      background: '#fff',
+    });
+    const tall = document.createElement('div');
+    tall.style.height = '1200px';
+    box.append(tall);
+    document.body.append(box);
+    return { x: 70, y: 70 };
+  });
+  await cdp.send('Input.synthesizeScrollGesture', {
+    x: at.x,
+    y: at.y,
+    yDistance: -80,
+    gestureSourceType: 'touch',
+    speed: 900,
+  });
+  await page.waitForTimeout(150);
+  const moved = await page.evaluate(() => {
+    const box = document.getElementById('__touch-control');
+    const top = box?.scrollTop ?? 0;
+    box?.remove();
+    return top;
+  });
+  await cdp.detach();
+  return moved > 0;
+}
+
+/**
+ * What a finger NEEDS in order to scroll `target` into view, checked from the page's own computed
+ * state: a scroll container above it with somewhere to go, and no `touch-action` between the panel
+ * content and that container that forbids vertical panning. Used where `touchScrollSynthesizes`
+ * says the gesture itself cannot be performed, so the test still proves everything a browser reads
+ * before scrolling rather than proving nothing.
+ */
+export const touchCouldScrollTo = (target: Locator): Promise<string | null> =>
+  target.evaluate((el) => {
+    let scroller: HTMLElement | null = el.parentElement;
+    while (scroller) {
+      const oy = getComputedStyle(scroller).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && scroller.scrollHeight > scroller.clientHeight)
+        break;
+      scroller = scroller.parentElement;
+    }
+    if (!scroller) return 'no scroll container with room to scroll sits above the control';
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const ta = getComputedStyle(node).touchAction;
+      if (ta === 'none' || ta === 'pan-x' || ta === 'pinch-zoom')
+        return `touch-action "${ta}" on ${node.tagName.toLowerCase()}.${node.getAttribute('class') ?? ''} forbids vertical panning`;
+      if (node === scroller) break;
+    }
+    return null;
+  });
+
+/**
  * Scrolls with a wheel or a finger over the panel until a pointer could land on `target`, and
  * THROWS if it cannot -- with where the control is, so the message says which way it is stuck.
  *

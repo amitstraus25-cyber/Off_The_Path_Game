@@ -2,7 +2,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { devices, expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { probe, reachByGesture, startGame } from './helpers';
+import {
+  pointerCanLandOn,
+  probe,
+  reachByGesture,
+  startGame,
+  touchCouldScrollTo,
+  touchScrollSynthesizes,
+} from './helpers';
 
 /**
  * The shipped copy, read rather than repeated -- the pattern e2e/card-rulebook.spec.ts sets and
@@ -447,6 +454,29 @@ for (const size of REACH_SIZES) {
 
       const pills = page.locator('.otp-verdict');
       await expect(pills).toHaveCount(3);
+
+      /*
+       * Calibrate before blaming the page. Where a plain injected box cannot be touch-scrolled
+       * either, this platform cannot synthesize touch scrolling (CI's Linux runner, measured), so
+       * the gesture half is skipped -- but only after asserting everything a browser reads before it
+       * scrolls, for each control that is out of reach. A skip here never stands in for a pass.
+       */
+      if (gesture === 'touch' && !(await touchScrollSynthesizes(page))) {
+        for (let i = 0; i < 3; i++) {
+          if (await pointerCanLandOn(pills.nth(i))) continue;
+          expect(
+            await touchCouldScrollTo(pills.nth(i)),
+            `verdict ${String(i)} is out of reach and a finger could not scroll to it`,
+          ).toBeNull();
+        }
+        test.skip(
+          true,
+          'this browser does not turn synthetic touch gestures into scrolling (a plain injected ' +
+            'overflow:auto box did not move either); the conditions for touch scrolling were ' +
+            'asserted instead, and the wheel variant of this test exercises the real gesture',
+        );
+      }
+
       // Top to bottom, then back up to the first: a panel that only scrolls one way would pass a
       // single downward sweep and strand Allow above the fold.
       let gestures = 0;

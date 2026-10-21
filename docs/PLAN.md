@@ -452,11 +452,12 @@ Several overlap Phase 7 and are listed once here. Fix before launch; most also a
 
 **Blockers**
 
-- [ ] On a phone at 200% zoom, Allow / Restrict / Reject sit 283–435px below the fold and no gesture
-      reaches them. The panel must be its own scrollport.
-      **Fixed `51574fc`, not yet proven everywhere:** wheel passes everywhere and touch passes on
-      Chromium 1228 and 1243 on macOS, but CI's Linux runner moved the panel 0px over 16 touch
-      gestures. Under investigation, with diagnostics in the failure message and traces uploaded.
+- [x] On a phone at 200% zoom, Allow / Restrict / Reject sat 283–435px below the fold and no gesture
+      reached them. The panel is its own scrollport now (`51574fc`). **Proven** by real wheel and touch
+      gestures on macOS (Chromium 1228 and 1243), and on CI's Linux runner -- whose headless browser
+      turns synthetic touch into no scrolling at all, measured with an injected control box -- by
+      the computed conditions a finger needs: a scroll container with room, and no blocking
+      `touch-action` (`ac1f450`'s diagnostics, then the calibrated test).
 - [x] The e2e test for that defect passes because it calls `scrollIntoViewIfNeeded()` itself.
 - [x] A failed asset load is silent — a healthy-looking HUD over an empty world. It needs a retry
       screen, and `window.onerror` a friendly message.
