@@ -1,5 +1,14 @@
 # `@otp/api` — the leaderboard service
 
+> **Current state, 2026-10-21.** The routes are `api/score.ts` and `api/top.ts` in THIS package, the
+> single copy. They are deployed through Vercel's Build Output API by
+> `apps/game/scripts/vercel-output.mjs`, which bundles them with packages/core and
+> content/game.json into self-contained CommonJS -- Vercel compiles none of our TypeScript. The
+> sections below record the arrangements that failed first (two services, routes in the game
+> service, routes in a repo-root `api/`); keep them, do not re-run them. Post-deploy check:
+> `GET /api/score` must answer **405** with `Allow: POST`; `GET /api/top` answers JSON when
+> the environment is set and **503** when it is not.
+
 Two routes behind the game, on the same origin, with no new dependencies.
 
 **The database as an operational thing is `docs/DATABASE.md`** — the schema and why, the RLS

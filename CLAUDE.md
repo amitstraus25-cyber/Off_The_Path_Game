@@ -58,25 +58,31 @@ Workspaces, five: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + 
 `apps/api` (the leaderboard functions), `tools/graybox` (placeholder art generator),
 `tools/sim` (strategy simulator).
 **Phase 6 landed, so `apps/api` exists** — it holds the leaderboard logic, the schema and its tests —
-**and `vercel.json` now declares NO `services` block at all.** It uses top-level `installCommand`,
-`buildCommand` and `outputDirectory`, and the two live routes are `api/score.ts` and `api/top.ts`
-**at the repository root**, thin re-exports of the handlers in `apps/api`. The logic has one home;
-only the hosting has moved, three times.
+**and the deploy is Vercel's Build Output API, written by us.** `vercel.json` carries
+`installCommand`, `buildCommand` and the security headers, nothing else. The build ends with
+`apps/game/scripts/vercel-output.mjs`, which writes `.vercel/output`: the static game, the two
+routes bundled into self-contained CommonJS, and the headers copied from `vercel.json`. **Vercel
+compiles none of our TypeScript.** The routes are `apps/api/api/score.ts` and `top.ts` — the
+single copy; there used to be three. `test/docs-truth.test.ts` fails if the build stops running
+that script, because nothing else would notice.
 
-**Why, and do not re-run either of the two things that failed.** Two services (`game` + `api` with
-an `/api/(.*)` rewrite) served no functions. Moving the routes inside the game service served no
-functions either. Vercel's own docs explain both: in services mode there is no project-level build
-and no project-level scan, each service is built by its own framework or runtime, and the
-zero-config `api/` convention is documented for **the project root**, not a service root — so a
-service declaring `framework: "vite"` gets a static build and its `api/` directory is never looked
-at. `services` is Beta on all plans, not gated; the `"private": true` in Vercel's schema means
-undocumented, not unavailable.
+**Why, and do not re-run any of the four things that failed.** Two services served no functions.
+Routes inside the game service served none either — in services mode a `framework: "vite"`
+service gets a static build and its `api/` is never scanned. Routes in a repo-root `api/` produced
+functions at last, and every invocation crashed (`FUNCTION_INVOCATION_FAILED`): Vercel compiled
+them with **its own** TypeScript settings, printed TS5097 for every `.ts` import specifier, and
+left those specifiers pointing at files that were not in the lambda. This codebase writes `.ts`
+specifiers deliberately so Node can run the source; a per-file compiler cannot follow them, nor
+workspace packages whose `main` is TypeScript. `includeFiles` did not help, because file tracing
+was never the problem. Bundling ourselves is the fix.
 
 **The discriminator, which cost days to find and is worth one line here.** `GET /api/score` on a
 mounted function answers **405 with `Allow: POST`**, because `handleScore` branches on the method
-itself. A **404** there means no function exists and the request never reached our code. 500 means
-it reached us and the cross-root import or the content import broke. Check that, not `/api/top`,
-which cannot tell the two apart. The routes `export default { fetch }` to keep that branch ours.
+itself. A **404** there means no function exists and the request never reached our code. A **500**
+with `FUNCTION_INVOCATION_FAILED` means the function exists and crashed on load — read the build
+log, not the runtime log. Check `/api/score`, not `/api/top`, which cannot tell these apart. The
+routes `export default { fetch }`; the adapter in `vercel-output.mjs` turns Vercel's Node
+`(req, res)` into a web `Request` and keeps that 405 branch ours.
 
 **Never a `"framework": null`** — it fails schema validation and with it every deployment, silently,
 for as long as nobody looks past CI. `X-OTP-Config` on a response says which config is actually

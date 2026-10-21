@@ -121,11 +121,11 @@ describe('the services vercel.json declares', () => {
    */
   it('declares a build, in one mode or the other', () => {
     const config = JSON.parse(read('vercel.json')) as Record<string, unknown>;
-    const topLevelBuild = 'buildCommand' in config && 'outputDirectory' in config;
+    const topLevelBuild = 'buildCommand' in config;
     expect(
       declared.length > 0 || topLevelBuild,
-      'vercel.json declares neither a service nor a top-level buildCommand and outputDirectory, ' +
-        'so nothing says how this project is built -- is this the right file?',
+      'vercel.json declares neither a service nor a top-level buildCommand, so nothing says how ' +
+        'this project is built -- is this the right file?',
     ).toBe(true);
     // The two modes are exclusive: Vercel rejects build fields at the top level in services mode.
     expect(
@@ -134,6 +134,31 @@ describe('the services vercel.json declares', () => {
         'runtime keys as invalid at the top level in services mode, because their owner would be ' +
         'ambiguous, so this fails validation and with it the whole deployment.',
     ).toBe(false);
+  });
+
+  /*
+   * THE DEPLOY IS THE BUILD OUTPUT, AND IT MUST NOT QUIETLY STOP BEING ONE.
+   *
+   * vercel.json has no `outputDirectory` and no `functions` any more: the build ends by running
+   * apps/game/scripts/vercel-output.mjs, which writes `.vercel/output` -- the static game, the two
+   * routes bundled into self-contained CommonJS, and the security headers copied from this file.
+   * That is what finally stopped Vercel compiling our TypeScript with its own settings, which
+   * crashed every invocation with FUNCTION_INVOCATION_FAILED (TS5097 on every `.ts` specifier).
+   *
+   * Drop the script from buildCommand and nothing reddens anywhere: the build still succeeds, CI
+   * still passes, and Vercel falls back to zero-config, which deploys no game and no functions. A
+   * deploy that fails silently has cost this project six hours once already.
+   */
+  it('ends the build by writing the Build Output API directory', () => {
+    const config = JSON.parse(read('vercel.json')) as { buildCommand?: string };
+    if (declared.length > 0) return;
+    const SCRIPT = 'apps/game/scripts/vercel-output.mjs';
+    expect(
+      config.buildCommand ?? '',
+      `vercel.json's buildCommand no longer runs ${SCRIPT}, so the deploy has no .vercel/output: ` +
+        'no static game, no functions, and nothing tells you until a visitor does.',
+    ).toContain(SCRIPT);
+    expect(existsSync(at(SCRIPT)), `${SCRIPT} is gone but buildCommand still runs it`).toBe(true);
   });
 
   it('is a count the documents do not contradict', () => {

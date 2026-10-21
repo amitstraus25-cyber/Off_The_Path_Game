@@ -79,26 +79,28 @@ not exist.
 
 ## Deployment
 
-`vercel.json` declares **no services at all** — top-level `installCommand`, `buildCommand` and
-`outputDirectory`, with the two live routes at `api/score.ts` and `api/top.ts` in the **repository
-root**, thin re-exports of the handlers in `apps/api`. No rewrites: there is no SPA fallback and
-unknown paths 404, which is unchanged from every arrangement before it.
+The deploy is **Vercel's Build Output API, written by this repository.** `vercel.json` holds
+`installCommand`, `buildCommand` and the security headers. The build ends with
+`apps/game/scripts/vercel-output.mjs`, which writes `.vercel/output`: `static/` is
+`apps/game/dist`; `functions/api/top.func` and `score.func` are the two routes from
+`apps/api/api/` bundled by esbuild into one self-contained CommonJS file each, with
+packages/core and content/game.json inlined; and `config.json` carries the headers, copied from
+`vercel.json` rather than restated. **Vercel compiles none of our TypeScript.** No rewrites: there
+is no SPA fallback and unknown paths 404, as in every arrangement before.
 
-**Two earlier arrangements served no functions and neither should be tried again.** Two services
-(`game` + `api`, with an `/api/(.*)` rewrite) produced none. Moving the routes inside the game
-service produced none either. Vercel's docs account for both: in services mode each service is
-built by its own framework or runtime with no project-level build and no project-level scan, and
-the zero-config `api/` convention is documented for the **project root** rather than a service
-root — so a service declaring `framework: "vite"` gets a static build and its `api/` directory is
-never read. `GET /api/top` returned Vercel's own 404 throughout, not a 500 from our code, which is
-the difference between "the route failed" and "the route was never created".
+**Four earlier arrangements failed and none should be tried again.** Two services produced no
+functions. Routes inside the game service produced none either, because a `framework: "vite"`
+service is built static and its `api/` is never scanned. Routes in a repo-root `api/` produced
+functions that crashed on every invocation: Vercel compiled them with its own TypeScript settings
+(TS5097 on every `.ts` specifier, an old `lib`, no strict narrowing) and left `.ts` specifiers
+pointing at files not in the lambda. `functions.includeFiles` did not help, because tracing was
+never the cause. The 404s throughout meant "never created"; the 500s meant "created and crashed
+on load" -- the build log, not the runtime log, is where that one is explained.
 
-Three things this arrangement needs that the previous ones did not, each of which will break the
-deploy quietly if it is undone: the root `package.json` depends on `@otp/api` as `workspace:*`, so
-pnpm links it where root `api/` can resolve it; `tsconfig.api.json` lives at the root and is wired
-into the root `build` as well as `typecheck`, because the platform runs `build` and never runs
-`typecheck`; and the routes `export default { fetch }` rather than a bare default function, which
-is not a shape Vercel documents.
+What this arrangement needs, each of which breaks the deploy quietly if undone: `buildCommand`
+must end with the script (`test/docs-truth.test.ts` asserts it); the script refuses an e2e
+`dist` and refuses a `vercel.json` with no CSP; and esbuild is resolved through Vite, so it is
+not a separate dependency and moves when Vite does.
 
 Security headers stay at the top level so the strict CSP applies to every response; `connect-src`
 stays `'self'` because the board is same-origin (D3) and widening it would be the wrong fix for

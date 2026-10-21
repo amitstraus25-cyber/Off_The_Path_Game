@@ -1,13 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm exec tsc -p tsconfig.api.json && pnpm --filter @otp/game build",
-  "outputDirectory": "apps/game/dist",
-  "functions": {
-    "api/*.ts": {
-      "includeFiles": "content/game.json"
-    }
-  },
+  "buildCommand": "pnpm --filter @otp/api typecheck && pnpm --filter @otp/game build && node apps/game/scripts/vercel-output.mjs",
   "headers": [
     {
       "source": "/(.*)",
@@ -30,7 +24,7 @@
         },
         {
           "key": "X-OTP-Config",
-          "value": "root-api-2-includefiles"
+          "value": "build-output-1"
         }
       ]
     }

@@ -91,9 +91,10 @@ const CORE_PURITY_SYNTAX = [
  * `no-restricted-properties` and `no-restricted-syntax` all undefined: the two files a request
  * actually reaches were the only shipped code in the repository with no shipped-code rules.
  *
- * Both locations are listed now. The dead copy keeps its rules because a glob that is wrong in the
- * harmless direction costs nothing, and because if that service is ever revived it must arrive
- * already covered rather than needing someone to remember this paragraph.
+ * Since then the routes moved twice more and settled back in `apps/api/api/` -- now the ONLY copy,
+ * bundled by apps/game/scripts/vercel-output.mjs into the deploy. This list has named that
+ * directory throughout, which is the one reason the rules happen to be armed on the right files
+ * today; the `apps/game/api` glob went with its directory.
  *
  * THE REAL LESSON IS THAT THIS LIST IS A SECOND OPINION ABOUT WHAT SHIPS. `vercel.json` is the
  * first, and when the two disagree this one loses silently -- no error, no warning, just rules
@@ -102,7 +103,6 @@ const CORE_PURITY_SYNTAX = [
 const SHIPPED_SOURCE = [
   'apps/game/src/**/*.ts',
   'apps/game/src/**/*.tsx',
-  'apps/game/api/**/*.ts',
   'apps/api/src/**/*.ts',
   'apps/api/api/**/*.ts',
   'packages/core/src/**/*.ts',
@@ -120,7 +120,18 @@ export default tseslint.config(
   // "dist-". These are line comments on purpose. A block comment cannot hold these globs at all,
   // because every one of them contains the two characters that end a block comment, and writing one
   // inline here silently truncated this config twice while it was being written.
-  { ignores: ['**/dist/**', '**/dist-*/**', '**/coverage/**', 'reference/**', 'node_modules/**'] },
+  // `.vercel/**` is the Build Output API directory written by apps/game/scripts/vercel-output.mjs:
+  // generated, gitignored, and 870KB of bundled CommonJS that eslint would otherwise walk into.
+  {
+    ignores: [
+      '**/dist/**',
+      '**/dist-*/**',
+      '**/coverage/**',
+      'reference/**',
+      'node_modules/**',
+      '.vercel/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },

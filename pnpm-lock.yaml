@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@otp/api':
-        specifier: workspace:*
-        version: link:apps/api
     devDependencies:
       '@eslint/js':
         specifier: 10.0.1

@@ -301,12 +301,15 @@ an empty list mean anything.
 **Half of this is now answered.** Both guards apply the policy _themselves_, so neither can prove
 that **Vercel** applies a top-level `headers` block to a real response. A request to production
 settled the document route: `GET /` returns the CSP from `vercel.json`, so the file is read and the
-header ships. What that request did _not_ settle is whether the same block reaches a **function**
-response — `/api/score` and `/api/top`, now served from inside the game service as
-`apps/game/api/*.ts`. If it does not, the policy is missing on exactly the two routes that handle
-input, and nothing in this repository can notice, because both guards would stay green. The check is
-one preview deploy with the response headers read off a real `/api/top` request — the same preview
-that answers whether those functions exist at all. Do one deploy and answer both.
+header ships. Whether the same block reaches a **function** response was the open half, and it
+now has evidence: on 2026-10-21, `/api/top` and `/api/score` answered (with a crash, at the time)
+carrying the `X-OTP-Config` header from that same block, so function responses do receive it.
+Since then the deploy is the Build Output API written by `apps/game/scripts/vercel-output.mjs`,
+whose `config.json` applies the headers to every path with `continue: true` ahead of the
+filesystem phase, and the headers there are copied from `vercel.json` rather than restated. **Still
+to do on each deploy that changes routing:** read `Content-Security-Policy` off a real `/api/top`
+response, because both guards in this repository apply the policy themselves and would stay green
+if the platform dropped it.
 
 ## 11. Performance budget
 

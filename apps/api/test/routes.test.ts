@@ -12,21 +12,17 @@ import { carefulRun, content } from './helpers.ts';
  *
  * THESE ARE NOT THE FILES VERCEL INVOKES, AND THIS COMMENT SAID THEY WERE UNTIL 2026-10-21.
  *
- * There are two copies of the routes in this repository. The ones imported below are
- * `apps/api/api/*.ts`, reaching the handlers by relative path. The ones actually served are
- * `apps/game/api/*.ts`, reaching them by the `@otp/api/src/*.ts` deep path -- because vercel.json
- * declares a single service, `game`, rooted at `apps/game`, and `apps/api` is not a service at all
- * any more. A path outside a service root is not deployed, so this copy is dead on the platform.
+ * THE FILES IMPORTED BELOW ARE THE FILES THAT SHIP, and for most of 2026-10-21 that was not true.
+ * There were up to three copies of these routes; this file tested `apps/api/api/*.ts` while the
+ * deployed copy, elsewhere, was executed by nothing and differed in exactly its import specifiers
+ * -- which is where its failure lived. Now there is one copy, `apps/api/api/`, and
+ * apps/game/scripts/vercel-output.mjs bundles THIS file into the deploy. So what this proves is
+ * the deployed route, not a pattern resembling it.
  *
- * It is not dead here. This file and `apps/api/vitest.config.ts`'s coverage include (`api/**`) are
- * what keep it alive, and the shipped copy is executed by NOTHING -- no test in any workspace
- * imports `apps/game/api/*.ts`; `apps/game/tsconfig.api.json` typechecks it and that is the whole
- * of its coverage. So what this file proves is that the wiring PATTERN works, not that the
- * deployed file works. The two differ only in their import specifiers, which is exactly the thing
- * a type error lives in, and exactly the thing this file cannot see.
+ * The one thing it still cannot see is the bundle: the `(req, res)` adapter and esbuild's output.
+ * That is proved separately, by serving the bundled `.func/index.js` from an isolated directory.
  *
- * Whether the dead copy should be deleted is a human's call and is written up in apps/api/README.md
- * rather than decided here. Deleting it stops this file importing anything, so read that first.
+ * The routes `export default { fetch }`, so `load()` unwraps `.fetch`.
  *
  * There is still no database. `fetch` is replaced before the modules are imported, so the store
  * these routes build talks to an in-process function; the environment is stubbed with obvious
@@ -57,8 +53,8 @@ async function load(
     calls.push({ url, init });
     return Promise.resolve(reply());
   });
-  const scoreRoute = (await import('../api/score.ts')).default;
-  const topRoute = (await import('../api/top.ts')).default;
+  const scoreRoute = (await import('../api/score.ts')).default.fetch;
+  const topRoute = (await import('../api/top.ts')).default.fetch;
   return { calls, scoreRoute, topRoute };
 }
 

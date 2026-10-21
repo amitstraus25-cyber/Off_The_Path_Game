@@ -9,9 +9,9 @@
   },
   "scripts": {
     "dev": "pnpm --filter @otp/game dev",
-    "build": "tsc -p tsconfig.api.json && pnpm --filter @otp/game build",
+    "build": "pnpm --filter @otp/game build",
     "test": "pnpm -r --if-present test",
-    "typecheck": "tsc -p tsconfig.api.json && pnpm -r --if-present typecheck",
+    "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "e2e": "pnpm --filter @otp/game e2e",
@@ -33,8 +33,5 @@
     "typescript-eslint": "8.70.1",
     "vitest": "4.1.11",
     "@vitest/coverage-v8": "4.1.11"
-  },
-  "dependencies": {
-    "@otp/api": "workspace:*"
   }
 }

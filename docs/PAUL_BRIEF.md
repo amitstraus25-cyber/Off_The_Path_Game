@@ -114,6 +114,13 @@ pixel` passed happily while the canvas sat on a half pixel. Same shape as trap 1
 
 ## 5. The leaderboard, precisely
 
+**Current state, 2026-10-21 -- read this before the history below it.** The deploy is the Build
+Output API written by `apps/game/scripts/vercel-output.mjs`: the routes in `apps/api/api/` are
+bundled into self-contained CommonJS and Vercel compiles none of our TypeScript. The three earlier
+arrangements below each failed and are recorded so nobody re-runs them. The last one produced
+functions that crashed on load because Vercel compiled `.ts` specifiers with its own settings
+(TS5097 in the BUILD log); that is what the bundling fixes.
+
 Measured against production, not assumed:
 
 - `GET /` → 200, and the CSP from `vercel.json` **is** live. So the file is read and the `game`
