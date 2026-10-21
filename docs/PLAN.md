@@ -6,7 +6,7 @@ Effort sizes: **S** under half a day, **M** about a day, **L** several days (for
 
 ## Progress at a glance
 
-**Updated 2026-10-21, at `8656fcb`, CI green, production live.** This is the status board. The phase
+**Updated 2026-10-21, at `51574fc`, production live.** This is the status board. The phase
 sections below are the detailed checklists. Phase 9 is the v2 redesign, and "Readiness findings" is
 everything the 2026-10-21 sweep found that is not yet fixed.
 
@@ -34,7 +34,9 @@ everything the 2026-10-21 sweep found that is not yet fixed.
 
 ### In progress
 
-- Nothing is running. **v2 Phase A waits on your go** (golden rule 1: plan, then approval).
+- **v2 Phase A is done** (`87c80ff`): the new rules are in `packages/core/src/v2`, beside v1, at
+  100% coverage. **Phase B, the six or seven real skills, is next** and waits on your go.
+- **The readiness blockers are fixed** (`51574fc`), with the question button and the privacy line.
 
 ### Planned — v2, "collect, and find out what you collected" (Phase 9)
 
@@ -424,7 +426,7 @@ Spec: `docs/GAME_DESIGN_V2.md`, approved in shape by the client on 2026-10-21. D
 on `main`; greedy is punished; the timer is hard; there are six or seven skills; she is Purple. This
 reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
 
-- [ ] **A. Rules** (L) — `packages/core`, test-first, at the 100% gate on all four metrics. The collect
+- [x] **A. Rules** (L) — done `87c80ff`, beside v1; Phase D switches the game over. — `packages/core`, test-first, at the 100% gate on all four metrics. The collect
       loop with take / take-limited / leave; the basket as an inventory; the three-minute timer as an
       injected clock (no `Date`); the "never made it" ending; scoring by what each collected skill
       did; a version tag on the run log, so a v1 log can never score as a v2 run.
@@ -435,7 +437,9 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
       changed cell claimed; a timer and the basket in the HUD.
 - [ ] **D. Screens** (M) — the how-to-play rewritten for v2; **the reveal screen**; the late
       ending; the Cyera-branded landing page (**blocked on the background image**).
-- [ ] **E. Leaderboard** (S) — `apps/api` recomputes with the new core in the same change. The table
+- [ ] **E. Leaderboard** (M) — **including a server-issued start token**, because v2's run-log
+      times are client-reported: a log forged with every event at 0ms replays as legal today.
+      The API must record when a run began and bound elapsed time on submit. Otherwise — `apps/api` recomputes with the new core in the same change. The table
       is empty today, so no posted score becomes incomparable.
 - [ ] **F. Readiness** (M) — a test-mode timer override (dot access on `import.meta.env`, and the
       symbol added to `csp.test.ts`'s bundle grep so it cannot ship like the debug handle did); then
@@ -450,17 +454,20 @@ Several overlap Phase 7 and are listed once here. Fix before launch; most also a
 
 - [ ] On a phone at 200% zoom, Allow / Restrict / Reject sit 283–435px below the fold and no gesture
       reaches them. The panel must be its own scrollport.
-- [ ] The e2e test for that defect passes because it calls `scrollIntoViewIfNeeded()` itself.
-- [ ] A failed asset load is silent — a healthy-looking HUD over an empty world. It needs a retry
+      **Fixed `51574fc`, not yet proven everywhere:** wheel passes everywhere and touch passes on
+      Chromium 1228 and 1243 on macOS, but CI's Linux runner moved the panel 0px over 16 touch
+      gestures. Under investigation, with diagnostics in the failure message and traces uploaded.
+- [x] The e2e test for that defect passes because it calls `scrollIntoViewIfNeeded()` itself.
+- [x] A failed asset load is silent — a healthy-looking HUD over an empty world. It needs a retry
       screen, and `window.onerror` a friendly message.
 
 **Majors**
 
 - [ ] The call to action, "Read the Research", points at **`https://www.cyera.com/off-the-path`,
       which is a 404**. The real URL is needed from the web team, set as `VITE_RESEARCH_URL`.
-- [ ] The privacy line says "no cookies" while `localStorage['otp:music']` persists. Widen the
+- [x] The privacy line says "no cookies" while `localStorage['otp:music']` persists. Widen the
       sentence or drop the persistence, then guard by enumerating storage after a full run.
-- [ ] The question buttons eat the first press while a line types, up to nine presses a run — the
+- [x] The question buttons eat the first press while a line types, up to nine presses a run — the
       interaction the game is named for. The fix pattern is already in `Dialogue.tsx`.
 - [ ] Grandma's door note says the words "stayed on the post" — on a door — beneath "anything you
       read now, the wolf reads too".
@@ -477,6 +484,13 @@ Several overlap Phase 7 and are listed once here. Fix before launch; most also a
 - [ ] The 3-second time-to-interactive budget is not measured, and only one of three byte budgets is
       enforced in CI.
 - [ ] ARCHITECTURE section 9 and this file describe a replaced embed-origin mechanism. README.md is stale about `apps/api` and the leaderboard client.
+
+**New, from the fixes themselves**
+
+- [ ] An asset request that HANGS (rather than 404ing) still leaves the title up with Begin
+      enabled. Only failures are handled; loads need a timeout.
+- [ ] Six new player-facing strings (the load and crash screens) have not had the human read
+      PAUL_BRIEF requires. They are not leaderboard or privacy strings, so Legal is not needed.
 
 **Minors and nits**: Post's "No reply came back" when a reply did; "Try another name" changes
 silently; `#game`'s label reaches nothing; closing a panel drops focus to `body`; text clipped at 200%

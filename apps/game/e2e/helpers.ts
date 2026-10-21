@@ -289,14 +289,56 @@ export async function reachByGesture(
       return { top: Math.round(r.top), bottom: Math.round(r.bottom), viewport: innerHeight };
     });
 
+  /*
+   * WHAT WAS UNDER THE FINGER, for the failure message only. This helper first failed on CI's Linux
+   * runner and on no machine anyone could reproduce it on -- 16 touch gestures, zero pixels moved --
+   * with a one-line message and no artefacts. So when it gives up it now says what it hit, what
+   * touch-action applied all the way up the tree, and whether the panel's scroller moved at all,
+   * which is the difference between "the gesture never arrived" and "it arrived and was refused".
+   */
+  const scrollerTops: number[] = [];
+  const scrollerTop = (): Promise<number | null> =>
+    page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('.otp-layer--modal .otp-panel__body');
+      return el ? el.scrollTop : null;
+    });
+  const diagnose = (x: number, y: number): Promise<string> =>
+    page.evaluate(
+      ({ x, y }) => {
+        const hit = document.elementFromPoint(x, y);
+        const chain: string[] = [];
+        for (let el: Element | null = hit; el && chain.length < 8; el = el.parentElement) {
+          const ta = getComputedStyle(el).touchAction;
+          const cls = typeof el.className === 'string' ? el.className.split(' ')[0] : '';
+          chain.push(`${el.tagName.toLowerCase()}${cls ? '.' + cls : ''}[${ta}]`);
+        }
+        const body = document.querySelector<HTMLElement>('.otp-layer--modal .otp-panel__body');
+        const state = body
+          ? `scroller top ${body.scrollTop} of ${body.scrollHeight - body.clientHeight} scrollable` +
+            ` (${getComputedStyle(body).overflowY})`
+          : 'no modal scroller found';
+        return (
+          `under the finger at (${x},${y}): ${chain.join(' < ') || 'nothing'}; ${state}; ` +
+          `pointer:coarse=${matchMedia('(pointer: coarse)').matches}, ` +
+          `maxTouchPoints=${navigator.maxTouchPoints}`
+        );
+      },
+      { x, y },
+    );
+
   let made = 0;
+  let lastHand = { x: 0, y: 0 };
   for (;;) {
     if (await pointerCanLandOn(target)) return made;
     const at = await where();
+    const top = await scrollerTop();
+    if (top !== null) scrollerTops.push(top);
     if (made >= maxGestures)
       throw new Error(
         `${String(made)} ${gesture} gestures over the panel and the control is still out of reach: ` +
-          `top ${String(at.top)}, bottom ${String(at.bottom)}, viewport ${String(at.viewport)}px tall`,
+          `top ${String(at.top)}, bottom ${String(at.bottom)}, viewport ${String(at.viewport)}px tall. ` +
+          `Scroller positions across the gestures: [${scrollerTops.join(', ')}]. ` +
+          (await diagnose(lastHand.x, lastHand.y)),
       );
     // Over the part of the panel that is actually on screen.
     const hand = await page
@@ -308,6 +350,7 @@ export async function reachByGesture(
         const bottom = Math.min(r.bottom, innerHeight);
         return { x: Math.round(r.left + r.width / 2), y: Math.round((top + bottom) / 2) };
       });
+    lastHand = hand;
     // Down the page if the control is below the fold, up it if it is above: a third of the screen
     // at a time, so a tiny panel is not flung past its target and a tall one still arrives.
     const step = Math.round(at.viewport / 3) * (at.bottom > at.viewport ? 1 : -1);

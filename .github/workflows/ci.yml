@@ -55,3 +55,13 @@ jobs:
       - run: pnpm audit --audit-level=high
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
+      # On failure, keep the evidence. This job used to fail with one line of log and no artefacts,
+      # on a Linux runner nobody could reproduce locally. playwright.config.ts retains a trace for
+      # every failing test on CI; open one with `npx playwright show-trace <zip>`. Same publisher as
+      # checkout and setup-node above, pinned the same way.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: apps/game/test-results/
+          retention-days: 7

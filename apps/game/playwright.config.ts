@@ -12,6 +12,10 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     launchOptions: executablePath ? { executablePath } : {},
+    // On CI, a failing test keeps its trace (DOM, network, console, every action). CI used to fail
+    // with one line of output and nothing else, on a Linux runner nobody here can reproduce; the
+    // trace is uploaded by .github/workflows/ci.yml so the next failure arrives with evidence.
+    trace: process.env['CI'] ? 'retain-on-failure' : 'off',
   },
   webServer: {
     /*
