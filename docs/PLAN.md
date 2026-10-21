@@ -4,6 +4,62 @@ How to use this file: work **one phase per Claude Code session**. Start the sess
 implement, tick the boxes, run the `phase-done` skill, commit, then `/clear` before the next phase.
 Effort sizes: **S** under half a day, **M** about a day, **L** several days (for one engineer pairing with Claude Code; art and review lead times are separate).
 
+## Progress at a glance
+
+**Updated 2026-10-21, at `8656fcb`, CI green, production live.** This is the status board. The phase
+sections below are the detailed checklists. Phase 9 is the v2 redesign, and "Readiness findings" is
+everything the 2026-10-21 sweep found that is not yet fixed.
+
+### Done
+
+- **"The line" — all three causes**: two one-pixel backdrop holes; a stale checkout of a different
+  repository serving the game on `:5173` (trap 10); and the camera's top edge cutting a canopy row.
+- **The client's list**: the trees; the Inspect card (three verbs, three explanations); the phone
+  goals panel (16% of the screen down to 5%); the phone glitches (canopy fixed; market stall measured
+  and accepted, because it cannot be moved out of frame); the Results block; **the gate**; the arcade
+  question answered (yes to the mobile deck, no to the cabinet).
+- **Purple's back view**: the hood has a shaded side and the nape is a glimpse, not a panel
+  (`8c45e68`). **Waiting on your eye** — you said it was "better but still not there" before this
+  pass.
+- **The rename, Red → Purple** (D11: "Little Purple" in copy, "Purple" in code), **shorter copy**,
+  and a **how-to-play that is visible without scrolling at every screen size**, on keyboard and touch.
+- **The leaderboard, end to end**: built; shown on Results in four honest states; never says "posted"
+  above "no runs"; and **live against the database** since `8656fcb` — `/api/top` reads Supabase,
+  `/api/score` answers from our own code.
+- **Security**: the debug handle no longer ships to players; the shipped-code lint rules cover the
+  live routes; the high-severity Vite advisory is patched; the CSP is on every response, functions
+  included.
+- **Process**: the v2 spec (`docs/GAME_DESIGN_V2.md`); the staffing policy (Opus 5.5 for judgment,
+  Sonnet and Haiku for labour); the database runbook and migrations.
+
+### In progress
+
+- Nothing is running. **v2 Phase A waits on your go** (golden rule 1: plan, then approval).
+
+### Planned — v2, "collect, and find out what you collected" (Phase 9)
+
+Collect freely from 6–7 characters; a 3-minute hard timer where running out is its own ending;
+scoring by what the skills **did**, so greed is punished; the reveal screen as the payoff; a
+Cyera-branded landing page. **A** rules → **B** content → **C** world → **D** screens →
+**E** leaderboard → **F** readiness. Full checklist below.
+
+### Open defects — readiness sweep (fix before launch)
+
+**3 blockers**: on a phone at 200% zoom the Allow / Restrict / Reject buttons are unreachable, and
+the test written for exactly that passes because it scrolls for itself; and an asset that fails to
+load is completely silent. **Majors include two that matter most on a security company's page**:
+the one call to action links to a **404 on cyera.com**, and the privacy line promises "no cookies"
+while the game keeps a key in the visitor's browser. Full list under "Readiness findings".
+
+### Waiting on you
+
+The **landing-page background image**. **Legal review** of the leaderboard and privacy copy (D10).
+The **real research URL** for the call to action. **Brand sign-off on the cape mark**. "Wolf
+Spotters" **with or without** its Season Mix highlight. **Post one score** to prove the write path.
+Turn on **Vercel rate limiting** for `/api/*`, and clear Vercel's **billing "Action required"**.
+D2 (who makes production art) and D6 (the real Haffer and Season Mix files). Your go on **v2
+Phase A**.
+
 ## Milestones
 
 | Milestone                                                                                                                                               | When           | What you can show                                                                                                     |
@@ -361,6 +417,77 @@ build, now that those routes are Vercel Functions of the game service rather tha
 - [ ] (S) Embed in the Off the Path page replacing the "Malicious skill finder game" placeholder; confirm the **Read the Research** button flow and the Security Leader / Practitioner toggle still work.
 - [ ] (S) Post-launch dashboard: plays, completion rate, average score, verdict distribution per skill (aggregate, from parent-page events), CTA click-through.
       Acceptance (M5): live, monitored, with a named owner for moderation and content updates.
+
+## Phase 9: v2 — collect, and find out what you collected
+
+Spec: `docs/GAME_DESIGN_V2.md`, approved in shape by the client on 2026-10-21. Decided: v2 replaces v1
+on `main`; greedy is punished; the timer is hard; there are six or seven skills; she is Purple. This
+reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
+
+- [ ] **A. Rules** (L) — `packages/core`, test-first, at the 100% gate on all four metrics. The collect
+      loop with take / take-limited / leave; the basket as an inventory; the three-minute timer as an
+      injected clock (no `Date`); the "never made it" ending; scoring by what each collected skill
+      did; a version tag on the run log, so a v1 log can never score as a v2 run.
+- [ ] **B. Content** (M) — six or seven skills and characters as data: what each promises, the card,
+      and what it did under each verdict. The mix is tuned through `pnpm sim` until the ceiling, the
+      greedy floor and restrict-everything all come out right.
+- [ ] **C. World** (M) — three or four new characters on the map, one regeneration with every
+      changed cell claimed; a timer and the basket in the HUD.
+- [ ] **D. Screens** (M) — the how-to-play rewritten for v2; **the reveal screen**; the late
+      ending; the Cyera-branded landing page (**blocked on the background image**).
+- [ ] **E. Leaderboard** (S) — `apps/api` recomputes with the new core in the same change. The table
+      is empty today, so no posted score becomes incomparable.
+- [ ] **F. Readiness** (M) — a test-mode timer override (dot access on `import.meta.env`, and the
+      symbol added to `csp.test.ts`'s bundle grep so it cannot ship like the debug handle did); then
+      a full functional, security and accessibility sweep of v2.
+
+## Readiness findings (sweep of 2026-10-21)
+
+Measured on production and the working tree by four review lenses plus a completeness critic.
+Several overlap Phase 7 and are listed once here. Fix before launch; most also apply to v2.
+
+**Blockers**
+
+- [ ] On a phone at 200% zoom, Allow / Restrict / Reject sit 283–435px below the fold and no gesture
+      reaches them. The panel must be its own scrollport.
+- [ ] The e2e test for that defect passes because it calls `scrollIntoViewIfNeeded()` itself.
+- [ ] A failed asset load is silent — a healthy-looking HUD over an empty world. It needs a retry
+      screen, and `window.onerror` a friendly message.
+
+**Majors**
+
+- [ ] The call to action, "Read the Research", points at **`https://www.cyera.com/off-the-path`,
+      which is a 404**. The real URL is needed from the web team, set as `VITE_RESEARCH_URL`.
+- [ ] The privacy line says "no cookies" while `localStorage['otp:music']` persists. Widen the
+      sentence or drop the persistence, then guard by enumerating storage after a full run.
+- [ ] The question buttons eat the first press while a line types, up to nine presses a run — the
+      interaction the game is named for. The fix pattern is already in `Dialogue.tsx`.
+- [ ] Grandma's door note says the words "stayed on the post" — on a door — beneath "anything you
+      read now, the wolf reads too".
+- [ ] The title card clipped its thesis sentence at the client's own 1673×449. Probably fixed by the
+      fit ladder; re-measure there.
+- [ ] Pressing Post is announced to nobody, because the status region mounts with its text already
+      in it.
+- [ ] A screen-reader player is never told where anyone is.
+- [ ] Heading structure is incoherent: three of seven screens have no heading.
+- [ ] The question list tells a screen reader the first question is already selected.
+- [ ] At 375, 390 and 768 every panel covers the goals and the basket under `aria-modal`.
+- [ ] The embed has no host side, and `frame-ancestors` means the first real iframe test is launch day.
+- [ ] M4 names an accessibility tool that is not installed anywhere.
+- [ ] The 3-second time-to-interactive budget is not measured, and only one of three byte budgets is
+      enforced in CI.
+- [ ] ARCHITECTURE section 9 and this file describe a replaced embed-origin mechanism. README.md is stale about `apps/api` and the leaderboard client.
+
+**Minors and nits**: Post's "No reply came back" when a reply did; "Try another name" changes
+silently; `#game`'s label reaches nothing; closing a panel drops focus to `body`; text clipped at 200%
+on a phone; stale test counts in four documents; the one error screen is unstyled; the placeholder
+lint checks one word of five; research sign-off covers about a quarter of the strings; the privacy
+copy has no link; Phaser announces its version in the console; five stale build directories in the
+checkout; "CAUGHT IT" wraps at 390px; a tile boundary where a direction key does nothing.
+
+**Fixed since the sweep**: the coverage gate measuring a copy of the routes that never shipped (one
+copy now, `8656fcb`); PAUL_BRIEF's claim that the dark band was still open; the docs saying
+`vercel.json` declares services.
 
 ## Risks and mitigations
 
