@@ -199,9 +199,31 @@ The client asked for it "nicer and more branded". Four specific faults:
   needs one new tile (two post tops with a narrow rail), a `TILE_NAMES` **append** — never a
   renumber, the order is gid order and is baked into the map — placement, and a regeneration in one
   commit.
-- **Nothing in the forest animates.** No NPC or bystander animation is ever created, so eight
-  painted blink frames ship in the atlases and no player has seen one.
-- **109 walkable tiles sit under fully opaque crowns**, so the player vanishes while standing there.
+- ~~**Nothing in the forest animates.**~~ **FIXED, 2026-10-21 — do not go looking for this.** It was
+  true and is not: `forest-scene.ts` creates one idle per character and `startIdles()` plays them,
+  staggered so no two share a period, with a hold of 3–5s and a 120ms blink, silent under
+  `prefers-reduced-motion`. `e2e/scene-second-pass.spec.ts` guards it with bounds derived from what
+  a blink is rather than from the constants. The eight painted frames are finally on screen.
+
+  Kept here struck through rather than deleted, because the entry sent at least one agent hunting
+  after it was already fixed — which is trap 2, arriving through this document instead of through a
+  comment.
+
+- **101 walkable tiles sit under fully opaque crowns**, so the player vanishes while standing
+  there. Re-measured 2026-10-21 and it is **smaller and sharper than it sounded, and it is real**:
+
+  - 101 cells, not 109 — the difference is this week's art, not an earlier miscount.
+  - **Only two gids, 60 and 63.** Counted by decoding `tileset-forest.png` and measuring
+    `alpha == 255` per cell, not by reading tile names. So it is two crown tiles, not scattered art.
+  - **Every one of them is reachable.** A BFS from `spawn-red` at tile (5,20) over `collision == 0`
+    reaches 1,514 tiles and all 101 are in that set, so this is not walkable-but-enclosed. A player
+    can stand on any of them and disappear: **6.7% of the reachable world.**
+  - Rows 2 to 37, so it is not only the far treeline. The row 24/32/37 cells look like ordinary
+    forest floor, which argues against "mark them solid" as the fix for those.
+
+  **The guard's bound must be derived the way the measurement was** — opacity out of the tileset,
+  reachability out of the map — and never written as a list of gids, which would pass in silence the
+  moment a third crown is painted.
 
 ## 8. The arcade shell — the answer, and the argument
 
