@@ -3,6 +3,11 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm exec tsc -p tsconfig.api.json && pnpm --filter @otp/game build",
   "outputDirectory": "apps/game/dist",
+  "functions": {
+    "api/*.ts": {
+      "includeFiles": "content/game.json"
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",
@@ -25,7 +30,7 @@
         },
         {
           "key": "X-OTP-Config",
-          "value": "root-api-1"
+          "value": "root-api-2-includefiles"
         }
       ]
     }
