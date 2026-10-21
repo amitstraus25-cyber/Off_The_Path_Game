@@ -156,6 +156,28 @@ The client asked for it "nicer and more branded". Four specific faults:
 
 ## 7. Known open defects
 
+- **The board has a THIRD node, and the honesty matrix models two.** Three rounds went into making
+  sure `.otp-error` and `.otp-board__note` cannot contradict each other, and the 25-pair
+  enumeration that guards it is real. But `.otp-board__row--you` renders "This is your run" in the
+  same section, and a post the server **took** whose reply never reached the page — a dropped
+  connection, the adapter's 6s timeout, or a 2xx body the schema rejects — renders
+  _"That run could not be posted."_ directly above _"Rank 2. …, 900 points. This is your run."_
+  Driven in Chromium, suite green throughout. Rare, but it is the same defect class the matrix
+  exists to prevent, one node outside its model.
+- **The pairing property is DECLARED, not guarded, and this is a real limit rather than an
+  oversight.** `NOTE_CLAIMS` and `NOTICE_CLAIMS` in `Results.tsx` are hand-written, and nothing
+  ties a claim to the sentence that carries it. Reverting `boardEmptyAfterPost` to the exact hedge
+  that was sent back twice leaves 651 unit and 212 e2e tests green; so does
+  _"No runs are showing yet. Your run is on the board."_, which is **worse** than the original
+  defect.
+
+  This is trap 1 one level up, and worth stating plainly: the first bound was written against a
+  **spelling** and the defect was a **meaning**, so it was replaced with a bound written against an
+  **assertion of** the meaning — by the same hand that writes the meaning. A test cannot close that
+  last gap. **Player-facing copy on this screen needs a human reading the sentences**, which is
+  also why `docs/COPY_REVIEW.md` sends leaderboard and privacy copy to Legal. Do not let a future
+  round claim the matrix makes that review unnecessary.
+
 - **The dark band across the top of the world — the third cause of "the line", and the one still
   open.** Not a backdrop hole: the magenta probe reads 0 across 49 configurations. The camera's top
   edge settles **part-way into a tile row**, so the world opens on the bottom slice of a canopy row

@@ -412,12 +412,27 @@ test('Results keeps every surface inside the viewport', async ({ page }) => {
          * `overflow: hidden` whose entire job is to hold text the eye never sees, so
          * `scrollWidth > clientWidth` is its mechanism rather than a symptom. It reads 241>1 and
          * always will. What this assertion is for is VISIBLE content silently swallowed by an
-         * ancestor's `overflow: hidden`, which is why the filter is a visible box, not any box.
-         * Without the exemption the first screen-reader-only string on Results reddens the suite:
-         * that is exactly what happened when the non-compact Trifecta moved here.
+         * ancestor's `overflow: hidden`. Without the exemption the first screen-reader-only string
+         * on Results reddens the suite: that is exactly what happened when the non-compact Trifecta
+         * moved here.
+         *
+         * THERE WERE TWO EXEMPTIONS DOING ONE JOB, AND THE SECOND ONE WAS SILENT. The class filter
+         * above sat next to `clientWidth > 1`, and `.otp-visually-hidden` is `width: 1px`
+         * (tokens.css), so its box reads clientWidth 1 and the class filter never excluded anything
+         * the width bound had not already excluded. The redundancy is not the problem; what the
+         * width bound ALSO did is. `> 1` rather than `> 0` exempted every 1px-wide VISIBLE element
+         * from this assertion -- a whole size class of real content, excused by a bound nobody
+         * wrote down as an exemption and nobody could review, sitting next to a named exemption
+         * that was doing nothing. Measured: a 1px-wide `.otp-fine` whose text needs 46px is
+         * reported at `> 0` and invisible at `> 1`.
+         *
+         * The named one is kept and the silent one is dropped. `> 0` still skips the zero-width
+         * boxes that have no layout to clip, the class filter is now the thing actually holding
+         * the three screen-reader strings out (it reports 241>1, 202>1 and 197>1 without it), and
+         * the exemption that remains says what it exempts and can be argued with.
          */
         .filter((el) => !el.classList.contains('otp-visually-hidden'))
-        .filter((el) => el.clientWidth > 1 && el.scrollWidth > el.clientWidth + 1)
+        .filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
         .map((el) => `${el.className || el.tagName} ${el.scrollWidth}>${el.clientWidth}`),
     );
     expect(clipped, `content wider than its own box at ${width}px`).toEqual([]);

@@ -3,7 +3,15 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import raw from '../../../content/game.json';
 import { readTop } from '../src/net/leaderboard';
-import { BOARD_NOTE, boardNoteKey, boardReads } from '../src/ui/Results';
+import {
+  BOARD_NOTE,
+  NOTE_CLAIMS,
+  NOTICE_CLAIMS,
+  boardNoteKey,
+  boardReads,
+  contradictions,
+} from '../src/ui/Results';
+import type { BoardState } from '../src/ui/Results';
 
 /*
  * THE BOARD ON RESULTS: that it can tell an ABSENT board from an EMPTY one, and that it says so.
@@ -33,6 +41,13 @@ import { BOARD_NOTE, boardNoteKey, boardReads } from '../src/ui/Results';
 const SRC = fileURLToPath(new URL('../src', import.meta.url));
 const results = readFileSync(`${SRC}/ui/Results.tsx`, 'utf8');
 const screens = readFileSync(`${SRC}/ui/screens.css`, 'utf8');
+/*
+ * The adapter, read as SOURCE rather than imported for its exports. The set of sentences a post can
+ * answer with lives in `createLeaderboardClient()`, which needs a whole `Content` to build and
+ * belongs to another owner this round; what the honesty block below needs is which content keys it
+ * reads, and that is a fact about the file.
+ */
+const adapter = readFileSync(`${SRC}/net/leaderboard.ts`, 'utf8');
 const shipped = (raw as { strings: Record<string, string> }).strings;
 
 /** Replaces fetch with one scripted reply, as test/leaderboard.test.ts does. */
@@ -162,90 +177,189 @@ describe('what the player is told matches what actually came back', () => {
 });
 
 /*
- * THE SEND-BACK, AND THE GUARD IT ASKED FOR.
+ * THE SEND-BACK, AND THE GUARD IT ASKED FOR -- REWRITTEN, BECAUSE THE FIRST ONE WAS A WORD LIST.
  *
- * Measured in Chromium on a clean build, after a post the server took, two adjacent paragraphs on
- * the payoff screen:
+ * Three adjacent-paragraph pairs were measured in Chromium on a clean build, `.otp-error` directly
+ * above `.otp-board__note`:
  *
- *     .otp-error        "Posted to the board as brave-lantern-42."
- *     .otp-board__note  "No runs on the board yet. Yours would be the first."
+ *   1  a post the server took  "Posted to the board as brave-lantern-42."
+ *                              "No runs on the board yet. Yours would be the first."
+ *   2  a 409                   "That run is already on the board."
+ *                              "No runs are showing yet. A run posted in the last minute may not
+ *                               be here."
+ *   3  a 400                   "That run could not be posted."
+ *                              ...and that same hedge, which explains a delay for a post that
+ *                               never happened.
  *
- * The player is told their run was posted and then told there are no runs and invited to be the
- * first. On an asset whose argument is "check whether the system is telling you the truth about
- * itself", a screen that misstates its own state is the asset contradicting itself in public.
+ * 1 was closed last round. The guard it shipped with matched
+ * `/no runs on the board|nothing on the board|would be the first/` against the note, and a
+ * reviewer put the defect back with ONE reworded string while every assertion here stayed green.
+ * Four more rewordings pass it: "The board is empty. Be the first to put a run on it.", "No scores
+ * yet. Yours would be number one.", "Nothing here yet. Post a run and it will be first." A bound
+ * written against a spelling cannot guard a meaning, and it closed 1 while leaving 2 and 3 open.
  *
- * It is the LAUNCH case rather than a corner: apps/api serves GET /api/top with
- * `s-maxage=60, stale-while-revalidate=300`, and Results re-reads the moment the post resolves, so
- * on a fresh board the mount read primes the CDN with `{entries: []}` and the re-read is answered
- * from that cached empty for up to a minute. The board genuinely answered "empty", so the
- * three-state read above is not at fault and is not touched; the EMPTY STATE'S COPY was.
+ * SO THE BOUND IS THE PAIRING, OVER DECLARED CLAIMS. Results.tsx names what each line asserts
+ * (`NOTE_CLAIMS`, `NOTICE_CLAIMS`) and which claims are mutually exclusive (`EXCLUSIVE`); this
+ * enumerates EVERY post outcome against EVERY board state and asserts no reachable pair carries an
+ * exclusive pair of claims. Rewording a line does not move the property. Adding a state, a note
+ * line or a post outcome without declaring what it asserts fails here rather than passing in
+ * silence -- and the outcome set is read out of `src/net/leaderboard.ts`, which is another owner's
+ * file, so it cannot drift out of step with a list kept here.
  *
- * This is the guard. It composes the same two halves the block above does -- a real HTTP reply
- * through `readTop`, and the screen's own copy table -- with the one extra fact that produced the
- * defect: that this visit has posted. The bound is the CONTRADICTION, in the player's words, not
- * the name of the key that fixes it, so swapping the implementation for another honest one keeps it
- * green and reverting to a single empty string turns it red.
+ * What this CANNOT check is that a declaration still matches its own words: a line reworded to mean
+ * something else while its claims stay put is a lie in the declaration. That is a human-review
+ * boundary and naming it is the honest thing to do -- the alternative is the regex above, which
+ * reads as proof and is not.
  */
-describe('a post can never sit above a sentence saying there are no runs', () => {
-  /** What the screen claims after a successful post, from the content file rather than typed here. */
-  const POSTED = shipped['handleAssigned']!;
+describe('no pairing of the post notice and the board note can contradict', () => {
+  /**
+   * Every sentence `.otp-error` can carry, DERIVED from the adapter that produces them.
+   *
+   * `createLeaderboardClient()` is the only thing that answers `onPost`, and every player-facing
+   * line it can return is a `content.strings['...']` read. Scanning for those is what makes this
+   * set the shipped one rather than a list kept beside a file this round does not own: a fifth
+   * outcome sentence added there arrives here undeclared and reddens the totality check below.
+   */
+  const NOTICE_KEYS = [
+    ...new Set(
+      [...adapter.matchAll(/content\.strings\['([A-Za-z0-9_]+)'\]/g)].map((match) => match[1]!),
+    ),
+  ];
+
+  /** Every state the board read can be in, including the screen's own fourth one. */
+  const STATES = Object.keys(BOARD_NOTE) as BoardState['state'][];
+
+  /** Every line `.otp-board__note` can carry, derived by asking `boardNoteKey` for all of them. */
+  const NOTE_KEYS = [
+    ...new Set(STATES.flatMap((state) => [boardNoteKey(state, false), boardNoteKey(state, true)])),
+  ];
 
   /**
-   * A line that asserts the board holds nothing, or that the reader's run would be its first.
-   *
-   * Written against the CLAIM and not against `boardEmpty`: a guard whose bound restates the thing
-   * it guards moves with the defect and passes in silence. Any new empty-board copy that says one
-   * of these things above a post is the same bug under a different key.
+   * `boardEmpty` is the one line that makes a claim a notice can contradict, and it is shown only
+   * before a press. That is only true if `attempted` cannot be false while a notice is on screen,
+   * which is a fact about `submit()` rather than about this table -- see the source guard below.
    */
-  const CLAIMS_NO_RUNS =
-    /\bno runs on the board\b|\bnothing on the board\b|\bwould be the first\b/i;
+  const reachable = (noteKey: string): boolean =>
+    noteKey !== 'boardEmpty' || NOTE_KEYS.indexOf('boardEmptyAfterPost') === -1;
 
-  it('the shipped post notice really does claim the run went up', () => {
-    // The other half of the contradiction. If this sentence ever stops making the claim, the rest
-    // of this block is guarding a collision that cannot happen, and should be read again.
-    expect(POSTED).toMatch(/posted to the board/i);
-    expect(POSTED).toContain('{handle}');
+  it('declares what every line either node can carry asserts, and nothing it cannot', () => {
+    expect(NOTICE_KEYS.length, 'no post outcome sentences were found in the adapter at all').toBe(
+      4,
+    );
+    expect(NOTICE_KEYS.filter((key) => !(key in NOTICE_CLAIMS)).sort()).toEqual([]);
+    expect(Object.keys(NOTICE_CLAIMS).filter((key) => !NOTICE_KEYS.includes(key))).toEqual([]);
+    expect(NOTE_KEYS.filter((key) => !(key in NOTE_CLAIMS)).sort()).toEqual([]);
+    expect(Object.keys(NOTE_CLAIMS).filter((key) => !NOTE_KEYS.includes(key))).toEqual([]);
+    // And every declared line is a line the content file actually ships.
+    for (const key of [...NOTICE_KEYS, ...NOTE_KEYS])
+      expect(typeof shipped[key], `${key} is declared but not shipped`).toBe('string');
   });
 
-  it('says nothing of the kind in any state once this visit has posted', async () => {
-    // Every state the adapter can answer with, driven through the real read where it can be.
-    reply(() => new Response(JSON.stringify({ entries: [] })));
-    expect((await readTop(10)).state, 'the cached empty is the state that produced this').toBe(
-      'empty',
-    );
-    for (const state of Object.keys(BOARD_NOTE) as (keyof typeof BOARD_NOTE)[]) {
-      const line = shipped[boardNoteKey(state, true)];
-      expect(typeof line, `${state} after a post has no line at all`).toBe('string');
-      expect(line, `"${POSTED}" can sit directly above "${line ?? ''}"`).not.toMatch(
-        CLAIMS_NO_RUNS,
-      );
+  /*
+   * THE ENUMERATION. Five states of `.otp-error` -- the four outcome sentences plus the absent
+   * notice, which is what is rendered before a press, during a press and after a reroll -- against
+   * every line the note can carry. The absent notice is a state, not a key: `{notice && <p …>}`
+   * renders nothing, so it asserts nothing.
+   */
+  it('holds for every post outcome against every board state', () => {
+    const checked: string[] = [];
+    const bad: string[] = [];
+    for (const noticeKey of [null, ...NOTICE_KEYS]) {
+      const noticeClaims = noticeKey === null ? [] : NOTICE_CLAIMS[noticeKey]!;
+      for (const noteKey of NOTE_KEYS) {
+        const pair = `${noticeKey ?? '(no notice)'} + ${noteKey}`;
+        if (!reachable(noteKey) && noticeKey !== null) continue;
+        checked.push(pair);
+        const clash = contradictions(noticeClaims, NOTE_CLAIMS[noteKey]!);
+        if (clash.length > 0)
+          bad.push(`${pair}: "${shipped[noticeKey!] ?? ''}" over "${shipped[noteKey]}" (${clash})`);
+      }
     }
+    expect(bad, 'two adjacent paragraphs on Results assert mutually exclusive things').toEqual([]);
+    // The self-check: the enumeration really did walk the matrix. 5 notice states x 5 note lines,
+    // less the 4 that `attempted` makes unreachable.
+    expect(checked.length, 'the enumeration checked nothing').toBe(
+      (NOTICE_KEYS.length + 1) * NOTE_KEYS.length - NOTICE_KEYS.length,
+    );
+  });
+
+  /*
+   * THE FOUR PAIRS THE ENUMERATION SKIPS, PROVED UNREACHABLE RATHER THAN ASSUMED.
+   *
+   * `boardEmpty` is the only line that claims the board holds nothing, and it would contradict both
+   * sentences that say a run is on the board. It is safe only because a post notice cannot exist
+   * while `attempted` is false: `submit()` sets the flag before the first `await`, so nothing can
+   * put a sentence in `.otp-error` first, and nothing ever sets it back.
+   */
+  it('the one line claiming an empty board cannot meet a post notice at all', () => {
+    const unsafe = NOTE_KEYS.filter((noteKey) =>
+      NOTICE_KEYS.some((n) => contradictions(NOTICE_CLAIMS[n]!, NOTE_CLAIMS[noteKey]!).length > 0),
+    );
+    expect(unsafe, 'a line that can contradict a notice is reachable with one').toEqual([
+      'boardEmpty',
+    ]);
+    // ...and it is exactly the line `attempted` swaps out. Both directions: a line that becomes
+    // unsafe and is not swapped fails here, and a line swapped for no reason fails here too.
+    const swapped = STATES.filter(
+      (state) => boardNoteKey(state, false) !== boardNoteKey(state, true),
+    ).map((state) => boardNoteKey(state, false));
+    expect(swapped).toEqual(unsafe);
+
+    /*
+     * The source half, which no table can state. Comments stripped, because the prose above
+     * `submit()` quotes the shape it replaced.
+     */
+    const code = results.replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const from = code.indexOf('const submit =');
+    expect(from, 'submit() is not where it was').toBeGreaterThan(-1);
+    const submit = code.slice(from, code.indexOf('return (', from));
+    expect(submit, 'submit() is not where it was').toContain('setAttempted(true)');
+    expect(
+      submit.indexOf('setAttempted(true)') < submit.indexOf('await onPost('),
+      'the flag no longer moves before the first thing that can set a notice',
+    ).toBe(true);
+    expect(code, 'the attempted flag is set back somewhere').not.toContain('setAttempted(false)');
+  });
+
+  it('the shipped post notices really do make the claims declared for them', () => {
+    // The other half of each contradiction. If these sentences stop claiming a run went up, this
+    // whole block is guarding a collision that cannot happen and should be read again.
+    expect(shipped['handleAssigned']).toMatch(/posted to the board/i);
+    expect(shipped['handleAssigned']).toContain('{handle}');
+    expect(shipped['leaderboardAlready']).toMatch(/already .*board/i);
+    expect(NOTICE_CLAIMS['handleAssigned']).toContain('readerRunIsOnBoard');
+    expect(NOTICE_CLAIMS['leaderboardAlready']).toContain('readerRunIsOnBoard');
+    expect(NOTICE_CLAIMS['leaderboardRefused']).toContain('readerRunDidNotGoUp');
   });
 
   it('explains the absence instead, so the empty board is not simply silent', () => {
     // Replacing the invitation with nothing would close the contradiction and leave the player
     // looking at a board that does not mention the run they just posted.
     const after = shipped[boardNoteKey('empty', true)]!;
-    expect(after).toMatch(/last minute|may not be here/i);
+    expect(after.trim().split(/(?<=[.!?])\s+/).length, 'the line lost its explanation').toBe(2);
     // And it is a different sentence from the one the launch board shows.
     expect(after).not.toBe(shipped[boardNoteKey('empty', false)]);
   });
 
   it('still invites the first run on a board nobody has posted to', () => {
-    // The fix must not cost the launch case its invitation: before any post, the copy is unchanged.
-    const before = shipped[boardNoteKey('empty', false)]!;
-    expect(before).toMatch(CLAIMS_NO_RUNS);
-    expect(before).toBe(shipped['boardEmpty']);
+    // The fix must not cost the launch case its invitation: before any press, the copy is unchanged.
+    expect(boardNoteKey('empty', false)).toBe('boardEmpty');
+    expect(NOTE_CLAIMS['boardEmpty']).toContain('readerHasNoRun');
     // The other three states do not vary on it at all.
     for (const state of ['loading', 'rows', 'unavailable'] as const)
       expect(boardNoteKey(state, true)).toBe(boardNoteKey(state, false));
   });
 
-  it('Results chooses the line with the flag, rather than reading the table directly', () => {
+  it('Results chooses the line with the flag, rather than reading the table directly', async () => {
     // The composition this file checks is only the shipped one if the screen uses it. A render that
     // went back to `BOARD_NOTE[board.state]` would pass every assertion above and ship the defect.
-    expect(results).toContain('s(boardNoteKey(board.state, posted))');
+    expect(results).toContain('s(boardNoteKey(board.state, attempted))');
     expect(results).not.toContain('s(BOARD_NOTE[board.state])');
+    // And the state that produced the defect is still the one a real cached reply comes back as.
+    reply(() => new Response(JSON.stringify({ entries: [] })));
+    expect((await readTop(10)).state, 'the cached empty is the state that produced this').toBe(
+      'empty',
+    );
   });
 });
 
@@ -558,14 +672,37 @@ describe('every string the board shows is in the content file and read from it',
    */
   const PROPER_NAMES = ['leaderboardTitle', 'leaderboardTitleHighlight'];
 
-  it('exempts the name of the board itself, and nothing else', () => {
-    // "Wolf Spotters" is a title, and BRAND_AND_UI section 3 names it in those capitals. The
-    // exemption is listed so it cannot grow quietly: a key added to it has to be argued for here.
-    expect(PROPER_NAMES.every((key) => KEYS.includes(key))).toBe(true);
-    expect(shipped['leaderboardTitle']).toBe('Wolf Spotters');
+  /*
+   * THE EXEMPTION LIST WAS AN OPEN DOOR, and a reviewer walked through it.
+   *
+   * This used to assert `PROPER_NAMES.every((key) => KEYS.includes(key))` -- that every exempted
+   * key is a board string -- which is satisfied by ANY board string. Adding `boardRetry` to the
+   * list made "Try Again" pass the sentence-case test AND pass the test whose whole job is to stop
+   * the list growing: the guard against the exemption was satisfiable by the exemption. It is the
+   * bound-written-in-terms-of-the-thing-it-guards trap in its purest form, because membership of
+   * the list was the only thing the list was checked against.
+   *
+   * The exemption now has to be earned by the VALUE. A key is exempt from sentence case only if
+   * what it ships IS the board's own name or one word of it -- derived from `leaderboardTitle`,
+   * so renaming the board moves the bound with it and does not open the door again.
+   */
+  it('exempts the board’s own name, and makes every exemption prove it is that name', () => {
+    // "Wolf Spotters" is a title, and BRAND_AND_UI section 3 names it in those capitals.
+    const title = shipped['leaderboardTitle']!;
+    const words = title.split(/\s+/);
+    for (const key of PROPER_NAMES) {
+      expect(KEYS, `${key} is exempted from sentence case but is not a board line`).toContain(key);
+      const value = shipped[key]!;
+      expect(
+        value === title || words.includes(value),
+        `${key} is exempted from sentence case, but "${value}" is neither the board's name ` +
+          `"${title}" nor one word of it`,
+      ).toBe(true);
+    }
+    expect(title).toBe('Wolf Spotters');
     expect(shipped['leaderboardTitleHighlight']).toBe('Spotters');
     // And it is one word OF the title, so the highlight cannot drift off the heading it marks.
-    expect(shipped['leaderboardTitle']).toContain(shipped['leaderboardTitleHighlight']!);
+    expect(title).toContain(shipped['leaderboardTitleHighlight']!);
   });
 
   it('is sentence case, not title case', () => {

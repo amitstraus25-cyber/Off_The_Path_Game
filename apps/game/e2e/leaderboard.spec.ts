@@ -289,8 +289,20 @@ const note = (page: Page) => page.locator('.otp-board__note');
  * queried descendants only, so a Lime ground on the board was invisible to it), border colours
  * (the retry pill is an outline, which is where a fill would hide), and its own coverage -- the
  * `> 20` floor was a number typed for the ten-row state and would have had to be lowered or
- * deleted to let the four-element states through. The floor is derived now: the sweep must have
- * read every element the board has, whatever state it is in.
+ * deleted to let the four-element states through.
+ *
+ * THE FLOOR THAT REPLACED IT WAS ARITHMETIC, NOT COVERAGE, and that is the defect this round.
+ * `expect(swept.used.length).toBe(swept.elements * 3)` reads as "the sweep looked at every element"
+ * and is in fact `all.flatMap((el) => [a, b, c]).length === all.length * 3`, which holds for 1, 2,
+ * 3, 4 and 33 elements and cannot fail for any of them. A bound that cannot fail is worse than no
+ * bound, because it is read as proof.
+ *
+ * What a sweep like this can actually get wrong is reading nothing USEFUL. `not.toContain` passes
+ * vacuously against empty strings, so a property name that stopped resolving -- or a root that
+ * stopped matching the elements it means to cover -- would leave every assertion below green while
+ * the sweep looked straight past a Lime fill. So the floor is about the VALUES now: every one of
+ * them is a colour the browser resolved, and they are not all the same value, which is what reading
+ * a real board produces and what reading past one does not.
  */
 async function expectNoLime(page: Page): Promise<void> {
   const swept = await page.locator('.otp-board').evaluate((root) => {
@@ -304,9 +316,15 @@ async function expectNoLime(page: Page): Promise<void> {
     };
   });
   expect(swept.elements, 'the board rendered nothing at all').toBeGreaterThan(1);
-  expect(swept.used.length, 'the sweep did not read every element in the board').toBe(
-    swept.elements * 3,
-  );
+  const read = [...new Set(swept.used)];
+  expect(
+    read.filter((value) => !/^(rgba?|hsla?|color|oklch|oklab|lab|lch)\(/.test(value)),
+    'the sweep read a value that is not a resolved colour, so a Lime there would be invisible to it',
+  ).toEqual([]);
+  expect(
+    read.length,
+    'the sweep read one value for the whole board, so it is reading past it rather than at it',
+  ).toBeGreaterThan(1);
   expect(swept.used, 'the board is spending the screen’s one Lime').not.toContain(LIME_RGB);
   // The control group: the page's one Lime is still on the research call to action.
   const cta = await page
@@ -374,64 +392,168 @@ test('an empty board invites a first run and does not look like a failure', asyn
 });
 
 /*
- * THE SEND-BACK, IN A BROWSER. The screen must not be able to say both things at once.
+ * THE SEND-BACK, IN A BROWSER, FOR EVERY OUTCOME A POST CAN HAVE.
  *
- * Measured on a clean build before this fix: after a post the server took, `.otp-error` read
- * "Posted to the board as brave-lantern-42." and the very next paragraph read "No runs on the board
- * yet. Yours would be the first." It is the launch case rather than a corner -- apps/api serves
- * GET /api/top with `s-maxage=60`, this screen re-reads the instant a post resolves, and on a fresh
- * board the mount read has already primed that cache with an empty one. A board that answers EMPTY
- * to the read that follows a post is exactly what production does for the first minute of its life,
- * which is what this route serves.
+ * Measured on a clean build, `.otp-error` and the very next paragraph on the payoff screen:
  *
- * The board is not being asked to lie the other way: it still says nothing is showing. What it may
- * not do is tell a player who has just posted that there are no runs and invite them to be first.
+ *   a post the server took  "Posted to the board as brave-lantern-42."
+ *                           "No runs on the board yet. Yours would be the first."
+ *   a 409                   "That run is already on the board."
+ *                           "No runs are showing yet. A run posted in the last minute may not
+ *                            be here."
+ *   a 400                   "That run could not be posted."
+ *                           ...and that same hedge, explaining a delay for a post that never
+ *                            happened, which implies one did.
+ *
+ * Only the first was ever measured. It was closed by giving the empty board a second line, and
+ * the other two are that second line read against the two outcomes nobody drove through it.
+ *
+ * It is the launch case rather than a corner -- apps/api serves GET /api/top with `s-maxage=60`,
+ * this screen re-reads the instant a post resolves, and on a fresh board the mount read has
+ * already primed that cache with an empty one. A board that answers EMPTY to the read that follows
+ * a post is exactly what production does for the first minute of its life, which is what this
+ * route serves, for all three.
+ *
+ * THE DIVISION OF LABOUR. The property -- that no pairing of these two nodes asserts mutually
+ * exclusive things -- is enumerated over every outcome against every board state in
+ * test/board.test.ts, where the claims each line makes are declared and the pairing is checked
+ * without a DOM. What a browser is for is the WIRING: that the screen really does render the pair
+ * that model checked, as exact shipped sentences rather than as something near them. So these
+ * assert equality against content/game.json, not a pattern over the words -- a regex over the
+ * phrasing is the bound a reviewer already walked through once with a single reworded string.
  */
-test('a board that answers empty after a post never claims there are no runs', async ({ page }) => {
-  let sent: { handle?: string } = {};
-  await page.route('**/api/score', async (route: Route) => {
-    sent = JSON.parse(route.request().postData() ?? '{}') as typeof sent;
-    await route.fulfill({
+interface Outcome {
+  what: string;
+  /** What /api/score answers. `sent` is the body the page posted. */
+  answer: (sent: { handle?: string }) => TopReply;
+  /** The exact sentence `.otp-error` must then carry, built from the content file. */
+  notice: (sent: { handle?: string }) => string;
+}
+
+const OUTCOMES: Outcome[] = [
+  {
+    what: 'a post the board takes',
+    answer: (sent) => ({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ handle: sent.handle, score: 900 }),
+    }),
+    notice: (sent) => say('handleAssigned').replace('{handle}', sent.handle!),
+  },
+  {
+    what: 'a run already on the board',
+    answer: () => ({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'that run is already on the board' }),
+    }),
+    notice: () => say('leaderboardAlready'),
+  },
+  {
+    what: 'a post the board refuses',
+    answer: () => ({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'that submission is not valid' }),
+    }),
+    notice: () => say('leaderboardRefused'),
+  },
+];
+
+for (const outcome of OUTCOMES) {
+  test(`${outcome.what} never sits above a line that contradicts it`, async ({ page }) => {
+    let sent: { handle?: string } = {};
+    await page.route('**/api/score', async (route: Route) => {
+      sent = JSON.parse(route.request().postData() ?? '{}') as typeof sent;
+      await route.fulfill(outcome.answer(sent));
     });
+    const board: Board = { reply: EMPTY_BOARD, calls: 0 };
+    await serveBoard(page, board);
+
+    await reachResults(page);
+    // The launch board, before anyone has pressed Post: the invitation is the right thing to show,
+    // and it is the one line on this screen that claims the board holds nothing. Nothing can
+    // contradict it here, because no post notice exists yet.
+    await expect(note(page)).toHaveText(say('boardEmpty'));
+    await expect(page.locator('.otp-error')).toHaveCount(0);
+
+    await post(page);
+
+    // One half of each pair: the outcome's own sentence, exactly as the content file ships it.
+    const status = page.getByRole('status');
+    await expect(status).toHaveText(outcome.notice(sent));
+    // The board read that followed it really did answer "empty" -- this is the state, not a dodge.
+    await expect(note(page)).toHaveAttribute('data-board', 'empty');
+
+    /*
+     * And the other half: the line that asserts only what the read answered. Asserted as the
+     * shipped sentence rather than as a pattern over its words, and asserted NOT to be the one
+     * line that claims the board holds nothing, which is the claim all three of these collide with.
+     */
+    await expect(note(page)).toHaveText(say('boardEmptyAfterPost'));
+    await expect(note(page)).not.toHaveText(say('boardEmpty'));
+
+    const together = await page.evaluate(() => ({
+      posted: document.querySelector('.otp-error')?.textContent ?? '',
+      board: document.querySelector('.otp-board__note')?.textContent ?? '',
+    }));
+    expect(
+      together.posted,
+      'the post notice is not on screen, so nothing is being contradicted',
+    ).not.toBe('');
+    expect(
+      [together.posted.trim(), together.board.trim()],
+      'the rendered pair is not the pair test/board.test.ts enumerates',
+    ).toEqual([outcome.notice(sent), say('boardEmptyAfterPost')]);
+
+    await expectNoLime(page);
+  });
+}
+
+/*
+ * THE NOTE TURNS OVER BEFORE THE REQUEST LANDS, AND THAT IS DELIBERATE -- so what it turns over TO
+ * has to be true of a post whose fate nothing yet knows.
+ *
+ * `attempted` is set at the press rather than after the reply, because waiting leaves a window,
+ * however many ticks wide, in which "Posted to the board as ..." can paint above "Yours would be
+ * the first" -- which is the first defect coming back. The cost is this moment: a board note that
+ * has already changed while `.otp-error` is still absent. Measured here with the reply held open.
+ *
+ * The old line made that moment a lie: it hedged that a run posted in the last minute might not be
+ * showing, for a post that had not been answered and might never go up. The line it turns over to
+ * now reports the read and explains the lag as the board's, which is true before the reply, after a
+ * refusal and after a success alike.
+ */
+test('the line the note turns over to is true before the post is answered', async ({ page }) => {
+  let release = (): void => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/score', async (route: Route) => {
+    await held;
+    await route
+      .fulfill({ status: 400, contentType: 'application/json', body: '{"error":"no"}' })
+      .catch(() => undefined);
   });
   const board: Board = { reply: EMPTY_BOARD, calls: 0 };
   await serveBoard(page, board);
 
   await reachResults(page);
-  // The launch board, before anyone has posted: the invitation is still the right thing to show.
   await expect(note(page)).toHaveText(say('boardEmpty'));
 
   await post(page);
+  await page.waitForTimeout(500);
 
-  // The post succeeded and says so, which is one half of the contradiction.
-  const status = page.getByRole('status');
-  await expect(status).toContainText(sent.handle!);
-  // The board read that followed it really did answer "empty" -- this is the state, not a dodge.
-  await expect(note(page)).toHaveAttribute('data-board', 'empty');
-
-  /*
-   * And the other half is gone. Asserted against the CLAIM rather than against the key that
-   * replaced it: any copy that says there are no runs, or that this player's would be the first,
-   * is the same defect whatever it is called.
-   */
-  const together = await page.evaluate(() => ({
-    posted: document.querySelector('.otp-error')?.textContent ?? '',
-    board: document.querySelector('.otp-board__note')?.textContent ?? '',
-  }));
-  expect(
-    together.posted,
-    'the post notice is not on screen, so nothing is being contradicted',
-  ).toMatch(/posted to the board/i);
-  expect(
-    together.board,
-    `"${together.posted}" is sitting directly above "${together.board}"`,
-  ).not.toMatch(/no runs on the board|nothing on the board|would be the first/i);
-  // It explains the absence rather than going silent about it.
+  // Nothing has been answered, so nothing is in .otp-error -- this is the moment the review found.
+  await expect(page.locator('.otp-error')).toHaveCount(0);
+  // And the note has already turned over. What it turned over to may not claim the reader has a
+  // run pending, because the reply that is still in flight is about to say they do not.
   await expect(note(page)).toHaveText(say('boardEmptyAfterPost'));
-  await expectNoLime(page);
+  await expect(note(page)).not.toHaveText(say('boardEmpty'));
+
+  release();
+  await expect(page.getByRole('status')).toHaveText(say('leaderboardRefused'));
+  await expect(note(page)).toHaveText(say('boardEmptyAfterPost'));
 });
 
 /*

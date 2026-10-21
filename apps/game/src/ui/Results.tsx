@@ -330,37 +330,146 @@ export const BOARD_NOTE: Record<BoardState['state'], string> = {
 };
 
 /**
- * THE SCREEN CANNOT SAY BOTH THINGS AT ONCE, and until 2026-10-21 it did.
+ * WHAT A LINE ON THIS SCREEN ASSERTS, declared beside the line instead of read out of its words.
  *
- * Measured in Chromium on a clean build, after a post the server took: `.otp-error` read
- * "Posted to the board as brave-lantern-42." and the very next paragraph, `.otp-board__note`, read
- * "No runs on the board yet. Yours would be the first." One screen, two adjacent sentences, and
- * they contradict each other -- on the asset whose whole argument is that you should check whether
- * a system is telling you the truth about itself.
+ * WHY A DECLARATION AND NOT A PATTERN. The guard this replaces matched
+ * `/no runs on the board|nothing on the board|would be the first/` against the board note and
+ * called the screen honest when it did not fire. A reviewer put the defect straight back with one
+ * reworded string -- "The board is empty. Be the first to put a run on it." -- and every assertion
+ * stayed green, because the bound was written against a SPELLING and the defect is a MEANING. Four
+ * more rewordings pass it. So the claims are named here, the pairing is checked over the claims,
+ * and the words are free to change without the property moving.
+ *
+ * The vocabulary is deliberately only what the two nodes can disagree ABOUT: what the board holds,
+ * what it is showing, and what became of the reader's own run. A claim with no `EXCLUSIVE` entry
+ * is inert by design and is still named, because "this line asserts nothing that can collide" is
+ * the thing that makes it the safe line to show -- and a line with no declaration at all would be
+ * indistinguishable from a line nobody has thought about.
+ */
+export type Claim =
+  /** There are runs on the board. */
+  | 'boardHoldsRuns'
+  /** The board holds nothing at all. The strongest thing any line here says. */
+  | 'boardHoldsNoRuns'
+  /** The board is showing nothing right now. Says nothing about what it holds. */
+  | 'boardShowsNoRuns'
+  /** This read of the board did not come back. Scoped to the read, not to the service. */
+  | 'boardNotAnswering'
+  /** The reader has no run on the board. */
+  | 'readerHasNoRun'
+  /** The reader's run is on the board. */
+  | 'readerRunIsOnBoard'
+  /** A run of the reader's may exist and not be showing yet. */
+  | 'readerRunMayBePending'
+  /** The reader's run did not go up. */
+  | 'readerRunDidNotGoUp'
+  /** This post did not come back. Scoped to the post, and claims nothing about the run. */
+  | 'postNotAnswered';
+
+/**
+ * Claims that cannot both be true of one screen at one moment. Unordered pairs.
+ *
+ * Two requests may disagree and both be honest, which is why `boardNotAnswering` and
+ * `postNotAnswered` collide with nothing: a POST that was answered and a GET that was not are two
+ * facts about two requests, and each line is scoped to its own. What may never happen is one node
+ * asserting the board holds nothing while the other asserts the reader's run is on it.
+ */
+export const EXCLUSIVE: readonly (readonly [Claim, Claim])[] = [
+  ['boardHoldsRuns', 'boardHoldsNoRuns'],
+  ['boardHoldsNoRuns', 'readerRunIsOnBoard'],
+  // A run that may be pending is a run the board may already hold, so "nothing is on it" is the
+  // same contradiction one tense removed. This is the pair the original defect was made of.
+  ['boardHoldsNoRuns', 'readerRunMayBePending'],
+  ['readerHasNoRun', 'readerRunIsOnBoard'],
+  ['readerHasNoRun', 'readerRunMayBePending'],
+  ['readerRunIsOnBoard', 'readerRunDidNotGoUp'],
+  ['readerRunMayBePending', 'readerRunDidNotGoUp'],
+];
+
+/**
+ * Every line `.otp-board__note` can carry, by content key, and what it asserts.
+ *
+ * `boardEmptyAfterPost` is the one shown from the press onwards, and its whole job is to assert
+ * nothing a post notice can contradict: it says what the read answered -- nothing is showing -- and
+ * explains the lag as a property of the BOARD rather than as a hedge about the reader's run. The
+ * hedge is what made a refused post read as a delayed one.
+ */
+export const NOTE_CLAIMS: Record<string, readonly Claim[]> = {
+  boardLoading: [],
+  boardReady: ['boardHoldsRuns'],
+  boardEmpty: ['boardHoldsNoRuns', 'readerHasNoRun'],
+  boardEmptyAfterPost: ['boardShowsNoRuns'],
+  boardDown: ['boardNotAnswering'],
+};
+
+/**
+ * Every line `.otp-error` can carry, by content key, and what it asserts.
+ *
+ * The keys are the four `content.strings[...]` reads in `src/net/leaderboard.ts`, which is another
+ * owner's file: `test/board.test.ts` derives that set from its source rather than trusting this
+ * list, so an outcome sentence added there fails the guard until it is declared here. The fifth
+ * state of `.otp-error` is that it is not rendered at all, which asserts nothing and is not a key.
+ */
+export const NOTICE_CLAIMS: Record<string, readonly Claim[]> = {
+  handleAssigned: ['readerRunIsOnBoard'],
+  leaderboardAlready: ['readerRunIsOnBoard'],
+  leaderboardRefused: ['readerRunDidNotGoUp'],
+  leaderboardDown: ['postNotAnswered'],
+};
+
+/** Every exclusive pair both of these carry at once, named. Empty means the two may sit together. */
+export const contradictions = (a: readonly Claim[], b: readonly Claim[]): string[] =>
+  EXCLUSIVE.filter(
+    ([x, y]) => (a.includes(x) && b.includes(y)) || (a.includes(y) && b.includes(x)),
+  ).map(([x, y]) => `${x} / ${y}`);
+
+/**
+ * THE SCREEN CANNOT SAY BOTH THINGS AT ONCE, and until 2026-10-21 it did -- three times over.
+ *
+ * Measured in Chromium on a clean build, `.otp-error` and the very next paragraph,
+ * `.otp-board__note`, on the asset whose whole argument is that you should check whether a system
+ * is telling you the truth about itself:
+ *
+ *   1. a post the server took   "Posted to the board as brave-lantern-42."
+ *                               "No runs on the board yet. Yours would be the first."
+ *   2. a 409                    "That run is already on the board."
+ *                               "No runs are showing yet. A run posted in the last minute may
+ *                                not be here."
+ *   3. a 400                    "That run could not be posted."
+ *                               ...and the same hedge, explaining a delay for a post that never
+ *                                happened, which implies one did.
+ *
+ * 1 was closed by the previous round. 2 and 3 are the same hedge read against two different
+ * outcomes, and 3 is the one that proves the hedge was never the fix: a line that explains why
+ * YOUR run is not showing cannot sit under a line saying your run did not go up.
  *
  * IT IS THE LAUNCH CASE, NOT A CORNER. `apps/api` serves GET /api/top with
  * `s-maxage=60, stale-while-revalidate=300`, and this screen re-reads the instant a post resolves.
  * On a board with nothing on it yet the mount read primes that cache with `{entries: []}`, the post
  * lands, and the re-read is answered from the cached empty for up to a minute. So the board really
  * did answer "empty" -- THE THREE-STATE READ IS NOT AT FAULT and is not touched here. What was
- * wrong is the empty state's COPY, which was written for a board nobody had posted to.
+ * wrong is what the note was written to be ABOUT.
  *
- * `boardReady` already carries the hedge for exactly this cache ("A run posted in the last minute
- * may not be here yet"); `boardEmpty` was the one state that had none, and it is the state where
- * the contradiction is total rather than partial. So the empty board gets a second line, chosen by
- * whether this visit has posted.
+ * WHAT THE NOTE ACTUALLY NEEDS TO KNOW. Not "did the post succeed" -- this screen cannot learn
+ * that. `onPost` resolves to a SENTENCE, `src/net/leaderboard.ts` belongs to another owner this
+ * round, and deciding success by matching that sentence is the coupling `submit()` refuses. What it
+ * needs is weaker and it already has it: whether it is still entitled to claim the board holds
+ * nothing. Before the press no post notice can exist (`attempted` goes true before `setNotice` can
+ * run, and never goes back), so `boardEmpty` has nothing to contradict and keeps its invitation.
+ * From the press onwards the note reports the READ and nothing else, which is true under every
+ * outcome the post can have -- taken, refused, already there, or never answered.
  *
- * `posted` IS "A POST HAS BEEN ATTEMPTED", NOT "A POST SUCCEEDED", and the copy is written to be
- * true either way. This screen cannot tell the two apart without reading `onPost`'s SENTENCE, which
- * is copy a human owns and which `submit()` deliberately refuses to match on. So
- * `boardEmptyAfterPost` claims nothing about the player's run: it says only that nothing is
- * SHOWING, and why that may be. A refused post sits above it just as honestly as a successful one.
+ * SET AT THE PRESS, STILL. That was argued for and it is kept: waiting for the reply leaves a
+ * window, however many ticks wide, in which "Posted to the board as ..." paints above "Yours would
+ * be the first", which is defect 1 coming back. The flag moving early is also why the note turns
+ * over before the request lands -- and that is now a line that says what the read said, rather than
+ * a hedge about a post nothing yet knows the fate of.
  *
  * Pure and exported so `test/board.test.ts` can drive a real HTTP reply through `readTop` and look
  * the answer up here, with no DOM -- the same composition `BOARD_NOTE` exists for.
  */
-export const boardNoteKey = (state: BoardState['state'], posted: boolean): string =>
-  posted && state === 'empty' ? 'boardEmptyAfterPost' : BOARD_NOTE[state];
+export const boardNoteKey = (state: BoardState['state'], attempted: boolean): string =>
+  attempted && state === 'empty' ? 'boardEmptyAfterPost' : BOARD_NOTE[state];
 
 /**
  * Which of several board reads is allowed to answer, and when none of them is.
@@ -460,10 +569,12 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
   const [posting, setPosting] = useState(false);
   const [board, setBoard] = useState<BoardState>({ state: 'loading' });
   /*
-   * Whether this visit has tried to post. It only ever goes true, and it is what `boardNoteKey`
-   * turns on -- see the long note over that function for why "attempted" and not "succeeded".
+   * Whether this visit has pressed Post. ATTEMPTED, never "posted": the old name claimed an
+   * outcome this screen has no way to learn, and a name that asserts more than the code knows is
+   * how a comment becomes the only place a fact lives. It only ever goes true, and it is what
+   * `boardNoteKey` turns on -- see the long note over that function.
    */
-  const [posted, setPosted] = useState(false);
+  const [attempted, setAttempted] = useState(false);
 
   /*
    * One read on mount, and one more after any post attempt.
@@ -519,12 +630,17 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
     setPosting(true);
     /*
      * Set AT THE PRESS, not after the reply, and that is the point rather than an optimisation.
-     * `posted` only chooses which of two true sentences the empty board shows, so there is no
+     * `attempted` only chooses which of two true sentences the empty board shows, so there is no
      * reason to wait -- and waiting is what leaves a window, however many ticks wide, in which
      * "Posted to the board as ..." can be painted above "Yours would be the first". The defect
      * being closed is two sentences on one screen, so the flag moves before either can be.
+     *
+     * IT IS ALSO WHAT MAKES `boardEmpty`'S INVITATION SAFE. This line runs before `setNotice`
+     * below can put anything in `.otp-error`, and nothing ever sets it back, so a render with a
+     * post notice in it always has this flag true -- which is the whole proof that the one line
+     * claiming the board holds nothing can never meet a notice at all.
      */
-    setPosted(true);
+    setAttempted(true);
     setNotice(await onPost(handle));
     setPosting(false);
     void readBoard();
@@ -887,7 +1003,7 @@ export function Results({ content, state, onReplay, onReadResearch, onPost, onTo
                 aria-live="polite"
                 aria-atomic="true"
               >
-                {s(boardNoteKey(board.state, posted))}
+                {s(boardNoteKey(board.state, attempted))}
               </p>
 
               {board.state === 'rows' && (
