@@ -167,3 +167,121 @@ Named here so nobody discovers it mid-round.
 - **The board's existing rows**, per §7.
 - **Legal review** of the leaderboard and privacy copy still stands from v1
   (`docs/COPY_REVIEW.md`), and v2 adds player-facing copy rather than removing it.
+
+## 9. Phase A: the rule decisions, as built
+
+**Built 2026-10-21 in `packages/core/src/v2/`, beside v1 rather than over it.** Production runs
+v1, and `apps/game` and `apps/api` import it from core, so v2 is exported as a namespace
+(`import { v2 } from '@otp/core'`) and every bare name (`reduce`, `score`, `checkLog`) still means
+v1. Phase D switches the game over. No v1 file changed; the 214 v1 tests pass untouched. Tests are
+in `packages/core/test/v2/`, driven by a three-skill fixture that is deliberately not the game.
+
+These are the decisions the spec left open. Each is enforced by a named test, and each was proved
+by breaking the code and watching that test fail.
+
+### The verdicts and the basket
+
+- **`take`, `limit`, `leave`.** Take and leave can be given straight from the conversation (on the
+  offerer's word, or on sight). **Limit needs the card to have been read**, because a boundary
+  names what to strip and nothing has been named yet. That is v1's rule, kept. It is also what lets
+  the server refuse a forged careful verdict. Once read, a card stays read: going back to the
+  conversation does not unread it.
+- **Leaving does nothing, by rule rather than by data.** The schema refuses a `did.leave` entry. A
+  skill that was left earned nothing and served nobody, and content cannot say otherwise.
+- **The basket is an ordered inventory of `{ skill, verdict }`**, in the order things were taken.
+  Left skills are not in it. A skill walked past with no verdict counts the same as one left.
+- **Not carried over from v1:** the questions (`ASK`) and the errand goals. The spec's loop does not
+  mention them. If Phase B wants dialogue, it is unscored data. If it wants goals back, that is a
+  rules change and goes through this section.
+
+### The clock
+
+- **`TIME_LIMIT_MS = 180_000` is a rule constant, not content.** The server replays every run
+  against it, and a content edit that moved it would quietly change what "in time" meant for runs
+  already played.
+- **Injected, as elapsed milliseconds since BEGIN.** Every action inside the run carries `at`, and
+  the log records it. The log is self-contained: the server needs no start time. Time only goes
+  forward, and that includes BACK, which is timed but not logged. NaN, infinite and negative times
+  are refused.
+- **An action that arrives at or after the limit is not applied, and the run ends late instead.**
+  This holds whatever the action was: legal or not, even the step through the cottage door. The
+  late event is stamped at the limit, not at whenever the news arrived. This is the one refusal
+  that changes the state (`reason: 'out-of-time'`, carrying the late state), because the clock
+  that refused the action has itself ended the run. The reducer does not wait for the game's
+  `TIME_UP`: a backgrounded tab throttles timers, so `TIME_UP` can arrive late or never.
+  **179,999 ms is in time and 180,000 is not.**
+- **`TIME_UP` before the limit is refused** (`time-not-up`), so a fast or buggy timer cannot end a
+  run early. After arrival the clock no longer matters, so nothing can make a run late once it is
+  in the cottage.
+- **Phase F's test-mode override belongs in the clock the game injects, not in core.** Slow the
+  clock, not the limit. Core keeps exactly one limit, so a second one can never ship.
+
+### The score
+
+- **`worth = points − wolfCost if it served the wolf`, with leave always 0. The total is
+  `max(0, Σ worth)` over the basket.** There is no bonus for collecting. Content carries
+  `scoring.outOf`, `scoring.wolfCost`, and for each skill `did.take` and `did.limit` as
+  `{ line, points, wolf? }`. The presence of `wolf` is the fact that gets scored. Phase B tunes all
+  of it without code.
+- **A late run scores `null`, not 0.** It is an ending, not a number, and it does not go on the
+  board. The reveal is still computed for it, in case Phase D wants to show what was carried.
+- **Endings are a rule; their copy is content.** `late` if the clock ran out. Otherwise `wolf` if
+  any skill in the basket served the wolf, and `grandma` if none did.
+
+### What the content lint holds, whatever the numbers are
+
+- A limit never earns more than taking the skill in full, and never serves the wolf when taking it
+  in full does not. A boundary only removes.
+- **A verdict that served the wolf must be worth less than 0.** It must leave the player worse off
+  than leaving the skill, not merely worse off than limiting it. This is the thesis written as a
+  rule: if "take it anyway, the points outweigh the wolf" were a correct reading of the card, the
+  game would teach the opposite of its lesson.
+- **The best possible run must score exactly `outOf`.** "Out of 1,000" is a promise to the player.
+- A launch build has six or seven skills and no PLACEHOLDER text. The vendor-word ban is copied from
+  v1, which does not export its list. Until Phase D retires v1, the two lists are kept in step by
+  hand.
+
+### The trap, measured by play (`sim.ts`). `loadContent` refuses content that fails any of these
+
+| Property                                    | Bound                                             |
+| ------------------------------------------- | ------------------------------------------------- |
+| careful reaches the ceiling                 | careful run = `outOf`, played, not just summed    |
+| greedy scores near zero                     | take-everything ≤ 20% of `outOf` (`GREEDY_SHARE`) |
+| greedy lets the wolf in                     | take-everything ends `wolf`                       |
+| limiting everything is not a strategy       | limit-everything < `outOf`                        |
+| taking in full / limiting / leaving is best | each is the strictly best verdict for ≥ 1 skill   |
+
+The 20% bound comes from the spec's own sketch, which scores a six-skill greedy haul 120 / 1000.
+It does not come from the fixture. Every property is proved by an edit to the fixture that makes
+it fail (`test/v2/sim.test.ts`). Where an edit can be made lint-clean, the test asserts that it
+is, so the trap is the only thing that refuses it.
+
+**Leave-everything always scores 0.** That follows from the rule that leaving is nothing. v1 had
+reject-all at 700; v2 has no equivalent, because leaving everything brings Grandma nothing. Both
+extremes lose. **If the client wants refusal to score something, that is a decision for them,
+not a tuning knob.**
+
+### The run log
+
+- **`{ rules: 2, content: <content version>, events: [...] }`, with events keyed `e`.** A v1 log
+  is a bare array whose events are keyed `t`, and both schemas are strict. So neither version's log
+  parses as the other's, whether in its envelope or stripped out of it. That is tested for every
+  event kind of both. The key matters because three of v1's kinds (met, inspected, arrived) have
+  exactly the fields v2's do.
+- A log played under different content is refused (`content-mismatch`) rather than replayed into
+  rules it was never played by. The event cap reuses v1's `MAX_LOG_EVENTS`.
+
+### Open, and needing a human
+
+- **"Read every card and arrive late"** (§2) can be read as a design target, meaning reading every
+  card must NOT fit. Phase A reads it the other way. If a player who reads every card cannot arrive
+  in time, the ceiling is out of reach and "out of 1,000" is a lie on the board. `clockCheck` tests
+  that a careful reader arrives, and reports the margin. The margin is meant to be small, not
+  negative. **The world's pace (walk and talk time) has no default.** It must come from the map
+  Phase C builds, not from a number written down here.
+- `inspectMs` is the simulator's model of reading time, and the reducer never charges it. Real
+  reading takes real time on the injected clock.
+- **Bundle cost until Phase D: measured at 886 bytes.** v2's top-level zod schemas cannot be
+  tree-shaken out of the game bundle (1,414,212 bytes of JS with the export, 1,413,326 without),
+  even though nothing in the game calls v2. They are inert. Dropping the `v2` export line until
+  Phase D would remove them, at the cost of a deep import for Phase B's simulator.

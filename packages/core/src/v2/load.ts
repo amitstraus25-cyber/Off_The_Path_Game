@@ -1,0 +1,36 @@
+import { ContentError } from '../content.ts';
+import { contentSchema, lintContent } from './content.ts';
+import type { Content, LintOptions } from './content.ts';
+import { trapChecks } from './sim.ts';
+
+/*
+ * Kept apart from content.ts so the import graph has no cycle: the trap is measured by PLAYING the
+ * content (sim.ts), the simulator needs the reducer, and the reducer needs content.ts.
+ */
+
+/** Schema only. Throws ContentError listing every problem. For tools and tests that lint by hand. */
+export function parseContent(raw: unknown): Content {
+  const parsed = contentSchema.safeParse(raw);
+  if (!parsed.success)
+    throw new ContentError(parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`));
+  return parsed.data;
+}
+
+/**
+ * Parse, lint, then play the trap properties. Throws ContentError listing every problem.
+ *
+ * The trap is not played on content the lint refused: an unknown skill or a broken ceiling makes
+ * the simulator's numbers meaningless, and a list of trap failures on top of a structural one
+ * sends the reader after the wrong fault.
+ */
+export function loadContent(raw: unknown, opts: LintOptions = {}): Content {
+  const content = parseContent(raw);
+  const issues = lintContent(content, opts);
+  if (issues.length > 0) throw new ContentError(issues);
+  const trap = trapChecks(content);
+  if (!trap.ok)
+    throw new ContentError(
+      trap.checks.filter((c) => !c.ok).map((c) => `trap: ${c.name} (${c.detail})`),
+    );
+  return content;
+}
