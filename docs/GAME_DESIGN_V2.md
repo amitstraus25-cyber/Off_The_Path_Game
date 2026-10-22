@@ -1,11 +1,13 @@
 # Game design v2: collect, and find out what you collected
 
-**Status: spec, approved in shape, not yet built.** Decided with the client 2026-10-21. This replaces
-the v1 loop on `main` — there is no v1 branch, by their decision, so the v1 behaviour recorded in
-`docs/GAME_DESIGN.md` is history rather than an alternative.
+**Status: built and live (corrected 2026-10-22, at `3c88684`).** Decided with the client 2026-10-21,
+and shaped by their rounds of 2026-10-22 (sections 4, 9, 10 and 11 record the result). This replaced
+the v1 loop on `main` — there is no v1 branch, by their decision, and v1 itself has been removed
+from the repository, so the v1 behaviour recorded in `docs/GAME_DESIGN.md` is history rather than an
+alternative.
 
-Read `docs/PAUL_BRIEF.md` first, then this. `docs/GAME_DESIGN.md` still describes v1 and is the
-reference for anything this document does not override.
+Read `docs/PAUL_BRIEF.md` first, then this. `docs/GAME_DESIGN.md` describes v1, is marked
+superseded, and is a reference only for what this document does not say.
 
 ---
 
@@ -126,6 +128,8 @@ You collected 6 skills.  Nice haul.
   The wolf knew you were coming.    120 / 1000
 ```
 
+(The sketch predates the scoring: the shipped score is out of 100, section 9.)
+
 Brand rules still bind: no red or green as status, purple tints plus shape and text, Lime once per
 screen, sentence case, no emoji.
 
@@ -139,12 +143,14 @@ Named here so nobody discovers it mid-round.
   rules are trustworthy.
 - **The leaderboard recomputes the score server-side** from the run log using core's own scoring
   function (golden rule 6). Changing scoring changes that contract: `apps/api` must move in the same
-  change, and its 79 tests with it. **Any score already on the board becomes incomparable** — decide
-  whether the table is cleared, and if it is, that is a data decision for the client, not for us.
+  change, and its 79 tests with it (`apps/api` has 202 now). **Any score already on the board becomes
+  incomparable** — decide whether the table is cleared, and if it is, that is a data decision for
+  the client, not for us. (Decided: the board reads only rows from `BOARD_SINCE`, and migration
+  `0006_clear_v1_rows.sql` deletes the v1 rows; running it is the client's.)
 - **The run log shape changes.** `runlog.ts` is what the server replays; a v1 log must not silently
   score as a v2 run.
-- **A hard timer makes the e2e suite time-dependent.** Many of the 206 specs walk Purple slowly
-  across the map and would now lose. The timer needs a test-mode override — and **the last gate of
+- **A hard timer makes the e2e suite time-dependent.** Many of the 206 specs then (335 are listed
+  now) walk Purple slowly across the map and would now lose. The timer needs a test-mode override — and **the last gate of
   that kind shipped the debug handle to production**, so it uses dot access on `import.meta.env`,
   and `test/csp.test.ts` gets the new symbol added to the three names it already greps the bundle
   for.
@@ -158,18 +164,19 @@ Named here so nobody discovers it mid-round.
 ## 8. Open, and needing the client
 
 - **The landing page background.** They asked for it to be "branded more cyera maybe with a
-  backround like this" — the reference image has not arrived. Nothing is invented in its absence:
-  CLAUDE.md rule 5 forbids inventing brand assets.
-- **The board's existing rows**, per §7.
+  backround like this" — the reference image has not arrived (promised for 2026-10-22). Nothing is
+  invented in its absence: CLAUDE.md rule 5 forbids inventing brand assets.
+- **The board's existing rows**, per §7: decided, and the delete is a human step
+  (`supabase/migrations/0006_clear_v1_rows.sql`, not run from the repository).
 - **Legal review** of the leaderboard and privacy copy still stands from v1
   (`docs/COPY_REVIEW.md`), and v2 adds player-facing copy rather than removing it.
 
 ## 9. Phase A: the rule decisions, as built
 
-**In `packages/core/src/v2/`, beside v1 rather than over it**, exported as `import { v2 } from
-'@otp/core'` so every bare name (`reduce`, `score`, `checkLog`) still means v1 until Phase D. Tests
-are in `packages/core/test/v2/`, driven by a three-skill fixture (one dealt good, so three deals)
-that is deliberately not the game. Rewritten 2026-10-22 for the random deal.
+**In `packages/core/src/v2/`**, exported as `import { v2 } from '@otp/core'`. It was built beside v1;
+v1 is removed now and `v2` is the only rulebook core has (core also keeps `camera` and
+`leaderboard`). Tests are in `packages/core/test/v2/`, driven by a three-skill fixture (one dealt
+good, so three deals) that is deliberately not the game. Rewritten 2026-10-22 for the random deal.
 
 ### Content shape
 
@@ -187,17 +194,19 @@ needs seven skills, three good.
 one or two plain sentences linking them, for the reveal. One per skill, shared by both variants.
 
 `ui` is every other word the v2 screens say, strictly keyed (an unknown or missing key fails the
-schema): `landing`, `howTo` (three or four steps), `hud` (exactly the HUD's `HudLabels`) and
-`reveal`. A `titleHighlight` must be a word of its title. The endings stay in `endings`. The old
+schema): `landing`, `howTo` (three or four steps), `cabinet`, `world`, `offer`, `card`, `hud`
+(exactly the HUD's `HudLabels`), `reveal`, `chrome` (a strict object of `v2.CHROME_KEYS`) and
+`contact` (the work email's lines and its consent version). A `titleHighlight` must be a word of its title. The endings stay in `endings`. The old
 free-form `strings` record is gone, so a screen cannot read a key that was never validated.
 
 ### The deal (`deal.ts`)
 
 `deal(content, seed)` returns the run's good skills in content order. It is an unranking, not a
 shuffle: `seed mod 35` is the deal's rank, so seeds 0 to 34 are every deal once (the tests and the
-e2e switch use that), and a uniform 32-bit seed is a uniform deal. Core has no randomness: the game
-draws the seed with `crypto.getRandomValues` and passes it to `createState(content, seed)` and to
-`RESET { seed }`; a bad seed is refused (`bad-seed`). The state carries `seed` and `good`.
+e2e used them when the game had a seed pin), and a uniform 32-bit seed is a uniform deal. Core has no randomness: the game
+takes the seed from `POST /api/start` (the server signs it into the run's token) and falls back to
+`crypto.getRandomValues` when the start does not answer, then passes it to
+`createState(content, seed)` and to `RESET { seed }`; a bad seed is refused (`bad-seed`). The state carries `seed` and `good`.
 
 ### Verdicts, clock, run log
 
@@ -210,7 +219,7 @@ draws the seed with `crypto.getRandomValues` and passes it to `createState(conte
 - **The run log is `{ rules: 2, content, seed, events }`.** The server deals from the seed and
   replays through the same reducer. **The seed is client-reported, like the timestamps**: a forger
   can post the one seed whose deal makes their basket careful. Closing that is the same fix as the
-  clock's, a server-issued seed with the start token (Phase 9 step E).
+  clock's, a server-issued seed with the start token (Phase 9 step E, done: `POST /api/start`).
 
 ### The score
 
@@ -240,17 +249,20 @@ run that walks the shortest content-order tour of the shipped map once (113 four
 `WALK_SPEED`, about 30 s, since the Cat moved into the clearing on 2026-10-22), knocks at the door (`world.knockMs`, 3 s) and reads every greeting and every
 card at `v2.BRISK` -- 238 words a minute, the Brysbaert meta-analysis rate the clock check's 200 is
 slowed from, with no pause to decide -- in the slowest of the 35 deals, **with no perk saving any
-time** (the no-perk tour: every leg walked, the knock paid, the raw stamp). Measured at 1:45.1 on
-draft 8; the content holds par at or above that and within ten seconds of it
+time** (the no-perk tour: every leg walked, the knock paid, the raw stamp). Measured at 106.7 s
+(1:46.7) on draft 8 on 2026-10-22 (an earlier line here said 1:45.1, which was the figure before the
+Cat moved); the content holds par at or above that and within ten seconds of it
 (`test/v2/real-content.test.ts`), so a copy edit that lengthens a card moves the test, not the
 players. A basket whose good three include a time perk beats par more easily: the fastest brisk
-careful run with its perks counts about 1:19 (the deal whose good three are Word Weaver, Slow Post
-and Long Evening: no knock, a faster walk and twenty seconds back). That is the perk, not a second par.
+careful run with its perks counts about 1:20 on the run clock, 80.5 s (the deal whose good three are
+Word Weaver, Slow Post and Long Evening: no knock, a faster walk and twenty seconds back; 99.8 s
+raw in the fastest deal and 100.5 s in this one, less the rewind). That is the perk, not a second
+par.
 
 | Run                          | Score |
 | ---------------------------- | ----- |
-| three good, at or under 1:46 | 100   |
-| three good, 2:00             | 94    |
+| three good, at or under 1:47 | 100   |
+| three good, 2:00             | 95    |
 | three good, 2:30             | 82    |
 | three good, 2:59             | 70    |
 | two good, 1:00 (fast)        | 70    |
@@ -362,14 +374,17 @@ score, question, cta, again. The three endings are `endings.grandma`, `.wolf` an
 
 In every deal exactly one of the 128 verdict combinations scores 100, and it is the careful one.
 
-**The clock.** Walking twice the shortest four-connected path on today's map (107 tiles), a reader
-who opens every card arrives in the tightest deal with **4.3 seconds to spare with no perk helping**
-(the no-perk tour, knock paid; Wood Map, Word Weaver and Wing Ride good, so the snail, lantern and
-cat are left) and 5.2 seconds with the perks the careful basket takes. The longest tour that still
-fits with no perk is 115 tiles. The margin was 13.4 s on draft 7; the 3 s knock and the longer
-approved cards took most of it. It is a conservative model (the walk doubled, 200 words a minute,
-three seconds to decide on every card), so 4.3 s is honest rather than alarming, but it is the
-number to watch if a card grows.
+**The clock.** Walking twice the shortest four-connected path on today's map (113 tiles: rabbit 7,
+toadstool 3, owl 19, magpie 34, snail 9, lantern keeper 10, cat 16, cottage 15), a reader who opens
+every card arrives in the tightest deal with **1.1 seconds to spare with no perk helping** (the
+no-perk tour, knock paid) and 2.0 seconds with the perks the careful basket takes. The longest tour
+that still fits with no perk is 115 tiles. All of these were measured on 2026-10-22 (the same
+helpers as `real-content.test.ts`, run apart from it); this paragraph used to say 107 tiles, 4.3 s
+and 5.2 s, which were the figures before the Cat moved into the clearing (107 to 113 tiles). The
+margin was 13.4 s on draft 7; the 3 s knock and the longer approved cards took most of it, and the
+Cat's move (six more tiles, doubled, at 3.75 tiles a second: 3.2 s) took the rest. It is a conservative model (the walk doubled, 200 words a minute,
+three seconds to decide on every card), so 1.1 s is honest rather than alarming, but it is the
+number to watch if a card grows or a character moves.
 
 ### History, briefly
 
@@ -387,9 +402,10 @@ derived from the real map. Draft 8 is the client's approved set, with a perk on 
   the lines written to fit the approved set (good cards' other lines, leave lines, good reveals,
   real-world notes, the Rabbit's, Toadstool's and Magpie's greetings) are DRAFT. The Cat's
   "Grandma made this for you" cuts both ways, which is the title's beat.
-- **Two icons do not exist yet:** `item-wings` (Wing Ride) and `item-hourglass` (Long Evening), named
-  by the client. They are on the `AWAITING_ART` ratchet in `real-content.test.ts`; nothing is drawn
-  in their place (CLAUDE.md rule 5). `item-shortcut` and `item-latch` are no longer used by any skill.
+- **Icons: all seven exist** (checked 2026-10-22: every skill's `icon` is in `manifest.json`, and
+  `AWAITING_ART` in `real-content.test.ts` is empty). `item-wings` and `item-hourglass` were drawn
+  with the perks (`c86b11e`). `item-shortcut` and `item-latch` are no longer used by any skill, and
+  nor are `item-translator`, `item-key` and `item-letter`.
 - **Portraits** exist for three of seven; v2's schema has no `portrait` field.
 - **The reveal screen** is a UI call: the data covers every offer, taken or left.
 

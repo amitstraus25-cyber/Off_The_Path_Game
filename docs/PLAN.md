@@ -6,40 +6,137 @@ Effort sizes: **S** under half a day, **M** about a day, **L** several days (for
 
 ## Progress at a glance
 
-**Updated 2026-10-21, at `51574fc`, production live.** This is the status board. The phase
-sections below are the detailed checklists. Phase 9 is the v2 redesign, and "Readiness findings" is
-everything the 2026-10-21 sweep found that is not yet fixed.
+**Updated 2026-10-22, at `3c88684`. The working tree was clean when this was written and the live
+game is v2.** This is the status board; the phase sections below are the detailed checklists.
+**Measured today, not remembered:** `pnpm test` is **1,151 tests passing and 1 skipped** --
+`packages/core` 348 and `apps/api` 202, both at 100% on statements, branches, functions and lines;
+`apps/game` 484 (+1 skipped) in 30 files; `tools/graybox` 117 -- and Playwright lists **335 e2e
+tests in 33 files** (`playwright test --list`; the last full run, at `2b42743`, was 329 passed and
+6 skipped). The e2e suite was not run for this update. `docs/PAUL_BRIEF.md` section 1
+holds the same counts.
 
 ### Done
 
-- **"The line" — all three causes**: two one-pixel backdrop holes; a stale checkout of a different
-  repository serving the game on `:5173` (trap 10); and the camera's top edge cutting a canopy row.
-- **The client's list**: the trees; the Inspect card (three verbs, three explanations); the phone
-  goals panel (16% of the screen down to 5%); the phone glitches (canopy fixed; market stall measured
-  and accepted, because it cannot be moved out of frame); the Results block; **the gate**; the arcade
-  question answered (yes to the mobile deck, no to the cabinet).
-- **Purple's back view**: the hood has a shaded side and the nape is a glimpse, not a panel
-  (`8c45e68`). **Waiting on your eye** — you said it was "better but still not there" before this
-  pass.
-- **The rename, Red → Purple** (D11: "Little Purple" in copy, "Purple" in code), **shorter copy**,
-  and a **how-to-play that is visible without scrolling at every screen size**, on keyboard and touch.
-- **The leaderboard, end to end**: built; shown on Results in four honest states; never says "posted"
-  above "no runs"; and **live against the database** since `8656fcb` — `/api/top` reads Supabase,
-  `/api/score` answers from our own code.
-- **Security**: the debug handle no longer ships to players; the shipped-code lint rules cover the
-  live routes; the high-severity Vite advisory is patched; the CSP is on every response, functions
-  included.
-- **Process**: the v2 spec (`docs/GAME_DESIGN_V2.md`); the staffing policy (Opus 5.5 for judgment,
-  Sonnet and Haiku for labour); the database runbook and migrations.
+- **The game as it is live now (v2).** Seven characters in walking order -- Rabbit, Toadstool, Owl,
+  Magpie, Snail, Lantern Keeper, Cat -- each offering one skill, in a Cyera arcade cabinet on every
+  screen size. Every skill has a real in-game effect, identical in its good and bad copies: Wood
+  Map (a minimap), Way Teller (fork signs naming who lives down each way), Word Weaver (Grandma
+  expects you, so the knock is skipped), Wing Ride (a flight to the next friend), Slow Post (a
+  faster walk), Night Light (a lantern at dusk) and Long Evening (20 seconds back). **Every run
+  deals 3 good and 4 bad** from a seed, so replaying meets the same characters with a different
+  set of malicious ones. Take it or leave it; a 3:00 hard timer; **score out of 100 = correct
+  choices plus speed**, par 1:47; any bad skill taken is 0. A door check asks before you go in with
+  anyone unmet; the minimap shows who you have met; the reveal puts the score first and then seven
+  flip tiles (promise against what it did, the real-world note); Walk it again starts a fresh
+  deal.
+- **The leaderboard, v2, end to end.** `POST /api/start` deals the seed in a signed token,
+  `POST /api/score` replays the v2 log against it and recomputes the score (a floor on the time
+  from the walk the log claims, a five-minute window, one token one row, wolf runs refused),
+  `GET /api/top` reads only rows from `BOARD_SINCE` and above 0, cached 10 s plus 20 s stale. Names
+  are typed (checked by `v2.checkName`), and the board shows your own row at once. Deployed through
+  the Build Output API (`vercel-output.mjs`). `apps/api/README.md` is the service's source of
+  truth.
+- **A work email to post, built and OFF.** Behind `OTP_WORK_EMAIL=required`: a work email and a
+  consent tick, written beside the score in a table the service cannot read back (migration
+  `0007`). Until the three steps under "Waiting on you" are done the game behaves exactly as at
+  `8c4dc49`.
+- **Phase 9 A to F** (rules, content, world, screens, leaderboard, readiness), with v1 removed from
+  the repository, and the readiness sweep's three blockers fixed (`51574fc`).
+- **The client's list from 2026-10-21**: "the line" (all three causes: two one-pixel backdrop
+  holes, a stale checkout of a different repository serving `:5173` -- trap 10 -- and the camera's
+  top edge cutting a canopy row); the trees; the Inspect card (superseded by the card that opens by
+  itself); the phone goals panel; the Results block; the gate; the rename Red to Purple (D11);
+  shorter copy. **The arcade question was answered both ways in one week and the cabinet is the
+  answer** (client's word, 2026-10-22).
+- **Security**: the debug handle no longer ships to players, and `csp.test.ts` greps the bundle for
+  the one test hook left (`testClock`); the shipped-code lint rules cover the live routes; the Vite
+  advisory is patched; the CSP is on every response, functions included.
+- **Process**: the v2 spec (`docs/GAME_DESIGN_V2.md`), the staffing policy (Opus 5.5 for judgment,
+  Sonnet and Haiku for labour), the database runbook and migrations `0001` to `0007`.
 
 ### In progress
 
-- **The seven perks, wired into the game (2026-10-22, built, not committed, not ticked).** Every
+Nothing is built and uncommitted. Everything the earlier version of this board listed as "built,
+not committed, not ticked" is in the log: the perks (`c86b11e`), the cabinet and replay hook
+(`f34ea67`, review round `6e1192f`), the morning interactions (`3e2473e`, `02420d6`), the afternoon
+screens (`8c4dc49`), the work email (`d61750b`), the minimap and the door (`f78dc5f`) and the
+last round's notes (`2b42743`, `7b28bc4`, `3c88684`). The records of each round stay below under
+"Shipped in the client rounds of 2026-10-22". What remains is waiting on a person or is planned.
+
+### Planned
+
+- **Phase 7, the release candidate:** the host side of the embed (the responsive container and a
+  test inside a copy of the landing page), a screen-reader and 200% zoom audit with a tool that is
+  actually installed, byte budgets and time to interactive measured, the cross-browser matrix.
+- **Phase 8, playtest and launch:** five to eight playtests, the launch checklist (secrets, rate
+  limits, moderation access, uptime check, rollback), embedding on the Off the Path page, the
+  post-launch dashboard.
+- **Moderation and review of the service:** an admin delete path and `docs/RUNBOOK.md` (neither
+  exists), and Phase 6's unticked `security-reviewer` box. Phase 6 has the detail.
+- **The camera and the cabinet:** `cameraFor()` in `packages/core/src/camera.ts` still does not
+  know the cabinet, so `pnpm world` and the graybox composition guards frame a camera the game no
+  longer builds (trap 1). `cabinetFor` is written to be lifted into camera.ts as it is.
+- **The copy read:** `content/game.v2.json` still says `draft: copy awaits the human read`, and the
+  new strings (the perk toasts, the door lines, the flip tiles, the contact lines) have not been
+  through `docs/COPY_REVIEW.md`.
+- **The readiness findings** below were written against v1 on 2026-10-21; two are marked expired
+  and the rest are not re-triaged against v2.
+
+### Waiting on you
+
+In the order they unblock things. None of these can be done from the repository.
+
+1. **Turn on Vercel firewall rate limiting for `/api/*` and prove it on a preview.** The only
+   control that spans instances, and the one gate before the board is exposed to the public
+   (Phase 9 E's open box). Recorded as not on at 2026-10-22; the Vercel dashboard was not
+   checked for this update.
+2. **Make Vercel deploy only after CI is green.** `.github/workflows/ci.yml` has no deploy step, so
+   nothing ties a deploy to a passing run.
+3. **The real research URL.** The call to action still falls back to
+   `https://www.cyera.com/off-the-path` (`DEFAULT_RESEARCH_URL`), which the 2026-10-21 sweep found
+   to be a 404. Set `VITE_RESEARCH_URL`. Promised for 2026-10-22.
+4. **The landing-page background image**, promised for 2026-10-22. The landing ships without one.
+5. **Brand sign-off, two items.** The pixel trace of the Cyera symbol on Purple's back (`8c4dc49`;
+   CLAUDE.md rule 5 forbids redrawn logo variants, and `docs/ART_PRODUCTION.md` says the mark is
+   not settled), and the cabinet's Lilac glow (`--otp-cab-glow` in `tokens.css`), which
+   contradicts "no shadows" in UI_FOUNDATIONS section 4 and BRAND_AND_UI section 3.
+6. **Legal review** of the leaderboard and privacy copy (D10), and of the work email (below).
+7. **Migration `0006_clear_v1_rows.sql`**, in the Supabase SQL editor. It deletes the v1 rows
+   (those before the v2 launch); the board already hides every row older than `BOARD_SINCE`, so this
+   is housekeeping, and rows between the two instants are hidden, not deleted.
+8. **Post one score on production** to prove the write path. Nothing here has been measured against
+   production since the v2 deploy (PAUL_BRIEF section 5).
+9. **Carried from the earlier board, not re-checked this pass:** clear Vercel's billing "Action
+   required"; D2 (who makes production art) and D6 (the real Haffer and Season Mix files).
+
+**Work email to post a score (your decision, 2026-10-22) -- built, OFF until you do these, in this
+order:**
+
+1. **Run the migration** `supabase/migrations/0007_leaderboard_work_email.sql` in the Supabase SQL
+   editor (pg_cron enabled first, as for 0003), then its verification block: no grants on
+   `leaderboard_contact`, execute on the function for `service_role` only, and the notice
+   "transaction proved".
+2. **Get Legal's sign-off** (D10 is reopened: the board now keeps a work email beside a score).
+   The paragraph, the consent wording (`research-contact-v1`: "Cyera may contact me about this
+   research.") and the twelve-month retention are in `docs/DATABASE.md`, "Decision 5"; the
+   player-facing lines are listed in `docs/COPY_REVIEW.md`.
+3. **Set `OTP_WORK_EMAIL=required`** in Vercel (Production and Preview) and **redeploy**. Then
+   `POST /api/start` answers `"emailRequired": true` and Results asks for the address. Exactly
+   `required`; any other value leaves it off and logs that it did.
+
+Until step 3 the game behaves exactly as at `8c4dc49`. Doing step 3 before step 1 makes every
+post answer "No reply came back for that post." (503) -- unset the variable and redeploy to undo.
+
+### Shipped in the client rounds of 2026-10-22
+
+Point-in-time records, oldest first; a later bullet supersedes an earlier one where they differ.
+
+- **The seven perks, wired into the game (2026-10-22, `c86b11e`).** Every
   effect is read from the skill's `effect` kind through core's perks.ts, never a skill id, and is
   the same for the good copy and the bad one. Wood Map: the minimap is drawn only once taken (the
   door's question stays for everyone). Way Teller: a wooden board at each `fork-N` and DOM chips on
   it -- face, name and a CSS arrow per heading, naming the nearest unmet character down that way
-  along the path (`world/forks.ts`), never the cottage. Word Weaver: a paper bird flies off west,
+  along the path (`world/forks.ts`), never the cottage. Word Weaver: a paper bird flies off (toward Grandma's door since `2b42743`),
   and the arrival opens on "Grandma is at the door already." with the knock skipped. Wing Ride: a
   2 s arc, carried by a copy of the giver, the camera following, then the next unmet friend's offer
   opens; under reduced motion a fade; with nobody left it does nothing and says so. Slow Post: the
@@ -57,8 +154,8 @@ everything the 2026-10-21 sweep found that is not yet fixed.
   figure's sheet frame at 1x, since most of the cast have no portrait. **Not reviewed:** the
   eleven new chrome lines need the COPY_REVIEW read.
 
-- **Client round 2026-10-22 (built, not committed, not ticked).** Four asks, all approved by the
-  client in chat:
+- **Client round 2026-10-22: the cabinet, the replay hook, copy into content (`f34ea67`; its
+  review round `6e1192f`).** Four asks, all approved by the client in chat:
   - **The arcade cabinet is THE presentation**, reversing the "no to the cabinet" above on the
     client's word. A marquee (the supplied white Cyera logo beside "Off the Path"), a dark purple
     body with a soft Lilac glow (still under reduced motion), the world in a bezel, and a deck with
@@ -70,12 +167,12 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     by itself, see the morning round below); on Title and
     Results the CTA keeps it and A is Lilac and disabled. The page ground is dark again, by the
     client's decision; the near-black share it moves is not a drift.
-    **Known gap, not mine to close:** `cameraFor()` in `packages/core/src/camera.ts` does not know
+    **Known gap, still open (`camera.ts` has no cabinet in it at `3c88684`):** `cameraFor()` in `packages/core/src/camera.ts` does not know
     the cabinet, so `pnpm world` and the graybox composition guards now frame a camera the game no
     longer builds (trap 1). `cabinetFor` is written to be lifted into camera.ts as-is.
   - **The reveal's replay hook**: each bad card replayed with its giveaway line marked, "You caught
     N of 4", and Walk it again as a secondary pill beside it (the research CTA keeps the Lime).
-    **Changed in the 2026-10-22 review round (not committed):** the line now reads "You kept N of 4
+    **Changed in the review round (`6e1192f`), and again by the afternoon round below:** the line now reads "You kept N of 4
     bad skills out of your basket." and is not shown on a late run; a row the player did not take
     labels its line `ui.reveal.wouldHave` ("What it would have done") instead of "What it did"; the
     arrive text reserves the advance ring's real 44px width; four notes, Way Teller's bad reveal and
@@ -89,7 +186,7 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     timer, so a slow phone or a starved runner walks it slower and never shorter; the e2e waits for
     the carry to finish. The same treatment for the walk-underway and stick-hold assertions.
 
-- **Client round 2026-10-22, morning: the interactions (built, not committed, not ticked).**
+- **Client round 2026-10-22, morning: the interactions (`3e2473e`, `02420d6`).**
   - **The card opens by itself.** An offer is ONE panel (`ui/Dialogue.tsx` with the card body from
     `ui/SkillCard.tsx`): who is speaking and their greeting, the skill's picture, name, promise and
     the dealt card's lines, then Take it / Leave it and Walk on. main.ts sends the INSPECT a MEET is
@@ -115,7 +212,8 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     `test/hud.test.ts` does; `docs/ASSETS.md` counts fifteen images and `GAME_DESIGN_V2.md` no
     longer says four icons are missing.
 
-- **Client round 2026-10-22, afternoon: the screens (built, not committed, not ticked).**
+- **Client round 2026-10-22, afternoon: the screens (`8c4dc49`).** Score and par are as that
+  commit left them; the how-to wording and par moved again in `2b42743`, below.
   - **Clear instructions.** The how-to is four short lines: each character offers a skill; three
     are good, four are malicious; read the card and take only the good ones; reach Grandma in 3:00,
     faster scores higher. The landing carries the same premise in one line (`chrome.landingPremise`,
@@ -140,8 +238,7 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     `boardRowKey` and adds "Joining the board" in words while it is `pending`. A wolf run is told
     up front that it does not go on the board (`chrome.wolfNotPosted`), since apps/api refuses it.
 
-- **Client round 2026-10-22, evening: "i cant find the character" (built, not committed, not
-  ticked).** The client finished a run with the Cat's Latch Lifter marked "You walked past".
+- **Client round 2026-10-22, evening: "i cant find the character" (`f78dc5f`).** The client finished a run with the Cat's Latch Lifter marked "You walked past".
   - **A minimap, top right of the world** (`ui/Minimap.tsx`, `world/minimap.ts`, `hud.css`). An
     inline SVG in the world box, drawn from the loaded map -- paths and bridges, the stream, open
     ground, Grandma's cottage, one dot per cast member at their spawn, Purple as a Lilac diamond --
@@ -164,51 +261,16 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     "Met" means MEET reached, so a character met and walked past without an answer counts as met
     and the door does not ask about them; the reveal still says "You walked past" for that card.
 
-- **v2 Phase A is done** (`87c80ff`): the new rules are in `packages/core/src/v2`, beside v1, at
-  100% coverage. **Phase B, the six or seven real skills, is next** and waits on your go.
-- **The readiness blockers are fixed** (`51574fc`), with the question button and the privacy line.
-
-### Planned — v2, "collect, and find out what you collected" (Phase 9)
-
-Collect freely from 6–7 characters; a 3-minute hard timer where running out is its own ending;
-scoring by what the skills **did**, so greed is punished; the reveal screen as the payoff; a
-Cyera-branded landing page. **A** rules → **B** content → **C** world → **D** screens →
-**E** leaderboard → **F** readiness. Full checklist below.
-
-### Open defects — readiness sweep (fix before launch)
-
-**3 blockers**: on a phone at 200% zoom the Allow / Restrict / Reject buttons are unreachable, and
-the test written for exactly that passes because it scrolls for itself; and an asset that fails to
-load is completely silent. **Majors include two that matter most on a security company's page**:
-the one call to action links to a **404 on cyera.com**, and the privacy line promises "no cookies"
-while the game keeps a key in the visitor's browser. Full list under "Readiness findings".
-
-### Waiting on you
-
-The **landing-page background image**. **Legal review** of the leaderboard and privacy copy (D10).
-The **real research URL** for the call to action. **Brand sign-off on the cape mark**. "Wolf
-Spotters" **with or without** its Season Mix highlight. **Post one score** to prove the write path.
-Turn on **Vercel rate limiting** for `/api/*`, and clear Vercel's **billing "Action required"**.
-D2 (who makes production art) and D6 (the real Haffer and Season Mix files). Your go on **v2
-Phase A**.
-
-**Work email to post a score (your decision, 2026-10-22) -- built, OFF until you do these, in this
-order:**
-
-1. **Run the migration** `supabase/migrations/0007_leaderboard_work_email.sql` in the Supabase SQL
-   editor (pg_cron enabled first, as for 0003), then its verification block: no grants on
-   `leaderboard_contact`, execute on the function for `service_role` only, and the notice
-   "transaction proved".
-2. **Get Legal's sign-off** (D10 is reopened: the board now keeps a work email beside a score).
-   The paragraph, the consent wording (`research-contact-v1`: "Cyera may contact me about this
-   research.") and the twelve-month retention are in `docs/DATABASE.md`, "Decision 5"; the
-   player-facing lines are listed in `docs/COPY_REVIEW.md`.
-3. **Set `OTP_WORK_EMAIL=required`** in Vercel (Production and Preview) and **redeploy**. Then
-   `POST /api/start` answers `"emailRequired": true` and Results asks for the address. Exactly
-   `required`; any other value leaves it off and logs that it did.
-
-Until step 3 the game behaves exactly as at `8c4dc49`. Doing step 3 before step 1 makes every
-post answer "No reply came back for that post." (503) -- unset the variable and redeploy to undo.
+- **Later the same day (`2b42743`, `7b28bc4`, `3c88684`).** The how-to is four lines in the
+  content: "Seven skills: three good, four malicious.", "Read each card. Take only the good,
+  leave the malicious.", "Reach Grandma in 3:00. Faster scores more." and "From 2:00 left, the
+  forest slowly darkens."; on the smallest fit rung its heading is visually hidden and stays the h1
+  for a screen reader. Bigger HUD text. Word Weaver's paper bird flies toward Grandma's door. The
+  bridge join is clean. **The Cat stands in the clearing above the cottage approach** (still last
+  in the walk, clear of the door; `f78dc5f` had first moved it onto the main track), which makes
+  the content-order tour **113 tiles** (measured 2026-10-22: rabbit 7, toadstool 3, owl 19, magpie
+  34, snail 9, lantern keeper 10, cat 16, cottage 15) against a measured maximum of 115, and par
+  **1:47** (`scoring.parMs` 107000). Every bend of the riverbank reads as one continuous shore.
 
 ## Milestones
 
@@ -224,19 +286,19 @@ post answer "No reply came back for that post." (503) -- unset the variable and 
 
 ## Open decisions (resolve in Phase 0; recommended defaults in bold)
 
-| ID  | Question                                                                                                                                                                                                                                                                                                                                                 | Recommended default                                                                                                                                                                                                                                         | Owner                  |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| D1  | Is Night Light genuinely safe, or malicious too?                                                                                                                                                                                                                                                                                                         | **Safe**, so "reject all" is not optimal. Update the Results mock copy accordingly (the mock shows it malicious).                                                                                                                                           | Game design + research |
-| D2  | Who produces production pixel art and when? Concept board is flattened.                                                                                                                                                                                                                                                                                  | **Design team or a pixel artist produces tileset, sprites, portraits** against `docs/ASSETS.md`; graybox until then.                                                                                                                                        | Design lead            |
-| D3  | Leaderboard backend host                                                                                                                                                                                                                                                                                                                                 | **Vercel Functions (Node) + managed Postgres/KV** behind a swappable interface (originally Cloudflare Workers + D1; changed because the game deploys on Vercel).                                                                                            | Eng + Security         |
-| D4  | Handle only, or optional email field for research follow-up?                                                                                                                                                                                                                                                                                             | **Handle only** (no gate before the research).                                                                                                                                                                                                              | Marketing + Legal      |
-| D5  | Mobile portrait layout                                                                                                                                                                                                                                                                                                                                   | **Canvas on top, panels docked at the bottom; never require rotation.**                                                                                                                                                                                     | Design                 |
-| D6  | Real Haffer / Season Mix files available?                                                                                                                                                                                                                                                                                                                | **Yes: request woff2 from Brand Kit**; fallbacks meanwhile.                                                                                                                                                                                                 | Brand                  |
-| D7  | Scoring weights. **As shipped: best verdict 200, safe but costly 100, compromised 0, and Word Weaver restrict 50** (because restricting it now earns an errand goal; at 100 it was a free trade). Question bonus +100, boundary bonus +200, trust bonus +100, three errand goals at 100. The "partial credit 150" this row used to name was never built. | **Resolved 2026-10-17** by the three errand goals: reject-all is 700 against a 1,000 ceiling and draws its own ending, and the best full-errand line (750) beats it. Restrict-all at 950 — the figure for a run that reads the forest post — is still open. | Game design            |
-| D8  | Must the player meet all three characters before the cottage? (v1; superseded in v2, where any of the seven can be walked past)                                                                                                                                                                                                                          | **Yes** (consistent scores).                                                                                                                                                                                                                                | Game design            |
-| D9  | Where is the game hosted and who owns analytics?                                                                                                                                                                                                                                                                                                         | **Static host under a cyera.com subdomain, embedded by iframe; parent page owns analytics via postMessage events.**                                                                                                                                         | Web team               |
-| D10 | Leaderboard retention, moderation, privacy review                                                                                                                                                                                                                                                                                                        | **Handle + score only, 12-month retention, manual delete endpoint, Legal sign-off before launch.**                                                                                                                                                          | Legal + Security       |
-| D11 | After the 2026-10-21 rename of the protagonist from Red to Purple, is she "Purple" or "Little Purple"? Her cloak is Aubergine and the brand rules ban red outright, so "Red" was a contradiction from the first commit; the fairy-tale shape survives the rename and the colour error does not.                                                          | **"Little Purple" in player-facing copy, "Purple" in code, identifiers, docstrings and docs.** A player meeting "Purple" alone reads a colour; "Little Purple" reads a person and keeps the tale's shape. Four player-facing strings carry the long form.   | Game design + Brand    |
+| ID  | Question                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Recommended default                                                                                                                                                                                                                                         | Owner                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| D1  | Is Night Light genuinely safe, or malicious too?                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | **Safe**, so "reject all" is not optimal. Update the Results mock copy accordingly (the mock shows it malicious).                                                                                                                                           | Game design + research |
+| D2  | Who produces production pixel art and when? Concept board is flattened.                                                                                                                                                                                                                                                                                                                                                                                                                                           | **Design team or a pixel artist produces tileset, sprites, portraits** against `docs/ASSETS.md`; graybox until then.                                                                                                                                        | Design lead            |
+| D3  | Leaderboard backend host                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | **Vercel Functions (Node) + managed Postgres/KV** behind a swappable interface (originally Cloudflare Workers + D1; changed because the game deploys on Vercel).                                                                                            | Eng + Security         |
+| D4  | Handle only, or optional email field for research follow-up?                                                                                                                                                                                                                                                                                                                                                                                                                                                      | **Handle only** (no gate before the research).                                                                                                                                                                                                              | Marketing + Legal      |
+| D5  | Mobile portrait layout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | **Canvas on top, panels docked at the bottom; never require rotation.**                                                                                                                                                                                     | Design                 |
+| D6  | Real Haffer / Season Mix files available?                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | **Yes: request woff2 from Brand Kit**; fallbacks meanwhile.                                                                                                                                                                                                 | Brand                  |
+| D7  | Scoring weights. **Superseded in v2 (2026-10-22): clean 10, good 20 each, speed 30, out of 100, par 1:47 (`content/game.v2.json`, `scoring`); what follows is v1.** **As shipped in v1: best verdict 200, safe but costly 100, compromised 0, and Word Weaver restrict 50** (because restricting it now earns an errand goal; at 100 it was a free trade). Question bonus +100, boundary bonus +200, trust bonus +100, three errand goals at 100. The "partial credit 150" this row used to name was never built. | **Resolved 2026-10-17** by the three errand goals: reject-all is 700 against a 1,000 ceiling and draws its own ending, and the best full-errand line (750) beats it. Restrict-all at 950 — the figure for a run that reads the forest post — is still open. | Game design            |
+| D8  | Must the player meet all three characters before the cottage? (v1; superseded in v2, where any of the seven can be walked past)                                                                                                                                                                                                                                                                                                                                                                                   | **Yes** (consistent scores).                                                                                                                                                                                                                                | Game design            |
+| D9  | Where is the game hosted and who owns analytics?                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | **Static host under a cyera.com subdomain, embedded by iframe; parent page owns analytics via postMessage events.**                                                                                                                                         | Web team               |
+| D10 | Leaderboard retention, moderation, privacy review                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | **Handle + score only, 12-month retention, manual delete endpoint, Legal sign-off before launch.**                                                                                                                                                          | Legal + Security       |
+| D11 | After the 2026-10-21 rename of the protagonist from Red to Purple, is she "Purple" or "Little Purple"? Her cloak is Aubergine and the brand rules ban red outright, so "Red" was a contradiction from the first commit; the fairy-tale shape survives the rename and the colour error does not.                                                                                                                                                                                                                   | **"Little Purple" in player-facing copy, "Purple" in code, identifiers, docstrings and docs.** A player meeting "Purple" alone reads a colour; "Little Purple" reads a person and keeps the tale's shape. Four player-facing strings carry the long form.   | Game design + Brand    |
 
 ### Decisions recorded (2026-10-15, Phase 0)
 
@@ -581,9 +643,9 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
 - [x] **B. Content** (M) — done 2026-10-21 as draft 4, after three refutations (GAME_DESIGN_V2 section 10). Checked by an independent scorer: one run of 2,187 at 1000, the best wolf run 500, the best two-clause rote rule 650. Phase C must lay the cast out in content order, Rabbit first. — six or seven skills and characters as data: what each promises, the card,
       and what it did under each verdict. The mix is tuned through `pnpm sim` until the ceiling, the
       greedy floor and restrict-everything all come out right.
-- [x] **C. World** (M) — done 2026-10-22: the cast in walking order (Rabbit first, Cat by the cottage), v2 wired behind a dev/e2e-only switch with a seeded deal per run, the timer and basket HUD. — three or four new characters on the map, one regeneration with every
+- [x] **C. World** (M) — done 2026-10-22 (`542ede4`): the cast in walking order (Rabbit first, Cat last), v2 wired behind a dev/e2e-only switch with a seeded deal per run, the timer and basket HUD. The switch is gone since Phase D, and the Cat has moved twice since (`f78dc5f`, `2b42743`). — three or four new characters on the map, one regeneration with every
       changed cell claimed; a timer and the basket in the HUD.
-      _Progress 2026-10-22 (world and wiring, not ticked):_ the seven stand in content order —
+      _Progress record, 2026-10-22 (history: the tour is now 113 tiles, see "Shipped in the client rounds"):_ the seven stand in content order —
       the Toadstool moved from (10,22) to (15,22), past the Rabbit's stall on the same verge, the one
       cast move; walk from the spawn rabbit 7, toadstool 10, owl 19, magpie 25, snail 34, lantern
       keeper 44, cat 46; content-order tour 108 tiles (104 before) against the clock test's
@@ -604,9 +666,9 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
       variant lookup); the seven met in walking order (Purple placed beside each, not walked);
       the careful run scores 100 at Grandma's, the greedy one lets the wolf in at 0; the clock
       override ends a run late.
-- [x] **D. Screens** (M) — done 2026-10-22; the live game is v2 (landing ships without a background until the client's image arrives). — the how-to-play rewritten for v2; **the reveal screen**; the late
+- [x] **D. Screens** (M) — done 2026-10-22 (`39b8f5f`); the live game is v2 (landing ships without a background until the client's image arrives). The offer, card and reveal described below were reworked by the client rounds of the same day (`3e2473e`, `8c4dc49`, `f78dc5f`); read "Shipped in the client rounds" for what is live. — the how-to-play rewritten for v2; **the reveal screen**; the late
       ending; the Cyera-branded landing page (**blocked on the background image**).
-      _Progress 2026-10-22 (built, not ticked):_ the live game is v2 -- no switch and no seed pin;
+      _Progress record, 2026-10-22 (as of `39b8f5f`):_ the live game is v2 -- no switch and no seed pin;
       the only test hook left is the run clock's `testClock` override on the dot-access-gated debug
       handle (in `csp.test.ts`'s bundle grep with the retired `otp-v2`, `otp-v2-seed`, `v2Clock`).
       A run is started on the server at Begin (`startRun()`, once per run and per replay); its seed
@@ -631,15 +693,15 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
       fifteen v1-only specs deleted, the world and title specs moved to v2.
       `e2e/leaderboard.spec.ts` was ported to v2 in Phase F (the start route answers a seed and a
       token; the post body carries the token).
-- [x] **E. Leaderboard** (M) — done 2026-10-22: `/api/start` deals the seed in a signed token, `/api/score` replays v2 against it, and `/api/top` reads only rows from the v2 launch (`V2_LAUNCH`); `supabase/migrations/0006_clear_v1_rows.sql` deletes the v1 rows and is the human's to run. — **including a server-issued start token**, because v2's run-log
+- [x] **E. Leaderboard** (M) — done 2026-10-22: `/api/start` deals the seed in a signed token, `/api/score` replays v2 against it, and `/api/top` reads only rows from `BOARD_SINCE` (2026-10-22T09:25:00Z, which replaced the v2-launch cut `V2_LAUNCH` when speed started to count) and above 0; `supabase/migrations/0006_clear_v1_rows.sql` deletes the v1 rows and is the human's to run. — **including a server-issued start token**, because v2's run-log
       times are client-reported: a log forged with every event at 0ms replays as legal today.
       The API must record when a run began and bound elapsed time on submit. Otherwise — `apps/api` recomputes with the new core in the same change. The table
       is empty today, so no posted score becomes incomparable.
       _Fix round 2026-10-22 (scripted 100s):_ a careful log for the token's seed, claiming 15 ms,
       replayed as legal and scored 100 -- and ties rank earliest first, so a bot's 100s would
       outrank every later honest one for good. Three answers, and what was done with each:
-      **(a) done** -- `MIN_RUN_MS` (10 s, `apps/api/src/handlers.ts`) floors both the claimed run
-      time and the server-observed time since the token; `apps/api/test/floor.test.ts` derives it
+      **(a) done, then replaced** -- `MIN_RUN_MS` (10 s, `apps/api/src/handlers.ts`) floored both the claimed run
+      time and the server-observed time since the token, and `8c4dc49` replaced it with `v2.walkFloor` (core `floor.ts`: every meeting and the arrival stamped no sooner than the straight-line walk the log describes, perks included). The rest of this item describes the 10 s floor as it was; `apps/api/test/floor.test.ts` derives it
       from the shipped map (straight line spawn to door, less a tile each end, at `WALK_SPEED`,
       11.2 s) and fails if it drifts above that or more than 2 s under it. It is one floor for every
       score; a per-score floor (a 100 must also meet the three holding good skills) needs the map's distances on
@@ -648,22 +710,24 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
       guess. **(c) the gate:**
   - [ ] **Vercel firewall rate limit on `/api/*`, on and proved on a preview, before the board is
         exposed to the public.** The only cross-instance bound on forged rows. Not on as of 2026-10-22.
-- [ ] **F. Readiness** (M) — a test-mode timer override (dot access on `import.meta.env`, and the
+- [x] **F. Readiness** (M) — done 2026-10-22: the cleanup and the test hook below, and the full review of `6e1192f` (security, brand, play and accessibility, content and education, docs truth) with its fix round. **What it does not cover:** the perks, minimap, door check, work email and the later screens landed after that review with their own tests and per-round checks, not a second whole-game sweep, and Phase 6's box "run `security-reviewer`" is still unticked. — a test-mode timer override (dot access on `import.meta.env`, and the
       symbol added to `csp.test.ts`'s bundle grep so it cannot ship like the debug handle did); then
       a full functional, security and accessibility sweep of v2.
-      _Progress 2026-10-22 (cleanup done, sweep not ticked):_ v1 is removed from the repository.
+      _Progress record, 2026-10-22:_ v1 is removed from the repository.
       Gone: `packages/core`'s v1 rules and tests (`content`, `state`, `reducer`, `runlog`,
       `scoring`, `outcomes`; core keeps `camera`, `leaderboard` and the `v2` namespace),
       `content/game.json` and `game.seed.json`, v1's `createLeaderboardClient`, and the v1
       strategies in `tools/sim`, which now runs v2 (`pnpm sim`). The chrome copy moved into
       `ui.chrome` in `content/game.v2.json`. `docs/GAME_DESIGN.md` is marked superseded, not
       deleted. The timer override and the bundle-grep item are done (`testClock`); the sweep
-      itself is open.
+      itself is the review of `6e1192f`, above.
 
 ## Readiness findings (sweep of 2026-10-21)
 
 Measured on production and the working tree by four review lenses plus a completeness critic.
 Several overlap Phase 7 and are listed once here. Fix before launch; most also apply to v2.
+**Re-read 2026-10-22:** this list was written against v1. Two majors expired with it and are
+ticked below with the reason; the rest are not re-triaged against v2 and stay as they were.
 
 **Blockers**
 
@@ -685,14 +749,18 @@ Several overlap Phase 7 and are listed once here. Fix before launch; most also a
       sentence or drop the persistence, then guard by enumerating storage after a full run.
 - [x] The question buttons eat the first press while a line types, up to nine presses a run — the
       interaction the game is named for. The fix pattern is already in `Dialogue.tsx`.
-- [ ] Grandma's door note says the words "stayed on the post" — on a door — beneath "anything you
-      read now, the wolf reads too".
+- [x] Grandma's door note says the words "stayed on the post" — on a door — beneath "anything you
+      read now, the wolf reads too". **Expired with v1:** neither sentence is in `content/game.v2.json`
+      or `apps/game/src` (grepped 2026-10-22).
 - [ ] The title card clipped its thesis sentence at the client's own 1673×449. Probably fixed by the
       fit ladder; re-measure there.
 - [ ] Pressing Post is announced to nobody, because the status region mounts with its text already
       in it.
 - [ ] A screen-reader player is never told where anyone is.
-- [ ] Heading structure is incoherent: three of seven screens have no heading.
+- [x] Heading structure is incoherent: three of seven screens have no heading. **Expired with v1:**
+      in v2 the landing, how-to, every panel, the problem screen and Results each set an `h1`, and the
+      forest has a visually hidden one (`App.tsx`, `Title.tsx`, `components.tsx`, `ProblemScreen.tsx`,
+      `Results.tsx`; read from source 2026-10-22, not with a screen reader).
 - [ ] The question list tells a screen reader the first question is already selected.
 - [ ] At 375, 390 and 768 every panel covers the goals and the basket under `aria-modal`.
 - [ ] The embed has no host side, and `frame-ancestors` means the first real iframe test is launch day.

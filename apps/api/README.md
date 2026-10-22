@@ -139,7 +139,9 @@ revoke all on public.leaderboard from anon, authenticated;
 ```
 
 A handle and a score. No account, no email, no cookie, no IP address, raw or hashed, and no run id —
-CLAUDE.md's privacy rule is the schema. `test/store.test.ts` asserts the inserted row has exactly
+CLAUDE.md's privacy rule is the schema. (With `OTP_WORK_EMAIL=required`, an address goes to a second
+table, `public.leaderboard_contact`, from migration 0007 -- not run yet -- and never into this one;
+see "Work email" below.) `test/store.test.ts` asserts the inserted row has exactly
 the two keys, so a third one cannot arrive by accident.
 
 `supabase/migrations/0001_leaderboard_baseline.sql` is this same DDL written idempotently, so the
@@ -268,6 +270,7 @@ api/start.ts     POST /api/start
 src/handlers.ts  the three routes as pure functions of (Request, Deps)
 src/token.ts     the run token: HKDF key, HMAC seal, open
 src/schema.ts    the v2 submit body; no node: imports, so the game's tests can hold it
+src/limit.ts     the per-instance write budget and the one-token-one-row set
 src/store.ts     the table, over fetch against PostgREST
 src/env.ts       the two variables, and what to do when they are not there
 src/deps.ts      the only place that touches process.env
@@ -284,6 +287,12 @@ no credentials and cannot reach Supabase; nothing in `test/` tries to.
 
 Two suites being green says each half does what its own tests ask. It does not say the halves agree.
 These are the measurements, not the intentions.
+
+> **These five measurements are v1-era (before v2 landed, 2026-10-22), kept as the record of what
+> was run then.** The numbers and shapes in them are not v2's: the score was out of 1,000 and is out of 100,
+> the body was `{handle, log}` and is `{handle, log, token}`, names were minted and are typed, and
+> there was no run token. The v2 service is covered by this package's 202 tests (2026-10-22), none
+> of which reaches a real database.
 
 - **A real browser, the built game, and this service in one process.** A headless Chromium plays a
   finished run on a `vite preview` of `apps/game`, the post to `/api/score` is intercepted, and the
@@ -322,7 +331,9 @@ dead.** `apps/game/src/ui/Results.tsx` imports `readTop` (line 20), calls it on 
 `.otp-board__rows`; `apps/game/e2e/leaderboard.spec.ts` drives `**/api/top*` in a real browser. The
 narrow old claim is still true and now irrelevant — the screen calls `readTop` directly rather than
 `LeaderboardClient.top()` — so do not let it stand in for "the read half is unmounted". Both halves
-of the board are wired, and both are waiting on the same thing: a function at `/api/*`.
+of the board are wired. When this paragraph was written they were waiting on a function at
+`/api/*`; that function is now bundled into the build output ("Vercel settings" above), and
+whether production answers has not been measured since the v2 deploy.
 
 ## What a hostile caller sends, and what happens
 
@@ -335,7 +346,7 @@ of the board are wired, and both are waiting on the same thing: a function at `/
 | A seed of the caller's choosing                | Refused. The log's seed must be the one sealed in a token this service signed.                                                                                                                                                                                                                                                                                                           |
 | A log claiming more time than really passed    | Refused: the claimed duration may not exceed the time since the token was issued (plus 2 s).                                                                                                                                                                                                                                                                                             |
 | A slow run restamped, or a stale token         | Refused with 410 once more than five minutes have passed off the game clock since the token was issued.                                                                                                                                                                                                                                                                                  |
-| A run faster than anyone could walk it         | Refused: every meeting and the arrival must be stamped no sooner than the straight-line walk to it (`v2.walkFloor`), and the time since the token was issued must cover the whole walk, so every forged row costs real waiting. With speed now scored, a forged 100 still needs only par (1:45) of waiting; `deal()` is public.                                                          |
+| A run faster than anyone could walk it         | Refused: every meeting and the arrival must be stamped no sooner than the straight-line walk to it (`v2.walkFloor`), and the time since the token was issued must cover the whole walk, so every forged row costs real waiting. With speed now scored, a forged 100 still needs only par (1:47) of waiting; `deal()` is public.                                                          |
 | A thousand events                              | Refused before replay: `MAX_LOG_EVENTS` is 256 against an honest run of about twenty.                                                                                                                                                                                                                                                                                                    |
 | A megabyte of JSON                             | Refused at 32 KB **as it arrives**. `content-length` is a cheap first check; the gate is a metered read, so a body that declares no length or is made of four-byte characters is cut off at the same 32 KB. The Node adapter (`src/node-adapter.ts`) applies the same cap before the handler is called, so the instance never buffers more than 32 KB of it; the answer is the same 413. |
 | The same token, posted again                   | `409 {"error":"that run is already on the board"}` with nothing written, whatever log or handle comes with it. One token is one row, including two posts of it in flight at once: the id is reserved before the insert and released if no row results. Per instance — see below.                                                                                                         |
@@ -404,7 +415,7 @@ writable in volume by anyone who can run a loop.
 
 Recomputing every score bounds what a row can SAY. It does not bound how many rows a caller can
 write, or prove that a player played. A maximal run log can be built offline by driving the reducer
-(`pnpm sim --strategy careful` produces one), so without the three steps below the board is a
+(`pnpm sim --strategy careful` produces one), so without the steps below the board is a
 write-what-you-like list that happens to contain honest scores. `src/limit.ts` closes the cheap case
 — one row per run, thirty writes a minute — but only within one instance, and Vercel runs several.
 
@@ -450,7 +461,7 @@ write-what-you-like list that happens to contain honest scores. `src/limit.ts` c
    rows rather than serving a short page, but the rows themselves are gone from the board.
 4. **The clock is half the player's.** Since Phase E a run cannot claim more time than the server
    saw, nor sit more than five minutes off the game clock, nor walk faster than the straight-line
-   floor of the route its own log describes. Since speed counts, a scripted 100 costs par (1:45) of
+   floor of the route its own log describes. Since speed counts, a scripted 100 costs par (1:47) of
    waiting per token: `deal()` is public, so a careful log for the token's seed, stamped at par,
    is indistinguishable from a brisk honest player. Requiring a card to be opened per take is out of scope: reading is optional by
    design (GAME_DESIGN_V2), so it would refuse an honest lucky guess.
@@ -461,10 +472,13 @@ write-what-you-like list that happens to contain honest scores. `src/limit.ts` c
    checkout. The PostgREST request shapes (headers, `order=score.desc,created_at.asc`,
    `Prefer: return=minimal`) are asserted in tests against a fake fetch, not against Supabase. The
    first real deploy is the first real test of those.
-7. **v1 rows are not comparable with v2's.** v1 scored out of 1,000, v2 out of 100. PLAN.md recorded
-   the table as empty before Phase E; if any v1 rows are there, they outrank every v2 run. **This
-   service deletes nothing.** Whether old rows are cleared is the client's data decision, made by
-   hand in the SQL editor (`docs/DATABASE.md`, Decision 3's delete path), not by a deploy.
+7. **v1 rows are not comparable with v2's, and neither are rows from before speed counted.** v1
+   scored out of 1,000, v2 out of 100, and rows written before 2026-10-22T09:25:00Z were scored
+   without the speed bonus. `GET /api/top` reads only rows from `BOARD_SINCE` (`src/store.ts`) on, so
+   none of them is shown. **This service deletes nothing.** `supabase/migrations/0006_clear_v1_rows.sql`
+   deletes the v1 rows (those before 2026-10-21T23:45:00Z) and is the client's to run in the SQL
+   editor; rows between the two instants stay in the table, hidden, until a human removes them
+   (`docs/DATABASE.md`, Decision 3's delete path).
 
 ## History: the Vercel arrangements that FAILED -- do not re-run any of them
 

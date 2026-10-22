@@ -4,7 +4,8 @@
 because the same mistakes kept costing whole rounds, and because a reviewer who measures the wrong
 thing confidently is more expensive than one who finds nothing.
 
-Last updated: 2026-10-22, after the review round on `f34ea67` (the cabinet commit). Before that,
+Last updated: 2026-10-22, at `3c88684`, after the client's rounds of that day (the cabinet, speed
+scoring, typed names, the minimap and door, the seven perks, the work email). Before that,
 2026-10-21, after the client round that found the stale checkout (trap 10) and the debug handle
 that was shipping to players. Read trap 10 before investigating anything the client reports seeing.
 
@@ -14,14 +15,28 @@ that was shipping to players. Read trap 10 before investigating anything the cli
 
 - The game is live at `off-the-path-game.vercel.app`, embedded-ready, `frame-ancestors` locked to
   `cyera.com` and `*.cyera.com`.
-- The suite is **681 tests** (counted 2026-10-22 on `f34ea67` plus the review-round fixes) —
-  `packages/core` 181 at a 100% gate on statements, branches, functions AND lines; `apps/api` 125
-  at the same gate; `apps/game` 367 plus 1 skipped; `tools/graybox` 8 — plus **211 e2e** in 26
-  files (`playwright test --list`). The game is v2 only; `pnpm sim` plays the v2 strategies.
+- The suite is **1,151 tests passing and 1 skipped** (run 2026-10-22 on `3c88684`, each workspace
+  on its own with its exit code taken separately, all 0) — `packages/core` 348 in 13 files and
+  `apps/api` 202 in 12, both at a 100% gate on statements, branches, functions AND lines (core
+  689/385/159/566, api 367/238/56/320); `apps/game` 484 plus 1 skipped in 30 files; `tools/graybox`
+  117 in 5 (no coverage gate; it gates on art measurements) — plus **335 e2e** in 33 files
+  (`playwright test --list`, which counts the specs that skip; the last full run, at
+  `2b42743`, was 329 passed and 6 skipped, and the e2e suite was not run for this update). The
+  figures this section carried earlier on 2026-10-22 (681 and 211) predate the day's later
+  rounds (trap 11). The game is v2 only; `pnpm sim` plays the four v2
+  strategies (`careful`, `greedy`, `leave-all`, `random`).
+- The live game: seven characters in walking order, each offering one skill with a real in-game
+  effect that is the same in the good and the bad copy; every run deals 3 good and 4 bad from a
+  seed; take it or leave it; a 3:00 hard timer; score out of 100 = correct choices plus speed (par
+  1:47); a door check; a flip-tile reveal; typed names; a leaderboard; a work-email gate that is
+  built and OFF. Everything is committed and the tree was clean at `3c88684`.
 - The art generator is deterministic: `pnpm graybox` regenerates `map-forest.json` byte-identical
   unless a painter changed. That property is the proof standard for every art change.
-- Phase 6 (the leaderboard) exists: `apps/api`, score recomputed server-side from the run log,
-  handles minted not typed, two columns in the table and a test that a third cannot arrive.
+- Phase 6 (the leaderboard) exists: `apps/api`, score recomputed server-side from the run log.
+  **Two things that sentence used to say are no longer true:** names are typed (checked by
+  `v2.checkName`, since 2026-10-22), and "two columns and a test that a third cannot arrive" holds
+  only for `public.leaderboard` — behind `OTP_WORK_EMAIL`, a work email lives in a second table
+  (`leaderboard_contact`, migration 0007, not run) that the service can write and cannot read.
 
 ## 2. The client's open list
 
@@ -31,14 +46,20 @@ Their words, their order. Anything not here is not a priority this week.
 | --- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | 1   | The line / "lagginess"                                               | **Three causes, all fixed.** Two one-pixel holes; the stale checkout (trap 10); the camera top edge cutting a canopy row.  |
 | 2   | Trees in the middle look messed up                                   | **Done.** Brick course gone, trunks and root flares, crowns merge. Squared flank lobe survives at 8x only — gid round.     |
-| 3   | Purple's back view                                                   | **Close.** Front and sides shippable. Nape hair reads as a structureless blob; cape mark needs brand sign-off.             |
-| 4   | Inspect card: three verbs, three explanations, nothing else, branded | **Done** — the best thing in the round. One open question: "allow two dots" read as a colon; we used columns.              |
+| 3   | Purple's back view                                                   | **Close.** Front and sides shippable. The Cyera-symbol trace on her back is in (`8c4dc49`) and awaits brand sign-off.      |
+| 4   | Inspect card: three verbs, three explanations, nothing else, branded | **Done in v1, superseded in v2:** two verbs (Take it / Leave it) on a card that opens by itself (`3e2473e`).               |
 | 5   | Leaderboard not working                                              | **Built, shown, and deployed through the Build Output API (§5).** Unmeasured on production since v2; rate limit open.      |
 | 6   | Phone: goals panel eats the screen                                   | **Done.** A 44px bar that taps open: ~5% of the screen against ~16%. Verified by touch.                                    |
 | 7   | Phone: three circled glitches                                        | **Closed.** The clipped canopy row is fixed with #1; the stall is measured and accepted — it cannot be moved out of frame. |
 | 8   | Arcade-cabinet shell, Cyera themed                                   | **Answered: cabinet everywhere (reversed 2026-10-22 on the client's word).** §8 keeps the argument as constraints.         |
 | 9   | Results block: "nicer and more branded"                              | **Done.** All four faults in §6 fixed; a guard now bans static inline styles.                                              |
 | 10  | The gate (fence)                                                     | **Done.** `gate-n` and `gate-s` in `tools/graybox/src/tiles.ts` (`840daab`); PLAN.md lists it done.                        |
+
+Since this table was written the client has had a further round of asks on 2026-10-22 — the
+cabinet as the presentation, speed in the score, typed names, "I can't find the character" (the
+minimap and the door), seven skills that each do something, a work email to post — and every one is
+built and committed; `docs/PLAN.md` "Progress at a glance" is the board for them and for what still
+waits on the client.
 
 ## 3. The traps that have actually cost rounds
 
@@ -90,6 +111,14 @@ pixel` passed happily while the canvas sat on a half pixel. Same shape as trap 1
     were killed on 2026-10-21. If a visual report ever disagrees with a measurement again, check
     this _first_, not last.
 
+11. **A number typed into a document is a claim nobody re-measures.** This brief said 681 tests,
+    GAME_DESIGN_V2 said the tightest deal arrived with 4.3 seconds to spare on 107 tiles, and
+    apps/api's README said par was 1:45. Measured on 2026-10-22: 1,151 tests; the tour is 113 tiles,
+    the tightest deal arrives with **1.1 seconds** to spare with no perk helping (2.0 with the
+    careful basket's perks), and par is 1:47. The 1.1 is the number to watch: one card that grows by
+    a few words moves it. Re-run the suite and read the figure off it, take each exit code on its
+    own line (trap 7), and when a number cannot be derived, write the date and the commit beside it.
+
 ## 4. The rules of a round
 
 - **Staffing: the top model is for judgment, not for labour.** Set by the client 2026-10-21. Only
@@ -116,19 +145,45 @@ pixel` passed happily while the canvas sat on a half pixel. Same shape as trap 1
 
 ## 5. The leaderboard, precisely
 
-**Current state, 2026-10-22 (v2, Phase E landed) -- this supersedes anything below where they
-differ.** Three routes are bundled by `vercel-output.mjs`, which reads them off `apps/api/api/`:
-`start`, `score`, `top`. `POST /api/start` answers `{ seed, token }` (an HMAC over the seed and the
-start time, nothing stored); `POST /api/score` takes `{ handle, log, token }`, replays the **v2** log
-and recomputes the score, and refuses a late run, a log dealt from another seed and a post more than
-five minutes off the game clock. A v1 log is a 400, and v1 itself is gone from the repo. The
-discriminators: `GET /api/start` and `GET /api/score` answer **405 `Allow: POST`** when mounted, 404
-when no function exists, 500 `FUNCTION_INVOCATION_FAILED` when it crashed on load; `POST /api/start`
-with `{}` as JSON is **200 `{seed, token}`** with the environment set and 503 without it.
-**Nothing here has been measured against production since the v2 deploy. Do that first.**
-`apps/api/README.md` lists what only a human can do (the Vercel firewall rate limit; whether any v1
-rows, scored out of 1,000, are cleared). The measurements below are 2026-10-21 and v1-era; keep them
-for the history of the Vercel arrangements, not as the state of the world.
+**Current state, 2026-10-22, at `3c88684` -- this supersedes everything below it in this section.**
+Three routes are bundled by `vercel-output.mjs`, which reads them off `apps/api/api/`: `start`,
+`score`, `top`. The service scores **v2** runs only; a v1 log is a 400, and v1 itself is gone from
+the repo.
+
+- `POST /api/start` answers `{ seed, token, emailRequired }`: an HMAC over the seed and the start
+  time, nothing stored, its own per-instance budget (120 a minute).
+- `POST /api/score` takes `{ handle, log, token }` (plus `{ email, consent }` when
+  `OTP_WORK_EMAIL=required`; ignored and stored nowhere otherwise). It checks the name first
+  (`v2.checkName`; names are typed), then the contact when the flag is on, then replays the log
+  against the token's seed and recomputes the score. **A late run and a wolf run are not posted**
+  (400, and 422 `reason: 'wolf'`). **Every meeting and the arrival must be stamped no sooner than the
+  straight-line walk the log describes** (`v2.walkFloor`, core `floor.ts`, perks included), and the
+  time since the token must cover the walk; this replaced the flat 10 s `MIN_RUN_MS` in `8c4dc49`.
+  A post more than five minutes off the game clock is a 410. One token is one row (409), per
+  instance. Thirty writes a minute per instance, then 429.
+- `GET /api/top` answers the top ten, rows from `BOARD_SINCE` (2026-10-22T09:25:00Z, the moment
+  speed started to count; it replaced the v2-launch cut) and above 0, cached 10 s plus 20 s stale,
+  so never more than 30 s old. The post's own answer carries its rank and the board, so a player
+  sees their row at once.
+- The discriminators: `GET /api/start` and `GET /api/score` answer **405 `Allow: POST`** when
+  mounted, 404 when no function exists, 500 `FUNCTION_INVOCATION_FAILED` when it crashed on load;
+  `POST /api/start` with `{}` as JSON is **200 `{seed, token, emailRequired}`** with the environment
+  set and 503 without it.
+
+**Nothing here has been measured against production since the v2 deploy, and this update did not
+measure it either (the sandbox this was written in denies `curl`). Do that first.** The tests that
+stand in for it are `apps/api`'s 202 at a 100% gate, run against a fake `fetch`: no test reaches
+Supabase and none can from this checkout.
+
+**What only a human can do, in the order it unblocks things** (`apps/api/README.md` and
+`docs/PLAN.md` "Waiting on you" carry the detail): the Vercel firewall rate limit on `/api/*`, on and
+proved on a preview, before the board is public; `supabase/migrations/0006_clear_v1_rows.sql`
+(deletes the v1 rows; the board already hides everything older than `BOARD_SINCE`, so it is
+housekeeping); and the work email's three steps — migration `0007`, Legal's sign-off (D10 is
+reopened), then `OTP_WORK_EMAIL=required` and a redeploy. Until the last, the game behaves exactly
+as at `8c4dc49`, and doing it before the migration makes every post answer 503. The measurements
+below are 2026-10-21 and v1-era; keep them for the history of the Vercel arrangements, not as the
+state of the world.
 
 **History, 2026-10-21 (superseded by the 2026-10-22 block above -- do not act on it).** Kept for
 the record of the Vercel arrangements. Almost every bullet below is false now: functions are
@@ -322,6 +377,9 @@ The client asked for it "nicer and more branded". Four specific faults:
 
 - **101 walkable tiles sit under fully opaque crowns**, so the player vanishes while standing
   there. Re-measured 2026-10-21 and it is **smaller and sharper than it sounded, and it is real**:
+  (The ratchet is still `OPEN_ENOUGH = 101` in `forest-map.ts` at `3c88684`. The counts below are
+  2026-10-21's and the map has been regenerated since — the cast moved, the bridge, the riverbank
+  corners — so re-measure before leaning on a figure.)
 
   - 101 cells, not 109 — the difference is this week's art, not an earlier miscount.
   - **Only two gids, 60 and 63.** Counted by decoding `tileset-forest.png` and measuring
