@@ -183,7 +183,7 @@ export const IDLE_POSES: Record<string, readonly Pose[]> = {
   'bystander-magpie': [pose(false, 0, 0), pose(false, 1, 0), pose(false, 0, 1), pose(false, 1, 0)],
   // stalks left, stalks dip, stalks right
   'bystander-snail': [pose(false, 0, 0), pose(false, 0, -1), pose(false, 1, 0), pose(false, 0, 1)],
-  // tail out and breathe, tail fully out, tail coming back and breathe
+  // tail tip curls and breathe, tail tip at its height, curling back and breathe
   'bystander-cat': [pose(false, 0, 0), pose(false, 1, 1), pose(false, 0, 2), pose(false, 1, 1)],
 };
 

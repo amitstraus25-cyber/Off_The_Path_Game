@@ -7,12 +7,19 @@ import { startGame } from './helpers';
  *
  * The card opens by itself since 2026-10-22, so an offer is now the tallest panel in the game:
  * greeting, picture, name, promise, two rows and the answers, in one. What has to hold at 375, 768,
- * 1280 and a landscape phone's 844x390, for every character and for the good card and the bad one
- * alike (the bad card is the good card with one line swapped, so either may be the longer):
+ * 1280, a landscape phone's 844x390 and the smallest landscape window, 568x320, for every character
+ * and for the good card and the bad one alike (the bad card is the good card with one line
+ * swapped, so either may be the longer):
  *
  *   - the card this run dealt is the one on screen, picture and all;
  *   - Take it, Leave it and Walk on are on screen and are what a pointer at their centre lands on,
- *     so nothing covers them -- a card too tall scrolls inside its own panel, under them;
+ *     so nothing covers them;
+ *   - and so is everything above them -- who is speaking and what they say, the picture, the name
+ *     and the promise, both rows -- each wholly inside the panel's visible box, not scrolled under
+ *     the answers (the UX review, 2026-10-22: at 844x390 the card was 41px too tall for its panel
+ *     and "If you leave it" sat cut through under Take it). On a short landscape window the panel
+ *     must not scroll at all: there the card goes to two columns (panels.css) precisely so that it
+ *     fits, and a scroll there is that layout failing;
  *   - the page itself never scrolls, and never sideways.
  *
  * Seeds are chosen here, by dealing, so that every skill is seen in both of its variants; nothing
@@ -24,7 +31,23 @@ const SIZES = [
   { width: 768, height: 1024 },
   { width: 1280, height: 800 },
   { width: 844, height: 390 },
+  { width: 568, height: 320 },
 ] as const;
+
+/** A landscape window as short as panels.css's two-column offer is written for. */
+const SHORT_LANDSCAPE = (size: { width: number; height: number }): boolean =>
+  size.width > size.height && size.height <= 580;
+
+/** Everything the offer says before its answers, by what it is. */
+const PARTS = {
+  speaker: '.otp-dialogue__speaker',
+  greeting: '.otp-dialogue__line',
+  picture: '.otp-card__icon',
+  name: '.otp-card__title',
+  promise: '.otp-card__promise',
+  'if you take it': '.otp-card__rows .otp-row:nth-child(1)',
+  'if you leave it': '.otp-card__rows .otp-row:nth-child(2)',
+} as const;
 
 /** A run dealt from `seed`, standing in the forest with its clock running. */
 const deal = (page: Page, seed: number): Promise<string[]> =>
@@ -111,6 +134,60 @@ for (const size of SIZES) {
             expect(reach.hit, `${where}: something covers ${action}`).toBe(true);
           }
 
+          // Everything above the answers is on screen too, wholly, and not under anything.
+          const shown = await offer.evaluate((root, parts) => {
+            // The boxes that clip a part: every ancestor that scrolls or clips, and the window.
+            const visibleBox = (el: Element) => {
+              const v = { top: 0, left: 0, bottom: innerHeight, right: innerWidth };
+              for (let a = el.parentElement; a; a = a.parentElement) {
+                if (!/(auto|scroll|hidden|clip)/.test(getComputedStyle(a).overflowY)) continue;
+                const c = a.getBoundingClientRect();
+                v.top = Math.max(v.top, c.top);
+                v.left = Math.max(v.left, c.left);
+                v.bottom = Math.min(v.bottom, c.bottom);
+                v.right = Math.min(v.right, c.right);
+              }
+              return v;
+            };
+            const out: Record<string, string> = {};
+            for (const [what, sel] of Object.entries(parts)) {
+              const el = root.querySelector(sel);
+              if (!el) {
+                out[what] = 'missing';
+                continue;
+              }
+              const r = el.getBoundingClientRect();
+              const view = visibleBox(el);
+              const inside =
+                r.width > 0 &&
+                r.top >= view.top - 0.5 &&
+                r.left >= view.left - 0.5 &&
+                r.bottom <= view.bottom + 0.5 &&
+                r.right <= view.right + 0.5;
+              // Its top, middle and foot are what a pointer there lands on: nothing lies over it.
+              const covered = [r.top + 2, r.top + r.height / 2, r.bottom - 2].some((y) => {
+                const hit = document.elementFromPoint(r.left + r.width / 2, y);
+                return !hit || !(hit === el || el.contains(hit));
+              });
+              out[what] = !inside
+                ? `outside the panel's visible box (${Math.round(r.top)}-${Math.round(r.bottom)} in ${Math.round(view.top)}-${Math.round(view.bottom)})`
+                : covered
+                  ? 'covered'
+                  : 'shown';
+            }
+            // How far the panel the card sits in could still scroll.
+            let scrolls = 0;
+            for (let a = root.querySelector('.otp-offer')!.parentElement; a; a = a.parentElement)
+              if (/(auto|scroll)/.test(getComputedStyle(a).overflowY))
+                scrolls = Math.max(scrolls, a.scrollHeight - a.clientHeight);
+            out['scrolls by'] = String(scrolls);
+            return out;
+          }, PARTS);
+          for (const what of Object.keys(PARTS))
+            expect(shown[what], `${where}: the ${what}`).toBe('shown');
+          if (SHORT_LANDSCAPE(size))
+            expect(shown['scrolls by'], `${where}: the offer scrolls in its panel`).toBe('0');
+
           const page_ = await page.evaluate(() => ({
             down: document.scrollingElement!.scrollHeight - innerHeight,
             sideways: document.documentElement.scrollWidth - innerWidth,
@@ -142,6 +219,11 @@ test('Walk on takes a slim ring that follows its shape and stands off its words'
   await startGame(page);
   await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
   const walkOn = page.locator('[data-offer] [data-action="walk-on"]');
+  // Tab only once the panel has taken focus: Tabs pressed while it mounts went to the page
+  // and the loop ran out before Walk on (flaked under load, 2026-10-22).
+  await expect
+    .poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-offer]')))
+    .toBe(true);
   for (let n = 0; n < 6 && !(await walkOn.evaluate((b) => b === document.activeElement)); n++)
     await page.keyboard.press('Tab');
   await expect(walkOn).toBeFocused();

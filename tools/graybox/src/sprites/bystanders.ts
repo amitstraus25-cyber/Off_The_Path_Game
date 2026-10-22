@@ -25,13 +25,13 @@
  *   toadstool -- a T. Everything above the stem is cap, gills under the brim, a pointing twig
  *   magpie    -- the only HORIZONTAL wedge tail in the cast, 14 px behind a 12 px body
  *   snail     -- a spiral and no legs: one continuous sole, a shell mouth, a parcel on the back
- *   cat       -- NARROW: 14 px across, ears flush with the skull, tail upright off the top-right
+ *   cat       -- NARROW: 15 px across, a round head with two broad ear points, a thin hooked tail
  *
  * Silhouettes, checked against each other and against the cast in `cast.ts`: a wide low dome on a
  * stalk, a long horizontal wedge, a low spiral, a tall thin triangle. The pair that used to be the
- * near-miss -- cat against rabbit -- is now 14 x 30 against 21 x 34, and the ears settle what is
+ * near-miss -- cat against rabbit -- is now 15 x 30 against 21 x 34, and the ears settle what is
  * left of it: the rabbit's are tall leaves standing up with sky between them, the cat's are short
- * triangles flush with the skull.
+ * broad triangles out on the corners of a round skull.
  *
  * Colour, per the rebrand (docs/ART_PRODUCTION.md section 6a):
  *   - the toadstool's cap is RUSSET, because THE TILE IS THE REFERENCE. `tiles.ts` assembles the
@@ -180,7 +180,12 @@ export const BYSTANDER_PLAN = {
   'bystander-toadstool': { w: 22, h: 18, widest: 'the cap', breaks: 'the pointing twig' },
   'bystander-magpie': { w: 28, h: 22, widest: 'the tail', breaks: 'the horizontal wedge tail' },
   'bystander-snail': { w: 27, h: 14, widest: 'the shell', breaks: 'two eye stalks' },
-  'bystander-cat': { w: 14, h: 30, widest: 'the shoulder', breaks: 'the tail, off the top-right' },
+  'bystander-cat': {
+    w: 14,
+    h: 30,
+    widest: 'the head',
+    breaks: 'the tail, clear of her right side',
+  },
 } as const satisfies Record<string, { w: number; h: number; widest: string; breaks: string }>;
 
 // ------------------------------------------------------------------------------- the pose
@@ -891,194 +896,194 @@ function paintSnail(img: Img, pose: Pose): void {
 const CAT_DARK: RGBA = keyline('wood');
 
 /**
- * Sitting, facing out, tail up, entirely uninterested in your errand.
+ * A filled triangle, sampled at pixel centres. The cat's ears are the one shape in this file that
+ * is neither round nor a stroke: a broad base on the skull and a point, and `taper` can only make
+ * a point by narrowing a line, which is what drew her old ears as two tall spikes.
+ */
+function tri(
+  img: Img,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  c: RGBA,
+): void {
+  const side = (px: number, py: number, x0: number, y0: number, x1: number, y1: number): number =>
+    (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0);
+  const area = side(cx, cy, ax, ay, bx, by);
+  for (let y = Math.floor(Math.min(ay, by, cy)); y <= Math.ceil(Math.max(ay, by, cy)); y++)
+    for (let x = Math.floor(Math.min(ax, bx, cx)); x <= Math.ceil(Math.max(ax, bx, cx)); x++) {
+      const px = x + 0.5;
+      const py = y + 0.5;
+      const s0 = side(px, py, ax, ay, bx, by) * area;
+      const s1 = side(px, py, bx, by, cx, cy) * area;
+      const s2 = side(px, py, cx, cy, ax, ay) * area;
+      if (s0 >= 0 && s1 >= 0 && s2 >= 0) img.px(x, y, c);
+    }
+}
+
+/**
+ * Sitting, facing out, tail curled up her right side, entirely uninterested in your errand.
  *
- * NARROW, and that is the whole assignment: 14 px across against the rabbit's 21, 30 tall against
- * his 34. She and the rabbit measured an identical 22 x 44 before this pass, which is the pair the
- * review named -- two upright animals with ears, the same size, in the same forest. The width is
- * what separates them now, and the ears finish the job: hers are short triangles FLUSH with the
- * skull (10.2), his are tall leaves standing up with four pixels of sky between them.
+ * SHE READ AS A FOX, and the client said so (2026-10-22). Every feature the last pass gave her is
+ * one a fox has and a cat does not, and the redraw is that list turned round:
  *
- * The upright tail is her break in the outline. Sitting with the tail curled round the front of her
- * feet -- the old pose -- it ran along the base and widened her to the rabbit's band; up the right
- * side it breaks the top-right corner, which no other character does, and costs two pixels of width
- * rather than nine.
+ *   was                                         is
+ *   tall ears tapering to a spike, set close    short BROAD-BASED triangles out on the skull's
+ *                                                 corners, pink inside, a V of sky between them
+ *   a cream muzzle in two lobes and a           no white anywhere: a whisker pad one step lighter
+ *     cream bib wedge -- a fox's white mask       than the face, a pink nose; ginger all over
+ *   a skull flatter than it is wide over a      a ROUND head, as wide as her haunches and fuller
+ *     narrow chin -- a long wedge of face         at the cheeks than at the brow; the eyes low and
+ *                                                 wide on it, the muzzle three rows and no more
+ *   long separate legs and white socks:         sitting: a pear of a body, narrow at the chest and
+ *     standing, which is how a fox is drawn       widest at the haunches, two short forelegs set
+ *                                                 straight down between them
+ *   a thick ringed brush lying against the hip  a THIN tail, two pixels from root to tip, standing
+ *                                                 clear of her side with a keyline between, hooked
+ *                                                 over at the top like a question mark
  *
- * Her haunch bars drop from four to three and her whisker dimples from six to four: at twelve
- * pixels of interior width, four bars is a dirty sprite.
+ * The tail is the change that reads furthest. The old one was drawn OVER the hip in the hip's own
+ * ramp, so at the playing camera it was a thicker right flank -- a brush, which is a fox. This one
+ * rises from behind the right haunch, one column of keyline clear of her side all the way up, so it
+ * is a separate line against the grass, and it hooks back over at the shoulder. No pale tip: that
+ * is the fox's mark.
+ *
+ * THE BOX DOES NOT MOVE. `BYSTANDER_PLAN` holds her at 14 x 30 within a pixel, and she measures 15
+ * x 30. The head and the tail set her two outer edges, which is why the body is ten columns and not
+ * eleven: the separated tail costs the one pixel the plan allows and nothing more. She stays out of
+ * the rabbit's band (dw 6), and the ears own their own rows above the skull.
+ *
+ * Her beat is still the tail: the hooked tip lifts and curls in a row a beat while the rest of her
+ * ignores you, and only up and inward -- never out, because out is where her width runs out. The
+ * breath dips the head and ears and nothing else.
  */
 function paintCat(img: Img, pose: Pose): void {
   const blink = pose.blink;
-  const b = pose.dip; // the head and ears dip; the paws and the tail stay planted
-  /**
-   * Her beat is the tail: its tip swishes out to the right by `sw` pixels and the rings ride along
-   * in proportion to how far up the tail they sit. The root stays on the hip. Only rightward --
-   * swung left, the tip runs into her own right ear two rows above it.
-   */
-  const sw = Math.max(0, pose.beat) * 1.2;
-  /** How far a point `y` rows up the tail moves with the tip: 0 at the root (row 41), 1 at the tip. */
-  const along = (y: number): number => Math.round(sw * ((41 - y) / 15.6));
-
-  // --- body: mass in shade, inset up-left, lit shoulder ---
-  img.ellipse(15.4, 36.4, 4.6, 7.8, shade('wood', 0));
-  img.ellipse(14.9, 35.9, 4.1, 7.2, shade('wood', 1));
-  img.ellipse(13.6, 31.8, 2.3, 3.2, shade('wood', 2));
-  // Haunch, pushed out to the right: a sitting cat is widest at the hip, not at the chest.
-  img.ellipse(17.6, 40.2, 3.0, 3.8, shade('wood', 0));
-  img.ellipse(17.2, 39.8, 2.5, 3.2, shade('wood', 1));
-
-  // Haunch bars: three of them. Three is a tabby; thirty is a dirty sprite.
-  for (const [by, bx0, bx1] of [
-    [34.5, 16.2, 20.2],
-    [37.5, 16.4, 20.6],
-    [40.5, 16.2, 20.2],
-  ] as const)
-    taper(img, bx0, by, bx1, by + 1.0, 1.8, 1.2, shade('wood', 0));
+  const b = pose.dip; // the head and ears dip; the body, the paws and the tail stay planted
+  /** How far the tail's hooked tip lifts this beat, in rows: never down, never more than two. */
+  const flick = Math.min(2, Math.max(0, pose.beat));
 
   /*
-   * Cream bib: a wedge under the chin, drawn BEFORE the legs so they crop it into a V. Drawn after
-   * them it was a two-pixel stripe running the whole chest, which read as a necktie; the shape a
-   * bib actually makes on a sitting cat is the bit of chest the legs do not cover.
+   * --- the tail, first, so the haunch laps over its root ---
    *
-   * It starts at row 32 and not a row higher, which at this size is the difference between a bib
-   * and a beard. `taper` caps a vertical stroke with a half-disc of its own half-width, so a 6-px
-   * bib started at row 29 reaches row 26 -- it filled the bottom two thirds of the FACE with cream,
-   * and the rendered cat had no muzzle, just a pale chin running into a pale chest.
+   * Out from behind the right haunch at the ground, up her right side one column clear of it, and
+   * hooked back over at the top. Two pixels thick from root to tip, ringed twice in the body's own
+   * dark: a tabby's rings, and no pale tip.
    */
-  taper(img, 15.0, 32.0, 15.0, 37.0, 6.8, 2.2, shade('wood', 0));
-  taper(img, 14.7, 31.8, 14.7, 36.4, 5.8, 1.8, shade('fur', 1));
-  taper(img, 14.3, 31.6, 14.3, 35.2, 4.2, 1.4, shade('fur', 2));
+  const tail: readonly (readonly [number, number])[] = [
+    [18.2, 45.6],
+    [20.4, 44.2],
+    [21.0, 40.0],
+    [21.0, 36.0],
+    [20.6 - flick * 0.2, 33.4 - flick * 0.6],
+    [19.4 - flick * 0.3, 32.2 - flick],
+  ];
+  for (let i = 0; i + 1 < tail.length; i++) {
+    const [x0, y0] = tail[i]!;
+    const [x1, y1] = tail[i + 1]!;
+    taper(img, x0, y0, x1, y1, 2.2, 2.2, shade('wood', 1));
+  }
+  // Its lit edge, on the left of the upright, where the light comes from.
+  taper(img, 20.4, 43.0, 20.4, 35.0, 0.9, 0.9, shade('wood', 2));
+  img.rect(20, 41, 2, 1, CAT_DARK);
+  img.rect(20, 37, 2, 1, CAT_DARK);
 
   /*
-   * Front legs and paws. The grooves matter more than the legs do: drawn in the body's own two
-   * levels the whole lower half came back as one brown mass, so each leg gets a level 0 trough down
-   * its outer edge and the pair are split by a column of background between them.
+   * --- body: a pear, narrow under the chin and widest at the haunches, lit from the upper left ---
+   *
+   * The haunches are one broad mass across the bottom and the chest a smaller one on top of it; the
+   * waist between them is the whole difference between sitting and standing.
+   */
+  img.ellipse(13.9, 42.4, 4.8, 4.3, shade('wood', 0)); // the haunches, in shade
+  img.ellipse(13.5, 41.9, 4.2, 3.7, shade('wood', 1));
+  img.ellipse(11.6, 40.4, 1.6, 2.0, shade('wood', 2)); // the near haunch takes the light
+  img.ellipse(14.0, 35.6, 3.1, 4.4, shade('wood', 0)); // the chest
+  img.ellipse(13.7, 35.2, 2.5, 3.8, shade('wood', 1));
+  img.ellipse(12.8, 34.0, 1.1, 2.0, shade('wood', 2));
+  // A tabby bar round each haunch: three marks on the body in all, with the tail's two rings.
+  img.rect(10, 42, 2, 1, shade('wood', 0));
+  img.rect(17, 41, 1, 2, shade('wood', 0));
+
+  /*
+   * Forelegs: two short straight posts down the middle, from the chest to the ground, with a paw at
+   * the foot of each. One column of keyline splits the pair and one sits outside each, because `wood`
+   * on `wood` is no edge and `outline` cannot reach between them -- without the grooves the lower
+   * half is one brown mass, which is what reads as a standing animal's chest.
    */
   for (const [lx, lit] of [
-    [12.8, 1],
-    [17.6, 0],
+    [12.5, true],
+    [15.5, false],
   ] as const) {
-    taper(img, lx, 36, lx, 43.4, 3.8, 3.4, shade('wood', 0));
-    taper(img, lx - 0.3, 35.7, lx - 0.3, 43.1, 2.8, 2.4, shade('wood', 1));
-    if (lit) taper(img, lx - 1.0, 36.2, lx - 1.0, 42.0, 1.2, 1.0, shade('wood', 2));
-    img.ellipse(lx, 45.0, 2.6, 1.8, shade('wood', 0));
-    img.ellipse(lx - 0.3, 44.6, 2.0, 1.3, shade('fur', 1));
-    img.ellipse(lx - 0.6, 44.3, 1.4, 0.9, shade('fur', 2));
-    img.px(Math.round(lx) - 1, 45, shade('wood', 0));
-    img.px(Math.round(lx) + 1, 45, shade('wood', 0));
+    img.rect(Math.round(lx - 1), 39, 2, 7, shade('wood', lit ? 2 : 1));
+    img.rect(Math.round(lx - 1), 45, 2, 1, shade('wood', lit ? 3 : 2)); // the paw's top, lit
   }
-  // The column between the legs, and it is the reason there are two of them. `wood` 0 on `wood` 1
-  // is 29 luma, which separates a leg from a leg; it does not separate a leg from the ground. The
-  // keyline does, and `outline` cannot reach here because the gap never touches the background.
-  img.line(15, 36.6, 15, 45.4, CAT_DARK);
+  img.line(14, 39, 14, 46, CAT_DARK);
+  img.line(11, 41, 11, 46, shade('wood', 0));
+  img.line(17, 41, 17, 46, shade('wood', 0));
 
   /*
-   * The tail, up the right side, and it is drawn LAST over the hip rather than first under it.
+   * --- ears: two broad triangles out on the corners of the skull ---
    *
-   * Drawn first -- so the haunch could lap over its root, which is the usual instinct -- the haunch
-   * simply covered it: both are `wood`, the haunch spans x 15..20 and the tail x 17..21, and the
-   * finished cat had no tail at all, just a brown plank. Over the hip it reads as what it is, a
-   * cylinder lying against the body, and the CAT_DARK groove down its inner edge is the whole of
-   * that read.
+   * About as wide at the base as they are tall, with a V of sky between the tips: a fox's are tall
+   * and set close, a cat's sit out at the edges of a round head. Pink inside, which is `skin`.
    */
-  img.line(18.0 + sw, 26.0, 18.6, 40.6, CAT_DARK);
-  taper(img, 19.0, 41.0, 20.4 + sw, 25.4, 3.0, 2.4, CAT_DARK);
-  taper(img, 18.9, 40.6, 20.3 + sw, 25.6, 2.2, 1.6, shade('wood', 1));
-  taper(img, 18.7, 40.0, 20.1 + sw, 26.4, 1.1, 1.0, shade('wood', 2));
-  /*
-   * Two rings on it. The tail was drawn in the body's own two levels of `wood` and standing against
-   * the hip, which is both the same ramp and the same value, so at size it read as a plank rather
-   * than as a limb -- a brown column beside a brown cat. A ringed tail is also the oldest tabby
-   * shorthand after the forehead M, and it costs two marks: at three bars on the haunch, three bars
-   * on the forehead and two here the count is still inside "three is a tabby, thirty is a dirty
-   * sprite", because no one group of them is more than three.
-   */
-  img.rect(19 + along(35), 35, 2, 1, CAT_DARK);
-  img.rect(20 + along(30), 30, 2, 1, CAT_DARK);
+  tri(img, 9.4, 24.4 + b, 13.6, 22.0 + b, 10.4, 18.6 + b, shade('wood', 0));
+  tri(img, 9.9, 23.6 + b, 13.0, 22.2 + b, 10.6, 19.6 + b, shade('wood', 2));
+  tri(img, 10.8, 23.0 + b, 12.4, 22.4 + b, 11.0, 20.8 + b, shade('skin', 0));
+  tri(img, 15.4, 22.0 + b, 19.6, 24.4 + b, 18.6, 18.6 + b, shade('wood', 0));
+  tri(img, 16.0, 22.2 + b, 19.1, 23.6 + b, 18.4, 19.6 + b, shade('wood', 1));
+  tri(img, 16.6, 22.4 + b, 18.2, 23.0 + b, 18.0, 20.8 + b, shade('skin', 0));
 
-  /*
-   * --- ears, and the V between them, which is the whole of her silhouette above the shoulder ---
-   *
-   * "Flush with the skull, not stalked like the rabbit's" (10.2) does not mean short enough to
-   * disappear, and the first attempt at this proved it: with the apexes three rows above a skull
-   * that topped out at row 20, and the tabby M's top bar reaching row 19 between them, `outline()`
-   * closed the gap completely and she came back as a plain 12 x 30 rectangle -- at 24 px a domino.
-   *
-   * Three things fix it and all three are measured, not felt. The skull drops a row and flattens,
-   * so the ears own rows 19 to 21 outright. The apexes are six pixels apart, because the outline
-   * takes one pixel off each facing edge and a six-pixel gap is what leaves four of sky. And the M
-   * starts at row 22, on the forehead, where it cannot bridge the two ears.
-   */
-  const ear = (baseX: number, apexX: number, lit: boolean): void => {
-    taper(img, baseX, 23.6 + b, apexX, 19.2 + b, 3.4, 1.2, shade('wood', 0));
-    taper(img, baseX - 0.3, 23.4 + b, apexX - 0.3, 19.8 + b, 2.4, 0.9, shade('wood', lit ? 2 : 1));
-    taper(img, baseX, 23.2 + b, apexX, 20.2 + b, 1.4, 0.7, shade('skin', 0));
-  };
-  ear(11.6, 10.8, true);
-  ear(18.0, 18.8, false);
-
-  // --- head: flatter than it is wide, which is what buys the ears their three clear rows ---
-  img.ellipse(14.8, 25.4 + b, 4.4, 3.8, shade('wood', 0));
-  img.ellipse(14.3, 24.9 + b, 3.9, 3.3, shade('wood', 1));
-  img.ellipse(12.9, 23.4 + b, 2.2, 1.6, shade('wood', 2));
-  // Cheek ruffs, which is why a cat's face is wider than her skull.
-  img.ellipse(11.2, 27.4 + b, 2.2, 1.8, shade('wood', 1));
-  img.ellipse(18.3, 27.4 + b, 2.2, 1.8, shade('wood', 0));
-  img.ellipse(11.0, 27.0 + b, 1.7, 1.3, shade('wood', 2));
-  // The tabby M on the forehead: three bars, which is the oldest cat shorthand there is. It starts
-  // at row 22 and not a row higher -- see the note on the ears.
-  for (const mx of [13, 15, 17]) img.rect(mx, 22 + b, 1, 3, shade('wood', 0));
+  // --- head: a ball as wide as the haunches, fuller at the cheeks than at the crown ---
+  img.ellipse(14.5, 26.6 + b, 5.0, 4.3, shade('wood', 0));
+  img.ellipse(14.2, 26.2 + b, 4.5, 3.8, shade('wood', 1));
+  img.ellipse(12.6, 24.4 + b, 2.4, 1.7, shade('wood', 2)); // the brow, lit
+  // Cheek ruffs: the jaw wider than the brow is the most cat thing a face can do at this size.
+  img.ellipse(10.2, 28.6 + b, 1.3, 1.2, shade('wood', 1));
+  img.ellipse(18.8, 28.6 + b, 1.3, 1.2, shade('wood', 0));
+  // The tabby M: short bars on the forehead between the ears.
+  for (const [mx, h] of [
+    [12, 2],
+    [14, 1],
+    [15, 1],
+    [17, 2],
+  ] as const)
+    img.rect(mx, 22 + b, 1, h, shade('wood', 0));
 
   /*
    * --- face: two eyes, each a small dark pupil in a lit field with a light on it ---
    *
-   * This is the design board's finding about the rabbit and the owl, arriving a third time. Each
-   * eye was a 3 x 2 block of `gold` 2 at luma 190 with a one-pixel dark column down its MIDDLE,
-   * which does not make a pupil -- it cuts the eye in half, so the face rendered as FOUR bright gold
-   * bars in a row across nine columns of head, and they were far and away the brightest thing on
-   * the sprite. A cat's eye is mostly iris and that is the charm of it, but the board's rule still
-   * holds: the dark mark has to be small, inside the light, with the light showing round it.
-   *
-   * So: 2 x 2 of `gold` 1 -- a step down from 2, because at 190 the pair out-shouted everything --
-   * with the pupil one pixel at the lower-inner corner and the catch one pixel at the upper-left,
-   * where every light in this project comes from. Four pixels of eye each, three columns of
-   * forehead between them.
+   * 2 x 2 of `gold` 1, the pupil one pixel at the lower-inner corner and the catch one pixel at the
+   * upper-left: the design board's rule from the rabbit and the owl, kept -- the dark mark small and
+   * inside the light. They sit low and wide on the head with three columns of face between them,
+   * which is a round face's proportion; a fox's eyes are high and close on a long one.
    */
   for (const [ex, px] of [
     [11, 12],
-    [16, 17],
+    [16, 16],
   ] as const) {
     if (blink) {
-      img.rect(ex, 25 + b, 3, 1, shade('wood', 0));
+      img.rect(ex, 26 + b, 2, 1, CAT_DARK);
     } else {
-      img.rect(ex, 24 + b, 2, 2, shade('gold', 1));
-      img.px(px, 25 + b, CAT_DARK);
-      img.px(ex, 24 + b, shade('gold', 3));
+      img.rect(ex, 25 + b, 2, 2, shade('gold', 1));
+      img.px(px, 26 + b, CAT_DARK);
+      img.px(ex, 25 + b, shade('gold', 3));
     }
   }
   /*
-   * Muzzle: two small lobes with a seam between them and a nose above, each lobe on its own shade.
-   * One wide pale patch with a dark crescent under it came back as a little mask, and a straight
-   * dark bar under it came back as a mouth -- which section 6 forbids outright at this size.
-   *
-   * The whisker dimples are gone with the height. Four dark pixels in a row across a cream bib is
-   * grit, not a muzzle, and at a 7-row face there is no clean row left to put them on.
+   * A SHORT muzzle: no snout and no white. A whisker pad one step lighter than the face, directly
+   * under the eyes, with a pink nose at its top -- three rows in all. No mouth (section 6).
    */
-  for (const mx of [13.4, 16.4]) {
-    img.ellipse(mx, 28.0 + b, 1.8, 1.4, shade('wood', 0));
-    img.ellipse(mx - 0.3, 27.7 + b, 1.4, 1.0, shade('fur', 1));
-  }
-  img.px(15, 27 + b, shade('wood', 0)); // the seam between the lobes
-  img.px(15, 28 + b, shade('wood', 0));
-  // The nose: two pixels. At a 1.3 x 0.9 ellipse it came out three wide by two deep, which on a
-  // seven-row face is a snout -- the rendered cat had a brown block in the middle of a cream muzzle.
-  img.rect(14, 26 + b, 2, 1, shade('skin', 0));
-  // The jaw line. Head and body are both `wood` and a head on a body in one ramp is a post: the
-  // keyline under the chin is the only thing that says where one ends and the other begins, and
-  // `outline` cannot help because the join never touches the background.
-  img.line(11.6, 29.6 + b, 18.4, 29.6 + b, CAT_DARK);
+  img.ellipse(14.5, 28.9 + b, 2.1, 1.1, shade('wood', 2));
+  img.rect(14, 28 + b, 2, 1, shade('skin', 0));
+  // The chin line: head and body are one ramp, and the keyline under the jaw is what says where one
+  // ends. `outline` cannot draw it, because the join never touches the background.
+  img.line(11.0, 30.6 + b, 18.0, 30.6 + b, CAT_DARK);
 
-  base(img, 11, 20, 47, CAT_DARK);
+  base(img, 9, 19, 47, CAT_DARK);
   img.outline(CAT_DARK);
 }
 

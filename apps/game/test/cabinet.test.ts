@@ -13,15 +13,23 @@ import {
   DECK,
   DECK_PAD,
   DECK_STICK,
+  HUD_PILL,
+  HUD_STRIP_GAP,
   MARQUEE,
+  PAD_GUTTER,
+  PORTRAIT_DECK,
   cabinetFor,
   fittingZoom,
+  hudDockFor,
+  hudStrip,
   overshoot,
 } from '../src/ui/cabinet';
 import { createInput } from '../src/world/input';
 import { STEP_PX } from '../src/ui/touch-controls';
 
 const TOKENS = fileURLToPath(new URL('../src/ui/tokens.css', import.meta.url));
+const PANELS = fileURLToPath(new URL('../src/ui/panels.css', import.meta.url));
+const SCREENS = fileURLToPath(new URL('../src/ui/screens.css', import.meta.url));
 
 /** The whole frame the world sits in: the canvas, its border and its header. */
 const frameOf = (fit: ReturnType<typeof cabinetFor>) => ({
@@ -124,6 +132,62 @@ describe('the world takes the largest whole zoom that fits what is left', () => 
   });
 });
 
+/*
+ * THE CLOCK AND THE BASKET UNDER A PORTRAIT WORLD (the UX review, 2026-10-22: "on portrait phones
+ * the timer and basket sit over the world"). A portrait cabinet leaves its own ground between the
+ * frame's foot and the deck; where that holds a pill with air either side, the pills stand there
+ * (`strip`) and the world's bottom corners are forest again. Everywhere else they stay in the world.
+ * The browser half -- the pills really landing in that strip, clear of the canvas and the deck --
+ * is e2e/hud.spec.ts.
+ */
+describe('where the clock and the basket stand', () => {
+  const sweep: { width: number; height: number }[] = [];
+  for (let width = 320; width <= 2560; width += 32)
+    for (let height = 320; height <= 1440; height += 24) sweep.push({ width, height });
+
+  it('moves them under the world on the portrait phone and tablet the client reviews on', () => {
+    for (const vp of [REFERENCE_VIEWPORTS.phone, REFERENCE_VIEWPORTS.tablet]) {
+      const fit = cabinetFor(vp);
+      expect(hudDockFor(fit), `${vp.width}x${vp.height}`).toBe('strip');
+    }
+    // 375x812: 812 - 40 marquee - (504 + 6 + 44) frame - 131 deck. Derived, not remembered: the
+    // e2e measures the same strip off the page.
+    const phone = cabinetFor(REFERENCE_VIEWPORTS.phone);
+    expect(hudStrip(phone)).toBe(
+      REFERENCE_VIEWPORTS.phone.height - MARQUEE - frameOf(phone).height - PORTRAIT_DECK,
+    );
+  });
+
+  it('leaves them in the world where the strip is too short for a pill, and in every landscape', () => {
+    // 320x568: 18px under the frame. A pill squeezed in there would stand on the deck.
+    const small = cabinetFor({ width: 320, height: 568 });
+    expect(hudStrip(small)).toBeLessThan(HUD_PILL);
+    expect(hudDockFor(small)).toBe('world');
+    for (const vp of sweep.filter((v) => v.height <= v.width)) {
+      const fit = cabinetFor(vp);
+      expect(hudStrip(fit), `${vp.width}x${vp.height}`).toBe(0);
+      expect(hudDockFor(fit), `${vp.width}x${vp.height}`).toBe('world');
+    }
+  });
+
+  it('only ever docks them in a strip that holds a full-size pill and its air', () => {
+    let strips = 0;
+    for (const vp of sweep.filter((v) => v.height > v.width)) {
+      const fit = cabinetFor(vp);
+      const room = fit.screen.height - frameOf(fit).height - PORTRAIT_DECK;
+      expect(hudStrip(fit), `${vp.width}x${vp.height}`).toBe(Math.max(0, room));
+      if (hudDockFor(fit) === 'strip') {
+        strips += 1;
+        expect(room, `${vp.width}x${vp.height}`).toBeGreaterThanOrEqual(
+          HUD_PILL + HUD_STRIP_GAP * 2,
+        );
+      } else expect(room, `${vp.width}x${vp.height}`).toBeLessThan(HUD_PILL + HUD_STRIP_GAP * 2);
+    }
+    // A sweep in which nothing docks proves nothing about the docking.
+    expect(strips).toBeGreaterThan(0);
+  });
+});
+
 describe('the deck and the stylesheet agree', () => {
   it('is as deep as the stick the stylesheet draws, and its padding', () => {
     const css = readFileSync(TOKENS, 'utf8');
@@ -134,6 +198,26 @@ describe('the deck and the stylesheet agree', () => {
     // The stylesheet's fallback is the same deck, for the frame before stage.ts publishes.
     expect(css).toContain(`--otp-cab-deck: ${DECK}px;`);
     expect(css).toContain(`--otp-cab-top: ${MARQUEE}px;`);
+  });
+
+  it('stands the portrait deck as tall as the stylesheet draws it, and the pill as tall', () => {
+    const tokens = readFileSync(TOKENS, 'utf8');
+    const gutter = /--otp-pad-gutter:\s*(\d+)px/.exec(tokens);
+    const border = /--otp-panel-border:\s*(\d+)px/.exec(tokens);
+    expect(gutter, 'tokens.css no longer declares --otp-pad-gutter').not.toBeNull();
+    expect(border, 'tokens.css no longer declares --otp-panel-border').not.toBeNull();
+    expect(Number(gutter![1])).toBe(PAD_GUTTER);
+    expect(Number(border![1])).toBe(FRAME.border);
+    // The console face's top edge is that border (screens.css `.otp-touch`).
+    expect(readFileSync(SCREENS, 'utf8')).toMatch(
+      /\.otp-touch \{[^}]*border-top: var\(--otp-panel-border\) solid/,
+    );
+    expect(PORTRAIT_DECK).toBe(DECK_STICK + PAD_GUTTER * 2 + FRAME.border);
+    const pill = /--otp-hud-basket-h:\s*calc\((\d+)px \* var\(--otp-ui\)\)/.exec(
+      readFileSync(PANELS, 'utf8'),
+    );
+    expect(pill, 'panels.css no longer declares --otp-hud-basket-h').not.toBeNull();
+    expect(Number(pill![1])).toBe(HUD_PILL);
   });
 });
 

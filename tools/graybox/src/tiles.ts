@@ -333,6 +333,29 @@ export const TILE_NAMES: readonly string[] = [
   'shore-cove-ne',
   'shore-cove-sw',
   'shore-cove-se',
+  /*
+   * The twelve banks SEALED, appended for the reason above, 2026-10-22: the client's "water meets
+   * hedge or rock with a hard edge" where the river crosses the border band. Each is its bank, whole
+   * and identical on all four edges, with stones on its lawn; the map lays them in `decor-below` over
+   * the same bank on the border band only, where the cover used to be an opaque square of lawn. The
+   * painters and why they cannot open a seam are "THE SEALED BANKS" in `tiles/w-water.ts`; placement
+   * is the dredge pass in `forest-map.ts`.
+   *
+   * 99 + 12 = 111 names is `Math.ceil(111 / 12)` = 10 rows, so the sheet grows from 384 x 288 to
+   * 384 x 320. Every existing gid keeps its value and its cell: these are gids 100 to 111.
+   */
+  'bank-stones-n',
+  'bank-stones-s',
+  'bank-stones-e',
+  'bank-stones-w',
+  'bank-stones-nw',
+  'bank-stones-ne',
+  'bank-stones-sw',
+  'bank-stones-se',
+  'bank-stones-cove-nw',
+  'bank-stones-cove-ne',
+  'bank-stones-cove-sw',
+  'bank-stones-cove-se',
 ];
 
 /*

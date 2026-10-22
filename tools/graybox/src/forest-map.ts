@@ -11,6 +11,7 @@ import {
 } from '@otp/core';
 import { Img, lumaOf, noise, valueNoise2D } from './paint.ts';
 import { COLUMNS, TILE, TILE_NAMES, TILE_PAINTERS, gid } from './tiles.ts';
+import { SEALED_BANK } from './tiles/w-water.ts';
 
 export const MAP_W = 60;
 export const MAP_H = 42;
@@ -7577,7 +7578,8 @@ export function generateForestMap(): GeneratedMap {
    *
    * (SUPERSEDED IN PART, 2026-10-22: it now DOES lift cover off a bank tile below the border band
    * -- the "middle of a long bank column" rule is reversed, see the note at `onBank` below. The
-   * border rule stands, and audit 9 counts the seven border tiles it leaves.)
+   * border rule stands -- and since later the same day the border's banks keep their cover as a
+   * SEALED bank rather than as a square of lawn; see the note below `byDeck`, and audit 9b.)
    *
    * It is the LAST writer on purpose. Every earlier position for it loses: `sealBorder` runs twice
    * and the second call is below the connectivity flood, the hem-stone swap is below that, and the
@@ -7587,6 +7589,7 @@ export function generateForestMap(): GeneratedMap {
   {
     const WET_GROUND = new Set(['water', 'water-2', 'waterfall'].map(gid));
     const dredged: [number, number][] = [];
+    const sealedBanks: [number, number][] = [];
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++) {
         const standing = nameAt(below, x, y);
@@ -7607,8 +7610,8 @@ export function generateForestMap(): GeneratedMap {
          *
          * THE BORDER BAND KEEPS ITS COVER, for the uncover pass's own reason, which still holds: the
          * seal is solid scrub so the player cannot see the end of the world, and a bank she can see
-         * and cannot walk onto at the top of the frame is an invisible wall. Audit 9 counts those
-         * and now fails on any other.
+         * and cannot walk onto at the top of the frame is an invisible wall. What the cover DRAWS
+         * there changed later the same day: see the sealed banks below.
          */
         const onBank = (TILE_NAMES[floor - 1] ?? '').startsWith('shore') && !onBorder(x, y);
         /*
@@ -7625,6 +7628,26 @@ export function generateForestMap(): GeneratedMap {
           [...NEIGHBOURS, [1, 1], [-1, 1], [1, -1], [-1, -1]].some(([dx, dy]) =>
             nameAt(ground, x + dx!, y + dy!).startsWith('bridge'),
           );
+        /*
+         * ...AND ON THE BORDER BAND THE COVER STAYS, BUT IT IS DRAWN AS THE BANK, 2026-10-22.
+         *
+         * The client, on the river where it crosses the top and bottom rows: "water meets hedge or
+         * rock with a hard edge" -- (31,0), (35,0), (30,1), (29,0), (27,1), (36,1) and (15,41),
+         * (16,41). The band's reason for keeping its cover still holds (a bank she can see and cannot
+         * walk onto is an invisible wall), so the cell stays solid and stays covered; what changes
+         * is the cover. Every one of the band's cover tiles paints a full 32x32 of lawn, so the river
+         * ran into a square of grass across the tile edge with its foam and keyline underneath it.
+         * The sealed bank (`bank-stones-*`, "THE SEALED BANKS" in `tiles/w-water.ts`) is the bank
+         * itself, identical on every edge, with stones piled on its lawn: the waterline comes back,
+         * and the stones are what say the cell is not ground to stand on. Audit 9 now fails on any
+         * bank under opaque cover anywhere, and audit 9b holds the sealed banks to the band.
+         */
+        const bankName = TILE_NAMES[floor - 1] ?? '';
+        if (bankName.startsWith('shore') && onBorder(x, y)) {
+          set(below, x, y, gid(SEALED_BANK[bankName]!) + ((at(ground, x, y) >>> 0) - floor));
+          sealedBanks.push([x, y]);
+          continue;
+        }
         if (!onWater && !onSand && !onBank && !byDeck) continue;
         set(below, x, y, 0);
         /*
@@ -7639,6 +7662,10 @@ export function generateForestMap(): GeneratedMap {
     console.log(
       `  dredged: ${dredged.length} opaque tile(s) lifted off water, waterfall, sand or bank` +
         (dredged.length ? ` -- ${dredged.map(([x, y]) => `(${x},${y})`).join(' ')}` : ''),
+    );
+    console.log(
+      `  sealed: ${sealedBanks.length} border-band bank(s) drawn as the bank with stones on it` +
+        (sealedBanks.length ? ` -- ${sealedBanks.map(([x, y]) => `(${x},${y})`).join(' ')}` : ''),
     );
   }
 
@@ -7943,6 +7970,8 @@ export function generateForestMap(): GeneratedMap {
     // too: the rule here is what is DRAWN, and a shrub-sized tree is still drawn as a tree.
     ...Object.values(KINDS).flatMap((k) => k.trunk),
     'rock',
+    // The sealed banks: a bank drawn with stones piled on it, laid only on the border band.
+    ...Object.values(SEALED_BANK),
     'fence-h',
     'fence-post',
     'fence-corner',
@@ -8414,21 +8443,18 @@ export function generateForestMap(): GeneratedMap {
   {
     const WET = new Set(['water', 'water-2', 'waterfall'].map(gid));
     const aground: [number, number][] = [];
-    let onBanks = 0;
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++) {
         if (!OPAQUE_FLOOR.has(nameAt(below, x, y))) continue;
         const floor = at(ground, x, y) & BASE_GID;
         const here = TILE_NAMES[floor - 1] ?? '';
         /*
-         * A bank tile may carry cover ON THE BORDER BAND ONLY, since 2026-10-22 (the note in the
-         * dredge pass). Below the band a covered bank is a lawn square bitten out of the stones,
-         * and it is a fault like any other cell here.
+         * NO BANK CARRIES OPAQUE COVER, ON THE BAND OR OFF IT, since 2026-10-22, later. Below the
+         * band a covered bank was a lawn square bitten out of the stones; ON the band it was the
+         * same square with the open river running into it, which is the hard edge the client
+         * named at (31,0) and (16,41). The band's banks are sealed instead (the dredge pass), and
+         * audit 9b below holds the sealed ones to their rules. This exemption used to count seven.
          */
-        if (here.startsWith('shore') && onBorder(x, y)) {
-          onBanks++;
-          continue;
-        }
         const touchesDeck = [...NEIGHBOURS, [1, 1], [-1, 1], [1, -1], [-1, -1]].some(([dx, dy]) =>
           nameAt(ground, x + dx!, y + dy!).startsWith('bridge'),
         );
@@ -8441,7 +8467,38 @@ export function generateForestMap(): GeneratedMap {
         'boulder against the deck',
       aground,
     );
-    verdictLines.push(`${onBanks} shoreline tile(s) left under cover on the border band`);
+  }
+
+  /*
+   * ===========================================================================
+   * 9b. THE BORDER'S BANKS ARE SEALED, AND ONLY THE BORDER'S.
+   * ===========================================================================
+   *
+   * A `bank-stones-*` tile is a bank drawn whole with stones on its lawn, laid in `decor-below` over
+   * that same bank on the border band (the dredge pass; "THE SEALED BANKS" in `tiles/w-water.ts`).
+   * Three things can go wrong with one and each is checked here, on the finished map:
+   *   - it stands over a DIFFERENT bank, or no bank: its waterline then crosses the ground's at an
+   *     angle, which is a worse seam than the one it replaced;
+   *   - it stands off the band, where a bank is walkable and the stones would be a wall;
+   *   - its cell is walkable, so the stones are a decal;
+   * Whether a sealed bank READS as solid is the painter's guard, not this audit's: every one of the
+   * twelve shows less open lawn than the band's own `rock` tile, checked on its pixels in
+   * `tiles/w-water.ts`, so any of them may stand anywhere on the band.
+   */
+  {
+    const SEALED = new Set(Object.values(SEALED_BANK));
+    const misplaced: [number, number][] = [];
+    let count = 0;
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        const b = nameAt(below, x, y);
+        if (!SEALED.has(b)) continue;
+        count++;
+        if (SEALED_BANK[nameAt(ground, x, y)] !== b || !onBorder(x, y) || walkableAt(x, y))
+          misplaced.push([x, y]);
+      }
+    fault('sealed bank(s) off the border band, over the wrong bank, or walkable', misplaced);
+    verdictLines.push(`${count} border-band bank(s) sealed with stone instead of covered`);
   }
 
   /*

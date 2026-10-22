@@ -91,6 +91,7 @@
  */
 import { clamp01, Img, keyline, lumaOf, mix, shade, smooth, TILE, tone } from '../paint.ts';
 import type { RGBA, Side } from '../paint.ts';
+import { UNDERGROWTH_TILES } from './w-undergrowth.ts';
 
 /**
  * Terrain tiles are one TILE square (docs/PIXEL_STANDARD.md section 1).
@@ -789,7 +790,260 @@ const APRON_LO = 0.0;
 const APRON_HI = 0.52;
 const APRON_STEPS = 20;
 
-function shore(side: Side): (img: Img) => void {
+/*
+ * ===========================================================================
+ * THE HAND-OVER: A BANK TILE ENDS IN OPEN WATER, NOT IN THE MIDDLE OF ITS OWN APRON.
+ * ===========================================================================
+ *
+ * The client, 2026-10-22, on the straight banks: a faint seam where each one meets the open river.
+ * Measured on HEAD (3c88684), straight across the seam -- the bank's outer line against the `water`
+ * tile's first -- the luma step averaged 20.4 on `shore-w`, 25.0 on `shore-e`, 15.8 and 13.7 on
+ * `shore-n` and `shore-s`, against 2.2 to 10.4 between neighbouring columns inside the open water
+ * and about 6 inside the bank itself. Two causes, and they add:
+ *
+ *   1. THE CROSS-SECTION RAN OFF THE TILE. `CHANNEL` is eleven rings out from whatever is solid, and
+ *      the front-row boulders wade out to depth 27, so along those stretches the apron was still on
+ *      its third or fourth ring -- luma 99 to 120 -- when it hit the tile edge, and the open river
+ *      on the far side is at 150. A dark band sawn off by the grid.
+ *   2. THE LAST RING WAS NOT THE RIVER. Where the apron did complete, it finished at `CHANNEL`'s 0.48
+ *      wobbled by `FOAM_PHASES` at a twentieth, while the open water is `bandAt`: 0.48 wobbled by
+ *      `SURFACE_PHASES` at a sixth, through a different quantiser. Two fields that agree on average
+ *      and nowhere in particular, so the seam drew itself even where the band had ended.
+ *
+ * So the apron now hands over to `bandAt` -- the open body, exactly, the same function the `water`
+ * tile paints -- in two ways at once, and takes whichever is further along:
+ *
+ *   - BY RING. Over the outer half of `CHANNEL` the ring's own tone slides into the surface's, and
+ *     the last ring IS the surface. That closes the line inside the tile where the apron used to
+ *     stop and `river()`'s pixels began (cause 2), and it is why the hand-over starts at ring
+ *     `HAND_RING` rather than at the foam: the dark near half of the cross-section, which is what
+ *     the board's scanline is about and what `SHORE_DARK_FLOOR` guards, is not touched.
+ *   - BY EDGE. Over the last `HAND_EDGE` pixels before the tile's water-facing boundary the same
+ *     slide runs on distance to that boundary, and on the boundary itself the pixel IS `bandAt`.
+ *     The field is periodic in the tile, so `bandAt` on our outer column and on the next tile's first
+ *     column are two neighbouring samples of one continuous surface: the seam is as visible as any
+ *     other column of the river, which is to say not at all (cause 1).
+ *
+ * Where a stone wades close to the edge the cross-section is compressed into what room is left
+ * rather than cut: the dark still sits at the foot of the rock, it just climbs to the body faster.
+ * The foam is untouched -- a white rim against open blue is the board's own hardest step and it is
+ * meant to be there.
+ *
+ * The corners take the same hand-over off each arm, composed the way their land is: a point's water
+ * is either arm's water, so it hands over by the NEARER of its two open edges (`max`); a cove's
+ * water is both arms' at once, so by the FURTHER (`min`). Either way, along an arm the weight is
+ * exactly the straight bank's, so an arm still meets its straight neighbour pixel for pixel in kind
+ * and in tone, and a point's two open edges are `bandAt` from end to end.
+ */
+const HAND_RING = 5;
+const HAND_EDGE = 8;
+
+/** The open body's `t` at a pixel, before `bandAt` snaps it: the surface the apron hands over to. */
+const surfaceT = (x: number, y: number): number => 0.48 + 0.16 * field(x, y, SURFACE_PHASES);
+
+/** How far a pixel `e` pixels in from a water-facing tile edge is handed over to the open body. */
+const edgeHand = (e: number): number => smooth(clamp01(1 - e / HAND_EDGE));
+
+/**
+ * One pixel of the apron, `d` rings out from what is solid (`d >= 2`; ring 1 and the wide ring 2 are
+ * foam and the caller paints them), with `open` the edge hand-over at this pixel.
+ *
+ * Untouched -- byte for byte the cross-section this file drew before -- wherever neither hand-over
+ * has begun. Once one has, the tone is mixed towards `surfaceT` and snapped on a grid that spans
+ * both bands at the apron's own step, so nothing clamps at `APRON_HI`; at full weight it is `bandAt`.
+ */
+function apron(d: number, x: number, y: number, open: number): RGBA {
+  const k = Math.min(CHANNEL.length - 1, d - 2);
+  const own = CHANNEL[k]! + 0.05 * field(x, y, FOAM_PHASES);
+  const h = Math.max(open, smooth(clamp01((k - HAND_RING) / (CHANNEL.length - 1 - HAND_RING))));
+  if (h <= 0) return snap(APRON_LO, APRON_HI, APRON_STEPS, own);
+  if (h >= 1) return bandAt(x, y);
+  const step = (APRON_HI - APRON_LO) / (APRON_STEPS - 1);
+  const steps = Math.round((SURF_HI - APRON_LO) / step) + 1;
+  return snap(APRON_LO, SURF_HI, steps, own + (surfaceT(x, y) - own) * h);
+}
+
+/* --- the sealed banks ----------------------------------------------------------- */
+
+/*
+ * ===========================================================================
+ * WHERE THE RIVER CROSSES THE BORDER BAND, THE BANK IS SEALED WITH STONE, NOT HIDDEN UNDER A HEDGE.
+ * ===========================================================================
+ *
+ * The client, 2026-10-22: where the river meets the map's top and bottom border rows, "water meets
+ * hedge or rock with a hard edge" -- (31,0), (35,0), (30,1), (29,0), (27,1), (36,1) at the top and
+ * (15,41)/(16,41) at the bottom. Walked through `pnpm world`, every one is the same picture: the
+ * border band is solid by rule, so a bank tile on it carried the band's cover, and every cover tile
+ * (`bush`, `bush-low`, `bush-tall`, `rock`) paints its own opaque 32x32 of lawn. The bank's foam,
+ * its keyline and its stones went under that square, and the open water beside it ran straight into
+ * lit grass across the tile edge -- the same square-bitten-out-of-the-bank fault the dredge pass in
+ * `forest-map.ts` cured everywhere BELOW the band, left standing on it for a reason that still holds.
+ *
+ * THE REASON, AND WHY THIS DOES NOT BREAK IT. The band is the edge of the world: two rows (one at the
+ * bottom) of solid ground. Lifting the cover off a bank there would show a lawn the player can see
+ * and cannot walk onto, which is an invisible wall at the top of the frame; that is why the cover
+ * was kept. So the cover stays, and only what it DRAWS changes. A sealed bank is the bank tile
+ * itself, whole -- the same waterline, foam, apron, hand-over and boulders, pixel for pixel on all
+ * four edges -- with its lawn given over to stones: the band's own vocabulary where it meets the
+ * river (`sealTile` there already chooses `rock` in the gorge) and the thing that reads as "you
+ * cannot stand here" without a square of anything. The map lays these in `decor-below`, opaque, over
+ * the same bank in `ground`, and the cell stays solid, as the band requires.
+ *
+ * THE STONES ARE PLACED BY MEASUREMENT, NOT BY HAND, because twelve shapes of land is twelve answers
+ * and a hand-placed list is a guess at each. `sealStones` stands each stone on open lawn, lets its
+ * body run back behind the bank's own stones and out into the shallows (`SEAL_WADE`) -- the foam is
+ * drawn after the pile, so it breaks round a sealing stone exactly as round the bank's own -- puts
+ * the biggest one that fits where there is most room, takes that ground away, and goes again. The
+ * room is bounded by the tile's edges EXACTLY, not by a margin (see `sealStones`): a sealed bank
+ * meets every neighbour as the plain bank does, and the guard at the foot of this file checks all
+ * four edges of all twelve against their plain banks, pixel for pixel.
+ *
+ * HOW MUCH LAWN IS LEFT, AND WHY THAT IS ENOUGH. The straight banks' lawn is a strip seven to
+ * seventeen pixels deep against a land edge no stone may cross, so what fits there is a stone of
+ * radius two to four, not the band's big boulder; a point's land is a wedge its own stones already
+ * cover, and nothing more fits at all (`shore-nw`, `-ne` and `-se` seal to themselves, `-sw` gains
+ * one pebble). That is a measured limit rather than an omission, and the measure that matters is
+ * the band's own: `rock`, the cover the band already uses as "a cell you cannot stand on", shows
+ * 528 pixels of open lawn round its boulder (measured 2026-10-22). Every sealed bank shows fewer --
+ * 11 to 393, the straight four 158 to 186 against 192 to 201 unsealed -- and the guard holds them
+ * under the `rock` tile's figure, read off its painter, so the border reads as solid by the band's
+ * own standard and not by one invented for these tiles.
+ */
+/**
+ * How far past the waterline a sealing stone may wade. The bank's own front row wades eleven pixels
+ * out (`FRONT`); a sealing stone stays nearer the land, so it reads as the bank's stones piled
+ * higher rather than as a new spit, and so it leaves the river its width at the border.
+ */
+const SEAL_WADE = 9;
+/** The keyline round a stone, a pixel and a half on the diagonal and one more on its shaded side. */
+const SEAL_RING = 2.5;
+const SEAL_COUNT = 5;
+const SEAL_R_MIN = 2.2;
+const SEAL_R_MAX = 6.5;
+
+/**
+ * The furthest a boulder of nominal radius `r` reaches from its centre, pixel centre to pixel centre:
+ * `lump` carries it to 1.41 r, and `boulder()` scans only r + 1 either side of a centre on a half
+ * pixel, which clips it at r + 2. The inverse, below, is what a measured room allows.
+ */
+const reachOf = (r: number): number => Math.min(1.41 * r, r + 2);
+const radiusFor = (reach: number): number => (reach <= reachOf(4.88) ? reach / 1.41 : reach - 2);
+
+/**
+ * The shoreline distance field: how many 4-neighbour steps each water pixel is from what is solid,
+ * up to the apron's depth, -1 beyond it and on the solid itself. `step` says which moves exist --
+ * the straight banks wrap along the bank and not across it, the corners do not wrap at all.
+ */
+function rings(
+  solid: Uint8Array,
+  w: number,
+  h: number,
+  step: (x: number, y: number, dx: number, dy: number) => [number, number] | null,
+): Int8Array {
+  const dist = new Int8Array(w * h).fill(-1);
+  let front: [number, number][] = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (solid[y * w + x]) front.push([x, y]);
+  for (let d = 1; d <= CHANNEL.length + 1 && front.length; d++) {
+    const next: [number, number][] = [];
+    for (const [x, y] of front)
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const to = step(x, y, dx, dy);
+        if (to === null) continue;
+        const [nx, ny] = to;
+        const i = ny * w + nx;
+        if (solid[i] || dist[i] !== -1) continue;
+        dist[i] = d;
+        next.push([nx, ny]);
+      }
+    front = next;
+  }
+  return dist;
+}
+
+/**
+ * The stones a sealed bank adds, as `[cx, cy, rock]` in tile pixels.
+ *
+ *   into(x, y)      how far inland a tile pixel is: positive on the lawn, negative in the water
+ *                   (how far past the waterline), and -Infinity on a stone the bank already has;
+ *   edgeRoom(x, y)  how far a stone's whole footprint, keyline included, may reach from a centre
+ *                   at (x, y) and leave every pixel on the tile's four edges exactly as it was.
+ *
+ * `edgeRoom` is the part that makes a sealed bank safe to lay, and it is EXACT rather than a margin
+ * guessed wide. An edge pixel of land or stone must simply not be covered. An edge pixel of water is
+ * coloured by its ring -- its 4-neighbour distance to the nearest solid pixel, `d0` -- so a stone may
+ * come no nearer to it than `d0`: a path of steps is never shorter than the straight line, so a stone
+ * whose nearest pixel is `d0` away cannot shorten that distance, and the foam, the channel and the
+ * hand-over on the edge are untouched. Beyond the apron's depth the bound is the depth itself.
+ */
+function sealStones(
+  into: (x: number, y: number) => number,
+  edgeRoom: (x: number, y: number) => number,
+  salt: number,
+): [number, number, Rock][] {
+  /*
+   * `free` is where a stone's body may lie: the lawn, the shallows out to `SEAL_WADE`, and the
+   * bank's own stones, which a sealing stone may sit BEHIND -- it is laid first and they are drawn
+   * over it, so what shows of it is the part on the lawn, which is the point. `centre` is where one
+   * may stand: on open lawn only, so a stone is never wholly hidden behind the bank's own.
+   */
+  const free = new Uint8Array(S * S);
+  const centre = new Uint8Array(S * S);
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const v = into(x, y);
+      free[y * S + x] = v === -Infinity || v > -SEAL_WADE ? 1 : 0;
+      centre[y * S + x] = v > 0 ? 1 : 0;
+    }
+  const out: [number, number, Rock][] = [];
+  for (let n = 0; n < SEAL_COUNT; n++) {
+    let best = 0;
+    let bx = -1;
+    let by = -1;
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        if (!centre[y * S + x]) continue;
+        // The room a stone centred here has: to the shallows' edge, to a stone already there and
+        // to whatever the tile's edges allow, less its keyline, as a radius.
+        let room = edgeRoom(x + 0.5, y + 0.5);
+        for (let v = 0; v < S && room > best; v++)
+          for (let u = 0; u < S; u++)
+            if (!free[v * S + u]) room = Math.min(room, Math.hypot(u - x, v - y) - 0.5);
+        const r = Math.min(SEAL_R_MAX, radiusFor(room - SEAL_RING));
+        if (r > best) {
+          best = r;
+          bx = x;
+          by = y;
+        }
+      }
+    if (best < SEAL_R_MIN) break;
+    out.push([bx + 0.5, by + 0.5, [0, 0, best, 0.9 + salt * 0.37 + n * 2.3, n === 0]]);
+    // Take its ground away, but only its body: the next stone may lean on this one's rim, which is
+    // what turns three stones into a pile instead of three pebbles in a row.
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++)
+        if (Math.hypot(x - bx, y - by) <= best + 1) {
+          free[y * S + x] = 0;
+          centre[y * S + x] = 0;
+        }
+  }
+  return out;
+}
+
+/** The pixels on a tile's four edges, each once. */
+const EDGE_PIXELS: readonly (readonly [number, number])[] = (() => {
+  const out: [number, number][] = [];
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++)
+      if (x === 0 || y === 0 || x === S - 1 || y === S - 1) out.push([x, y]);
+  return out;
+})();
+
+function shore(side: Side, seal = false): (img: Img) => void {
   return (img) => {
     // The river first, and the whole tile of it, so the field and the dashes run unbroken from the
     // open water into the bank. Clipping the surface to the wet part would put a phase break along
@@ -810,22 +1064,6 @@ function shore(side: Side): (img: Img) => void {
       const [sx, sy] = toTile(side, t - PHASE[side], d);
       sprig(img, wrap(sx), wrap(sy));
     }
-
-    /*
-     * The boulder band, composed on one scratch image and keylined there (section 3.4). Back row
-     * first so the front row overlaps it, and the keyline goes on last so it rings the pile and
-     * not the seams.
-     */
-    const pile = new Img(S, S);
-    for (const rock of BACK) layRock(pile, side, rock);
-    for (const rock of FRONT) layRock(pile, side, rock);
-    ringPile(pile, ROCK_LINE);
-    img.blit(pile, 0, 0);
-
-    const solid = new Uint8Array(S * S);
-    for (let y = 0; y < S; y++)
-      for (let x = 0; x < S; x++)
-        solid[y * S + x] = isLand(side, x, y) || pile.get(x, y)[3] > 0 ? 1 : 0;
 
     /*
      * One step of the shoreline distance field: WRAPPED ALONG THE BANK, OPEN ACROSS IT.
@@ -856,29 +1094,59 @@ function shore(side: Side): (img: Img) => void {
       return ny < 0 || ny >= S ? null : [wrap(nx), ny];
     };
 
-    const dist = new Int8Array(S * S).fill(-1);
-    let front: [number, number][] = [];
-    for (let y = 0; y < S; y++)
-      for (let x = 0; x < S; x++) if (solid[y * S + x] === 1) front.push([x, y]);
-    for (let d = 1; d <= CHANNEL.length + 1 && front.length; d++) {
-      const next: [number, number][] = [];
-      for (const [x, y] of front)
-        for (const [dx, dy] of [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ] as const) {
-          const to = step(x, y, dx, dy);
-          if (to === null) continue;
-          const [nx, ny] = to;
-          const i = ny * S + nx;
-          if (solid[i] === 1 || dist[i] !== -1) continue;
-          dist[i] = d;
-          next.push([nx, ny]);
+    /*
+     * The boulder band, composed on one scratch image and keylined there (section 3.4). Back row
+     * first so the front row overlaps it, and the keyline goes on last so it rings the pile and
+     * not the seams.
+     */
+    const pile = new Img(S, S);
+    if (seal) {
+      /*
+       * The plain bank's own pile and rings first, on scratch, only to measure: where the lawn is
+       * taken and what every edge pixel's ring is. The sealing stones then go down BEFORE the bank's
+       * own, because they stand further up the bank, behind them.
+       */
+      const own = new Img(S, S);
+      for (const rock of [...BACK, ...FRONT]) layRock(own, side, rock);
+      ringPile(own, ROCK_LINE);
+      const solid0 = new Uint8Array(S * S);
+      for (let y = 0; y < S; y++)
+        for (let x = 0; x < S; x++)
+          solid0[y * S + x] = isLand(side, x, y) || own.get(x, y)[3] > 0 ? 1 : 0;
+      const d0 = rings(solid0, S, S, step);
+      const into = (x: number, y: number): number => {
+        if (own.get(x, y)[3] > 0) return -Infinity;
+        const [t, d] = toBank(side, x, y);
+        return bankDepth(wrap(t) + PHASE[side]) - d;
+      };
+      // The rings wrap along the bank, so a stone near one end is measured round to the other.
+      const edgeRoom = (cx: number, cy: number): number => {
+        let room = Infinity;
+        for (const [x, y] of EDGE_PIXELS) {
+          let dx = Math.abs(x + 0.5 - cx);
+          let dy = Math.abs(y + 0.5 - cy);
+          if (acrossX) dy = Math.min(dy, S - dy);
+          else dx = Math.min(dx, S - dx);
+          const i = y * S + x;
+          const near = solid0[i] ? 0.5 : d0[i]! < 1 ? CHANNEL.length + 2 : d0[i]!;
+          room = Math.min(room, Math.hypot(dx, dy) - near);
         }
-      front = next;
+        return room;
+      };
+      for (const [cx, cy, rock] of sealStones(into, edgeRoom, PHASE[side]))
+        layOpen(pile, cx, cy, rock);
     }
+    for (const rock of BACK) layRock(pile, side, rock);
+    for (const rock of FRONT) layRock(pile, side, rock);
+    ringPile(pile, ROCK_LINE);
+    img.blit(pile, 0, 0);
+
+    const solid = new Uint8Array(S * S);
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++)
+        solid[y * S + x] = isLand(side, x, y) || pile.get(x, y)[3] > 0 ? 1 : 0;
+
+    const dist = rings(solid, S, S, step);
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
         const d = dist[y * S + x]!;
@@ -926,14 +1194,10 @@ function shore(side: Side): (img: Img) => void {
         /*
          * The cross-section. `CHANNEL` is indexed from the foam outwards, modulated a little by the
          * field so the bands wander across the tile instead of tracking the waterline exactly --
-         * the board's dark band is wider under an overhang and narrower off a shallow spit.
+         * the board's dark band is wider under an overhang and narrower off a shallow spit -- and
+         * handed over to the open body by ring and by distance to the outer edge (`apron`).
          */
-        const k = Math.min(CHANNEL.length - 1, d - 2);
-        img.px(
-          x,
-          y,
-          snap(APRON_LO, APRON_HI, APRON_STEPS, CHANNEL[k]! + 0.05 * field(x, y, FOAM_PHASES)),
-        );
+        img.px(x, y, apron(d, x, y, edgeHand(S - 1 - toBank(side, x, y)[1])));
       }
   };
 }
@@ -1072,7 +1336,7 @@ const SPRIGS: readonly (readonly [number, number])[] = [
  * A corner: `point` is land in corner `c` with water round it on two sides; `cove` is land with
  * the water reaching into corner `c` only. See the long note above.
  */
-function corner(kind: 'point' | 'cove', c: Corner): (img: Img) => void {
+function corner(kind: 'point' | 'cove', c: Corner, seal = false): (img: Img) => void {
   const [a, b] = kind === 'point' ? SIDES_AT[c] : SIDES_AT[ACROSS[c]];
   const other = (s: Side): Side => (s === a ? b : a);
   /*
@@ -1263,34 +1527,80 @@ function corner(kind: 'point' | 'cove', c: Corner): (img: Img) => void {
      * The stones, both sides' rows, back row first, laid on the wide canvas at every repeat that can
      * reach it, and ringed there so a stone crossing a seam is ringed against what it continues into.
      */
-    const pile = new Img(WIDE, WIDE);
-    const laid: [number, number][] = [];
-    for (const row of [BACK, FRONT])
-      for (const rock of row)
-        for (const s of [a, b])
-          for (const k of [-1, 0, 1, 2]) {
-            const [cx, cy] = toTile(s, rock[0] - PHASE[s] + k * S, rock[1]);
-            if (cx < -PAD || cy < -PAD || cx >= S + PAD || cy >= S + PAD) continue;
-            if (!lays(s, cx, cy, rock[2])) continue;
-            layOpen(pile, cx + PAD, cy + PAD, rock);
-            laid.push([cx, cy]);
-          }
+    const layBank = (pile: Img): void => {
+      const laid: [number, number][] = [];
+      for (const row of [BACK, FRONT])
+        for (const rock of row)
+          for (const s of [a, b])
+            for (const k of [-1, 0, 1, 2]) {
+              const [cx, cy] = toTile(s, rock[0] - PHASE[s] + k * S, rock[1]);
+              if (cx < -PAD || cy < -PAD || cx >= S + PAD || cy >= S + PAD) continue;
+              if (!lays(s, cx, cy, rock[2])) continue;
+              layOpen(pile, cx + PAD, cy + PAD, rock);
+              laid.push([cx, cy]);
+            }
+      /*
+       * A POINT GETS A STONE ON ITS NOSE if neither row happened to put one there. Which stones a
+       * point inherits depends on where the two rows' phases fall, and on two of the four corners
+       * they fall clear of the land altogether -- which left the nose as a bare wedge of wet earth
+       * and keyline, the darkest and emptiest thing on the bank. The board's headlands are where its
+       * stones pile up. One front-row stone, wading off the tip, wholly inside the tile.
+       */
+      if (kind === 'point') {
+        const [ox, oy] = [c.endsWith('w') ? 0 : S - 1, c.startsWith('n') ? 0 : S - 1];
+        const [ux, uy] = [c.endsWith('w') ? 1 : -1, c.startsWith('n') ? 1 : -1];
+        let i = 0;
+        while (i < S && land(ox + ux * i, oy + uy * i)) i++;
+        const [tx, ty] = [ox + ux * (i + 1), oy + uy * (i + 1)];
+        if (!laid.some(([x, y]) => Math.hypot(x - tx, y - ty) < NOSE_CLEAR))
+          layOpen(pile, tx + PAD, ty + PAD, NOSE);
+      }
+    };
     /*
-     * A POINT GETS A STONE ON ITS NOSE if neither row happened to put one there. Which stones a
-     * point inherits depends on where the two rows' phases fall, and on two of the four corners
-     * they fall clear of the land altogether -- which left the nose as a bare wedge of wet earth
-     * and keyline, the darkest and emptiest thing on the bank. The board's headlands are where its
-     * stones pile up. One front-row stone, wading off the tip, wholly inside the tile.
+     * The shoreline distance field over the whole canvas, with no wrap on either axis: the land and
+     * the stones on the far side of every seam are on the canvas, so the foam and the dark channel
+     * at an edge are measured from what is actually there.
      */
-    if (kind === 'point') {
-      const [ox, oy] = [c.endsWith('w') ? 0 : S - 1, c.startsWith('n') ? 0 : S - 1];
-      const [ux, uy] = [c.endsWith('w') ? 1 : -1, c.startsWith('n') ? 1 : -1];
-      let i = 0;
-      while (i < S && land(ox + ux * i, oy + uy * i)) i++;
-      const [tx, ty] = [ox + ux * (i + 1), oy + uy * (i + 1)];
-      if (!laid.some(([x, y]) => Math.hypot(x - tx, y - ty) < NOSE_CLEAR))
-        layOpen(pile, tx + PAD, ty + PAD, NOSE);
+    const openStep = (x: number, y: number, dx: number, dy: number): [number, number] | null => {
+      const nx = x + dx;
+      const ny = y + dy;
+      return nx < 0 || ny < 0 || nx >= WIDE || ny >= WIDE ? null : [nx, ny];
+    };
+    const solidOf = (p: Img): Uint8Array => {
+      const out = new Uint8Array(WIDE * WIDE);
+      for (let i = 0; i < WIDE * WIDE; i++) out[i] = wet[i] === 0 || p.data[i * 4 + 3]! > 0 ? 1 : 0;
+      return out;
+    };
+
+    const pile = new Img(WIDE, WIDE);
+    if (seal) {
+      // As in `shore()`: the plain bank's own pile and rings on scratch, only to measure, and the
+      // sealing stones laid first, behind the bank's own.
+      const own = new Img(WIDE, WIDE);
+      layBank(own);
+      ringOpen(own, ROCK_LINE);
+      const solid0 = solidOf(own);
+      const d0 = rings(solid0, WIDE, WIDE, openStep);
+      const into = (x: number, y: number): number =>
+        own.get(x + PAD, y + PAD)[3] > 0
+          ? -Infinity
+          : land(x, y)
+            ? depth(x, y)
+            : Math.min(raw(x, y), -0.01);
+      const edgeRoom = (cx: number, cy: number): number => {
+        let room = Infinity;
+        for (const [x, y] of EDGE_PIXELS) {
+          const i = (y + PAD) * WIDE + x + PAD;
+          const near = solid0[i] ? 0.5 : d0[i]! < 1 ? CHANNEL.length + 2 : d0[i]!;
+          room = Math.min(room, Math.hypot(x + 0.5 - cx, y + 0.5 - cy) - near);
+        }
+        return room;
+      };
+      const salt = (kind === 'cove' ? 5 : 0) + ['nw', 'ne', 'sw', 'se'].indexOf(c);
+      for (const [cx, cy, rock] of sealStones(into, edgeRoom, salt))
+        layOpen(pile, cx + PAD, cy + PAD, rock);
     }
+    layBank(pile);
     ringOpen(pile, ROCK_LINE);
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
@@ -1298,39 +1608,7 @@ function corner(kind: 'point' | 'cove', c: Corner): (img: Img) => void {
         if (p[3] > 0) img.px(x, y, p);
       }
 
-    /*
-     * The shoreline distance field over the whole canvas, with no wrap on either axis: the land and
-     * the stones on the far side of every seam are on the canvas, so the foam and the dark channel
-     * at an edge are measured from what is actually there.
-     */
-    const solid = new Uint8Array(WIDE * WIDE);
-    for (let i = 0; i < WIDE * WIDE; i++)
-      solid[i] = wet[i] === 0 || pile.data[i * 4 + 3]! > 0 ? 1 : 0;
-    const dist = new Int8Array(WIDE * WIDE).fill(-1);
-    let front: number[] = [];
-    for (let i = 0; i < WIDE * WIDE; i++) if (solid[i] === 1) front.push(i);
-    for (let d = 1; d <= CHANNEL.length + 1 && front.length; d++) {
-      const next: number[] = [];
-      for (const i of front) {
-        const x = i % WIDE;
-        const y = (i - x) / WIDE;
-        for (const [dx, dy] of [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ] as const) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= WIDE || ny >= WIDE) continue;
-          const j = ny * WIDE + nx;
-          if (solid[j] === 1 || dist[j] !== -1) continue;
-          dist[j] = d;
-          next.push(j);
-        }
-      }
-      front = next;
-    }
+    const dist = rings(solidOf(pile), WIDE, WIDE, openStep);
     for (let y = 0; y < S; y++)
       for (let x = 0; x < S; x++) {
         const d = dist[(y + PAD) * WIDE + x + PAD]!;
@@ -1344,12 +1622,10 @@ function corner(kind: 'point' | 'cove', c: Corner): (img: Img) => void {
           img.px(x, y, W_FOAM);
           continue;
         }
-        const k = Math.min(CHANNEL.length - 1, d - 2);
-        img.px(
-          x,
-          y,
-          snap(APRON_LO, APRON_HI, APRON_STEPS, CHANNEL[k]! + 0.05 * field(x, y, FOAM_PHASES)),
-        );
+        // Each arm's own edge hand-over, composed the way the land is: see `apron`'s note.
+        const ha = edgeHand(S - 1 - toBank(a, x, y)[1]);
+        const hb = edgeHand(S - 1 - toBank(b, x, y)[1]);
+        img.px(x, y, apron(d, x, y, kind === 'point' ? Math.max(ha, hb) : Math.min(ha, hb)));
       }
   };
 }
@@ -1541,6 +1817,24 @@ export const WATER_TILES: Record<string, (img: Img) => void> = {
   'shore-cove-se': corner('cove', 'se'),
 };
 
+/**
+ * The twelve banks again, SEALED: each the bank above with stones on its lawn, for the border band
+ * only (see "THE SEALED BANKS" above). `bank-stones-<x>` seals `shore-<x>`. Named off the `shore-`
+ * prefix on purpose: every pass in `forest-map.ts` that asks `startsWith('shore')` is asking about
+ * the GROUND, and these are only ever laid in `decor-below`, over the bank they seal.
+ */
+export const SEALED_BANK: Record<string, string> = {};
+for (const side of ['n', 's', 'e', 'w'] as const) {
+  WATER_TILES[`bank-stones-${side}`] = shore(side, true);
+  SEALED_BANK[`shore-${side}`] = `bank-stones-${side}`;
+}
+for (const kind of ['point', 'cove'] as const)
+  for (const c of ['nw', 'ne', 'sw', 'se'] as const) {
+    const suffix = kind === 'point' ? c : `cove-${c}`;
+    WATER_TILES[`bank-stones-${suffix}`] = corner(kind, c, true);
+    SEALED_BANK[`shore-${suffix}`] = `bank-stones-${suffix}`;
+  }
+
 /* --- the guard -------------------------------------------------------------- */
 
 /*
@@ -1605,6 +1899,36 @@ const OUTER_LINE: Record<Side, (i: number) => [number, number]> = {
   s: (i) => [i, 0],
 };
 
+/*
+ * THE THIRD THING: THE SEAM WHERE A STRAIGHT BANK HANDS OVER TO THE OPEN RIVER.
+ *
+ * The client's "faint line" along every straight bank (2026-10-22) was a whole-line tone step across
+ * that seam: the bank's outer line still in its apron, the `water` tile's first line in the open
+ * body. Measured as the MEDIAN per-pixel luma step over the 32 pairs -- the median because a white
+ * dash crossing the seam is the river's own texture and a few pixels of it must not count, while a
+ * seam is the whole line -- HEAD (3c88684) stood at 22.6 on `shore-w`, 27.6 on `shore-e`, 6.1 on
+ * `shore-n` and 10.8 on `shore-s`.
+ *
+ * THE BOUND IS THE OPEN WATER'S OWN. For each of `water` and `water-2`, laid as the map lays it
+ * beyond the bank, the seam may be no larger than the largest median step between any two
+ * neighbouring lines INSIDE that tile along the same axis -- 2.6 across columns and 3.7 to 4.8
+ * across rows when this was written, against the hand-over's 2.2. That is "no more visible than any
+ * other line of the river", read off the river and not off `HAND_EDGE` or `CHANNEL`, so editing the
+ * hand-over cannot move the bound with it.
+ */
+const medianStep = (a: readonly RGBA[], b: readonly RGBA[]): number => {
+  const d = a.map((c, i) => Math.abs(lumaOf(c) - lumaOf(b[i]!))).sort((p, q) => p - q);
+  return (d[S / 2 - 1]! + d[S / 2]!) / 2;
+};
+const OPEN: Record<string, Img> = {};
+for (const name of ['water', 'water-2']) {
+  OPEN[name] = new Img(S, S);
+  WATER_TILES[name]!(OPEN[name]);
+}
+/** Line `k` of a tile across axis `acrossX` (a column when true, a row when false). */
+const lineOf = (img: Img, acrossX: boolean, k: number): RGBA[] =>
+  Array.from({ length: S }, (_, i) => (acrossX ? img.get(k, i) : img.get(i, k)));
+
 for (const side of ['n', 's', 'e', 'w'] as const) {
   const name = `shore-${side}`;
   const img = new Img(S, S);
@@ -1658,5 +1982,101 @@ for (const side of ['n', 's', 'e', 'w'] as const) {
         `happened before was the shoreline distance field wrapping on the across-bank axis, which ` +
         `made the far side of the tile read as one pixel from land and gave it the foam rim. ` +
         `Check the step() in shore(): it wraps along the bank only.`,
+    );
+
+  const acrossX = side === 'e' || side === 'w';
+  // The bank's outer line, and the first line of open water beyond it: the far edge of the tile
+  // the map lays next door, which for a west bank is that tile's column 0.
+  const mine = line;
+  const theirsAt = side === 'w' || side === 'n' ? 0 : S - 1;
+  for (const [open, img2] of Object.entries(OPEN)) {
+    let bound = 0;
+    for (let k = 0; k < S; k++)
+      bound = Math.max(
+        bound,
+        medianStep(lineOf(img2, acrossX, k), lineOf(img2, acrossX, (k + 1) % S)),
+      );
+    const seam = medianStep(mine, lineOf(img2, acrossX, theirsAt));
+    if (seam > bound)
+      throw new Error(
+        `${name} meets ${open} with a median luma step of ${seam.toFixed(1)} across the seam, ` +
+          `over the ${bound.toFixed(1)} that ${open} itself never exceeds between two of its own ` +
+          `neighbouring lines. That is the faint line along the bank the client reported: the ` +
+          `apron is still on its way to the open body when it reaches the tile edge. Check that ` +
+          `apron() still hands over to bandAt() by distance to the outer edge (edgeHand).`,
+      );
+  }
+}
+
+/*
+ * THE SEALED BANKS ARE THEIR BANKS ON EVERY EDGE, AND THEY ARE SEALED.
+ *
+ * A sealed bank is laid over its plain bank and meets that bank's neighbours, so the whole of its
+ * job at a seam is to be the plain bank: all four edge lines are compared pixel for pixel. A stone
+ * that reached an edge would be sawn off there -- the square-edged boulder the corner pass was
+ * written to remove -- and this is where it would show.
+ *
+ * And it has to read as solid. A sealed bank stands on the border band over a bank the player can
+ * see and cannot walk onto, so it may show no more open lawn -- the daylight band of the lawn,
+ * green over red and blue and brighter than the shaded band at the waterline -- than the band's
+ * own `rock` tile does round its boulder, read off `rock`'s painter. And wherever there is room for
+ * a stone (every straight bank and every cove) it must have been given one: a sealed bank that is
+ * its plain bank again is the fix quietly undone.
+ */
+const ROCK_COVER = new Img(S, S);
+UNDERGROWTH_TILES['rock']!(ROCK_COVER);
+const openLawn = (img: Img): number => {
+  let n = 0;
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const c = img.get(x, y);
+      if (c[1] > c[0] && c[1] > c[2] && lumaOf(c) > 120) n++;
+    }
+  return n;
+};
+const ROCK_LAWN = openLawn(ROCK_COVER);
+for (const [plain, sealed] of Object.entries(SEALED_BANK)) {
+  const p = new Img(S, S);
+  const q = new Img(S, S);
+  WATER_TILES[plain]!(p);
+  WATER_TILES[sealed]!(q);
+  for (let i = 0; i < S; i++)
+    for (const [x, y] of [
+      [i, 0],
+      [i, S - 1],
+      [0, i],
+      [S - 1, i],
+    ] as const) {
+      const a = p.get(x, y);
+      const b = q.get(x, y);
+      if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2] || a[3] !== b[3])
+        throw new Error(
+          `${sealed} differs from ${plain} at its edge pixel ${x},${y}: a sealing stone has reached ` +
+            `the tile edge, where the plain bank's neighbour will cut it off. sealStones() keeps a ` +
+            `stone SEAL_RING pixels clear of every edge; check that bound against LUMP_PEAK.`,
+        );
+    }
+  const stone = (img: Img): number => {
+    let n = 0;
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const c = img.get(x, y);
+        if (Math.abs(c[0] - c[1]) < 3 && !isWaterPixel(c)) n++;
+      }
+    return n;
+  };
+  if (!plain.match(/^shore-(nw|ne|sw|se)$/) && !(stone(q) > stone(p)))
+    throw new Error(
+      `${sealed} carries no more stone than ${plain} (${stone(q)} pixels against ${stone(p)}). ` +
+        `There is room for a stone on that bank's lawn and sealStones() has stopped finding it, ` +
+        `which leaves the border band's bank exactly as it was. Check SEAL_WADE, SEAL_R_MIN and ` +
+        `the centre mask.`,
+    );
+  if (openLawn(q) > ROCK_LAWN)
+    throw new Error(
+      `${sealed} shows ${openLawn(q)} pixels of open lawn, over the ${ROCK_LAWN} the band's own ` +
+        `rock tile shows round its boulder. It is laid on the border band, which is solid, so ` +
+        `lawn the player can see and cannot walk onto is an invisible wall; the band's cover was ` +
+        `kept to prevent exactly that.`,
     );
 }

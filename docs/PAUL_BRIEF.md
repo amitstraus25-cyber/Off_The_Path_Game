@@ -4,8 +4,9 @@
 because the same mistakes kept costing whole rounds, and because a reviewer who measures the wrong
 thing confidently is more expensive than one who finds nothing.
 
-Last updated: 2026-10-22, at `3c88684`, after the client's rounds of that day (the cabinet, speed
-scoring, typed names, the minimap and door, the seven perks, the work email). Before that,
+Last updated: 2026-10-22, at `e2f7e7f` (no code has changed since `3c88684`; the commits after it
+are docs), after the client's rounds of that day (the cabinet, speed scoring, typed names, the
+minimap and door, the seven perks, the work email). Before that,
 2026-10-21, after the client round that found the stale checkout (trap 10) and the debug handle
 that was shipping to players. Read trap 10 before investigating anything the client reports seeing.
 
@@ -15,13 +16,17 @@ that was shipping to players. Read trap 10 before investigating anything the cli
 
 - The game is live at `off-the-path-game.vercel.app`, embedded-ready, `frame-ancestors` locked to
   `cyera.com` and `*.cyera.com`.
-- The suite is **1,151 tests passing and 1 skipped** (run 2026-10-22 on `3c88684`, each workspace
+- The suite is **1,151 tests passing and 1 skipped** (run 2026-10-22 on `e2f7e7f`, each workspace
   on its own with its exit code taken separately, all 0) — `packages/core` 348 in 13 files and
   `apps/api` 202 in 12, both at a 100% gate on statements, branches, functions AND lines (core
   689/385/159/566, api 367/238/56/320); `apps/game` 484 plus 1 skipped in 30 files; `tools/graybox`
   117 in 5 (no coverage gate; it gates on art measurements) — plus **335 e2e** in 33 files
-  (`playwright test --list`, which counts the specs that skip; the last full run, at
-  `2b42743`, was 329 passed and 6 skipped, and the e2e suite was not run for this update). The
+  (`playwright test --list`, which counts the specs that skip; **run in full on 2026-10-22 on a
+  `git archive` copy of `e2f7e7f`, its own port, Chromium 1228, two workers,
+  `--fail-on-flaky-tests`: 329 passed and 6 skipped, exit 0, 4.7 minutes**. A first attempt
+  failed on every spec with `ERR_CONNECTION_REFUSED` after the preview server was killed under it:
+  trap 9's starvation, not a defect, and the pass above had a supervised server. That run covers
+  the committed tree only, not the uncommitted work below). The
   figures this section carried earlier on 2026-10-22 (681 and 211) predate the day's later
   rounds (trap 11). The game is v2 only; `pnpm sim` plays the four v2
   strategies (`careful`, `greedy`, `leave-all`, `random`).
@@ -29,7 +34,14 @@ that was shipping to players. Read trap 10 before investigating anything the cli
   effect that is the same in the good and the bad copy; every run deals 3 good and 4 bad from a
   seed; take it or leave it; a 3:00 hard timer; score out of 100 = correct choices plus speed (par
   1:47); a door check; a flip-tile reveal; typed names; a leaderboard; a work-email gate that is
-  built and OFF. Everything is committed and the tree was clean at `3c88684`.
+  built and OFF. All of it is committed (the tree was clean at `3c88684`). **Not clean now:**
+  another builder's round is in the checkout, uncommitted -- `ui/cabinet.ts`, `hud.css`,
+  `panels.css`, `stage.ts`, `world/forest-scene.ts`, `world/logic.ts`, two graybox painters, edits
+  to `test/cabinet.test.ts`, `e2e/hud.spec.ts` and `e2e/offer.spec.ts`, and new
+  `e2e/talk-bubble.spec.ts` and `test/talk-bubble.test.ts` (read off `git status`; nobody here has
+  read those diffs). The unit counts above were taken at the start of this round, before
+  `test/talk-bubble.test.ts` appeared, and equal the counts at `e2f7e7f`; they will move when that
+  work lands, so measure again then (trap 2).
 - The art generator is deterministic: `pnpm graybox` regenerates `map-forest.json` byte-identical
   unless a painter changed. That property is the proof standard for every art change.
 - Phase 6 (the leaderboard) exists: `apps/api`, score recomputed server-side from the run log.
@@ -145,7 +157,7 @@ pixel` passed happily while the canvas sat on a half pixel. Same shape as trap 1
 
 ## 5. The leaderboard, precisely
 
-**Current state, 2026-10-22, at `3c88684` -- this supersedes everything below it in this section.**
+**Current state, 2026-10-22, at `3c88684` (the route code is unchanged at `e2f7e7f`) -- this supersedes everything below it in this section.**
 Three routes are bundled by `vercel-output.mjs`, which reads them off `apps/api/api/`: `start`,
 `score`, `top`. The service scores **v2** runs only; a v1 log is a 400, and v1 itself is gone from
 the repo.

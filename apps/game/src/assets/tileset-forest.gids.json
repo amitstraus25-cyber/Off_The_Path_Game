@@ -97,5 +97,17 @@
   "shore-cove-nw": 96,
   "shore-cove-ne": 97,
   "shore-cove-sw": 98,
-  "shore-cove-se": 99
+  "shore-cove-se": 99,
+  "bank-stones-n": 100,
+  "bank-stones-s": 101,
+  "bank-stones-e": 102,
+  "bank-stones-w": 103,
+  "bank-stones-nw": 104,
+  "bank-stones-ne": 105,
+  "bank-stones-sw": 106,
+  "bank-stones-se": 107,
+  "bank-stones-cove-nw": 108,
+  "bank-stones-cove-ne": 109,
+  "bank-stones-cove-sw": 110,
+  "bank-stones-cove-se": 111
 }

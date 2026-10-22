@@ -25,8 +25,9 @@ import {
   moveWithCollision,
   nearest,
   overlaps,
+  placeBubble,
 } from './logic';
-import type { Facing, Interactable, Rect, Vec } from './logic';
+import type { BubbleSide, Facing, Interactable, Rect, Vec } from './logic';
 import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
 import { sketchMap } from './minimap';
@@ -248,6 +249,10 @@ interface Npc extends Interactable {
   faces: -1 | 1;
   /** The sheet the figure was placed from (`npc-rabbit`); its strips are `<sheet>-idle`, `-hop`. */
   sheet: string;
+  /** The drawing inside their frame, in frame pixels (`inkOf`): what the bubble must not cover. */
+  ink: Rect;
+  /** Which side of their head the bubble stands on while it is up (`placePrompt`), else null. */
+  bubbleSide: BubbleSide | null;
 }
 
 /** One wing ride in progress (`flyTo`). */
@@ -341,21 +346,55 @@ function tokenColor(name: string): number | null {
  */
 function headroomOf(frame: Phaser.Textures.Frame | null): number {
   if (!frame) return 0;
+  const ink = inkOf(frame);
+  return ink ? frame.cutHeight - ink.y : frame.cutHeight;
+}
+
+/**
+ * The box round everything drawn in a frame, in frame pixels, or null when the readback is
+ * unavailable or the frame is empty. `headroomOf` is its top row; the talk bubble's placement
+ * (`placePrompt`) needs all four sides, of the speaker, of everyone it must not cover and of the
+ * bubble itself -- measured, for the reason `headroomOf` gives, never tabled.
+ */
+function inkOf(frame: Phaser.Textures.Frame | null): Rect | null {
+  if (!frame) return null;
   const { cutX, cutY, cutWidth: w, cutHeight: h } = frame;
   try {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return h;
+    if (!ctx) return null;
     ctx.drawImage(frame.source.image as CanvasImageSource, cutX, cutY, w, h, 0, 0, w, h);
     const { data } = ctx.getImageData(0, 0, w, h);
+    let left = w;
+    let right = -1;
+    let top = h;
+    let bottom = -1;
     for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3]! > 0) return h - y;
-    return h;
+      for (let x = 0; x < w; x++)
+        if (data[(y * w + x) * 4 + 3]! > 0) {
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+    if (right < 0) return null;
+    return { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
   } catch {
-    return h;
+    return null;
   }
+}
+
+/** The smallest box holding every one of these; the whole frame when none could be measured. */
+function unionOf(boxes: readonly (Rect | null)[], frame: { width: number; height: number }): Rect {
+  const real = boxes.filter((b): b is Rect => b !== null);
+  if (real.length === 0) return { x: 0, y: 0, width: frame.width, height: frame.height };
+  const x = Math.min(...real.map((b) => b.x));
+  const y = Math.min(...real.map((b) => b.y));
+  const right = Math.max(...real.map((b) => b.x + b.width));
+  const bottom = Math.max(...real.map((b) => b.y + b.height));
+  return { x, y, width: right - x, height: bottom - y };
 }
 
 /**
@@ -472,6 +511,10 @@ export class ForestScene extends Phaser.Scene {
 
   private map!: ForestMap;
   private purple!: Phaser.GameObjects.Sprite;
+  /** Purple's drawing in her frame, over all four facings: what a talk bubble must not cover. */
+  private purpleInk: Rect = { x: 0, y: 0, width: 0, height: 0 };
+  /** The talk bubble's drawing in its frame, over both bob frames. */
+  private bubbleInk: Rect = { x: 0, y: 0, width: 0, height: 0 };
   /** Purple's own pool of shade. Moves and re-tints with her, because she is the one who walks. */
   private purpleShadow!: Phaser.GameObjects.Ellipse;
   /** The tile layer the figures stand on, which is what their shadows take their colour from. */
@@ -593,6 +636,18 @@ export class ForestScene extends Phaser.Scene {
     this.purple = this.add
       .sprite(this.position.x, this.position.y, 'purple', 'purple-idle-down-0')
       .setOrigin(0.5, 1);
+    this.purpleInk = unionOf(
+      (['down', 'left', 'right', 'up'] as const).map((f) =>
+        this.textures.exists('purple')
+          ? inkOf(this.textures.getFrame('purple', `purple-idle-${f}-0`))
+          : null,
+      ),
+      { width: this.purple.width, height: this.purple.height },
+    );
+    const bubble = this.textures.exists('fx-interact-prompt')
+      ? [0, 1].map((i) => inkOf(this.textures.getFrame('fx-interact-prompt', i)))
+      : [];
+    this.bubbleInk = unionOf(bubble, { width: TILE, height: TILE });
     /*
      * Her depth comes with her, not with her first step.
      *
@@ -1191,6 +1246,10 @@ export class ForestScene extends Phaser.Scene {
     const shadow = this.addShadow(footprintOf(this.textures.getFrame(key, 0)));
     this.seatShadow(shadow, sprite.x, sprite.y);
     const faces = facingOf(this.textures.getFrame(key, 0));
+    const ink = unionOf([inkOf(this.textures.getFrame(key, 0))], {
+      width: sprite.width,
+      height: sprite.height,
+    });
     return {
       kind,
       id: spawn.id,
@@ -1201,6 +1260,8 @@ export class ForestScene extends Phaser.Scene {
       shadow,
       faces,
       sheet: key,
+      ink,
+      bubbleSide: null,
     };
   }
 
@@ -1510,10 +1571,55 @@ export class ForestScene extends Phaser.Scene {
   private updatePrompts(): Npc | null {
     const target = nearest(this.position, this.available(), INTERACT_RADIUS);
     for (const npc of this.npcs) {
-      if (npc === target) this.showPrompt(npc);
-      else this.hidePrompt(npc);
+      if (npc === target) {
+        this.showPrompt(npc);
+        this.placePrompt(npc);
+      } else this.hidePrompt(npc);
     }
     return target;
+  }
+
+  /**
+   * A sprite's drawing in world pixels: its measured ink, placed by the sprite's bottom-centre
+   * origin and mirrored with it.
+   */
+  private drawingOf(sprite: Phaser.GameObjects.Sprite, ink: Rect): Rect {
+    const left = sprite.flipX ? sprite.width - ink.x - ink.width : ink.x;
+    return {
+      x: sprite.x - sprite.width / 2 + left,
+      y: sprite.y - sprite.height + ink.y,
+      width: ink.width,
+      height: ink.height,
+    };
+  }
+
+  /**
+   * WHERE THE BUBBLE STANDS, every frame it is up (world/logic.ts `placeBubble`, which carries the
+   * why): over the speaker's head unless that covers Purple or anybody else, or leaves the camera;
+   * then beside the head, away from Purple. Measured against the figures as they stand THIS frame,
+   * Purple walking and the cast turning to face her, so it follows her round them. Two writes at
+   * most, and only when the answer moved.
+   */
+  private placePrompt(npc: Npc): void {
+    const main = this.cameras.main;
+    const others: Rect[] = [this.drawingOf(this.purple, this.purpleInk)];
+    for (const other of this.npcs)
+      if (other !== npc && other.sprite.visible)
+        others.push(this.drawingOf(other.sprite, other.ink));
+    const place = placeBubble({
+      talker: this.drawingOf(npc.sprite, npc.ink),
+      frame: { width: npc.prompt.width, height: npc.prompt.height },
+      ink: this.bubbleInk,
+      others,
+      view: { x: main.scrollX, y: main.scrollY, width: main.width, height: main.height },
+      gap: PROMPT_GAP,
+      awayFromX: this.position.x,
+      keep: npc.bubbleSide,
+    });
+    npc.bubbleSide = place.side;
+    if (npc.prompt.x !== place.x || npc.prompt.y !== place.y)
+      npc.prompt.setPosition(place.x, place.y);
+    if (npc.prompt.flipX !== place.flip) npc.prompt.setFlipX(place.flip);
   }
 
   /**
@@ -1537,6 +1643,8 @@ export class ForestScene extends Phaser.Scene {
     if (!npc.prompt.visible) return;
     npc.prompt.stop();
     npc.prompt.setVisible(false);
+    // The next time it is raised it starts from over the head again, not from wherever it last was.
+    npc.bubbleSide = null;
   }
 
   /**

@@ -1,4 +1,4 @@
-import { MAX_ZOOM, MIN_VIEW, PORTRAIT_WORLD, TILE, availableFor, stageFit } from '@otp/core';
+import { FRAME, MAX_ZOOM, MIN_VIEW, PORTRAIT_WORLD, TILE, availableFor, stageFit } from '@otp/core';
 import type { Size, StageFit } from '@otp/core';
 
 /*
@@ -35,6 +35,38 @@ export const MARQUEE = 40;
 export const DECK_STICK = 96;
 export const DECK_PAD = 12;
 export const DECK = DECK_STICK + DECK_PAD * 2;
+
+/**
+ * THE PORTRAIT DECK IS DEEPER THAN `DECK`. In portrait the deck is not a reserved box but
+ * `.otp-touch` itself, pinned to the bottom of the window with `--otp-pad-gutter` (16px) above and
+ * below the stick (tokens.css) and the console face's Deep Purple top edge over that
+ * (`--otp-panel-border`, screens.css), so it stands DECK_STICK + 2 x 16 + 3 tall: 131px, which is
+ * what a 375x812 browser measures. test/cabinet.test.ts holds the gutter and the edge against the
+ * stylesheets.
+ */
+export const PAD_GUTTER = 16;
+export const PORTRAIT_DECK = DECK_STICK + PAD_GUTTER * 2 + FRAME.border;
+
+/**
+ * THE HUD PILL'S HEIGHT AT FULL SCALE: `--otp-hud-basket-h` is `calc(40px * --otp-ui)` (panels.css)
+ * and the clock takes the same min-height. --otp-ui is 1 or less, so this is the most the pills
+ * can ever need; HUD_STRIP_GAP clear of the frame above and the deck below.
+ */
+export const HUD_PILL = 40;
+export const HUD_STRIP_GAP = 6;
+
+/**
+ * Where the clock and the basket stand.
+ *
+ *   strip  under the world, in the portrait strip between the frame and the deck (the UX review,
+ *          2026-10-22: "on portrait phones the timer and basket sit over the world"). On a 375x812
+ *          phone that strip is 88px of the cabinet's own ground with nothing in it while you walk;
+ *          the pills move there and the world's bottom corners are forest again.
+ *   world  in the world's bottom corners, as always: every landscape layout (the deck is beside or
+ *          below the screen, or over it), and a portrait window too short to leave the pills a
+ *          strip -- 320x568 leaves 18px, and a pill squeezed in there would sit on the deck.
+ */
+export type HudDock = 'strip' | 'world';
 
 /**
  * Where the deck goes.
@@ -127,6 +159,24 @@ function fit(
     view,
     tiles: { width: view.width / TILE, height: view.height / TILE },
   };
+}
+
+/**
+ * The free height under a portrait world, above the deck, in CSS pixels: the screen box less the
+ * whole frame (the canvas, its two borders and its header) less the deck pinned to the bottom. Zero
+ * in every landscape layout, where there is no such strip. The window's safe-area inset is the
+ * stylesheet's to subtract (it is an `env()` the arithmetic cannot see); the CSS centres the pills
+ * in the strip it actually measures, so this only has to say whether there is room at all.
+ */
+export function hudStrip(fit: CabinetFit): number {
+  if (fit.place !== 'portrait') return 0;
+  const frame = fit.view.height * fit.zoom + FRAME.border * 2 + FRAME.header;
+  return Math.max(0, fit.screen.height - frame - PORTRAIT_DECK);
+}
+
+/** `strip` exactly when the strip under a portrait world holds a full-scale pill with its gaps. */
+export function hudDockFor(fit: CabinetFit): HudDock {
+  return hudStrip(fit) >= HUD_PILL + HUD_STRIP_GAP * 2 ? 'strip' : 'world';
 }
 
 /** How far the smallest playable camera overshoots a box, in CSS pixels summed over both axes. */

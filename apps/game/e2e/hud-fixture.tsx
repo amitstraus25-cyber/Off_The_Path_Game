@@ -8,11 +8,15 @@
  * property that makes the debug handle's mistake impossible here is that this code has no road
  * into `dist`, rather than a flag standing in the road.
  *
- * What is real: the stylesheets in the order the game loads them, the stage (`watchStage` fits a
- * plain canvas and publishes the same --otp-canvas-* box Phaser's does, so every `.otp-world-anchor`
- * rule resolves exactly as it does in play), and the touch pad (`createTouchControls`, so the
- * overlap the spec measures is against the actual stick and A button, not a rectangle written down
- * here). What is not: Phaser, the store and the frame's header and hint.
+ * What is real: the stylesheets in the order the game loads them (screens.css included, which draws
+ * the cabinet's deck face; it was missing until the clock and the basket moved under a portrait
+ * world, the first rule here measured against that face), the stage (`watchStage` fits a plain
+ * canvas and publishes the same --otp-canvas-* box Phaser's does, so every `.otp-world-anchor` rule
+ * resolves exactly as it does in play), the world frame's box (`.otp-world-frame`, empty: its
+ * stylesheet places it round the canvas from those same properties), and the touch pad
+ * (`createTouchControls`, so the overlap the spec measures is against the actual stick and A
+ * button, not a rectangle written down here). What is not: Phaser, the store and the frame's
+ * header text and hint.
  *
  * `window.__hudFixture.set(...)` is the spec's one hook. It lives in this file and only this file.
  */
@@ -27,6 +31,7 @@ import { createTouchControls } from '../src/ui/touch-controls';
 // order its selectors have to win in.
 import '../src/ui/tokens.css';
 import '../src/ui/panels.css';
+import '../src/ui/screens.css';
 
 declare global {
   interface Window {
@@ -67,6 +72,11 @@ ui.append(deck.root);
 const anchor = document.createElement('div');
 anchor.className = 'otp-world-anchor';
 ui.prepend(anchor);
+
+// The frame round the world, as components.tsx `WorldFrame` draws it: what "under the world" means.
+const frame = document.createElement('div');
+frame.className = 'otp-world-frame';
+ui.prepend(frame);
 
 let props: HudProps = { remainingMs: 180_000, basket: [] };
 const draw = (): void => render(<Hud {...props} />, anchor);

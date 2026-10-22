@@ -192,3 +192,110 @@ export function cameraTopLeft(
     y: Math.round(clamp(centre.y - view.height / 2, world.height - view.height)),
   };
 }
+
+/** The area two boxes share, 0 when they only touch or do not meet. */
+export function sharedArea(a: Rect, b: Rect): number {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+/** Which side of the speaker the talk bubble stands on. */
+export type BubbleSide = 'above' | 'right' | 'left';
+
+/** What `placeBubble` needs: the speaker, the bubble's drawing, and everything it must not hide. */
+export interface BubbleAsk {
+  /** The speaker's DRAWING, in world pixels: the opaque rows and columns of their frame. */
+  talker: Rect;
+  /** The bubble's frame size and the drawing inside it, in frame pixels (its tail is bottom left). */
+  frame: { width: number; height: number };
+  ink: Rect;
+  /** Every other figure's drawing, Purple first among them. Hidden figures are simply left out. */
+  others: readonly Rect[];
+  /** What the camera shows, in world pixels: a bubble half off screen is not a pointer. */
+  view: Rect;
+  /** Clear air between the bubble and the head it sits over (the scene's PROMPT_GAP). */
+  gap: number;
+  /** Where Purple's centre is, so a bubble that must stand beside the head goes the other way. */
+  awayFromX: number;
+  /** The side it stood on last frame: kept while it is still clear, so it does not flicker. */
+  keep?: BubbleSide | null;
+}
+
+/** Where to put the bubble sprite (origin bottom centre, as the scene draws it) and whether to mirror it. */
+export interface BubblePlace {
+  side: BubbleSide;
+  /** The sprite's origin: the bottom centre of its FRAME, in whole world pixels. */
+  x: number;
+  y: number;
+  /** Mirrored on the left, so the tail still points at the head it belongs to. */
+  flip: boolean;
+  /** The drawing where it lands, in world pixels: what the overlap was measured on. */
+  box: Rect;
+}
+
+/**
+ * WHERE THE TALK BUBBLE STANDS (the UX review, 2026-10-22: "the talk prompt covers characters").
+ *
+ * It always stood over the speaker's head, `gap` above their drawing, at depth 9000 -- over
+ * everything. So whoever stood north of the speaker had it painted across them, and the one person
+ * who is reliably north of the speaker is the player: walk up to the Rabbit from above and the
+ * bubble sat on Purple's face. A bystander one tile above another figure got the same.
+ *
+ * Over the head is still the first choice, unchanged, because it is where a speech bubble reads.
+ * When that would cover another figure or leave the camera, the bubble moves BESIDE the head --
+ * on the side away from Purple first, so it never swings across her -- mirrored on the left so its
+ * tail still points at the speaker. A candidate is clear when its drawing meets nobody's drawing,
+ * the speaker's included, and lies wholly on screen. Last frame's side is kept while it is still
+ * clear, so a player standing on the boundary does not make it flap. Where nothing is clear (a
+ * crowd at the edge of the world) it takes the candidate that hides least, then the one most on
+ * screen, in the order above.
+ *
+ * Drawings, not frames: every character's frame is 32 x 48 whatever is painted in it, and the snail
+ * fills 14 rows of hers, so frames would call a bubble over the snail's head "covering" her.
+ */
+export function placeBubble(ask: BubbleAsk): BubblePlace {
+  const { talker, frame, ink, others, view, gap, awayFromX, keep } = ask;
+  const headX = talker.x + talker.width / 2;
+  const headY = talker.y;
+  // The side gap is the one between two drawings, so it is the same air as above the head.
+  const at = (side: BubbleSide): BubblePlace => {
+    const flip = side === 'left';
+    // The drawing's left edge inside the frame, mirrored with it.
+    const inkLeft = flip ? frame.width - ink.x - ink.width : ink.x;
+    let frameLeft: number;
+    let frameTop: number;
+    if (side === 'above') {
+      frameLeft = headX - frame.width / 2;
+      frameTop = headY - gap - frame.height;
+    } else {
+      const boxLeft = side === 'right' ? talker.x + talker.width + gap : talker.x - gap - ink.width;
+      frameLeft = boxLeft - inkLeft;
+      // The drawing's middle level with the top of the head: beside the face, tail towards it.
+      frameTop = headY - ink.height / 2 - ink.y;
+    }
+    const x = Math.round(frameLeft + frame.width / 2);
+    const y = Math.round(frameTop + frame.height);
+    const box = {
+      x: x - frame.width / 2 + inkLeft,
+      y: y - frame.height + ink.y,
+      width: ink.width,
+      height: ink.height,
+    };
+    return { side, x, y, flip, box };
+  };
+  const away: BubbleSide = awayFromX > headX ? 'left' : 'right';
+  const order: BubbleSide[] = ['above', away, away === 'left' ? 'right' : 'left'];
+  if (keep) order.unshift(keep);
+  const candidates = [...new Set(order)].map(at);
+  const hides = (c: BubblePlace): number =>
+    [talker, ...others].reduce((n, r) => n + sharedArea(c.box, r), 0);
+  const offScreen = (c: BubblePlace): number =>
+    c.box.width * c.box.height - sharedArea(c.box, view);
+  const clear = candidates.find((c) => hides(c) === 0 && offScreen(c) === 0);
+  if (clear) return clear;
+  return candidates.reduce((best, c) => {
+    const d = hides(c) - hides(best) || offScreen(c) - offScreen(best);
+    return d < 0 ? c : best;
+  });
+}

@@ -1042,6 +1042,76 @@
   }
 }
 
+/*
+ * SHORT LANDSCAPE: THE OFFER IN TWO COLUMNS (the UX review, 2026-10-22: at 844x390 the greeting,
+ * the card and Take it / Leave it / Walk on did not fit, and the card scrolled under the answers --
+ * 41px short, with "If you leave it" cut through its middle). A phone on its side has width to
+ * spare and no height, and the one-column card spends height on everything: the greeting, the
+ * picture with the name beside it, then both rows full width under them.
+ *
+ * So where the window is landscape and short -- the same `max-height: 580px` the scale step and the
+ * card's compact grid already use -- the offer is one grid and the card's three areas join it
+ * (`display: contents` on `.otp-card__top`, which is a plain div with no role to lose): who is
+ * speaking across the left, the picture and the name under them, the two rows down the right beside
+ * both, and the answers across the foot. The tallest column, not the sum of them, is now the
+ * card's height. The answers stay sticky at the scrollport's foot, so a window shorter than every
+ * reviewed device still reaches them (e2e/offer.spec.ts measures that nothing scrolls at 844x390).
+ */
+@media (orientation: landscape) and (max-height: 580px) {
+  .otp-offer {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'voice voice rows'
+      'icon head rows'
+      'answers answers answers';
+    grid-template-rows: auto 1fr auto;
+    column-gap: calc(16px * var(--otp-ui));
+    align-items: start;
+  }
+
+  .otp-offer .otp-card__top {
+    display: contents;
+  }
+
+  .otp-offer__voice {
+    grid-area: voice;
+    padding-bottom: calc(8px * var(--otp-ui));
+    margin-bottom: calc(8px * var(--otp-ui));
+  }
+
+  .otp-offer .otp-card__icon {
+    margin-bottom: 0;
+  }
+
+  .otp-offer .otp-card__head {
+    align-self: center;
+  }
+
+  .otp-offer .otp-card__promise {
+    margin-bottom: 0;
+  }
+
+  /*
+   * A little less air round the rows and the answers: on the smallest windows (568x320, 640x360)
+   * the rows column is the taller one, and these few pixels are what it overran by.
+   */
+  .otp-offer .otp-card__rows .otp-row {
+    padding-block: calc(6px * var(--otp-ui));
+    margin-bottom: 6px;
+  }
+
+  .otp-offer .otp-card__rows .otp-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .otp-offer__answers {
+    grid-area: answers;
+    margin-top: calc(6px * var(--otp-ui));
+    padding-top: calc(8px * var(--otp-ui));
+  }
+}
+
 /* Card title: 25 / 105% / -2% / Medium. */
 .otp-card__title {
   font-size: calc(25px * var(--otp-ui));

@@ -42,6 +42,44 @@ html[data-cabinet='overlay'] .otp-ui {
   pointer-events: none;
 }
 
+/*
+ * THE PORTRAIT STRIP (the UX review, 2026-10-22: "on portrait phones the timer and basket sit over
+ * the world"). A portrait cabinet leaves a strip of its own ground between the bottom of the frame
+ * and the deck -- 88px at 375x812, 150 at 768x1024 -- with nothing in it while you walk, and the two
+ * pills were standing in the world's bottom corners above it, over the forest Purple walks into.
+ * Wherever that strip holds them (`data-hud`, ui/cabinet.ts `hudDockFor`, which says no at 320x568)
+ * the HUD box becomes the strip and the pills stand centred in it, at the same left and right insets
+ * they had, so they read as the same two things one step lower.
+ *
+ * The strip is measured here rather than quoted from cabinet.ts: the window under the frame, less
+ * the deck pinned to its foot -- the stick between its two gutters (tokens.css `.otp-touch`), the
+ * console face's top edge (screens.css, one `--otp-panel-border`) and the safe area under it, which
+ * only the stylesheet can see. Opaque Black there, because there is no forest behind them to let
+ * through, only the cabinet's own purple. e2e/hud.spec.ts measures both pills wholly between the
+ * frame's foot and the deck's top edge, and off the canvas altogether.
+ */
+html[data-hud='strip'] .otp-hud2 {
+  inset: auto 0;
+  top: calc(100% + var(--otp-panel-border));
+  height: max(
+    0px,
+    calc(
+      100dvh - var(--otp-canvas-y, 0px) - var(--otp-canvas-h, 0px) - var(--otp-panel-border) * 2 -
+        var(--otp-pad-stick) - var(--otp-pad-gutter) * 2 - env(safe-area-inset-bottom)
+    )
+  );
+}
+
+html[data-hud='strip'] .otp-hud2 :is(.otp-hud2__timer, .otp-hud2__basket) {
+  bottom: calc((100% - var(--otp-hud-basket-h)) / 2);
+  background: var(--cyera-black);
+}
+
+/* And the perk's toast, which stopped above the basket, may use the world down to its foot. */
+html[data-hud='strip'] .otp-ui .otp-layer.otp-layer--toast {
+  height: calc(var(--otp-canvas-h, 0px) - 10px * var(--otp-ui));
+}
+
 /* ------------------------------------------------------------------------------- the clock */
 
 .otp-hud2 .otp-hud2__timer {

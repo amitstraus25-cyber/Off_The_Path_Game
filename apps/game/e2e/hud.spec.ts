@@ -596,7 +596,7 @@ test.describe('the brand', () => {
 });
 
 /**
- * The sizes the game is played at, and the real pad on each.
+ * The sizes the game is played at, the real pad on each, and where the pills stand there.
  *
  * 375, 768 and 1280 are the three the Definition of Done names; the rest are where the HUD has
  * actually been wrong before -- the narrowest phone the stage supports, and the two landscape
@@ -604,16 +604,29 @@ test.describe('the brand', () => {
  * over them. The arcade cabinet draws the deck on every device and puts it outside the screen in
  * landscape (ui/cabinet.ts), so each case first asserts the pad is on screen: an overlap test run
  * against a pad that is `display: none` proves nothing.
+ *
+ * `dock` is where the clock and the basket must be (the UX review, 2026-10-22: "on portrait phones
+ * the timer and basket sit over the world"). `strip`: under the world, in the cabinet's own ground
+ * between the frame's foot and the deck's top edge, and touching no pixel of the canvas. `world`:
+ * in the world's bottom corners, as before -- a landscape window, or a portrait one whose strip is
+ * too short for a pill (320x568, 18px). Named per size rather than read off the page, so a page
+ * that quietly stopped docking them cannot pass by being measured as whatever it now does.
  */
-const SIZES: (Viewport & { name: string })[] = [
-  { name: '375x812 phone', width: 375, height: 812, touch: true },
-  { name: '320x568 small phone', width: 320, height: 568, touch: true },
-  { name: '768x1024 tablet, touch', width: 768, height: 1024, touch: true },
-  { name: '768x1024, mouse', width: 768, height: 1024, touch: false },
-  { name: '1280x800 desktop', width: 1280, height: 800, touch: false },
-  { name: '844x390 landscape phone', width: 844, height: 390, touch: true },
-  { name: '568x320 small landscape phone', width: 568, height: 320, touch: true },
-  { name: '1024x768 landscape tablet, touch', width: 1024, height: 768, touch: true },
+const SIZES: (Viewport & { name: string; dock: 'strip' | 'world' })[] = [
+  { name: '375x812 phone', width: 375, height: 812, touch: true, dock: 'strip' },
+  { name: '320x568 small phone', width: 320, height: 568, touch: true, dock: 'world' },
+  { name: '768x1024 tablet, touch', width: 768, height: 1024, touch: true, dock: 'strip' },
+  { name: '768x1024, mouse', width: 768, height: 1024, touch: false, dock: 'strip' },
+  { name: '1280x800 desktop', width: 1280, height: 800, touch: false, dock: 'world' },
+  { name: '844x390 landscape phone', width: 844, height: 390, touch: true, dock: 'world' },
+  { name: '568x320 small landscape phone', width: 568, height: 320, touch: true, dock: 'world' },
+  {
+    name: '1024x768 landscape tablet, touch',
+    width: 1024,
+    height: 768,
+    touch: true,
+    dock: 'world',
+  },
 ];
 
 test.describe('the layout', () => {
@@ -641,9 +654,13 @@ test.describe('the layout', () => {
             .map((el) => ({ name: el.className, ...box(el) }));
           return {
             coarse: matchMedia('(pointer: coarse)').matches,
+            dock: document.documentElement.dataset['hud'] ?? null,
             timer: box(document.querySelector('.otp-hud2__timer')!),
             basket: box(document.querySelector('.otp-hud2__basket')!),
             anchor: box(document.querySelector('.otp-world-anchor')!),
+            canvas: box(document.querySelector('#game canvas')!),
+            frame: box(document.querySelector('.otp-world-frame')!),
+            deck: box(document.querySelector('.otp-touch')!),
             pad,
             vw: innerWidth,
             vh: innerHeight,
@@ -677,19 +694,41 @@ test.describe('the layout', () => {
           expect(area(m.timer, p), `${label}: the clock is under ${p.name}`).toBe(0);
           expect(area(m.basket, p), `${label}: the basket is under ${p.name}`).toBe(0);
         }
+        expect(m.dock, `${label}: the pills are docked in the wrong place`).toBe(size.dock);
         for (const [name, b] of [
           ['clock', m.timer],
           ['basket', m.basket],
         ] as const) {
           expect(b.l, `${label}: ${name} off the left edge`).toBeGreaterThanOrEqual(0);
           expect(b.r, `${label}: ${name} off the right edge`).toBeLessThanOrEqual(m.vw + 0.01);
-          expect(b.t, `${label}: ${name} above the world`).toBeGreaterThanOrEqual(
-            m.anchor.t - 0.01,
-          );
-          expect(b.b, `${label}: ${name} below the world`).toBeLessThanOrEqual(m.anchor.b + 0.01);
           expect(b.r, `${label}: ${name} outside the world's width`).toBeLessThanOrEqual(
             m.anchor.r + 0.01,
           );
+          if (size.dock === 'strip') {
+            // Off the world altogether, and in the cabinet's own ground under it.
+            expect(area(b, m.canvas), `${label}: ${name} still stands on the world`).toBe(0);
+            expect(b.t, `${label}: ${name} over the frame's foot`).toBeGreaterThanOrEqual(
+              m.frame.b - 0.01,
+            );
+            expect(b.b, `${label}: ${name} over the deck`).toBeLessThanOrEqual(m.deck.t + 0.01);
+            // Air both ways, so it reads as standing in the strip rather than wedged into it.
+            expect(b.t - m.frame.b, `${label}: ${name} touches the frame`).toBeGreaterThanOrEqual(
+              4,
+            );
+            expect(m.deck.t - b.b, `${label}: ${name} touches the deck`).toBeGreaterThanOrEqual(4);
+          } else {
+            expect(b.t, `${label}: ${name} above the world`).toBeGreaterThanOrEqual(
+              m.anchor.t - 0.01,
+            );
+            expect(b.b, `${label}: ${name} below the world`).toBeLessThanOrEqual(m.anchor.b + 0.01);
+          }
+        }
+        if (size.dock === 'strip') {
+          // The two pills still share a baseline, as they did in the world's corners.
+          expect(
+            Math.abs(m.timer.b - m.basket.b),
+            `${label}: the pills are not level`,
+          ).toBeLessThan(1);
         }
         expect(m.scrollW, `${label}: the page scrolls sideways`).toBeLessThanOrEqual(m.vw);
         expect(m.scrollH, `${label}: the page scrolls down`).toBeLessThanOrEqual(m.vh);

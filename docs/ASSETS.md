@@ -21,7 +21,7 @@ them is derived or generated rather than typed out:
 | How big is the camera, and what is in frame?             | `cameraFor()` in `packages/core/src/camera.ts`, or `pnpm world --frame title`.                                                        |
 
 `manifest.json` currently declares one tileset, one map, Purple's atlas, **twenty-eight spritesheets**
-and **eighteen images** (read off the file on 2026-10-22, at `3c88684`; 48 PNGs in all, with the
+and **eighteen images** (read off the file and counted on 2026-10-22, at `e2f7e7f`; 48 PNGs in all, with the
 manifest, the map, Purple's atlas data and the tileset's gid list making 52 files in
 `apps/game/src/assets/`).
 

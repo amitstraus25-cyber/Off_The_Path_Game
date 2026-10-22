@@ -1,5 +1,5 @@
 import { pixelSnap } from '../world/logic';
-import { DECK, cabinetFor } from './cabinet';
+import { DECK, cabinetFor, hudDockFor } from './cabinet';
 import type { CabinetFit } from './cabinet';
 
 /*
@@ -106,12 +106,15 @@ export function fitStage(
 /**
  * The cabinet's reservation, as the stylesheet reads it: `--otp-cab-top/bottom/side` inset the
  * stage and every screen-sized layer to the screen box, `--otp-cab-deck` sizes the deck, and
- * `data-cabinet` on <html> says where the deck went. Written from the numbers `cabinetFor` used,
+ * `data-cabinet` on <html> says where the deck went and `data-hud` where the clock and the basket
+ * stand. Written from the numbers `cabinetFor` used,
  * so the CSS cannot hold a different idea of the cabinet than the camera was sized against.
  */
 function publishCabinet(cabinet: CabinetFit): void {
   const root = document.documentElement;
   root.dataset['cabinet'] = cabinet.place;
+  // Where the clock and the basket stand (cabinet.ts `hudDockFor`): the portrait strip, or the world.
+  root.dataset['hud'] = hudDockFor(cabinet);
   root.style.setProperty('--otp-cab-top', `${cabinet.top}px`);
   root.style.setProperty('--otp-cab-bottom', `${cabinet.bottom}px`);
   root.style.setProperty('--otp-cab-side', `${cabinet.side}px`);

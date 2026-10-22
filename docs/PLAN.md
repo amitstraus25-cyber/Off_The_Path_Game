@@ -6,14 +6,22 @@ Effort sizes: **S** under half a day, **M** about a day, **L** several days (for
 
 ## Progress at a glance
 
-**Updated 2026-10-22, at `3c88684`. The working tree was clean when this was written and the live
-game is v2.** This is the status board; the phase sections below are the detailed checklists.
-**Measured today, not remembered:** `pnpm test` is **1,151 tests passing and 1 skipped** --
-`packages/core` 348 and `apps/api` 202, both at 100% on statements, branches, functions and lines;
-`apps/game` 484 (+1 skipped) in 30 files; `tools/graybox` 117 -- and Playwright lists **335 e2e
-tests in 33 files** (`playwright test --list`; the last full run, at `2b42743`, was 329 passed and
-6 skipped). The e2e suite was not run for this update. `docs/PAUL_BRIEF.md` section 1
-holds the same counts.
+**Updated 2026-10-22, at `e2f7e7f`; the live game is v2.** No code has changed since `3c88684`:
+`git diff --stat 3c88684 HEAD` touches only `docs/`, `apps/api/README.md` and `CLAUDE.md`. The
+working tree is NOT clean while this round runs -- see "In progress". This is the status board; the
+phase sections below are the detailed checklists.
+**Measured today, not remembered** (each workspace run on its own, exit code taken on its own
+line, all 0): `pnpm test` is **1,151 tests passing and 1 skipped** -- `packages/core` 348 in 13
+files and `apps/api` 202 in 12, both at 100% on statements, branches, functions and lines;
+`apps/game` 484 (+1 skipped) in 30 files; `tools/graybox` 117 in 5 -- and Playwright lists **335
+e2e tests in 33 files at HEAD** (`playwright test --list`; 336 in 34 while another builder's
+uncommitted `e2e/talk-bubble.spec.ts` is in the tree). **Full e2e run, 2026-10-22, on a copy of `e2f7e7f`
+(`git archive`, its own port, Chromium 1228, two workers, `--fail-on-flaky-tests`): 329 passed and
+6 skipped, exit 0, in 4.7 minutes -- the same split as the run at `2b42743`.** It is a run of the
+committed tree, not of the other builders' uncommitted work. An earlier attempt at it failed with
+`ERR_CONNECTION_REFUSED` on every spec after the preview server was killed mid-run; that is the
+environment, not an assertion (PAUL_BRIEF trap 9), and the run above had its server supervised.
+`docs/PAUL_BRIEF.md` section 1 holds the same counts.
 
 ### Done
 
@@ -56,12 +64,21 @@ holds the same counts.
 
 ### In progress
 
-Nothing is built and uncommitted. Everything the earlier version of this board listed as "built,
-not committed, not ticked" is in the log: the perks (`c86b11e`), the cabinet and replay hook
-(`f34ea67`, review round `6e1192f`), the morning interactions (`3e2473e`, `02420d6`), the afternoon
-screens (`8c4dc49`), the work email (`d61750b`), the minimap and the door (`f78dc5f`) and the
-last round's notes (`2b42743`, `7b28bc4`, `3c88684`). The records of each round stay below under
-"Shipped in the client rounds of 2026-10-22". What remains is waiting on a person or is planned.
+**Other builders' uncommitted work (read off `git status` as this was finished, not described from
+the diffs, which this file's owner has not read):** edits to `apps/game/src/ui/cabinet.ts`,
+`hud.css`, `panels.css`, `stage.ts`, `apps/game/src/world/forest-scene.ts`, `logic.ts`,
+`tools/graybox/src/sprites/bystanders.ts` and `tiles/w-water.ts`; edits to
+`apps/game/test/cabinet.test.ts`, `e2e/hud.spec.ts` and `e2e/offer.spec.ts`; and two new files,
+`apps/game/e2e/talk-bubble.spec.ts` and `apps/game/test/talk-bubble.test.ts`. The tree was still
+moving while this was written, so the counts above are the counts at `e2f7e7f` and move when this
+lands. None of it is claimed anywhere in this file as done.
+
+Everything the earlier version of this board listed as "built, not committed, not ticked" is in the
+log: the perks (`c86b11e`), the cabinet and replay hook (`f34ea67`, review round `6e1192f`), the
+morning interactions (`3e2473e`, `02420d6`), the afternoon screens (`8c4dc49`), the work email
+(`d61750b`), the minimap and the door (`f78dc5f`) and the last round's notes (`2b42743`, `7b28bc4`,
+`3c88684`). The records of each round stay below under "Shipped in the client rounds of
+2026-10-22". What remains is waiting on a person or is planned.
 
 ### Planned
 
@@ -291,7 +308,7 @@ Point-in-time records, oldest first; a later bullet supersedes an earlier one wh
 | D1  | Is Night Light genuinely safe, or malicious too?                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | **Safe**, so "reject all" is not optimal. Update the Results mock copy accordingly (the mock shows it malicious).                                                                                                                                           | Game design + research |
 | D2  | Who produces production pixel art and when? Concept board is flattened.                                                                                                                                                                                                                                                                                                                                                                                                                                           | **Design team or a pixel artist produces tileset, sprites, portraits** against `docs/ASSETS.md`; graybox until then.                                                                                                                                        | Design lead            |
 | D3  | Leaderboard backend host                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | **Vercel Functions (Node) + managed Postgres/KV** behind a swappable interface (originally Cloudflare Workers + D1; changed because the game deploys on Vercel).                                                                                            | Eng + Security         |
-| D4  | Handle only, or optional email field for research follow-up?                                                                                                                                                                                                                                                                                                                                                                                                                                                      | **Handle only** (no gate before the research).                                                                                                                                                                                                              | Marketing + Legal      |
+| D4  | Handle only, or optional email field for research follow-up?                                                                                                                                                                                                                                                                                                                                                                                                                                                      | **Handle only** (no gate before the research). **Reversed by the client 2026-10-22**: a work email behind `OTP_WORK_EMAIL`, off for now (see "Decisions recorded").                                                                                         | Marketing + Legal      |
 | D5  | Mobile portrait layout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | **Canvas on top, panels docked at the bottom; never require rotation.**                                                                                                                                                                                     | Design                 |
 | D6  | Real Haffer / Season Mix files available?                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | **Yes: request woff2 from Brand Kit**; fallbacks meanwhile.                                                                                                                                                                                                 | Brand                  |
 | D7  | Scoring weights. **Superseded in v2 (2026-10-22): clean 10, good 20 each, speed 30, out of 100, par 1:47 (`content/game.v2.json`, `scoring`); what follows is v1.** **As shipped in v1: best verdict 200, safe but costly 100, compromised 0, and Word Weaver restrict 50** (because restricting it now earns an errand goal; at 100 it was a free trade). Question bonus +100, boundary bonus +200, trust bonus +100, three errand goals at 100. The "partial credit 150" this row used to name was never built. | **Resolved 2026-10-17** by the three errand goals: reject-all is 700 against a 1,000 ceiling and draws its own ending, and the best full-errand line (750) beats it. Restrict-all at 950 — the figure for a run that reads the forest post — is still open. | Game design            |
@@ -518,7 +535,8 @@ why the shape changed.
       board carries the Deep Purple body BRAND_AND_UI section 3 requires, and "Ask the board again"
       no longer looks exactly like "Walk it again".
 - [x] (M) `apps/api` Vercel Functions (Node 22). **Shipped as `POST /api/score` and `GET /api/top`
-      over Supabase/PostgREST.** ~~`POST /runs`, `POST /runs/:id/submit`, `GET /leaderboard`; HMAC
+      over Supabase/PostgREST** (`POST /api/start` joined them in Phase 9 E, so three routes are
+      bundled today). ~~`POST /runs`, `POST /runs/:id/submit`, `GET /leaderboard`; HMAC
       token; D1 schema + migrations; week window logic (UTC)~~ — none of this was built. The token
       existed to bind a run to a start time; ranking is by score alone and there is no duration
       column, so it protected nothing. D1 was the pre-D3 Cloudflare plan. One board, no week windows.
@@ -526,16 +544,19 @@ why the shape changed.
       plus a strict body schema that makes a claimed score a 400, a 32 KB metered body gate, a
       `MAX_LOG_EVENTS` of 256, and a duplicate guard. ~~Min-duration plausibility~~ was dropped: the
       clock is the player's and ranking ignores it, so a floor would reject honest fast runs and buy
-      nothing. ~~Handle blocklist~~ was dropped because **handles are minted, not typed**
-      (`[a-z]+-[a-z]+-[1-9][0-9]`), re-checked on the way out of `GET /api/top`; there is no
-      free-text field to moderate. Escape on render is Preact text nodes.
+      nothing. ~~Handle blocklist~~ was dropped because **handles were minted, not typed**
+      (`[a-z]+-[a-z]+-[1-9][0-9]`), re-checked on the way out of `GET /api/top`; there was no
+      free-text field to moderate. **Superseded 2026-10-22: names are typed now, and `v2.checkName` (core
+      `v2/board.ts`) is the blocklist and the shape check, run by the game, by the score route and
+      by the store before the insert.** Escape on render is Preact text nodes.
 - [x] (S) Rate limiting: `src/limit.ts`, thirty writes a minute, **per instance**. ~~Hashed,
       salt-rotating IP keys~~ dropped — **no IP is read, hashed or stored at all**, which is
       stronger than the task asked for. ~~CORS to embed origins~~ is moot: same origin by D3.
       **The cross-instance control is Vercel firewall rate limiting on `/api/*` and it is NOT ON.**
       See "What is NOT done" below.
 - [x] (S) http adapter with timeouts (6 s) and graceful degradation; never blocks results or the CTA.
-- [x] (M) Tests: 53 across 5 files, including the forged-log suite — claimed score, unreachable
+- [x] (M) Tests: 53 across 5 files when this landed (`apps/api` runs 202 across 12 files today,
+      measured 2026-10-22), including the forged-log suite — claimed score, unreachable
       score, a verdict whose card was never opened, a run that never arrived, an oversized body, a
       duplicate. `apps/game/e2e/leaderboard.spec.ts` covers the board; the API-down path is the
       `503` case, asserted in `routes.test.ts` ("when the board is not there").

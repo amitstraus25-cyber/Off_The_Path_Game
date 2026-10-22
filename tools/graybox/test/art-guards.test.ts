@@ -312,9 +312,14 @@ describe('the map', () => {
    * 99 since 2026-10-22, the river round: the eight bank CORNERS (`shore-nw` ... `shore-cove-se`)
    * APPENDED at gids 92 to 99, laid only by the corner pass in `forest-map.ts` (`bankFor`). The
    * sheet grows to 384x288 because `ceil(99 / 12)` is 9; all 91 earlier names keep their gid.
+   *
+   * 111 since 2026-10-22, later the same day: the twelve SEALED banks (`bank-stones-n` ...
+   * `bank-stones-cove-se`) APPENDED at gids 100 to 111, laid only in `decor-below` on the border
+   * band by the dredge pass in `forest-map.ts`. The sheet grows to 384x320 because
+   * `ceil(111 / 12)` is 10; all 99 earlier names keep their gid.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(99);
+    expect(TILE_NAMES).toHaveLength(111);
   });
 });
 
