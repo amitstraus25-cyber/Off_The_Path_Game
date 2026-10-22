@@ -274,7 +274,9 @@ describe('the map', () => {
     expect(parsed.width).toBe(MAP_W);
     expect(parsed.height).toBe(MAP_H);
     expect(parsed.layers.length).toBeGreaterThan(0);
-  });
+    // Declared slow (PAUL_BRIEF trap 9): a full generation and audit is about 2 s locally and
+    // passed 5 s on CI's shared runner once the map grew (2026-10-22), timing out a passing test.
+  }, 30_000);
 
   /*
    * Section 4.10: TILE_NAMES order IS gid order, and a tile added without regenerating the map
