@@ -38,7 +38,7 @@ migration, and the table is still two columns.
   the authority, then again in `store.ts` before the insert. The `char_length(handle) between 1 and
 16` check still fits: names are counted in code points, which is what `char_length` counts. **A
   typed name can be a real person's name, so a row can now be personal data** — see Decision 3.
-- **The board reads rows from `BOARD_SINCE` (2026-10-22T09:25:00Z) on, and only scores above 0.**
+- **The board reads rows from `BOARD_SINCE` (2026-10-22T21:25:00Z, the client's reset) on, and only scores above 0.**
   The scoring rule took speed into account at that moment, so earlier rows (three good was 100 at
   any pace) would outrank every run that now has to be fast. Wolf runs are no longer posted, so
   the zeros are the old ones. Both are filters on the read; deleting the old rows is optional and

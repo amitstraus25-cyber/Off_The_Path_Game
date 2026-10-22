@@ -39,8 +39,11 @@ const MAX_ROWS_READ = 100;
  * `V2_LAUNCH` (2026-10-21T23:45:00Z), which did the same for the v1 rows scored out of 1,000, and
  * is later than it, so that cut still holds. It hides rows from every visitor's view without this
  * service holding a delete; removing them is the human step in docs/DATABASE.md.
+ *
+ * Moved to 2026-10-22T21:25:00Z when the client asked to reset the board before sharing it (the
+ * rows before it were test runs). The rows themselves are deleted by hand in Supabase.
  */
-export const BOARD_SINCE = '2026-10-22T09:25:00Z';
+export const BOARD_SINCE = '2026-10-22T21:25:00Z';
 
 /**
  * The status PostgREST answers to an insert on a table.
