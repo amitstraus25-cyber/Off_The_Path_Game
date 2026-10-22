@@ -146,7 +146,9 @@ test('Keep looking puts Purple a step back off the step, and the door asks again
   // She can walk again, and walking back up asks again rather than letting her in.
   await walkUpToTheDoor(page);
   await expect(page.locator('[data-door="ask"]')).toBeVisible();
-  // Esc is Keep looking too.
+  // Esc is Keep looking too -- once the panel holds focus, as a keyboard player's Esc would
+  // (the same race as the Enter above; it flaked on CI's runner, 2026-10-22).
+  await expect(page.locator('[data-action="keep-looking"]')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-door]')).toHaveCount(0);
   expect(onStep(await purple(page))).toBe(false);
