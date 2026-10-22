@@ -1376,6 +1376,8 @@
   border: none;
   padding: 0 calc(10px * var(--otp-ui));
   color: var(--cyera-haze);
+  /* A button does not inherit the page's family; without this the "on"/"off" label set in Arial. */
+  font-family: var(--cyera-font-sans);
   font-size: calc(18px * var(--otp-ui));
   line-height: 1;
   cursor: pointer;

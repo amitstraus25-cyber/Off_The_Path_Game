@@ -107,7 +107,7 @@
           "take": ["Walks you the old way to her door.", "Follows any note pinned to a tree."],
           "leave": "You find your own way."
         },
-        "reveal": "Followed the wolf's note. Off the path."
+        "reveal": "Walked you the old way. Obeyed the wolf's note too."
       }
     },
     {
@@ -117,7 +117,7 @@
       "promise": "It sends word ahead, so Grandma expects you.",
       "realWorld": {
         "term": "Oversharing and public exposure",
-        "note": "A copy at every crossing is data anyone passing can read. Reaching the right person does not undo the copies left behind."
+        "note": "A copy left at a crossing is data anyone passing can read. Reaching the right person does not undo the copies left behind."
       },
       "good": {
         "card": {
@@ -144,7 +144,7 @@
       "promise": "It gives you the quicker tracks, fresh each evening.",
       "realWorld": {
         "term": "Supply-chain risk",
-        "note": "The stranger's map is fetched fresh each night. A skill that loads instructions from elsewhere at run time can change after you approved it."
+        "note": "A map fetched from a stranger can be redrawn any night. A skill that loads instructions at run time can change after you approved it."
       },
       "good": {
         "card": {
@@ -168,7 +168,7 @@
       "promise": "I carry the heavy things, sealed. You walk light.",
       "realWorld": {
         "term": "Third-party data sharing",
-        "note": "The friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way."
+        "note": "A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way."
       },
       "good": {
         "card": {
@@ -216,7 +216,7 @@
       "promise": "I open Grandma's door. I feel where it sticks.",
       "realWorld": {
         "term": "Over-broad access",
-        "note": "A latch that lifts for anyone is access with no check on who is asking. Give a skill only the access its job needs."
+        "note": "A latch that lifts for anyone never checks who asks. A skill is an identity too: give it only the access its job needs."
       },
       "good": {
         "card": {
@@ -268,7 +268,7 @@
         "Walk the path and meet each character.",
         "Open each card and read what the skill does.",
         "Take the skill or leave it.",
-        "Reach Grandma's door before 3:00."
+        "You have 3:00 to reach Grandma's door."
       ],
       "go": "Start walking"
     },
@@ -309,11 +309,12 @@
       "bad": "Unsafe",
       "promised": "It promised",
       "did": "What it did",
+      "wouldHave": "What it would have done",
       "giveaway": "The line that gave it away",
       "realWorld": "In the real world",
       "score": "Your score",
       "outOf": "out of {outOf}",
-      "caught": "You caught {caught} of {bad}",
+      "caught": "You kept {caught} of {bad} bad skills out of your basket.",
       "frameTitle": "Reveal",
       "unanswered": "You walked past",
       "question": "Who wrote the instructions your agent follows?",

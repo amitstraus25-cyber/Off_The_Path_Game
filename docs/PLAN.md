@@ -51,6 +51,11 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     longer builds (trap 1). `cabinetFor` is written to be lifted into camera.ts as-is.
   - **The reveal's replay hook**: each bad card replayed with its giveaway line marked, "You caught
     N of 4", and Walk it again as a secondary pill beside it (the research CTA keeps the Lime).
+    **Changed in the 2026-10-22 review round (not committed):** the line now reads "You kept N of 4
+    bad skills out of your basket." and is not shown on a late run; a row the player did not take
+    labels its line `ui.reveal.wouldHave` ("What it would have done") instead of "What it did"; the
+    arrive text reserves the advance ring's real 44px width; four notes, Way Teller's bad reveal and
+    the how-to's clock step were reworded as the content review proposed.
   - **Copy into content**: the last unkeyed words (`PENDING`) are `ui.howTo.go`, `ui.world`,
     `ui.offer`, `ui.card` (with `offeredBy`, "Offered by the {name}", now on the card),
     `ui.reveal.{outOf,caught,frameTitle,unanswered}`, `ui.landing.frameTitle`, `ui.cabinet`, and

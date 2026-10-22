@@ -164,6 +164,7 @@ export const raw = {
       bad: 'Fixture bad',
       promised: 'Fixture promised',
       did: 'Fixture did',
+      wouldHave: 'Fixture would have',
       giveaway: 'Fixture giveaway',
       realWorld: 'Fixture real world',
       score: 'Fixture score',

@@ -4,9 +4,9 @@
 because the same mistakes kept costing whole rounds, and because a reviewer who measures the wrong
 thing confidently is more expensive than one who finds nothing.
 
-Last updated: 2026-10-21, after the client round — the one that found the stale checkout (trap 10)
-and the debug handle that was shipping to players. Read trap 10 before investigating anything the
-client reports seeing.
+Last updated: 2026-10-22, after the review round on `f34ea67` (the cabinet commit). Before that,
+2026-10-21, after the client round that found the stale checkout (trap 10) and the debug handle
+that was shipping to players. Read trap 10 before investigating anything the client reports seeing.
 
 ---
 
@@ -14,9 +14,10 @@ client reports seeing.
 
 - The game is live at `off-the-path-game.vercel.app`, embedded-ready, `frame-ancestors` locked to
   `cyera.com` and `*.cyera.com`.
-- The suite is **647 tests** (2026-10-22, after v1 was removed) — `packages/core` 179 at a 100% gate on
-  statements, branches, functions AND lines; `apps/api` 107 at the same gate; `apps/game` 353;
-  `tools/graybox` 8 — plus **196 e2e**. The game is v2 only; `pnpm sim` plays the v2 strategies.
+- The suite is **681 tests** (counted 2026-10-22 on `f34ea67` plus the review-round fixes) —
+  `packages/core` 181 at a 100% gate on statements, branches, functions AND lines; `apps/api` 125
+  at the same gate; `apps/game` 367 plus 1 skipped; `tools/graybox` 8 — plus **211 e2e** in 26
+  files (`playwright test --list`). The game is v2 only; `pnpm sim` plays the v2 strategies.
 - The art generator is deterministic: `pnpm graybox` regenerates `map-forest.json` byte-identical
   unless a painter changed. That property is the proof standard for every art change.
 - Phase 6 (the leaderboard) exists: `apps/api`, score recomputed server-side from the run log,
@@ -32,12 +33,12 @@ Their words, their order. Anything not here is not a priority this week.
 | 2   | Trees in the middle look messed up                                   | **Done.** Brick course gone, trunks and root flares, crowns merge. Squared flank lobe survives at 8x only — gid round.     |
 | 3   | Purple's back view                                                   | **Close.** Front and sides shippable. Nape hair reads as a structureless blob; cape mark needs brand sign-off.             |
 | 4   | Inspect card: three verbs, three explanations, nothing else, branded | **Done** — the best thing in the round. One open question: "allow two dots" read as a colon; we used columns.              |
-| 5   | Leaderboard not working                                              | **The board is built and shown.** The route is still undeployed (§5), so it correctly reports itself unavailable.          |
+| 5   | Leaderboard not working                                              | **Built, shown, and deployed through the Build Output API (§5).** Unmeasured on production since v2; rate limit open.      |
 | 6   | Phone: goals panel eats the screen                                   | **Done.** A 44px bar that taps open: ~5% of the screen against ~16%. Verified by touch.                                    |
 | 7   | Phone: three circled glitches                                        | **Closed.** The clipped canopy row is fixed with #1; the stall is measured and accepted — it cannot be moved out of frame. |
-| 8   | Arcade-cabinet shell, Cyera themed                                   | **Answered: yes to the mobile deck, no to the desktop cabinet.** The argument is in §8.                                    |
+| 8   | Arcade-cabinet shell, Cyera themed                                   | **Answered: cabinet everywhere (reversed 2026-10-22 on the client's word).** §8 keeps the argument as constraints.         |
 | 9   | Results block: "nicer and more branded"                              | **Done.** All four faults in §6 fixed; a guard now bans static inline styles.                                              |
-| 10  | The gate (fence)                                                     | In flight — owned at last, tile and placement split, one regeneration.                                                     |
+| 10  | The gate (fence)                                                     | **Done.** `gate-n` and `gate-s` in `tools/graybox/src/tiles.ts` (`840daab`); PLAN.md lists it done.                        |
 
 ## 3. The traps that have actually cost rounds
 
@@ -129,7 +130,11 @@ with `{}` as JSON is **200 `{seed, token}`** with the environment set and 503 wi
 rows, scored out of 1,000, are cleared). The measurements below are 2026-10-21 and v1-era; keep them
 for the history of the Vercel arrangements, not as the state of the world.
 
-**Current state, 2026-10-21 -- read this before the history below it.** The deploy is the Build
+**History, 2026-10-21 (superseded by the 2026-10-22 block above -- do not act on it).** Kept for
+the record of the Vercel arrangements. Almost every bullet below is false now: functions are
+mounted, `services` is gone, the routes bundle their imports, `apps/game/api/` no longer exists,
+and Results calls `readTop`. **One line is still outstanding: the Vercel firewall rate limit on
+`/api/*` (the last bullet), which nobody has turned on or proved.** As written then: the deploy is the Build
 Output API written by `apps/game/scripts/vercel-output.mjs`: the routes in `apps/api/api/` are
 bundled into self-contained CommonJS and Vercel compiles none of our TypeScript. The three earlier
 arrangements below each failed and are recorded so nobody re-runs them. The last one produced
@@ -257,14 +262,15 @@ The client asked for it "nicer and more branded". Four specific faults:
   for that post."_ still means `postNotAnswered` and nothing more. A human has to read that
   sentence beside _"This is your run."_ and agree.
 
-- **The dark band across the top of the world — the third cause of "the line", and the one still
-  open.** Not a backdrop hole: the magenta probe reads 0 across 49 configurations. The camera's top
+- ~~**The dark band across the top of the world — the third cause of "the line".**~~ **FIXED — do
+  not go looking for this.** `snapTopEdge` (`packages/core/src/camera.ts`) wraps `topEdgeRows()`, and
+  the forest scene reaches it through `snapCentreToRow`; §2 row 1 records all three causes fixed. The entry as written: Not a backdrop hole: the magenta probe reads 0 across 49 configurations. The camera's top
   edge settles **part-way into a tile row**, so the world opens on the bottom slice of a canopy row
   — crown keylines and nothing else. Measured: at the client's own 1673×449 the first 8 game rows
   are 25.1% dark against 6.3% mid-frame; at 390×844 it is 48.1% against 8.1%. Causation proved by
   moving Purple at a fixed world position (25.1→8.0 desktop, 48.1→19.2 phone), so it is where the
   camera sits, not what is painted. The fix is `topEdgeRows()` in `packages/core/src/camera.ts` —
-  **already written, already tested, and never once called from the running game.** Snapping
+  at the time already written, already tested, and not yet called from the running game. Snapping
   naively will make vertical walking judder, so it belongs at the clamp or the top bound, not every
   frame. This is also phone glitch #7a: the clipped canopy row is the same defect at a smaller
   camera.
@@ -291,14 +297,15 @@ The client asked for it "nicer and more branded". Four specific faults:
   lands exactly on a tile boundary, so a visitor sees one WHOLE column — the awning's own left end
   and a counter tile — not a torn tile.
 - ~~**Purple cannot reach the toadstool.**~~ **FIXED, 2026-10-21, and it was never a map bug.** (10,22)
-  is the toadstool's own spawn cell, deliberately solid under the "nobody in the cast is a ghost"
+  was then the toadstool's own spawn cell (it moved to (15,22) in v2 Phase C), deliberately solid under the "nobody in the cast is a ghost"
   invariant, and all four of its neighbours are walkable. The walk TARGET was stale: `37a94b9` wrote
   `talkingDistance` as `spot.y + TILE + 8`, correct when the cast sat at tile-centre + 24, and the
   very next commit moved them to tile-centre + 16 without touching the helper. Eight pixels against
   a 40px tolerance whose north approach is exactly 40.00px — zero margin — so 3px of lateral drift
   threw "Something is in the corridor." `test/cast-anchor.test.ts` now fails if those two
   expressions drift apart again.
-- **The gate is not a gate.** The opening is an absence of fence: post run, flat terminator plank,
+- ~~**The gate is not a gate.**~~ **DONE** — `gate-n` and `gate-s` in `tools/graybox/src/tiles.ts`,
+  commit `840daab`. The entry as written: The opening is an absence of fence: post run, flat terminator plank,
   gap, flat plank, post run. The terminators are the least-finished object in the payoff frame. It
   needs one new tile (two post tops with a narrow rail), a `TILE_NAMES` **append** — never a
   renumber, the order is gid order and is baked into the map — placement, and a regeneration in one
@@ -351,6 +358,14 @@ The client asked for it "nicer and more branded". Four specific faults:
   "solid" is plainly the wrong remedy for those.
 
 ## 8. The arcade shell — the answer, and the argument
+
+> **REVERSED 2026-10-22 on the client's word: the cabinet is the presentation**, on every screen
+> (`apps/game/src/ui/cabinet.ts`; PLAN.md "Client round 2026-10-22" records it). The argument
+> below is kept, and its practical reasons now apply as **constraints, not a veto**: the cabinet
+> must not read as a rendering fault, must not vanish at the payoff, and must not borrow anyone's
+> cabinet design. The shipped Lilac glow (`--otp-cab-glow` in `tokens.css`) contradicts "no
+> shadows" in UI_FOUNDATIONS section 4 and BRAND_AND_UI section 3, and has no recorded brand
+> sign-off yet; that is open, not settled.
 
 They asked for an opinion, not agreement. The prototype was built and turned on before answering.
 

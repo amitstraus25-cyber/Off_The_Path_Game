@@ -67,6 +67,13 @@ describe('POST /api/start', () => {
     ).toBe(403);
     // A plain cross-origin form post or a bare fetch is not a run start.
     expect(handleStart(start({ 'content-type': 'text/plain' }), h.deps).status).toBe(415);
+    // The media type is matched exactly: a JSON-looking parameter or suffix is not JSON.
+    for (const type of ['text/plain;x=application/json', 'application/jsonx', 'x-application/json'])
+      expect(handleStart(start({ 'content-type': type }), h.deps).status, type).toBe(415);
+    // Parameters and case on the real type are fine.
+    expect(
+      handleStart(start({ 'content-type': 'Application/JSON; charset=utf-8' }), h.deps).status,
+    ).toBe(200);
     expect(
       handleStart(
         start({ 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }),

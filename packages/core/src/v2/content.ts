@@ -217,15 +217,25 @@ const ui = z.strictObject({
     /** What the dealt variant was, as words beside its shape (no red or green). */
     good: text,
     bad: text,
-    /** Row labels: the promise, the variant's reveal line, the giveaway, the real-world note. */
+    /**
+     * Row labels: the promise, the variant's reveal line, the giveaway, the real-world note. The
+     * reveal line is labelled `did` on a row the player TOOK and `wouldHave` on one they left or
+     * walked past: a left bad skill never ran, and "What it did: the wolf opened the door" above
+     * "Clean arrival" taught that leaving it had not protected you (content review, 2026-10-22).
+     */
     promised: text,
     did: text,
+    wouldHave: text,
     giveaway: text,
     realWorld: text,
     score: text,
     /** The score's denominator, filled from `scoring.outOf` so the two cannot disagree. */
     outOf: template('outOf'),
-    /** The replay hook: how many of the run's bad skills were left, out of how many were dealt. */
+    /**
+     * The replay hook: how many of the run's bad skills stayed out of the basket, out of how many
+     * were dealt. Worded as what the basket holds, not as "caught": a run that walked past every
+     * card kept them out without reading one, and must not be told it caught anything.
+     */
     caught: template('caught', 'bad'),
     /** The reveal's frame title, and a row's eyebrow when the player never answered. */
     frameTitle: text,

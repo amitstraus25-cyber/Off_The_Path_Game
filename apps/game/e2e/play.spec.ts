@@ -9,7 +9,12 @@ import { fileURLToPath } from 'node:url';
 /** The shipped content, read as a file: Playwright's loader takes no JSON import. */
 const raw = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
-) as { ui: { cabinet: { marquee: string }; reveal: { caught: string; again: string } } };
+) as {
+  ui: {
+    cabinet: { marquee: string };
+    reveal: { caught: string; again: string; did: string; wouldHave: string };
+  };
+};
 
 /*
  * THE v2 GAME, PLAYED THROUGH THE PAGE: landing, how-to, seven offers in walking order, the
@@ -225,6 +230,10 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
     await expect(row.locator('[data-reveal-line]')).toHaveText(
       isGood ? s.good.reveal : s.bad.reveal,
     );
+    // A skill left behind never ran: its line is what it WOULD have done, not what it did.
+    await expect(row.locator('[data-reveal-label]')).toHaveText(
+      verdicts[s.id] === 'take' ? raw.ui.reveal.did : raw.ui.reveal.wouldHave,
+    );
     const giveaway = s.bad.card.take.find((line) => !s.good.card.take.includes(line))!;
     if (isGood) await expect(row.locator('[data-giveaway]')).toHaveCount(0);
     else {
@@ -276,6 +285,9 @@ test('the clock override ends a run late, and a late run is not posted', async (
   expect(run.phase).toBe('late');
   expect(run.log.at(-1)?.e).toBe('late');
   await expect(page.locator('[data-ending="late"]')).toContainText('After dark');
+  // No "kept 4 of 4" beside a 0 the clock gave: the count is not shown on a late run, the way back is.
+  await expect(page.locator('.otp-replay__caught')).toHaveCount(0);
+  await expect(page.locator('.otp-replay [data-action="replay"]')).toBeVisible();
   await expect(page.locator('[data-post="unavailable"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Post', exact: true })).toHaveCount(0);
 });
@@ -371,6 +383,33 @@ test('keyboard only: begin, talk, read, answer, arrive, reveal, replay', async (
   await page.keyboard.press('Enter');
   await expect(page.locator('#game')).toHaveAttribute('data-phase', 'forest');
 });
+
+/*
+ * The advance ring has a 44px floor that does not scale with --otp-ui, so on a phone it sat on the
+ * end of the first arrive line ("waves" at 360 and 375). The text column must end before the ring
+ * begins on every beat that shows it.
+ */
+for (const width of [360, 375, 390]) {
+  test(`at ${width}px the advance ring never sits on an arrive line`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await serveStart(page, 0);
+    await serveEmptyBoard(page);
+    await begin(page);
+    await walkIntoCottage(page);
+    const arrive = page.locator('[data-arrive="grandma"]');
+    await expect(arrive).toBeVisible();
+    const advance = arrive.locator('.otp-advance');
+    for (let beat = 0; beat < 10 && (await advance.isVisible()); beat++) {
+      const ring = (await advance.boundingBox())!;
+      const words = (await arrive.locator('.otp-arrive__text').boundingBox())!;
+      expect(
+        words.x + words.width,
+        `beat ${beat}: the text runs under the advance ring at ${width}px`,
+      ).toBeLessThanOrEqual(ring.x);
+      await advance.click();
+    }
+  });
+}
 
 for (const [width, height] of [
   [375, 812],

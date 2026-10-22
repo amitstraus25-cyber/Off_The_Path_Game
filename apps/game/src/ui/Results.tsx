@@ -481,10 +481,17 @@ export function Results({
 
   /*
    * The bad skills this run dealt, and how many of them stayed out of the basket. Unanswered counts
-   * as left, the same rule core scores by, so "caught" can never disagree with the score.
+   * as left, the same rule core scores by, so the count can never disagree with the score. The
+   * sentence says "kept out of your basket", never "caught": a run that walked past every card kept
+   * them all out without reading one (content and UX review, 2026-10-22).
+   *
+   * A LATE run does not show the count at all. Its score is 0 because the clock ran out, not because
+   * of the basket, and "4 of 4" beside "0 out of 100" and "After dark" reads as praise for a run
+   * that may have read nothing. Walk it again stays.
    */
   const dealtBad = run.entries.filter((row) => !row.good).length;
   const caught = run.entries.filter((row) => !row.good && row.verdict !== 'take').length;
+  const showCaught = run.ending !== 'late';
 
   /** What the player said to it, in the reveal's words. Unanswered counts as left (core). */
   const chose = (verdict: v2.Verdict | null): string =>
@@ -520,7 +527,12 @@ export function Results({
                       <dl class="otp-reveal__pairs">
                         <dt>{r.promised}</dt>
                         <dd>{row.promise}</dd>
-                        <dt>{r.did}</dt>
+                        {/*
+                          A row the player did not take never ran, so its line is what it WOULD have
+                          done: "What it did: the wolf opened the door" on a skill they left taught
+                          that leaving it had not protected them.
+                        */}
+                        <dt data-reveal-label="">{row.verdict === 'take' ? r.did : r.wouldHave}</dt>
                         <dd data-reveal-line="">{row.line}</dd>
                       </dl>
                       {row.giveaway !== null && (
@@ -581,7 +593,9 @@ export function Results({
               the research call to action below, and it stays that.
             */}
             <div class="otp-replay" data-caught={caught} data-bad={dealtBad}>
-              <p class="otp-replay__caught">{fill(r.caught, { caught, bad: dealtBad })}</p>
+              {showCaught && (
+                <p class="otp-replay__caught">{fill(r.caught, { caught, bad: dealtBad })}</p>
+              )}
               <button type="button" class="otp-button" data-action="replay" onClick={onReplay}>
                 {r.again}
               </button>

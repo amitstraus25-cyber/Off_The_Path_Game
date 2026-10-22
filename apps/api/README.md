@@ -134,6 +134,254 @@ indexes, grants and RLS state, which is the first thing to run when the board mi
 
 ## Vercel settings
 
+**`vercel.json` has no `services`, no `rewrites` and no `framework` key.** It carries
+`installCommand`, `buildCommand` and the security headers, and nothing else. The deploy is Vercel's
+**Build Output API, written by us**:
+
+- **`buildCommand`** is `pnpm --filter @otp/api typecheck && pnpm --filter @otp/game build && node
+apps/game/scripts/vercel-output.mjs`. The typecheck at its head is the guard on the route files:
+  a type error in `apps/api/api/*.ts` or `src/` fails the deploy before anything is built, so a
+  broken route costs a failed deploy rather than a deployed dead board.
+- **`apps/game/scripts/vercel-output.mjs` writes `.vercel/output`**: the static game from
+  `apps/game/dist`, one function per file it finds under **`apps/api/api/`** (`start.ts`,
+  `score.ts`, `top.ts` -- the single copy of the routes), and `config.json`, whose routes apply the
+  headers copied from `vercel.json` and then hand off to the filesystem. Each route is bundled by
+  esbuild into one self-contained CommonJS `index.js` with `packages/core`, the handlers and
+  `content/game.v2.json` inlined, so only `node:` built-ins are left to resolve at run time.
+  **Vercel compiles none of our TypeScript**, which is the whole fix (see the history below).
+- **The routes `export default { fetch }`.** `src/node-adapter.ts`, bundled into each function,
+  turns Vercel's Node `(req, res)` into a web `Request`, caps the body at 32 KB, and keeps the 405
+  branch ours: `GET /api/start` and `GET /api/score` answer **405 `Allow: POST`** when mounted.
+- **Node version:** each function's `.vc-config.json` says `nodejs22.x`, matching `engines.node`
+  in this package and `.nvmrc` for CI. Project Settings -> Node.js Version should read 22.x.
+- **Environment variables:** the two above, on Production and Preview, marked sensitive.
+- **`X-OTP-Config: build-output-1`** is in the headers block, and it is how to tell a landed deploy
+  from a stale one: `curl -sI https://off-the-path-game.vercel.app/` and read it back before
+  believing any `/api` probe. Absent or a different value means this deployment is not the config
+  in the repo; read the build log and change nothing. Bump the value whenever the deploy mechanism
+  changes.
+- **Never a `"framework": null`.** It fails schema validation and with it every deployment, silently.
+
+`docs/ARCHITECTURE.md` sections 5 and 8 describe the same arrangement from the game's side.
+
+## Layout
+
+```
+api/score.ts     POST /api/score   -- thin: reads the environment once, calls the handler
+api/top.ts       GET  /api/top
+api/start.ts     POST /api/start
+src/handlers.ts  the three routes as pure functions of (Request, Deps)
+src/token.ts     the run token: HKDF key, HMAC seal, open
+src/schema.ts    the v2 submit body; no node: imports, so the game's tests can hold it
+src/store.ts     the table, over fetch against PostgREST
+src/env.ts       the two variables, and what to do when they are not there
+src/deps.ts      the only place that touches process.env
+src/content.ts   the shipped content/game.v2.json, through the same schema the game loads it with
+src/http.ts      the response shapes and the one place headers are written
+src/node-adapter.ts  Vercel's (req, res) over a web handler; reads at most 32 KB of body
+```
+
+Everything with a decision in it is a pure function taking its dependencies as an argument, so the
+whole service is tested in-process with a fake `fetch` and no database anywhere. This checkout has
+no credentials and cannot reach Supabase; nothing in `test/` tries to.
+
+## What has actually been run, end to end
+
+Two suites being green says each half does what its own tests ask. It does not say the halves agree.
+These are the measurements, not the intentions.
+
+- **A real browser, the built game, and this service in one process.** A headless Chromium plays a
+  finished run on a `vite preview` of `apps/game`, the post to `/api/score` is intercepted, and the
+  exact body the shipped adapter sent is handed to `handleScore` with a fake store. Result: the
+  results screen reads **900 out of 1,000**, the body is `{handle, log}` with 13 events and no
+  `score` key, the service answers `200 {"handle":"fair-otter-22","score":900}`, and the row handed
+  to the table is `{"handle":"fair-otter-22","score":900}`. Golden rule 6 holds in fact and not only
+  in a unit test: the number on the board came from the server's own `score()` over the replayed
+  log, and it matched the screen.
+- **The same contract, in CI, without a browser.** `apps/game/test/leaderboard.test.ts` takes the
+  body off the adapter's own request and runs it through `submitRequestSchema` → `checkLog` →
+  `score()`, which is what this route does. Adding a key to the posted body fails it (checked by
+  doing so).
+- **A cold start with no environment.** `node` loading `api/score.ts` and `api/top.ts` with both
+  variables unset logs `not configured: SUPABASE_URL is not set`, answers `503` to a complete run
+  and to `GET /api/top`, and never throws. A `GET` on the write route is `405`, a form post is
+  `415`, and a body carrying `score: 999999` is `400 {"error":"that submission is not valid"}`.
+- **The fingerprint survives key reordering.** `limit.ts` says zod normalises key order, so the same
+  run posted with its fields shuffled hashes the same and is still a duplicate. Checked against zod
+  4.6.5 rather than assumed: both orders parse to the same JSON.
+- **Posted twice, which a player does.** The Post button is enabled again as soon as a post
+  succeeds, so a second press sends the same log and gets `409`. The game now reads that out as its
+  own sentence (`leaderboardAlready`, "That run is already on the board.") rather than as
+  "that run could not be posted", which told a player their score had failed while it was on the
+  board under the name they had just been shown.
+
+**Not run, and not runnable from here:** anything against Supabase. The PostgREST request shapes are
+asserted against a fake `fetch`. There are no credentials in this checkout and none were sought.
+
+## `GET /api/top` has a caller now — this section said otherwise until 2026-10-21
+
+It used to read "nothing in `apps/game/src` calls `LeaderboardClient.top()`", and treat the board as
+a write-only list whose screen had not been built. **That landed in `811d2ca` and the sentence is
+dead.** `apps/game/src/ui/Results.tsx` imports `readTop` (line 20), calls it on mount through
+`readBoard`'s effect and again at the end of every `submit`, and renders the rows into
+`.otp-board__rows`; `apps/game/e2e/leaderboard.spec.ts` drives `**/api/top*` in a real browser. The
+narrow old claim is still true and now irrelevant — the screen calls `readTop` directly rather than
+`LeaderboardClient.top()` — so do not let it stand in for "the read half is unmounted". Both halves
+of the board are wired, and both are waiting on the same thing: a function at `/api/*`.
+
+## What a hostile caller sends, and what happens
+
+| The attempt                                    | What this service does                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A claimed score                                | Refused. The body schema is strict; `score` is not one of its two keys. The stored number always comes from `score()` over the replayed log.                                                                                                                                                                                                                                             |
+| A log that replays to a huge score             | Refused unless it is a run a player could have played. `checkLog` replays every event through the real reducer and requires the replay to reproduce the submitted log exactly.                                                                                                                                                                                                           |
+| A verdict the player never read the card for   | Not refused: in v2 a verdict can be given from the conversation without opening the card, and it replays as played, a `verdict` event with no `inspected` before it. Replay never opens a card on the player's behalf (`runlog.ts`), so nothing is invented. A log that does not replay exactly is refused whatever it says about cards.                                                 |
+| A run that never reached the cottage           | Refused. `checkRunLog` reports `ended` and this route requires it; a `late` ending is refused too.                                                                                                                                                                                                                                                                                       |
+| A seed of the caller's choosing                | Refused. The log's seed must be the one sealed in a token this service signed.                                                                                                                                                                                                                                                                                                           |
+| A log claiming more time than really passed    | Refused: the claimed duration may not exceed the time since the token was issued (plus 2 s).                                                                                                                                                                                                                                                                                             |
+| A slow run restamped, or a stale token         | Refused with 410 once more than five minutes have passed off the game clock since the token was issued.                                                                                                                                                                                                                                                                                  |
+| A run faster than anyone could walk it         | Refused: the claimed run time and the time since the token was issued must both reach `MIN_RUN_MS` (10 s), so every forged row costs real waiting.                                                                                                                                                                                                                                       |
+| A thousand events                              | Refused before replay: `MAX_LOG_EVENTS` is 256 against an honest run of about twenty.                                                                                                                                                                                                                                                                                                    |
+| A megabyte of JSON                             | Refused at 32 KB **as it arrives**. `content-length` is a cheap first check; the gate is a metered read, so a body that declares no length or is made of four-byte characters is cut off at the same 32 KB. The Node adapter (`src/node-adapter.ts`) applies the same cap before the handler is called, so the instance never buffers more than 32 KB of it; the answer is the same 413. |
+| The same token, posted again                   | `409 {"error":"that run is already on the board"}` with nothing written, whatever log or handle comes with it. One token is one row, including two posts of it in flight at once: the id is reserved before the insert and released if no row results. Per instance — see below.                                                                                                         |
+| A loop writing rows as fast as it can          | Thirty writes a minute per instance, then `429` with `retry-after`. The budget is spent only on a row that is about to exist, so nonsense cannot exhaust it. Per instance — see below.                                                                                                                                                                                                   |
+| A handle that is not one of ours               | Refused by `handleSchema`, and refused again by the store immediately before the insert. Only a word pair from `packages/core`'s lists plus a two-digit number parses.                                                                                                                                                                                                                   |
+| A handle designed to break a page              | Cannot exist. The grammar is `[a-z]+-[a-z]+-[1-9][0-9]`, the game renders through Preact text nodes, and `GET /api/top` drops any row whose handle is not one the game could mint.                                                                                                                                                                                                       |
+| A body that is not JSON, or does not say it is | 400 and 415. A JSON-only endpoint cannot be reached by a plain cross-origin form post.                                                                                                                                                                                                                                                                                                   |
+| Probing for the shape of an acceptable log     | Gets `{"error":"that submission is not valid"}`. No zod issue, no field name, no database status: the detail goes to the server log, not to the caller.                                                                                                                                                                                                                                  |
+
+## Turning it on, in order
+
+The table and the two variables already exist. What is left is a deploy and five checks. **Run them
+in this order and do not skip step 2**, which is the one that has been skipped every round: four
+reviewers have read a probe against a deployment that was never built.
+
+1. **Deploy a preview** of this branch. The build is `vercel.json`'s `buildCommand` (above). If it
+   fails, production is untouched -- "a deployment on Vercel is the result of a successful build",
+   and this project's own six-hour outage proved it: production went stale, not down. Read the
+   BUILD log and stop.
+2. **Prove the config is live before believing any probe.** `curl -sI <preview>/` and read
+   `X-OTP-Config` back, then `echo $?` on its own line -- never through a pipe, which reports the
+   pipe's status. Anything but `build-output-1` means this deployment is not the config in the
+   repo; everything below would be measuring something else. Then check the deployment's
+   **Resources -> Functions** list: it should name `api/start`, `api/score` and `api/top`. Empty
+   means zero functions were produced, which is the whole answer in one click.
+3. **`GET /api/score` (and `GET /api/start`) on the preview URL -- a GET, deliberately.** This is
+   the discriminator, not `GET /api/top`.
+   - **`405` with `Allow: POST`** -- the function is mounted and loaded. Go on.
+   - **`404`** -- no function is mounted and nothing of ours ran; `fail()` cannot emit a 404. Stop:
+     this is the build output, not the database. Check that `vercel-output.mjs` ran (the build log)
+     and that `.vercel/output/functions/api/` was written.
+   - **`500` `FUNCTION_INVOCATION_FAILED`** -- mounted, and threw on load. Read the BUILD log, not
+     the runtime log; a bundle that left a module unresolved is the likely cause.
+   - **`503` is impossible here** and that is useful: the method check returns `405` before the
+     store is ever consulted.
+4. **`POST /api/start` with `content-type: application/json` and `{}`, then `GET /api/top`.** The
+   first is **200 `{seed, token}`** with the environment set and 503 without it. The second is the
+   first request that reaches Supabase.
+   - `{"entries":[]}` with `content-type: application/json` -- live, and the board is empty. Go on.
+   - `503 {"error":"the leaderboard is unavailable"}` -- routed and running; the environment or the
+     database is not. The runtime log names which: `[leaderboard] not configured: SUPABASE_URL is
+not set` is a variable (set it, then **redeploy** -- variables are read once per cold start),
+     `select refused with 401` is a wrong or rotated key, `403` a missing grant, `404` PostgREST's
+     stale schema cache, `5xx` a paused project. Values are never logged.
+   - **Read the log even on a 2xx.** No `[leaderboard]` line beside a non-2xx means nothing of ours
+     ran, whatever the status said.
+5. **Play a run on the preview, press Post once, then `GET /api/top` again.** "Posted to the board
+   as ..." means a row was written and the number on it was computed by the server from the replayed
+   log. `handleTop` sets `s-maxage=60`, so wait a minute before concluding. If step 5 said posted
+   and the row never appears, the write path works and the read path does not: the one failure a
+   fake `fetch` could not have caught. Press Post a second time for `409` and "That run is already
+   on the board." -- which also proves the first write landed.
+
+Then do the four things under "What is NOT done" below, of which **turning on Vercel's rate
+limiting for `/api/*` is the one that cannot wait**: until it is on, the per-instance budget in
+`src/limit.ts` and the per-instance one-token-one-row set are speed bumps, and the board is
+writable in volume by anyone who can run a loop.
+
+## What is NOT done, and must be done by hand before this is believed
+
+Recomputing every score bounds what a row can SAY. It does not bound how many rows a caller can
+write, or prove that a player played. A maximal run log can be built offline by driving the reducer
+(`pnpm sim --strategy careful` produces one), so without the three steps below the board is a
+write-what-you-like list that happens to contain honest scores. `src/limit.ts` closes the cheap case
+— one row per run, thirty writes a minute — but only within one instance, and Vercel runs several.
+
+1. **Turn on rate limiting for `/api/*` in the Vercel project, and prove it on a preview. A hard
+   precondition for exposing the board to the public.** Firewall → rate limiting, scoped to the
+   `/api/` path. This is the control that spans instances, and it is the one thing here that cannot
+   be done from the repository. Until it is on, treat the per-instance budget as a speed bump and
+   nothing more. Tracked as an unticked box under Phase 9 E in `docs/PLAN.md`.
+2. **Make dedupe durable.** `supabase/migrations/0002_leaderboard_log_hash.sql` adds the column the
+   code cannot add, with the unique index over it, and is safe to run before the code that writes
+   it. It **reopens D10** rather than being a quiet migration — the column is a third one on a table
+   whose decision reads "handle and score only" — so the argument on both sides, and the paragraph
+   to put in front of Legal, are in `docs/DATABASE.md` under "Decision 1". The code change that goes
+   with it is there too, including the one trap: do not use
+   `Prefer: resolution=ignore-duplicates`, because with `return=minimal` an ignored duplicate is
+   indistinguishable from a real insert and the player is told a row exists that does not.
+
+3. **Decide the delete path (D10 already did).** `supabase/migrations/0004_leaderboard_delete_path.sql`
+   ships the recommendation: no route at all, an `admin` schema PostgREST does not expose holding a
+   find-then-remove-by-id pair, and `UPDATE`/`DELETE`/`TRUNCATE` revoked from `service_role` so a
+   leaked key cannot erase the board. `docs/DATABASE.md`, "Decision 3", has the reasoning — the
+   short version is that **a handle is not an identity**, so a player cannot identify their own row
+   and neither can we, which makes this a moderation control rather than a privacy one.
+
+4. **Set retention.** `supabase/migrations/0003_leaderboard_retention.sql` schedules it against
+   D10's twelve months. Note what nobody has written down: twelve-month retention makes this a
+   rolling-twelve-month board rather than an all-time one.
+
+### Known and accepted
+
+1. **A handle is not an identity.** Anyone can post any legal run under any mintable handle. That is
+   what a leaderboard with no accounts is (decision D4), and the whole value at stake is a row on a
+   list.
+2. **The per-instance budget can be spent by an attacker.** Thirty writes a minute is per instance,
+   so a flood can hold a given instance at `429` and the game will show "Leaderboard unavailable
+   right now" to honest players on it. That failure is quiet, reversible and leaves results and the
+   call to action untouched, which is the better of the two outcomes available without step 1 — the
+   alternative is the same flood landing as rows on a public page.
+3. **Removing a word from the handle lists hides existing rows.** `GET /api/top` drops any handle the
+   game could not mint, so a word taken out of `packages/core/src/leaderboard.ts` retires every row
+   already posted under it. The store over-fetches four pages so the filter falls through to real
+   rows rather than serving a short page, but the rows themselves are gone from the board.
+4. **The clock is half the player's.** Since Phase E a run cannot claim more time than the server
+   saw, nor sit more than five minutes off the game clock, nor be faster than `MIN_RUN_MS` on
+   either clock. That floor is one number for every score -- the straight walk to the door -- so a
+   scripted 100 still costs only ten seconds of waiting per token, though an honest 100 must also
+   meet the three holding good skills on the way. A per-score floor needs the map's distances on the server and
+   is not done. Requiring a card to be opened per take is out of scope: reading is optional by
+   design (GAME_DESIGN_V2), so it would refuse an honest lucky guess.
+5. **Content drift.** Scores are recomputed against whatever `content/game.v2.json` the deployment
+   carries. Change the scoring weights and old rows are no longer comparable to new ones, with
+   nothing in the table recording which version produced them.
+6. **Nothing here has been run against the live service.** There are no credentials in this
+   checkout. The PostgREST request shapes (headers, `order=score.desc,created_at.asc`,
+   `Prefer: return=minimal`) are asserted in tests against a fake fetch, not against Supabase. The
+   first real deploy is the first real test of those.
+7. **v1 rows are not comparable with v2's.** v1 scored out of 1,000, v2 out of 100. PLAN.md recorded
+   the table as empty before Phase E; if any v1 rows are there, they outrank every v2 run. **This
+   service deletes nothing.** Whether old rows are cleared is the client's data decision, made by
+   hand in the SQL editor (`docs/DATABASE.md`, Decision 3's delete path), not by a deploy.
+
+## History: the Vercel arrangements that FAILED -- do not re-run any of them
+
+> **Everything in this section is history, kept so nobody re-runs it.** It was written in the
+> present tense on 2026-10-21, and almost every present-tense statement in it is now false:
+> `vercel.json` declares no services and no rewrites, `apps/game/api/` and
+> `apps/game/tsconfig.api.json` no longer exist, the routes are a single copy in `apps/api/api/`
+> exporting `default { fetch }`, the content file is `content/game.v2.json`, `X-OTP-Config` is
+> `build-output-1`, and Vercel compiles nothing -- `vercel-output.mjs` bundles every route. The
+> three arrangements below each failed: two services (no functions), routes inside the game service
+> (a `framework: "vite"` service gets a static build and its `api/` is never scanned), and routes
+> in a repo-root `api/` (functions at last, every one crashing with `FUNCTION_INVOCATION_FAILED`
+> because Vercel compiled them with its own TypeScript settings and left the `.ts` specifiers
+> pointing at files that were not in the lambda). The current arrangement is "Vercel settings"
+> above. The text below is unchanged from when it was written.
+
+### As written 2026-10-21 (the two-service attempt)
+
 **Since 2026-10-21, `vercel.json` declares TWO services**, and `/api/(.*)` is routed into this one:
 
 ```json
@@ -407,204 +655,3 @@ deps) }` suits these handlers exactly, since they already branch on `request.met
   `node_modules`, where Node 22 is willing to strip types. A bundler that copies the service root
   plus its `node_modules` without following that link out of `apps/api` gets nothing to compile.
   Same symptom, same check: `GET /api/top` on the preview.
-
-## Layout
-
-```
-api/score.ts     POST /api/score   -- thin: reads the environment once, calls the handler
-api/top.ts       GET  /api/top
-api/start.ts     POST /api/start
-src/handlers.ts  the three routes as pure functions of (Request, Deps)
-src/token.ts     the run token: HKDF key, HMAC seal, open
-src/schema.ts    the v2 submit body; no node: imports, so the game's tests can hold it
-src/store.ts     the table, over fetch against PostgREST
-src/env.ts       the two variables, and what to do when they are not there
-src/deps.ts      the only place that touches process.env
-src/content.ts   the shipped content/game.v2.json, through the same schema the game loads it with
-src/http.ts      the response shapes and the one place headers are written
-src/node-adapter.ts  Vercel's (req, res) over a web handler; reads at most 32 KB of body
-```
-
-Everything with a decision in it is a pure function taking its dependencies as an argument, so the
-whole service is tested in-process with a fake `fetch` and no database anywhere. This checkout has
-no credentials and cannot reach Supabase; nothing in `test/` tries to.
-
-## What has actually been run, end to end
-
-Two suites being green says each half does what its own tests ask. It does not say the halves agree.
-These are the measurements, not the intentions.
-
-- **A real browser, the built game, and this service in one process.** A headless Chromium plays a
-  finished run on a `vite preview` of `apps/game`, the post to `/api/score` is intercepted, and the
-  exact body the shipped adapter sent is handed to `handleScore` with a fake store. Result: the
-  results screen reads **900 out of 1,000**, the body is `{handle, log}` with 13 events and no
-  `score` key, the service answers `200 {"handle":"fair-otter-22","score":900}`, and the row handed
-  to the table is `{"handle":"fair-otter-22","score":900}`. Golden rule 6 holds in fact and not only
-  in a unit test: the number on the board came from the server's own `score()` over the replayed
-  log, and it matched the screen.
-- **The same contract, in CI, without a browser.** `apps/game/test/leaderboard.test.ts` takes the
-  body off the adapter's own request and runs it through `submitRequestSchema` → `checkLog` →
-  `score()`, which is what this route does. Adding a key to the posted body fails it (checked by
-  doing so).
-- **A cold start with no environment.** `node` loading `api/score.ts` and `api/top.ts` with both
-  variables unset logs `not configured: SUPABASE_URL is not set`, answers `503` to a complete run
-  and to `GET /api/top`, and never throws. A `GET` on the write route is `405`, a form post is
-  `415`, and a body carrying `score: 999999` is `400 {"error":"that submission is not valid"}`.
-- **The fingerprint survives key reordering.** `limit.ts` says zod normalises key order, so the same
-  run posted with its fields shuffled hashes the same and is still a duplicate. Checked against zod
-  4.6.5 rather than assumed: both orders parse to the same JSON.
-- **Posted twice, which a player does.** The Post button is enabled again as soon as a post
-  succeeds, so a second press sends the same log and gets `409`. The game now reads that out as its
-  own sentence (`leaderboardAlready`, "That run is already on the board.") rather than as
-  "that run could not be posted", which told a player their score had failed while it was on the
-  board under the name they had just been shown.
-
-**Not run, and not runnable from here:** anything against Supabase. The PostgREST request shapes are
-asserted against a fake `fetch`. There are no credentials in this checkout and none were sought.
-
-## `GET /api/top` has a caller now — this section said otherwise until 2026-10-21
-
-It used to read "nothing in `apps/game/src` calls `LeaderboardClient.top()`", and treat the board as
-a write-only list whose screen had not been built. **That landed in `811d2ca` and the sentence is
-dead.** `apps/game/src/ui/Results.tsx` imports `readTop` (line 20), calls it on mount through
-`readBoard`'s effect and again at the end of every `submit`, and renders the rows into
-`.otp-board__rows`; `apps/game/e2e/leaderboard.spec.ts` drives `**/api/top*` in a real browser. The
-narrow old claim is still true and now irrelevant — the screen calls `readTop` directly rather than
-`LeaderboardClient.top()` — so do not let it stand in for "the read half is unmounted". Both halves
-of the board are wired, and both are waiting on the same thing: a function at `/api/*`.
-
-## What a hostile caller sends, and what happens
-
-| The attempt                                    | What this service does                                                                                                                                                                                                                                                                                                                                                                   |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A claimed score                                | Refused. The body schema is strict; `score` is not one of its two keys. The stored number always comes from `score()` over the replayed log.                                                                                                                                                                                                                                             |
-| A log that replays to a huge score             | Refused unless it is a run a player could have played. `checkLog` replays every event through the real reducer and requires the replay to reproduce the submitted log exactly.                                                                                                                                                                                                           |
-| A verdict the player never read the card for   | Not refused: in v2 a verdict can be given from the conversation without opening the card, and it replays as played, a `verdict` event with no `inspected` before it. Replay never opens a card on the player's behalf (`runlog.ts`), so nothing is invented. A log that does not replay exactly is refused whatever it says about cards.                                                 |
-| A run that never reached the cottage           | Refused. `checkRunLog` reports `ended` and this route requires it; a `late` ending is refused too.                                                                                                                                                                                                                                                                                       |
-| A seed of the caller's choosing                | Refused. The log's seed must be the one sealed in a token this service signed.                                                                                                                                                                                                                                                                                                           |
-| A log claiming more time than really passed    | Refused: the claimed duration may not exceed the time since the token was issued (plus 2 s).                                                                                                                                                                                                                                                                                             |
-| A slow run restamped, or a stale token         | Refused with 410 once more than five minutes have passed off the game clock since the token was issued.                                                                                                                                                                                                                                                                                  |
-| A run faster than anyone could walk it         | Refused: the claimed run time and the time since the token was issued must both reach `MIN_RUN_MS` (10 s), so every forged row costs real waiting.                                                                                                                                                                                                                                       |
-| A thousand events                              | Refused before replay: `MAX_LOG_EVENTS` is 256 against an honest run of about twenty.                                                                                                                                                                                                                                                                                                    |
-| A megabyte of JSON                             | Refused at 32 KB **as it arrives**. `content-length` is a cheap first check; the gate is a metered read, so a body that declares no length or is made of four-byte characters is cut off at the same 32 KB. The Node adapter (`src/node-adapter.ts`) applies the same cap before the handler is called, so the instance never buffers more than 32 KB of it; the answer is the same 413. |
-| The same token, posted again                   | `409 {"error":"that run is already on the board"}` with nothing written, whatever log or handle comes with it. One token is one row, including two posts of it in flight at once: the id is reserved before the insert and released if no row results. Per instance — see below.                                                                                                         |
-| A loop writing rows as fast as it can          | Thirty writes a minute per instance, then `429` with `retry-after`. The budget is spent only on a row that is about to exist, so nonsense cannot exhaust it. Per instance — see below.                                                                                                                                                                                                   |
-| A handle that is not one of ours               | Refused by `handleSchema`, and refused again by the store immediately before the insert. Only a word pair from `packages/core`'s lists plus a two-digit number parses.                                                                                                                                                                                                                   |
-| A handle designed to break a page              | Cannot exist. The grammar is `[a-z]+-[a-z]+-[1-9][0-9]`, the game renders through Preact text nodes, and `GET /api/top` drops any row whose handle is not one the game could mint.                                                                                                                                                                                                       |
-| A body that is not JSON, or does not say it is | 400 and 415. A JSON-only endpoint cannot be reached by a plain cross-origin form post.                                                                                                                                                                                                                                                                                                   |
-| Probing for the shape of an acceptable log     | Gets `{"error":"that submission is not valid"}`. No zod issue, no field name, no database status: the detail goes to the server log, not to the caller.                                                                                                                                                                                                                                  |
-
-## Turning it on, in order
-
-The table and the two variables already exist. What is left is a deploy and five checks. **Run them
-in this order and do not skip step 2**, which is the one that has been skipped every round: four
-reviewers have read a probe against a deployment that was never built.
-
-1. **Deploy a preview** of this branch. Nothing here needs a build step. If the build fails,
-   production is untouched — "a deployment on Vercel is the result of a successful build", and this
-   project's own six-hour outage proved it: production went stale, not down. Read the log and stop.
-2. **Prove the config is live before believing any probe.** `curl -sI <preview>/` and read
-   `X-OTP-Config` back, then `echo $?` on its own line — never through a pipe, which reports the
-   pipe's status. Absent or the previous value → this deployment is not the config you just wrote;
-   everything below would be measuring the old one. New value → go on. Then check the deployment's
-   **Resources → Functions** list (PAUL_BRIEF §5 calls it the Functions tab): empty means zero
-   functions were produced, which is the whole answer in one click.
-3. **`GET /api/score` on the preview URL — a GET, deliberately.** This is the discriminator, not
-   `GET /api/top`.
-   - **`405` with `Allow: POST`** — a function is mounted and the routing works. This is the first
-     thing that has ever reached a line we wrote. Go on.
-   - **`404`** — no function is mounted and nothing of ours ran; `fail()` cannot emit a 404. Stop:
-     this is `vercel.json`, not the database, and nothing below can be tested. It is **not** the
-     game's `index.html` — a service rewrite delegates the path into the service, which does its own
-     filesystem lookup, and there is no SPA-fallback rewrite anywhere in `vercel.json`.
-   - **`500`** — mounted, and threw at cold start: one of the two cross-root imports, almost
-     certainly `src/content.ts`'s reach for `../../../content/game.json`. The function log has the
-     module name.
-   - **`503` is impossible here** and that is useful: the method check returns `405` before the
-     store is ever consulted.
-4. **`GET /api/top` on the preview URL.** The first request that reaches Supabase.
-   - `{"entries":[]}` with `content-type: application/json` — live, and the table is empty. Go on.
-   - `503 {"error":"the leaderboard is unavailable"}` — routed and running; the environment or the
-     database is not. The runtime log names which: `[leaderboard] not configured: SUPABASE_URL is
-not set` is a variable (set it, then **redeploy** — variables are read once per cold start),
-     `select refused with 401` is a wrong or rotated key, `403` a missing grant, `404` PostgREST's
-     stale schema cache, `5xx` a paused project. Values are never logged.
-   - **Read the log even on a 2xx.** No `[leaderboard]` line beside a non-2xx means nothing of ours
-     ran, whatever the status said.
-5. **Play a run on the preview, press Post once, then `GET /api/top` again.** "Posted to the board
-   as …" means a row was written and the number on it was computed by the server from the replayed
-   log. The handle should come back rank 1 — but `handleTop` sets `s-maxage=60`, so wait a minute
-   before concluding. If step 5 said posted and the row never appears, the write path works and the
-   read path does not: the one failure a fake `fetch` could not have caught. Press Post a second
-   time for `409` and "That run is already on the board." — which also proves the first write
-   landed.
-
-Then do the four things under "What is NOT done" below, of which **turning on Vercel's rate
-limiting for `/api/*` is the one that cannot wait**: until it is on, the per-instance budget in
-`src/limit.ts` is a speed bump and the board is writable in volume by anyone who can run a loop.
-
-## What is NOT done, and must be done by hand before this is believed
-
-Recomputing every score bounds what a row can SAY. It does not bound how many rows a caller can
-write, or prove that a player played. A maximal run log can be built offline by driving the reducer
-(`pnpm sim --strategy perfect` produces one), so without the three steps below the board is a
-write-what-you-like list that happens to contain honest scores. `src/limit.ts` closes the cheap case
-— one row per run, thirty writes a minute — but only within one instance, and Vercel runs several.
-
-1. **Turn on rate limiting for `/api/*` in the Vercel project, and prove it on a preview. A hard
-   precondition for exposing the board to the public.** Firewall → rate limiting, scoped to the
-   `/api/` path. This is the control that spans instances, and it is the one thing here that cannot
-   be done from the repository. Until it is on, treat the per-instance budget as a speed bump and
-   nothing more. Tracked as an unticked box under Phase 9 E in `docs/PLAN.md`.
-2. **Make dedupe durable.** `supabase/migrations/0002_leaderboard_log_hash.sql` adds the column the
-   code cannot add, with the unique index over it, and is safe to run before the code that writes
-   it. It **reopens D10** rather than being a quiet migration — the column is a third one on a table
-   whose decision reads "handle and score only" — so the argument on both sides, and the paragraph
-   to put in front of Legal, are in `docs/DATABASE.md` under "Decision 1". The code change that goes
-   with it is there too, including the one trap: do not use
-   `Prefer: resolution=ignore-duplicates`, because with `return=minimal` an ignored duplicate is
-   indistinguishable from a real insert and the player is told a row exists that does not.
-
-3. **Decide the delete path (D10 already did).** `supabase/migrations/0004_leaderboard_delete_path.sql`
-   ships the recommendation: no route at all, an `admin` schema PostgREST does not expose holding a
-   find-then-remove-by-id pair, and `UPDATE`/`DELETE`/`TRUNCATE` revoked from `service_role` so a
-   leaked key cannot erase the board. `docs/DATABASE.md`, "Decision 3", has the reasoning — the
-   short version is that **a handle is not an identity**, so a player cannot identify their own row
-   and neither can we, which makes this a moderation control rather than a privacy one.
-
-4. **Set retention.** `supabase/migrations/0003_leaderboard_retention.sql` schedules it against
-   D10's twelve months. Note what nobody has written down: twelve-month retention makes this a
-   rolling-twelve-month board rather than an all-time one.
-
-### Known and accepted
-
-1. **A handle is not an identity.** Anyone can post any legal run under any mintable handle. That is
-   what a leaderboard with no accounts is (decision D4), and the whole value at stake is a row on a
-   list.
-2. **The per-instance budget can be spent by an attacker.** Thirty writes a minute is per instance,
-   so a flood can hold a given instance at `429` and the game will show "Leaderboard unavailable
-   right now" to honest players on it. That failure is quiet, reversible and leaves results and the
-   call to action untouched, which is the better of the two outcomes available without step 1 — the
-   alternative is the same flood landing as rows on a public page.
-3. **Removing a word from the handle lists hides existing rows.** `GET /api/top` drops any handle the
-   game could not mint, so a word taken out of `packages/core/src/leaderboard.ts` retires every row
-   already posted under it. The store over-fetches four pages so the filter falls through to real
-   rows rather than serving a short page, but the rows themselves are gone from the board.
-4. **The clock is half the player's.** Since Phase E a run cannot claim more time than the server
-   saw, nor sit more than five minutes off the game clock, nor be faster than `MIN_RUN_MS` on
-   either clock. That floor is one number for every score -- the straight walk to the door -- so a
-   scripted 100 still costs only ten seconds of waiting per token, though an honest 100 must also
-   meet the three holding good skills on the way. A per-score floor needs the map's distances on the server and
-   is not done. Requiring a card to be opened per take is out of scope: reading is optional by
-   design (GAME_DESIGN_V2), so it would refuse an honest lucky guess.
-5. **Content drift.** Scores are recomputed against whatever `content/game.v2.json` the deployment
-   carries. Change the scoring weights and old rows are no longer comparable to new ones, with
-   nothing in the table recording which version produced them.
-6. **Nothing here has been run against the live service.** There are no credentials in this
-   checkout. The PostgREST request shapes (headers, `order=score.desc,created_at.asc`,
-   `Prefer: return=minimal`) are asserted in tests against a fake fetch, not against Supabase. The
-   first real deploy is the first real test of those.
-7. **v1 rows are not comparable with v2's.** v1 scored out of 1,000, v2 out of 100. PLAN.md recorded
-   the table as empty before Phase E; if any v1 rows are there, they outrank every v2 run. **This
-   service deletes nothing.** Whether old rows are cleared is the client's data decision, made by
-   hand in the SQL editor (`docs/DATABASE.md`, Decision 3's delete path), not by a deploy.

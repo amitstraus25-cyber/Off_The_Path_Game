@@ -74,9 +74,14 @@ const crossSite = (request: Request): boolean => {
   return site !== null && site !== 'same-origin';
 };
 
-/** JSON-only, so a cross-origin page cannot reach a route without a preflight it will fail. */
+/**
+ * JSON-only, so a cross-origin page cannot reach a route without a preflight it will fail. The
+ * MEDIA TYPE is compared exactly, parameters aside: a substring match let `text/plain;x=application/json`
+ * through -- a type a browser sends cross-origin with no preflight -- and `application/jsonx` too.
+ */
 const isJson = (request: Request): boolean =>
-  (request.headers.get('content-type') ?? '').toLowerCase().includes('application/json');
+  (request.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase() ===
+  'application/json';
 
 /**
  * A submission is a handle, a log and a token. 32 KB is about forty times the largest honest body, and the

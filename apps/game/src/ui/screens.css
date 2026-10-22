@@ -234,8 +234,8 @@
 /*
  * No footer link action any more. "Walk it again" was an underlined text link at the foot of
  * Results, made different in KIND from the board's retry pill because the two used to share a
- * class. It is the reveal's replay hook now -- a secondary Deep Purple pill beside "You caught N of
- * 4" (`.otp-replay`), well above the board -- so the two are no longer neighbours to confuse.
+ * class. It is the reveal's replay hook now -- a secondary Deep Purple pill beside "You kept N of
+ * 4 bad skills out of your basket" (`.otp-replay`), well above the board -- so the two are no longer neighbours to confuse.
  */
 
 /* ---------------------------------------------------------------- arrive */
@@ -249,10 +249,18 @@
   align-content: end;
 }
 
+/*
+ * The right padding is the advance ring's own column: its width, its right offset and a 12px gap.
+ * It was `56px * --otp-ui`, which is 56 at 1 but 39 at the phone's 0.7 -- while the ring cannot
+ * shrink below the 44px touch minimum, so at 360 and 375 it sat on the "s" of "waves" in the first
+ * beat. The bound is derived from the ring's real size (the max below is its width), not scaled.
+ */
 .otp-arrive {
   align-items: center;
   position: relative;
-  padding-right: calc(56px * var(--otp-ui));
+  padding-right: calc(
+    max(var(--otp-touch-min), 34px * var(--otp-ui)) + 14px * var(--otp-ui) + 12px
+  );
 }
 
 .otp-arrive__text {

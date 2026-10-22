@@ -40,12 +40,12 @@ curl -i https://off-the-path-game.vercel.app/api/score
 `handleScore` answers any non-`POST` with `405` and an `Allow: POST` header before it looks at
 anything else, so the status alone separates four entirely different problems:
 
-| Status                   | What it means                                           | Go to                                   |
-| ------------------------ | ------------------------------------------------------- | --------------------------------------- |
-| `405` with `Allow: POST` | A function exists and routing works. The service is up. | Then check `/api/top` for the database. |
-| `404`                    | **No function is mounted at all.** Nothing of ours ran. | [Routing](#when-the-404-is-vercels)     |
-| `500`                    | Routed, and it threw at cold start — an import failed.  | [Cold start](#when-it-is-not-working)   |
-| `503`                    | Routed and running, environment not wired.              | [Environment](#environment-variables)   |
+| Status                   | What it means                                           | Go to                                                   |
+| ------------------------ | ------------------------------------------------------- | ------------------------------------------------------- |
+| `405` with `Allow: POST` | A function exists and routing works. The service is up. | Then check `/api/top` for the database.                 |
+| `404`                    | **No function is mounted at all.** Nothing of ours ran. | [Routing](#is-a-function-mounted-at-all-run-this-first) |
+| `500`                    | Routed, and it threw at cold start — an import failed.  | [Cold start](#when-it-is-not-working)                   |
+| `503`                    | Routed and running, environment not wired.              | [Environment](#environment-variables)                   |
 
 `GET /api/start` is the same discriminator for the third route: `405` with `Allow: POST` when
 mounted. Then `POST /api/start` with `content-type: application/json` and `{}` answers `200
@@ -586,29 +586,33 @@ normal case.
 
 ## When it is not working
 
-| Symptom                                          | Most likely cause                                                        | What to do                                                                                                    |
-| ------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `GET /api/score` → `404`                         | No function is mounted. Routing, not the database.                       | See [the routing note](#when-the-404-is-vercels). Nothing here will help until this is a `405`.               |
-| `GET /api/score` → `500`                         | Threw at cold start: a cross-root import did not survive bundling.       | Vercel function log has the stack. Suspect `content/game.json` or the `@otp/core` symlink.                    |
-| `/api/top` → `503`, log says `not configured: …` | The named environment variable is unset on that environment.             | Set it in Vercel, **then redeploy** — variables are read at cold start.                                       |
-| `/api/top` → `503`, log says `refused with 401`  | The key is wrong, rotated, or is the anon key.                           | Confirm `SUPABASE_SERVICE_ROLE_KEY` holds the service role key. An anon key here 401s on every call.          |
-| `/api/top` → `503`, log says `refused with 403`  | The key is valid but the grant is gone.                                  | Run `0001`'s verification query. Look for a `revoke` that swept up `service_role`.                            |
-| `/api/top` → `503`, log says `refused with 404`  | PostgREST's schema cache does not know the table.                        | Reload the schema cache in the Supabase dashboard. Easy to confuse with Vercel's 404 — read the function log. |
-| `/api/top` → `503`, log says `refused with 5xx`  | The project is paused, or Supabase is having a day.                      | Check the Supabase dashboard. See [pausing](#when-the-free-tier-pauses).                                      |
-| `/api/top` → `503`, "came back in a shape…"      | Something other than PostgREST answered — a gateway or interstitial.     | Check `SUPABASE_URL` points at the right project and nothing is proxying it.                                  |
-| Posts succeed, board stays empty                 | The write path works and the read path does not. Has never happened.     | A fake `fetch` could not have caught this. Check the handle filter and `Max rows`.                            |
-| A score is on the board twice                    | Per-instance dedupe, working as built.                                   | [Decision 1](#decision-1--dedupe).                                                                            |
-| Two ranks swap on refresh                        | The sort is not a total order.                                           | [Decision 4](#decision-4--the-read-query).                                                                    |
-| The board is short, or a handle vanished         | A word was removed from `HANDLE_FIRST_WORDS` / `HANDLE_SECOND_WORDS`.    | See below. Put the word back.                                                                                 |
-| Retention deletes nothing, every night           | RLS was changed to `force`, or pg_cron is off, or the project is paused. | `0003`'s verification queries. Check `relforcerowsecurity` in `0001`'s.                                       |
+| Symptom                                          | Most likely cause                                                        | What to do                                                                                                          |
+| ------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/score` → `404`                         | No function is mounted. Routing, not the database.                       | See [the routing note](#is-a-function-mounted-at-all-run-this-first). Nothing here will help until this is a `405`. |
+| `GET /api/score` → `500`                         | Threw at cold start: a cross-root import did not survive bundling.       | Vercel function log has the stack. Suspect `content/game.json` or the `@otp/core` symlink.                          |
+| `/api/top` → `503`, log says `not configured: …` | The named environment variable is unset on that environment.             | Set it in Vercel, **then redeploy** — variables are read at cold start.                                             |
+| `/api/top` → `503`, log says `refused with 401`  | The key is wrong, rotated, or is the anon key.                           | Confirm `SUPABASE_SERVICE_ROLE_KEY` holds the service role key. An anon key here 401s on every call.                |
+| `/api/top` → `503`, log says `refused with 403`  | The key is valid but the grant is gone.                                  | Run `0001`'s verification query. Look for a `revoke` that swept up `service_role`.                                  |
+| `/api/top` → `503`, log says `refused with 404`  | PostgREST's schema cache does not know the table.                        | Reload the schema cache in the Supabase dashboard. Easy to confuse with Vercel's 404 — read the function log.       |
+| `/api/top` → `503`, log says `refused with 5xx`  | The project is paused, or Supabase is having a day.                      | Check the Supabase dashboard. See [pausing](#when-the-free-tier-pauses).                                            |
+| `/api/top` → `503`, "came back in a shape…"      | Something other than PostgREST answered — a gateway or interstitial.     | Check `SUPABASE_URL` points at the right project and nothing is proxying it.                                        |
+| Posts succeed, board stays empty                 | The write path works and the read path does not. Has never happened.     | A fake `fetch` could not have caught this. Check the handle filter and `Max rows`.                                  |
+| A score is on the board twice                    | Per-instance dedupe, working as built.                                   | [Decision 1](#decision-1--dedupe).                                                                                  |
+| Two ranks swap on refresh                        | The sort is not a total order.                                           | [Decision 4](#decision-4--the-read-query).                                                                          |
+| The board is short, or a handle vanished         | A word was removed from `HANDLE_FIRST_WORDS` / `HANDLE_SECOND_WORDS`.    | See below. Put the word back.                                                                                       |
+| Retention deletes nothing, every night           | RLS was changed to `force`, or pg_cron is off, or the project is paused. | `0003`'s verification queries. Check `relforcerowsecurity` in `0001`'s.                                             |
 
-### When the 404 is Vercel's
+### Is a function mounted at all? Run this first
 
-This is the live symptom as of 2026-10-21 and it is **not** a database problem. `GET /api/score` and
-`GET /api/top` both return `404` on production, and our code cannot emit a `404`, so no function is
-mounted. The work to fix it is in `vercel.json` and the route files, which this runbook does not
-own — but know that **nothing in this document can be verified until that is a `405`.** No request
-has ever reached Supabase from this service.
+The routes ship through Vercel's **Build Output API**: `apps/game/scripts/vercel-output.mjs`
+bundles each file in `apps/api/api/` (`start`, `score`, `top`) into a self-contained function, and
+Vercel compiles none of our TypeScript (`apps/api/README.md`, "Vercel settings"). Before reading
+anything in this runbook as a database problem, `GET /api/start` and `GET /api/score`: **405
+`Allow: POST`** means the function is mounted and loaded, and only then is the database the next
+suspect. A **404** is not a database problem -- our code cannot emit a `404`, so no function is
+mounted; that is the build output, which this runbook does not own. A **500**
+`FUNCTION_INVOCATION_FAILED` is a function that crashed on load; read the build log. (On 2026-10-21
+both routes answered 404 on production; that was the services-mode deploy, since replaced.)
 
 ### The handle wordlist is effectively part of the schema
 
@@ -659,19 +663,21 @@ No request from this service has reached Supabase. There are no credentials in t
 were sought, and no `.env` was created. Every PostgREST request shape — headers, `order`,
 `Prefer: return=minimal`, the projection — is asserted against a fake `fetch` in `apps/api/test/`.
 
-Whether `services`, `apps/game/api` or any other routing arrangement produces functions on this
-Vercel account. Only the Functions tab of a deployment, or a deploy, answers it.
+Whether the current deployment answers the 405 above. The routing question itself is settled --
+the Build Output API is what ships, and `services`, `apps/game/api` and a repo-root `api/` each
+failed and are not to be re-run -- but a deployment is only believed once it has been probed.
 
 Which key format `SUPABASE_SERVICE_ROLE_KEY` carries. Our code is correct for both the legacy
 `service_role` JWT and the newer `sb_secret_` format, because it puts the same value in both headers.
 
 Whether PostgREST's schema cache has `public.leaderboard`. The table was created after the service
 was written; if the cache is stale the first call is a 404 **from our function**, which looks
-identical from outside to the Vercel 404 you are already seeing. Read the function log, not the
-status.
+identical from outside to a Vercel 404. Read the function log, not the status.
 
 Whether the project is paused right now, and whether a daily read — or the retention job — stops it
 pausing.
 
-Whether Vercel's bundler follows `src/content.ts`'s import of `content/game.json` and the `@otp/core`
-symlink out of the service root. That would present as a `500`, never as the current `404`.
+~~Whether Vercel's bundler follows `src/content.ts`'s import of the content file and the `@otp/core`
+symlink out of the service root.~~ No longer a question: `vercel-output.mjs` inlines
+`content/game.v2.json` and `packages/core` into each function's bundle, so nothing is resolved
+across the service root at run time.
