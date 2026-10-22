@@ -52,7 +52,7 @@ const Caret = () => (
  * doorstep until the last line lands; only then does the portrait change, so the reveal is not
  * given away on the first beat. No shake and no gore: a slow fade and a held beat.
  *
- * Focus moves to the text on arrival (a whole screen, not a modal, so no trap), and the region
+ * Focus moves to the advance control on arrival (a whole screen, not a modal, so no trap), and the region
  * that speaks is born empty and then mutated, because a live region inserted with its text is
  * announced by no screen reader.
  */
@@ -62,10 +62,18 @@ export function Cottage({ ending, words, onFinish }: CottageProps) {
   const done = shown >= beats.length;
   const visible = beats.slice(0, shown);
 
-  const text = useRef<HTMLDivElement>(null);
+  /*
+   * FOCUS GOES TO THE CONTROL THAT MOVES THE SCENE ON, not to the text (the 2026-10-22 review:
+   * focused on the text box, Enter and Space did nothing, and when the last line replaced the
+   * advance ring with Step inside, focus fell back to the page). Whichever of the two buttons is
+   * showing takes it, on arrival and after every beat, so a keyboard player presses Enter through
+   * the whole ending. The hidden status region below still says each line as it lands, so what a
+   * screen reader hears is unchanged.
+   */
+  const next = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    text.current?.focus();
-  }, []);
+    next.current?.focus();
+  }, [shown]);
 
   const [said, setSaid] = useState('');
   useEffect(() => {
@@ -86,7 +94,7 @@ export function Cottage({ ending, words, onFinish }: CottageProps) {
             role="img"
             aria-label={done ? words.title : 'Little Purple on the doorstep'}
           />
-          <div class="otp-dialogue__text otp-arrive__text" ref={text} tabIndex={-1} data-autofocus>
+          <div class="otp-dialogue__text otp-arrive__text">
             <p class="otp-visually-hidden" data-announce="arrive" role="status" aria-live="polite">
               {said}
             </p>
@@ -102,6 +110,7 @@ export function Cottage({ ending, words, onFinish }: CottageProps) {
 
           {done ? (
             <button
+              ref={next}
               type="button"
               class="otp-button otp-arrive__finish"
               data-action="finish"
@@ -111,6 +120,7 @@ export function Cottage({ ending, words, onFinish }: CottageProps) {
             </button>
           ) : (
             <button
+              ref={next}
               type="button"
               class="otp-advance"
               aria-label={strings['arriveNext'] ?? ''}

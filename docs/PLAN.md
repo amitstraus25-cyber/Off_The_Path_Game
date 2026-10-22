@@ -117,6 +117,30 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     `boardRowKey` and adds "Joining the board" in words while it is `pending`. A wolf run is told
     up front that it does not go on the board (`chrome.wolfNotPosted`), since apps/api refuses it.
 
+- **Client round 2026-10-22, evening: "i cant find the character" (built, not committed, not
+  ticked).** The client finished a run with the Cat's Latch Lifter marked "You walked past".
+  - **A minimap, top right of the world** (`ui/Minimap.tsx`, `world/minimap.ts`, `hud.css`). An
+    inline SVG in the world box, drawn from the loaded map -- paths and bridges, the stream, open
+    ground, Grandma's cottage, one dot per cast member at their spawn, Purple as a Lilac diamond --
+    at a whole number of CSS pixels a tile (3 wide, 2 elsewhere, 1 in the `overlay` cabinet) and on
+    whole pixels. A dot is a Haze ring until met and solid after; nothing on it carries a skill.
+    One polite sentence for a screen reader (`chrome.mapSummary`, "Map: 5 of 7 met"), changed only on
+    a new meeting. The keyboard hint stops short of it. `test/minimap.test.ts`, `e2e/minimap.spec.ts`
+    (no overlap with the clock, basket, hint or pad at 375, 768, 1280, 844x390 and 568x320).
+  - **The door asks first** (`ui/DoorCheck.tsx`, `main.ts`, `ForestScene.stepBack`). With anyone
+    unmet, the doorstep opens "You haven't met N of the 7 characters yet. Go in anyway?" with the
+    names; Keep looking (default, focused, Esc) steps Purple back the way she came, Go in enters.
+    The clock keeps running and only the walk pauses. Five `chrome.door*` keys. `e2e/door.spec.ts`;
+    `play.spec.ts` answers Go in where a run walks in early.
+  - **The flip tiles.** An open tile is one outlined box (the edge and the focus ring are the
+    `li`'s, not the face button's); while any tile is open the list is one column in walking order,
+    so no holes; "It promised / What it did" is a label above its line, side by side only when the
+    tile itself is 560px wide (a container query). `e2e/results.spec.ts`. Also: `toTheReveal` now
+    waits for Results to take focus, which was a real race in the keyboard spec.
+  - **Deferred / assumed.** The new copy (`doorAsk` and the rest) has not been through COPY_REVIEW.
+    "Met" means MEET reached, so a character met and walked past without an answer counts as met
+    and the door does not ask about them; the reveal still says "You walked past" for that card.
+
 - **v2 Phase A is done** (`87c80ff`): the new rules are in `packages/core/src/v2`, beside v1, at
   100% coverage. **Phase B, the six or seven real skills, is next** and waits on your go.
 - **The readiness blockers are fixed** (`51574fc`), with the question button and the privacy line.

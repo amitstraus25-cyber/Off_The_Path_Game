@@ -29,6 +29,9 @@ import {
 import type { Facing, Interactable, Rect, Vec } from './logic';
 import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
+import { sketchMap } from './minimap';
+import type { MapSketch } from './minimap';
+import gids from '../assets/tileset-forest.gids.json';
 
 /** The gap between the top of a character's head and the bottom of the prompt bubble. */
 const PROMPT_GAP = TILE * (3 / 8);
@@ -344,6 +347,14 @@ export class ForestScene extends Phaser.Scene {
   private walking = false;
   private npcs: Npc[] = [];
   private cottage!: MapObject;
+  /**
+   * The last place Purple stood OUTSIDE the cottage's trigger, so the door's question can put her
+   * back a step when the player chooses to keep looking (`stepBack`). Written in place, never
+   * reallocated: it is touched on every walking frame.
+   */
+  private readonly lastOutside: Vec = { x: 0, y: 0 };
+  /** What the minimap draws, read off the loaded map once at boot (world/minimap.ts). */
+  private sketched: MapSketch | null = null;
   /** The building itself, which is what the arrival shot is framed on. */
   private facade!: MapObject;
   /** The wolf's prints on the lane outside the door. Hidden until an arrival that earned them. */
@@ -411,6 +422,7 @@ export class ForestScene extends Phaser.Scene {
     const tiled = this.cache.tilemap.get('map-forest')?.data as unknown;
     if (!tiled) throw new Error('map-forest was not loaded');
     this.map = readForestMap(tiled);
+    this.sketched = sketchMap(tiled, gids, (spawn) => this.run.castOf(spawn)?.id ?? null);
 
     const phaserMap = this.make.tilemap({ key: 'map-forest' });
     const tiles = phaserMap.addTilesetImage('tileset-forest', 'tileset-forest');
@@ -445,6 +457,8 @@ export class ForestScene extends Phaser.Scene {
       footprintOf(this.textures.getFrame('purple', 'purple-idle-down-0')),
     );
     this.placePurple();
+    this.lastOutside.x = this.position.x;
+    this.lastOutside.y = this.position.y;
     this.createAnimations();
     this.startIdles();
     this.createDust();
@@ -557,6 +571,8 @@ export class ForestScene extends Phaser.Scene {
     const spawn = findObject(this.map, 'spawn-purple');
     if (!spawn) return;
     this.position = { x: spawn.x + TILE / 2, y: spawn.y + PURPLE_FEET_BELOW_SPAWN };
+    this.lastOutside.x = this.position.x;
+    this.lastOutside.y = this.position.y;
     this.facing = 'down';
     this.stopWalking();
     /*
@@ -749,6 +765,10 @@ export class ForestScene extends Phaser.Scene {
       if (input.interactPressed) this.interact(target);
       this.checkNotices(state);
       this.checkCottage(state);
+      if (!overlaps(this.position, this.cottage)) {
+        this.lastOutside.x = this.position.x;
+        this.lastOutside.y = this.position.y;
+      }
     } else {
       /*
        * THE BUBBLE OUTLIVED THE KEY THAT ANSWERS IT.
@@ -1245,8 +1265,41 @@ export class ForestScene extends Phaser.Scene {
     return { x: this.facade.x + this.facade.width / 2, y: (top + bottom) / 2 };
   }
 
-  /** Test-only: where Purple is standing right now. */
+  /** Where Purple is standing right now: the minimap's marker, and the specs. */
   get purplePosition(): Vec {
     return { ...this.position };
+  }
+
+  /** The minimap's picture of this map, or null before the scene has been created. */
+  get sketch(): MapSketch | null {
+    return this.sketched;
+  }
+
+  /**
+   * "Keep looking" at the door (ui/DoorCheck.tsx): Purple back off the step to where she last stood
+   * outside it, and half a tile further, the way she came -- so the very next frame does not walk
+   * her straight back onto the trigger and ask the same question again.
+   *
+   * The way she came is the opposite of the way she faces, and the extra half tile goes through
+   * `moveWithCollision`, so a step back into a fence is a step back as far as the fence and no
+   * further. `lastOutside` is a place she actually stood, so it is walkable by construction.
+   */
+  stepBack(): void {
+    const away = {
+      up: { x: 0, y: 1 },
+      down: { x: 0, y: -1 },
+      left: { x: 1, y: 0 },
+      right: { x: -1, y: 0 },
+    }[this.facing];
+    const from = { x: this.lastOutside.x, y: this.lastOutside.y };
+    this.position = moveWithCollision(
+      this.map.collision,
+      from,
+      away.x * (TILE / 2),
+      away.y * (TILE / 2),
+    );
+    if (overlaps(this.position, this.cottage)) this.position = from;
+    this.stopWalking();
+    this.placePurple();
   }
 }

@@ -14,6 +14,7 @@ const raw = JSON.parse(
   ui: {
     cabinet: { marquee: string };
     reveal: { caught: string; again: string; did: string; wouldHave: string };
+    chrome: { revealCaught: string; revealMissed: string };
   };
 };
 
@@ -83,6 +84,11 @@ async function standBeside(page: Page, spawn: string): Promise<void> {
   );
 }
 
+/**
+ * Onto the doorstep. A run that has not met all seven is asked first (ui/DoorCheck.tsx, and
+ * e2e/door.spec.ts for the question itself); these specs are about what lies through the door, so
+ * they answer Go in.
+ */
 async function walkIntoCottage(page: Page): Promise<void> {
   await page.evaluate(() => {
     const otp = window.__otp!;
@@ -90,6 +96,9 @@ async function walkIntoCottage(page: Page): Promise<void> {
     otp.scene!.position = { x: door.x + door.width / 2, y: door.y + door.height / 2 };
     otp.scene!.placePurple();
   });
+  await expect(page.locator('[data-door], [data-arrive]').first()).toBeVisible();
+  const ask = page.locator('[data-door="ask"]');
+  if (await ask.isVisible()) await ask.locator('[data-action="go-in"]').click();
 }
 
 /**
@@ -217,15 +226,30 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
     const isGood = good.includes(s.id);
     await expect(row, 'walking order').toHaveAttribute('data-reveal', s.id);
     await expect(row).toHaveAttribute('data-kind', isGood ? 'good' : 'bad');
-    // Shape and word, never colour alone.
+    /*
+     * THE FACE LEADS WITH THE PLAYER'S CALL, not with what the skill was: a good skill is caught by
+     * taking it, a bad one by leaving it (every card was opened on this walk). Shape and word,
+     * never colour alone -- and a missed call is the only one that wears the Haze and the "!".
+     */
+    const took = verdicts[s.id] === 'take';
+    const right = isGood ? took : !took;
+    await expect(row).toHaveAttribute('data-call', right ? 'caught' : 'missed');
+    await expect(row.locator('.otp-tile__call')).toHaveText(
+      right ? raw.ui.chrome.revealCaught : raw.ui.chrome.revealMissed,
+    );
     await expect(row.locator('.otp-recap__badge')).toHaveAttribute(
       'data-glyph',
-      isGood ? 'check' : 'missed',
+      right ? 'check' : 'missed',
     );
+    await expect(row).toHaveClass(right ? /^otp-tile$/ : /\botp-tile--missed\b/);
+    // What it really was stays on the face, as the smaller line under the call.
     await expect(row.locator('.otp-recap__status')).toHaveText(isGood ? 'Safe' : 'Unsafe');
     // Its own picture, at the art's own size: every painted pixel whole. Inside the tile's button
     // the picture says nothing (`alt=""`) -- the name beside it names the button, once.
     const icon = row.locator('img.otp-reveal__icon');
+    // A card that let the wolf in arrives turned over, and turning is a rotation: let it land
+    // before its picture is measured, or the box is the rotated one.
+    await row.evaluate((li) => Promise.all(li.getAnimations().map((a) => a.finished)));
     await expect(icon).toHaveAttribute('alt', '');
     await expect(row.locator('.otp-tile__face')).toHaveAccessibleName(new RegExp(`^${s.name}\\b`));
     const iconName = raw.skills.find((k) => k.id === s.id)!.icon;
@@ -269,15 +293,19 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
      */
     const face = row.locator('.otp-tile__face');
     const back = row.locator('.otp-tile__back');
-    await expect(face).toHaveAttribute('aria-expanded', 'false');
-    await expect(back).toBeHidden();
+    // A bad skill the player TOOK arrives turned over: it is the card that let the wolf in.
+    const culprit = !isGood && took;
+    const first = culprit ? 'true' : 'false';
+    const second = culprit ? 'false' : 'true';
+    await expect(face).toHaveAttribute('aria-expanded', first);
+    await expect(back).toBeVisible({ visible: culprit });
     await expect(face).toHaveAttribute('aria-controls', (await back.getAttribute('id'))!);
     await face.click();
-    await expect(face).toHaveAttribute('aria-expanded', 'true');
-    await expect(back).toBeVisible();
+    await expect(face).toHaveAttribute('aria-expanded', second);
+    await expect(back).toBeVisible({ visible: !culprit });
     await face.click();
-    await expect(face).toHaveAttribute('aria-expanded', 'false');
-    await expect(back).toBeHidden();
+    await expect(face).toHaveAttribute('aria-expanded', first);
+    await expect(back).toBeVisible({ visible: culprit });
   }
 
   // The replay hook: the bad skills SPOTTED -- every card was opened on this walk, so that is the
@@ -306,6 +334,24 @@ test('the greedy run takes everything and lets the wolf in at 0', async ({ page 
   await throughTheDoor(page, 'wolf');
   await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '0');
   await expect(page.locator('[data-ending="wolf"]')).toContainText("That's not Grandma");
+  /*
+   * After the zero, the cards that let the wolf in are already turned over -- every bad skill, since
+   * this run took them all -- and every good one is face up, waiting. Each one taken bad is a missed
+   * call; each one taken good was caught.
+   */
+  const { good } = await state(page);
+  const rows = page.locator('[data-reveal]');
+  await expect(rows).toHaveCount(7);
+  for (let n = 0; n < 7; n++) {
+    const row = rows.nth(n);
+    const isGood = good.includes((await row.getAttribute('data-reveal'))!);
+    await expect(row.locator('.otp-tile__face')).toHaveAttribute(
+      'aria-expanded',
+      isGood ? 'false' : 'true',
+    );
+    await expect(row.locator('.otp-tile__back')).toBeVisible({ visible: !isGood });
+    await expect(row).toHaveAttribute('data-call', isGood ? 'caught' : 'missed');
+  }
 });
 
 test('the clock override ends a run late, and a late run is not posted', async ({ page }) => {
@@ -403,12 +449,17 @@ test('keyboard only: begin, talk, read, answer, arrive, reveal, replay', async (
   const arrive = page.locator('[data-arrive="grandma"]');
   await expect(arrive).toBeVisible();
   const finish = arrive.locator('[data-action="finish"]');
+  /*
+   * ENTER ALONE, NO TAB. Focus lands on the control that moves the ending on and stays on whichever
+   * of the two is showing, so a keyboard player presses Enter through every line and then through
+   * the door (the 2026-10-22 review: focus sat on the text, Enter did nothing, and the last line
+   * dropped focus to the page).
+   */
+  await expect(arrive.locator('.otp-advance')).toBeFocused();
   for (let n = 0; n < 8 && !(await finish.isVisible()); n++) {
-    await page.keyboard.press('Tab');
+    await expect(arrive.locator('.otp-advance')).toBeFocused();
     await page.keyboard.press('Enter');
   }
-  for (let n = 0; n < 4 && !(await finish.evaluate((b) => b === document.activeElement)); n++)
-    await page.keyboard.press('Tab');
   await expect(finish).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '100');

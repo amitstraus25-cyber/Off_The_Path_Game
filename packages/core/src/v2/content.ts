@@ -182,6 +182,26 @@ export const CHROME_KEYS = [
   'handleChars',
   'handleContact',
   'handleBlocked',
+  /*
+   * The client's 2026-10-22 evening report: "how do i get to this? i cant find the character".
+   * The minimap's one sentence for a screen reader, and the door's question when somebody in the
+   * cast has not been met yet. `mapSummary` carries {met} and {total}; `doorAsk` {count} and {total}.
+   */
+  'mapSummary',
+  'doorAsk',
+  'doorStill',
+  'doorStay',
+  'doorGoIn',
+  /*
+   * The full UX/UI review on the same evening. The Explore header's notation chip (UI_FOUNDATIONS
+   * section 5): `worldGoal` is its label and `worldMetCount` its muted count, carrying {met} and
+   * {total}. And the reveal's verdict on the player's call, which leads each tile's face: whether
+   * they were right, before what the skill was (`ui.reveal.good` / `bad`) and what they did.
+   */
+  'worldGoal',
+  'worldMetCount',
+  'revealCaught',
+  'revealMissed',
 ] as const;
 export type ChromeKey = (typeof CHROME_KEYS)[number];
 

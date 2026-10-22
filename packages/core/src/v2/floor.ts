@@ -62,7 +62,7 @@ export const WALK_WORLD: WalkWorld = {
     'bystander-magpie': { x: 976, y: 736 },
     'bystander-snail': { x: 1232, y: 768 },
     'npc-lantern-keeper': { x: 1200, y: 1088 },
-    'bystander-cat': { x: 1680, y: 640 },
+    'bystander-cat': { x: 1264, y: 640 },
   },
 };
 

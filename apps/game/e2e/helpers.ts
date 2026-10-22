@@ -1,3 +1,4 @@
+import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 // The real constants, not copies: `logic.ts` is pure TypeScript with no Phaser and no DOM, so the
 // walking helpers below pace themselves off the same numbers the game walks at. They used to carry
@@ -100,6 +101,13 @@ export async function toTheReveal(page: Page): Promise<void> {
   while (!(await finish.isVisible())) await page.getByRole('button', { name: 'Go on' }).click();
   await finish.click();
   await page.locator('.otp-reveal').waitFor();
+  /*
+   * And the screen has taken focus. Results focuses its own body in an after-paint effect, which
+   * Preact runs up to a frame (or its 100ms fallback) after the screen is in the DOM; a spec that
+   * starts tabbing before then has focus pulled back out from under it, mid-test -- seen as a card
+   * that opened on Enter and then ignored Space, because Space went to the body.
+   */
+  await expect(page.locator('.otp-screen__body')).toBeFocused();
 }
 
 /**

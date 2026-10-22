@@ -87,6 +87,15 @@ test.describe('the result comes first', () => {
     await expect(page.locator('.otp-replay__caught')).toHaveText(
       content.ui.reveal.caught.replace('{caught}', '4').replace('{bad}', '4'),
     );
+    /*
+     * A PERFECT RUN READS AS SEVEN CATCHES (the 2026-10-22 review). The tiles used to be styled by
+     * Safe/Unsafe, so the four bad skills this run correctly left wore the Haze, the bar and the
+     * "!" that UI_FOUNDATIONS section 5 keeps for "Missed it".
+     */
+    await expect(page.locator('[data-call="caught"]')).toHaveCount(7);
+    await expect(page.locator('.otp-tile--missed')).toHaveCount(0);
+    await expect(page.locator('.otp-tile__call')).toHaveText(Array(7).fill(say('revealCaught')));
+    await expect(page.locator('.otp-recap__badge[data-glyph="missed"]')).toHaveCount(0);
   });
 
   test('a run the wolf got into says why it is 0, in words', async ({ page }) => {
@@ -141,6 +150,95 @@ test.describe('the seven cards', () => {
     expect(
       await tile.evaluate((el) => el.getAnimations().map((a) => (a as CSSAnimation).animationName)),
     ).toEqual(['otp-tile-turn']);
+  });
+});
+
+/*
+ * THE CLIENT'S THREE SCREENSHOTS (2026-10-22): the open card's outline wrapped the header only and
+ * its details spilled out below it; "It promised / What it did" was a label column that left the
+ * line four words wide; and a turned card beside an unturned one left a ragged grid.
+ */
+test.describe('an open card is one box, and the grid keeps its shape', () => {
+  for (const [width, height] of [
+    [375, 812],
+    [768, 1024],
+    [1280, 800],
+  ] as const) {
+    test(`at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await serveEmptyBoard(page);
+      await playTo(page, { take: 'good', seconds: 10 });
+      const list = page.locator('.otp-tiles');
+      const tiles = page.locator('.otp-tile');
+      // The second card: in the right-hand column wherever there are two, which is the case that
+      // used to leave a hole beside the first.
+      const open = tiles.nth(1);
+      await open.locator('.otp-tile__face').click();
+      await expect(open).toHaveAttribute('data-open', 'true');
+      // The turn finishes before anything is measured (the cabinet's own glow never does).
+      await open.evaluate((li) => Promise.all(li.getAnimations().map((a) => a.finished)));
+
+      // ONE BOX: the back lies inside the card's own edge, and the edge is drawn all round it.
+      const card = (await open.boundingBox())!;
+      const back = (await open.locator('.otp-tile__back').boundingBox())!;
+      expect(back.height, 'the back is showing').toBeGreaterThan(20);
+      expect(back.y + back.height).toBeLessThanOrEqual(card.y + card.height + 0.5);
+      expect(back.x).toBeGreaterThanOrEqual(card.x - 0.5);
+      const edge = await open.evaluate((li) => {
+        const s = getComputedStyle(li);
+        return [s.borderTopStyle, s.borderBottomStyle, s.borderRightStyle].map(
+          (style, i) =>
+            style !== 'none' &&
+            parseFloat([s.borderTopWidth, s.borderBottomWidth, s.borderRightWidth][i]!) > 0 &&
+            [s.borderTopColor, s.borderBottomColor, s.borderRightColor][i] !== 'rgba(0, 0, 0, 0)',
+        );
+      });
+      expect(edge, 'the open card is outlined top, bottom and right').toEqual([true, true, true]);
+
+      // NO HOLES: with a card open, every card spans the list -- one column, in walking order.
+      const row = (await list.boundingBox())!;
+      const boxes = await Promise.all((await tiles.all()).map((t) => t.boundingBox()));
+      for (const [i, b] of boxes.entries()) {
+        expect(Math.abs(b!.x - row.x), `card ${i} is not at the start of its row`).toBeLessThan(1);
+        expect(Math.abs(b!.width - row.width), `card ${i} does not fill its row`).toBeLessThan(1);
+        if (i > 0)
+          expect(b!.y, `card ${i} is out of walking order`).toBeGreaterThan(boxes[i - 1]!.y);
+      }
+
+      // LABEL ABOVE ITS WORDS: each pair's label sits over its line, never beside it.
+      const pairs = open.locator('.otp-reveal__pair');
+      await expect(pairs).toHaveCount(2);
+      for (const pair of await pairs.all()) {
+        const dt = (await pair.locator('dt').boundingBox())!;
+        const dd = (await pair.locator('dd').boundingBox())!;
+        expect(dt.y + dt.height, 'the label is beside its line').toBeLessThanOrEqual(dd.y + 0.5);
+        // And the line has room: at least half the card, never a four-word column.
+        expect(dd.width).toBeGreaterThan(card.width * (width >= 768 ? 0.4 : 0.8));
+      }
+
+      // Turning it back restores the grid wherever there is room for one.
+      await open.locator('.otp-tile__face').click();
+      await expect(open).toHaveAttribute('data-open', 'false');
+      if (width >= 768) {
+        const [a, b] = await Promise.all([tiles.nth(0).boundingBox(), tiles.nth(1).boundingBox()]);
+        expect(Math.abs(a!.y - b!.y), 'the first two cards share a row again').toBeLessThan(1);
+      }
+    });
+  }
+
+  test('the focus ring goes round the whole card, open or not', async ({ page }) => {
+    await serveEmptyBoard(page);
+    await playTo(page, { take: 'good', seconds: 10 });
+    const first = page.locator('.otp-tile').first();
+    const face = first.locator('.otp-tile__face');
+    for (let n = 0; n < 12 && !(await face.evaluate((b) => b === document.activeElement)); n++)
+      await page.keyboard.press('Tab');
+    await expect(face).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(first).toHaveAttribute('data-open', 'true');
+    const ring = await first.evaluate((li) => getComputedStyle(li).outlineStyle);
+    expect(ring, 'the card carries the ring').toBe('solid');
+    expect(await face.evaluate((b) => getComputedStyle(b).outlineStyle)).toBe('none');
   });
 });
 
@@ -302,5 +400,15 @@ for (const [width, height] of [
       const box = (await page.locator(selector).boundingBox())!;
       expect(box.height, `${selector} at ${width}px`).toBeGreaterThanOrEqual(44);
     }
+    // Post is the form's primary, so it is never the smaller pill beside "Suggest a name".
+    const post = (await page.locator('.otp-post button[type="submit"]').boundingBox())!;
+    const suggest = (await page.locator('.otp-post .otp-button--quiet').boundingBox())!;
+    expect(post.width, `Post is narrower than Suggest at ${width}px`).toBeGreaterThanOrEqual(
+      suggest.width - 0.5,
+    );
+    // The board's title is a title, "Wolf Spotters", not the all-caps label "WOLF Spotters".
+    const title = page.locator('.otp-board__title');
+    await expect(title).toHaveText(say('leaderboardTitle'));
+    expect(await title.evaluate((h) => getComputedStyle(h).textTransform)).toBe('none');
   });
 }

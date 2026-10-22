@@ -156,3 +156,131 @@ html[data-cabinet='overlay'] .otp-ui {
     animation: none;
   }
 }
+
+/* ----------------------------------------------------------------------------- the minimap */
+
+/*
+ * THE MINIMAP, top right of the world box (ui/Minimap.tsx). The client, 2026-10-22: "i cant find
+ * the character.. lets add a little mini map on the top rite".
+ *
+ * WHERE, AND WHAT IT KEEPS CLEAR OF. The clock and the basket stand in the world's BOTTOM corners
+ * and the deck is outside the screen everywhere but `overlay`, where it sits at the bottom too, so
+ * the top right is the one corner nothing else uses. The controls hint takes the top left, and
+ * stops short of this box (below). e2e/minimap.spec.ts measures every one of those at zero overlap
+ * at 375, 768, 1280 and 844x390.
+ *
+ * PIXEL-CRISP: one map tile is `--otp-map-px` WHOLE CSS pixels, and the SVG's size is the map's own
+ * size in tiles (`--otp-map-cols` / `--otp-map-rows`, set from the map by the component) times that.
+ * Three where the world is wide, two everywhere else -- the tuck for small screens is a smaller
+ * integer, never a fraction.
+ *
+ * Tokens only, and none of them Lime (the Explore screen has none) or a status hue. The ground is
+ * the HUD pills' own translucent Black, open forest Deep Purple, the paths a Lilac-on-Deep-Purple
+ * mix that reads as the way through, the stream a quieter Lilac, the cottage Offwhite. A dot is a
+ * Haze ring until its character is met, and filled Haze after: met is a SHAPE (hollow, solid), and
+ * nothing on it says good or bad.
+ */
+.otp-ui {
+  --otp-map-px: 2;
+  --otp-minimap-pad: 4px;
+  /* The minimap's whole width, for the hint beside it. Zero while there is no minimap. */
+  --otp-minimap-w: calc(
+    var(--otp-map-cols, 0) * var(--otp-map-px) * 1px + var(--otp-minimap-pad) * 2
+  );
+}
+
+@media (min-width: 1000px) and (min-height: 600px) {
+  .otp-ui {
+    --otp-map-px: 3;
+  }
+}
+
+/*
+ * THE TUCK. `overlay` is the window too small for a deck of its own (ui/cabinet.ts): the stick and
+ * the A button stand inside the world and the basket is lifted over the button, into the top half
+ * of a screen barely 200px tall. One pixel a tile keeps the whole map above the basket there.
+ */
+html[data-cabinet='overlay'] .otp-ui {
+  --otp-map-px: 1;
+}
+
+.otp-minimap {
+  position: absolute;
+  /* Whole pixels from the world's own whole-pixel edges, so the tiles do not smear across two.
+     The first line is the fallback for a browser without `round()`. */
+  top: calc(14px * var(--otp-ui));
+  top: round(calc(14px * var(--otp-ui)), 1px);
+  right: calc(14px * var(--otp-ui));
+  right: round(calc(14px * var(--otp-ui)), 1px);
+  padding: var(--otp-minimap-pad);
+  border-radius: var(--otp-r-inset);
+  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  pointer-events: none;
+  line-height: 0;
+}
+
+.otp-minimap__map {
+  display: block;
+  width: calc(var(--otp-map-cols) * var(--otp-map-px) * 1px);
+  height: calc(var(--otp-map-rows) * var(--otp-map-px) * 1px);
+  shape-rendering: crispEdges;
+  overflow: visible;
+}
+
+.otp-minimap__open {
+  /* Quiet: the trees scattered through the open ground are texture, not news. */
+  fill: color-mix(in srgb, var(--cyera-deep-purple) 55%, var(--cyera-black));
+}
+
+.otp-minimap__path {
+  /* The brightest ground on the map, because the path is what a player steers by. */
+  fill: color-mix(in srgb, var(--cyera-lilac) 62%, var(--cyera-deep-purple));
+}
+
+.otp-minimap__water {
+  fill: var(--cyera-deep-purple);
+}
+
+.otp-minimap__cottage {
+  fill: var(--cyera-offwhite);
+}
+
+/* Round marks are not crisp-edged: a circle drawn with crispEdges is a jagged octagon. */
+.otp-minimap__who,
+.otp-minimap__purple {
+  shape-rendering: geometricPrecision;
+}
+
+/* A Haze ring on Black until met, solid Haze ringed in Black after: legible on every ground. */
+.otp-minimap__who {
+  fill: var(--cyera-black);
+  stroke: var(--cyera-haze);
+  stroke-width: 0.6;
+  transition:
+    fill var(--otp-motion-slow) ease-out,
+    stroke var(--otp-motion-slow) ease-out;
+}
+
+.otp-minimap__who[data-met='true'] {
+  fill: var(--cyera-haze);
+  stroke: var(--cyera-black);
+}
+
+/* Purple: a different SHAPE (a diamond) in the colour the brand gives her controls, ringed in Black
+   so she reads on the path and on the open ground alike. */
+.otp-minimap__purple {
+  fill: var(--cyera-lilac);
+  stroke: var(--cyera-black);
+  stroke-width: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-minimap__who {
+    transition: none;
+  }
+}
+
+/* The keyboard hint at the top left stops before the minimap at the top right. */
+html .otp-ui[data-map-shown='true'] .otp-world-hint {
+  max-width: calc(100% - 42px * var(--otp-ui) - var(--otp-minimap-w));
+}

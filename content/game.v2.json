@@ -267,7 +267,7 @@
     "howTo": {
       "title": "How to play",
       "steps": [
-        "Each character offers a skill.",
+        "Seven characters offer skills.",
         "Three are good. Four are malicious.",
         "Read each card. Take the good ones.",
         "Reach Grandma in 3:00. Faster scores more."
@@ -390,7 +390,16 @@
       "handleLong": "Keep your name to 16 characters or fewer.",
       "handleChars": "Use letters, numbers, spaces, hyphens or apostrophes, and start and end with a letter or number.",
       "handleContact": "That looks like contact details. Please use just a name.",
-      "handleBlocked": "Please pick a different name."
+      "handleBlocked": "Please pick a different name.",
+      "mapSummary": "Map: {met} of {total} met",
+      "doorAsk": "You haven't met {count} of the {total} characters yet. Go in anyway?",
+      "doorStill": "Still to meet",
+      "doorStay": "Keep looking",
+      "doorGoIn": "Go in",
+      "worldGoal": "Find Grandma",
+      "worldMetCount": "{met} of {total} met",
+      "revealCaught": "Caught it",
+      "revealMissed": "Missed it"
     },
     "contact": {
       "consentVersion": "research-contact-v1",

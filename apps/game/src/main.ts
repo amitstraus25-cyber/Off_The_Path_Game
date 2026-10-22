@@ -8,6 +8,8 @@ import { createStore } from './store';
 import { loadManifest } from './world/assets';
 import type { Manifest } from './world/assets';
 import { BootScene, ForestScene } from './world/scenes';
+import type { MapSketch } from './world/minimap';
+import type { Vec } from './world/logic';
 import { cardOwed, gameRun, localSeed, walkOn } from './world/run';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
@@ -248,6 +250,14 @@ async function start(): Promise<void> {
   const bus = createBus();
   /** The assets that would not load, or null. While it is set the world is not on screen. */
   let loadFailure: readonly string[] | null = null;
+  /*
+   * THE DOOR IS ASKING (ui/DoorCheck.tsx): Purple stepped onto Grandma's doorstep with somebody in
+   * the cast not yet met. The run stays in the forest and the clock keeps running; only the walk
+   * pauses, which is why this is `walkable`'s business and not the store's.
+   */
+  let doorAsking = false;
+  /** The minimap's picture of the forest, read off the map once the scene is built. */
+  let sketch: MapSketch | null = null;
 
   /*
    * THE RUN'S START, AND WHO DEALT IT. `startRun()` asks `POST /api/start` for a seed and a token
@@ -262,7 +272,8 @@ async function start(): Promise<void> {
   let pending: Promise<RunStart | null> | null = null;
   let starting = false;
 
-  const walkable = (): boolean => loadFailure === null && store.getState().phase === 'forest';
+  const walkable = (): boolean =>
+    loadFailure === null && !doorAsking && store.getState().phase === 'forest';
   const input = createInput(window, {
     // Esc on an open offer walks on, exactly as the panel's own Walk on does.
     onBack: () => walkOn(store),
@@ -332,11 +343,34 @@ async function start(): Promise<void> {
     draw();
   };
 
+  /** Who in the cast has not been met this run. The door asks first while this is not zero. */
+  const unmetCount = (): number => {
+    const { met } = store.getState();
+    return content.characters.filter((c) => !met.includes(c.id)).length;
+  };
+  const closeDoor = (): void => {
+    doorAsking = false;
+    syncWorldChrome();
+  };
+
   const draw = (): void =>
     void render(
       h(App, {
         store,
         starting,
+        sketch,
+        wherePurple,
+        doorAsking,
+        onDoorStay: () => {
+          closeDoor();
+          forest.stepBack();
+          draw();
+        },
+        onDoorGoIn: () => {
+          closeDoor();
+          if (store.getState().phase === 'forest') store.dispatch({ type: 'ENTER_COTTAGE' });
+          draw();
+        },
         music: {
           on: music.wanted,
           onToggle: () => {
@@ -383,9 +417,19 @@ async function start(): Promise<void> {
     const reason = store.dispatch({ type: 'MEET', c: characterId });
     if (reason) console.warn(`MEET ${characterId} rejected: ${reason}`);
   });
-  // Any basket may walk through the door; the score is what it says about the basket.
+  /*
+   * Any basket may walk through the door; the score is what it says about the basket. With anybody
+   * still unmet the door asks first (ui/DoorCheck.tsx), and the answer dispatches the entry.
+   */
   bus.on('enteredCottage', () => {
-    if (store.getState().phase === 'forest') store.dispatch({ type: 'ENTER_COTTAGE' });
+    if (store.getState().phase !== 'forest' || doorAsking) return;
+    if (unmetCount() > 0) {
+      doorAsking = true;
+      syncWorldChrome();
+      draw();
+      return;
+    }
+    store.dispatch({ type: 'ENTER_COTTAGE' });
   });
   bus.on('loadFailed', ({ keys }) => {
     loadFailure = keys;
@@ -393,22 +437,25 @@ async function start(): Promise<void> {
     draw();
   });
 
+  // Held, not inlined: the door's "Keep looking" steps Purple back, and the minimap reads her.
+  const forest = new ForestScene(gameRun(store), bus, input, walkable);
   // Held, not inlined, because the retry screen has to be able to restart it.
-  const boot = mountWorld(
-    stage,
-    manifest,
-    bus,
-    new ForestScene(gameRun(store), bus, input, walkable),
-  );
+  const boot = mountWorld(stage, manifest, bus, forest);
+  /** Purple for the minimap's marker: one function for the page's life, so its loop is not restarted. */
+  const wherePurple = (): Vec | null => (sketch ? forest.purplePosition : null);
 
   bus.on('worldReady', () => {
     stage.dataset['ready'] = 'true';
+    sketch = forest.sketch;
     emit('otp:ready', { version: content.version });
+    draw();
   });
 
   let lastPhase = store.getState().phase;
   let lastVerdicts = 0;
   store.subscribe((state) => {
+    // The question belongs to the forest: a run that leaves it (the clock, a replay) takes it along.
+    if (state.phase !== 'forest') doorAsking = false;
     /*
      * THE CARD OPENS BY ITSELF. A MEET has just put the run in `talk`: read its card now, and let
      * the nested dispatch do this listener's work for the state it produces. `lastPhase` is moved

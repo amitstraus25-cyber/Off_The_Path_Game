@@ -255,3 +255,57 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
     .click();
   await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
 });
+
+/*
+ * THE QUEST CHIP (UI_FOUNDATIONS section 5, screen 01; the full UX/UI review, 2026-10-22). Nothing
+ * on Explore said there were seven people to find, how many had been met, or that the walk was for
+ * Grandma -- the header carried only the sound control, with an empty slot for this chip beside it.
+ * It must say both halves, count from the store rather than from a number written here, and fit:
+ * ui/stage.ts reserves the header's height to the pixel, so anything that does not fit is painted
+ * outside the viewport rather than wrapped (panels.css, "The world header on a phone").
+ */
+for (const [width, height] of [
+  [320, 568],
+  [375, 812],
+  [768, 1024],
+  [1280, 800],
+] as const) {
+  test(`the header says what the walk is for and who is left, and fits, at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    await startGame(page);
+    const chip = page.locator(`${HEADER} .otp-chip`);
+    const total = await page.evaluate(() => window.__otp!.content.characters.length);
+    await expect(chip.locator('.otp-chip__label')).toHaveText('Find Grandma');
+    await expect(chip.locator('.otp-chip__count')).toHaveText(`0 of ${total} met`);
+
+    await step(page, { type: 'MEET', c: 'rabbit' }, 'card');
+    await expect(chip.locator('.otp-chip__count')).toHaveText(`1 of ${total} met`);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
+
+    // Inside the header, inside the viewport, and not under the music control.
+    const header = (await page.locator(HEADER).boundingBox())!;
+    const music = (await page.locator(MUSIC).boundingBox())!;
+    for (const part of ['.otp-chip', '.otp-chip__label', '.otp-chip__count']) {
+      const box = (await page.locator(`${HEADER} ${part}`).boundingBox())!;
+      expect(box.width, `${part} is drawn`).toBeGreaterThan(0);
+      expect(box.x, `${part} starts left of the header`).toBeGreaterThanOrEqual(header.x - 0.5);
+      expect(box.y, `${part} rises out of the header`).toBeGreaterThanOrEqual(header.y - 0.5);
+      expect(box.y + box.height).toBeLessThanOrEqual(header.y + header.height + 0.5);
+      expect(box.x + box.width, `${part} runs into the music control`).toBeLessThanOrEqual(
+        music.x + 0.5,
+      );
+    }
+    expect(music.x + music.width).toBeLessThanOrEqual(width + 0.5);
+    // The label is whole, not cut to an ellipsis.
+    expect(
+      await chip
+        .locator('.otp-chip__label')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth + 0.5),
+      'the label is cut short',
+    ).toBe(true);
+  });
+}

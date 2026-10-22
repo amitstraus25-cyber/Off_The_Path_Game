@@ -497,9 +497,12 @@ export interface ResultsProps {
 /**
  * One offer on the reveal, as a card the player turns over.
  *
- * THE FACE is what the player did and what it really was: the skill's picture and name, Safe or
- * Unsafe as a shape and a word (a drawn check, or a "!" -- never a colour alone, and no red or green
- * anywhere, UI_FOUNDATIONS section 5), and "You took / You left / You walked past".
+ * THE FACE leads with whether the player's call was right: "Caught it" on Natural with a drawn
+ * check, or "Missed it" on Haze with the Deep Purple bar and a "!" -- UI_FOUNDATIONS section 5's two
+ * recap rows, a shape and a word and never a colour alone. Under it, smaller, what the skill really
+ * was (Safe / Unsafe) and what the player did ("You took / You left / You walked past"). Until the
+ * full review of 2026-10-22 the styling followed Safe/Unsafe, so a perfect run wore the "Missed
+ * it" treatment on all four of its correctly left cards.
  *
  * THE BACK is why: for a bad skill the card as it was dealt with the one line that gave it away
  * marked, what it promised against what it did (or would have done -- a skill left behind never
@@ -520,15 +523,43 @@ function RevealTile({
   skill: v2.Skill;
   words: v2.Content['ui']['reveal'];
 }) {
-  const [open, setOpen] = useState(false);
+  /*
+   * THE PLAYER'S CALL, which is what the face leads with (a reward, not a report): a good skill was
+   * caught by taking it, a bad one by opening its card and keeping it out of the basket -- the same
+   * rule as "You spotted N of 4" above (`spottedOf`), so the count and the seven faces cannot
+   * disagree. Safe/Unsafe and what the player did stay on the face as the smaller line under it.
+   */
+  const caught = row.good ? row.verdict === 'take' : row.read && row.verdict !== 'take';
+  /*
+   * A BAD SKILL THE PLAYER TOOK IS TURNED OVER ALREADY. After "That's not Grandma" and a zero, the
+   * card that let the wolf in is the one the player most needs to read, so it is not left face down
+   * among six others for them to guess at.
+   */
+  const [open, setOpen] = useState(!row.good && row.verdict === 'take');
   const back = `otp-tile-back-${row.skillId}`;
+  /*
+   * TURNING A CARD MOVES IT, so it is brought back into view. An open card spans the whole row and
+   * the list reflows to one column while any card is open (screens.css), which is what keeps the
+   * grid free of holes -- and which can carry the card the player just pressed a row or two down.
+   * `nearest` scrolls only if it has to, and instantly under reduced motion.
+   */
+  const tile = useRef<HTMLLIElement>(null);
+  const turned = useRef(false);
+  useEffect(() => {
+    if (!turned.current) return;
+    const still =
+      typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    tile.current?.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
+  }, [open]);
   const chose =
     row.verdict === 'take' ? words.took : row.verdict === 'leave' ? words.left : words.unanswered;
   return (
     <li
-      class={`otp-tile${row.good ? '' : ' otp-tile--bad'}`}
+      ref={tile}
+      class={`otp-tile${caught ? '' : ' otp-tile--missed'}`}
       data-reveal={row.skillId}
       data-kind={row.good ? 'good' : 'bad'}
+      data-call={caught ? 'caught' : 'missed'}
       data-verdict={row.verdict ?? 'none'}
       data-open={open ? 'true' : 'false'}
     >
@@ -537,16 +568,23 @@ function RevealTile({
         class="otp-tile__face"
         aria-expanded={open ? 'true' : 'false'}
         aria-controls={back}
-        onClick={() => setOpen((was) => !was)}
+        onClick={() => {
+          turned.current = true;
+          setOpen((was) => !was);
+        }}
       >
         <RevealIcon skill={skill} />
         <span class="otp-tile__text">
           <span class="otp-tile__name">{row.name}</span>
           <span class="otp-tile__mark">
-            <Badge glyph={row.good ? 'check' : 'missed'} />
-            <span class="otp-recap__status">{row.good ? words.good : words.bad}</span>
+            <Badge glyph={caught ? 'check' : 'missed'} />
+            <span class="otp-tile__call">{s(caught ? 'revealCaught' : 'revealMissed')}</span>
           </span>
-          <span class="otp-reveal__chose">{chose}</span>
+          <span class="otp-tile__what">
+            <span class="otp-recap__status">{row.good ? words.good : words.bad}</span>
+            <span aria-hidden="true"> · </span>
+            <span class="otp-reveal__chose">{chose}</span>
+          </span>
         </span>
         <span class="otp-tile__flip">{s(open ? 'revealFlipBack' : 'revealFlip')}</span>
       </button>
@@ -576,11 +614,21 @@ function RevealTile({
             </ul>
           </div>
         )}
+        {/*
+          Each label ABOVE its words, in its own group (a `div` is a valid child of a `dl`), so the
+          pair is a short eyebrow and a full-width line rather than a label column that left the
+          line four words wide (the client's screenshot, 2026-10-22). Side by side where the card
+          is wide enough for two readable columns: the promise beside what it did.
+        */}
         <dl class="otp-reveal__pairs">
-          <dt>{words.promised}</dt>
-          <dd>{row.promise}</dd>
-          <dt data-reveal-label="">{row.verdict === 'take' ? words.did : words.wouldHave}</dt>
-          <dd data-reveal-line="">{row.line}</dd>
+          <div class="otp-reveal__pair">
+            <dt>{words.promised}</dt>
+            <dd>{row.promise}</dd>
+          </div>
+          <div class="otp-reveal__pair">
+            <dt data-reveal-label="">{row.verdict === 'take' ? words.did : words.wouldHave}</dt>
+            <dd data-reveal-line="">{row.line}</dd>
+          </div>
         </dl>
         <p class="otp-reveal__real" data-real-world="">
           <span class="otp-reveal__term">

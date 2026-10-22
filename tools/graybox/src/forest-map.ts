@@ -3881,7 +3881,8 @@ export function generateForestMap(): GeneratedMap {
    *
    * Declared up here, above the clearing it sizes, because every row and column of the building is
    * derived from these two and `cx`: the clearing, the roof loop, the wall course, the gable's
-   * columns, the bank along the foot of the wall, the tabby against its east corner, the treeline's
+   * columns, the bank along the foot of the wall, the tabby against its east corner (until
+   * 2026-10-22, when she moved off the doorstep to the main track; see her placement), the treeline's
    * `standsOnTheRoof`, the `prop-cottage` rectangle the game points its payoff camera with, and the
    * audit that measures where the facade lands in that camera. The only figures written out below
    * are the ones the LEVEL fixes rather than the building: the gate rows and the notice's.
@@ -4096,7 +4097,8 @@ export function generateForestMap(): GeneratedMap {
   /*
    * ...AND THE RIGHT-HAND ONE IS LIT. The Arrive panel says "The lamp is lit" and the copy is
    * protected, so the art moves: `wall-window-lit` is the board's own amber window with the warm
-   * spill on its sill, and it goes at the window the tabby sits under. One of the two, not both --
+   * spill on its sill, and it goes at the window the tabby sat under until she moved to the main
+   * track on 2026-10-22. One of the two, not both --
    * the board lights one side and leaves the other blue, and two lit windows on a two-window facade
    * is a lantern, not a cottage. No animal in it, by the painter's own note: a tile is the same
    * pixels on every ending, and the wolf belongs to the panel.
@@ -4714,8 +4716,10 @@ export function generateForestMap(): GeneratedMap {
    * apron right across the front of its cottage and runs the pawprints over it.
    *
    * Three tiles, centred on the door rather than on the two-tile porch, so the step is symmetrical
-   * about the thing it belongs to. It stops short of the east window, where the tabby sits: she has
-   * to touch the track to be met and she must not be standing in the middle of it.
+   * about the thing it belongs to. It stops short of the east window, where the tabby sat until
+   * 2026-10-22: she had to touch the track to be met and must not stand in the middle of it. She
+   * has since left the doorstep altogether, because a talking ring beside the door lane is inside
+   * the run's ending; (52,19) is an ordinary walkable bush now.
    */
   for (const x of [cx + 1, cx + 2, cx + 3]) lane(x, doorstep + 1);
   /*
@@ -5300,6 +5304,11 @@ export function generateForestMap(): GeneratedMap {
     if (last < 0) throw new Error(`no track at column ${x} to stand a bystander beside`);
     return last + 1;
   };
+  /** The row just NORTH of the track at this column: `besideTrack`'s mirror, for the same reason. */
+  const aboveTrack = (x: number): number => {
+    for (let y = 0; y < MAP_H; y++) if (isPath(x, y)) return y - 1;
+    throw new Error(`no track at column ${x} to stand a bystander above`);
+  };
 
   // --- Purple's pad and the spawn clearing ----------------------------------------------------------
   const spawnX = SPAWN.x;
@@ -5353,6 +5362,11 @@ export function generateForestMap(): GeneratedMap {
      * total (108 tiles at this placement, 104 before the move) against the clock's maximum in
      * `packages/core/test/v2/real-content.test.ts`.
      *
+     * (2026-10-22, after the Cat moved to (39,19): the tour is 107 tiles -- rabbit 7, toadstool 3,
+     * owl 19, magpie 34, snail 9, lantern keeper 10, cat 13, door 12 -- against a measured edge of
+     * 125. That ZERO-tile last leg above was the defect, not a nicety: it meant the Cat's talking
+     * ring already stood in `trigger-cottage`, which ends the run. See the note on her placement.)
+     *
      * The other three bystanders keep the stretch of the walk they were placed for: the far side
      * of the bridge, the gate approach, and the doorstep.
      */
@@ -5379,7 +5393,42 @@ export function generateForestMap(): GeneratedMap {
      * the forest notice has already done whatever it was going to do.
      */
     /*
-     * ON THE DOORSTEP ROW, TOUCHING THE WALL, east of the door.
+     * ===========================================================================
+     * OFF THE DOORSTEP, ONTO THE MAIN TRACK: (39,19), the north verge of the climb past the snail.
+     * Moved 2026-10-22 on the client's report, and everything below this block is HISTORY.
+     * ===========================================================================
+     *
+     * The client, verbatim: "You can't reach the cat because the cat is after the door." She stood
+     * at (52,19), the tile directly EAST of `trigger-cottage` (50-51 x 19-21), so every cell she
+     * could be spoken to from touched the trigger or sat a tile off it. The walk to her went through
+     * the door lane, `trigger-cottage` is a point test on Purple's feet, and the run ended on the way:
+     * Latch Lifter came out "You walked past" on runs where the player had walked straight at her.
+     * Every guard passed, because every guard asked whether she was REACHABLE -- and she was, by a
+     * flood that is allowed to walk through the trigger. Nothing asked whether reaching her ENDS THE
+     * RUN. `tools/graybox/test/cast-clear-of-door.test.ts` asks that now, over the committed map.
+     *
+     * Why this cell, of the stretch between the south-fork junction and the forest notice:
+     *  - She is still the LAST face before the door on the eastward walk: the player comes back up
+     *    from the Lantern Keeper's fork, passes the snail at (38,23), meets her, and only then
+     *    reaches the notice (x 42) and the gate (x 46). Her talking ring (38-40 x 18-20) touches
+     *    neither the snail's (37-39 x 22-24) nor `notice-forest-post` (42-45 x 20-22), so speaking
+     *    to her opens nobody else's card and fires no notice.
+     *  - Row 19, not 20 or 21. Those two are the due-east walker's line, and `apps/game/test/
+     *    map.test.ts` fails on any solid cell along them; (40,21) -- the inside of the bend -- was
+     *    the other candidate and is ruled out by that alone. (41,20) is carriageway (path at 40 and
+     *    42) and `bystander` refuses it. (40,19)-(42,19) are the lane's own sand.
+     *  - "A cat sits AGAINST something" (the note below) still holds as well as this stretch allows:
+     *    the sapling pair at (40-41,18) stands on her north-east corner and the white flowers at
+     *    (38,18) on her north-west, with the road wrapping her on the east and the south.
+     *  - Her nearest talking position is about nine tiles from the trigger; the guard demands five.
+     *
+     * `aboveTrack(39)` rather than 19 in figures, so a later bend in the track moves her with it
+     * instead of planting her in the sand. Core's `WALK_WORLD` (packages/core/src/v2/floor.ts) caches
+     * her talking spot and `test/v2/floor.test.ts` fails until it is re-derived, which is the point.
+     */
+    bystander('bystander-cat', 39, aboveTrack(39)),
+    /*
+     * HISTORY (until 2026-10-22): ON THE DOORSTEP ROW, TOUCHING THE WALL, east of the door.
      *
      * She stood at (47,19) and then at (49,19), and both are lawn: (47,19) is the middle of
      * Grandma's front garden and (49,19) is a tile off the west corner of the house with the lane on
@@ -5398,8 +5447,11 @@ export function generateForestMap(): GeneratedMap {
      * two tiles clear of the building -- the exact placement fault ("a tabby standing alone on that
      * lawn") this note was written to close, reopened by a column count. `cx + FACADE_W - 1` is the
      * east corner post whatever the facade does next.
+     *
+     * (That placement was `bystander('bystander-cat', cx + FACADE_W - 1, doorstep + 1)` = (52,19),
+     * and it is the one the client could not reach without walking into the run's ending. Do not
+     * put her back against the house: anywhere on the doorstep row is inside the door lane.)
      */
-    bystander('bystander-cat', cx + FACADE_W - 1, doorstep + 1),
     /*
      * The walk ends on the DOORSTEP, not at the garden gate.
      *

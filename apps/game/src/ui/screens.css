@@ -499,6 +499,16 @@
   align-self: flex-end;
 }
 
+/*
+ * POST IS THE FORM'S PRIMARY, so it is never the smaller of its two pills (the 2026-10-22 review:
+ * the filled "Post" was narrower than the outlined "Suggest a name" beside it). The floor is set
+ * above what "Suggest a name" measures (191px at --otp-ui 1, 135px at the smallest scale, measured
+ * 2026-10-22); e2e/results.spec.ts compares the two boxes, so a longer label fails there.
+ */
+.otp-post > .otp-button[type='submit'] {
+  min-width: max(152px, calc(212px * var(--otp-ui)));
+}
+
 .otp-handle__problem,
 .otp-contact__problem {
   display: flex;
@@ -769,10 +779,20 @@ h2.otp-section-label {
  */
 .otp-board__title {
   color: var(--cyera-offwhite);
+  /*
+   * A TITLE, not an all-caps section label: the deck sets it "Wolf Spotters" (UI_FOUNDATIONS
+   * section 8, 06 Leaderboard). Under the label's uppercase it read "WOLF Spotters", capitals
+   * beside the one upright Season Mix word.
+   */
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-size: calc(20px * var(--otp-ui));
 }
 
 .otp-board__title .otp-serif {
   color: var(--cyera-lilac);
+  font-size: inherit;
+  letter-spacing: inherit;
 }
 
 .otp-board__note {
@@ -1289,6 +1309,12 @@ h2.otp-section-label {
 .otp-title-panel:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-cta {
   padding-block: calc(4px * var(--otp-ui));
 }
+
+/* The title's one Lime never breaks over two lines (the 2026-10-22 review: "Begin the walk" wrapped
+   in the narrow card at 844x390 and was the only wrapped button in the game). */
+.otp-title-panel .otp-cta {
+  white-space: nowrap;
+}
 .otp-title-panel:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-cta__disc {
   width: 26px;
   height: 26px;
@@ -1753,19 +1779,43 @@ html[data-cabinet='overlay'] .otp-touch {
 .otp-reveal__icon.otp-icon-placeholder {
   font-size: 18px;
 }
+/*
+ * THE PROMISE AND WHAT IT DID, each as a label ABOVE its words (the client's screenshot,
+ * 2026-10-22: a label column beside the line left "It opens Grandma's door, even where it sticks."
+ * four lines tall in a column a few words wide). Stacked on a narrow card; two groups side by side
+ * where the card itself is wide enough for two readable columns -- a container query on the card,
+ * not the window, because a card's width is not the window's.
+ */
 .otp-reveal__pairs {
   margin: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 2px calc(10px * var(--otp-ui));
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(10px * var(--otp-ui)) calc(18px * var(--otp-ui));
   font-size: max(12px, calc(15px * var(--otp-ui)));
-  line-height: 1.3;
+  line-height: 1.35;
+}
+.otp-reveal__pair {
+  display: grid;
+  gap: calc(3px * var(--otp-ui));
+  align-content: start;
+  min-width: 0;
 }
 .otp-reveal__pairs dt {
+  font-size: max(10px, calc(11px * var(--otp-ui)));
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
   color: var(--cyera-ash);
 }
 .otp-reveal__pairs dd {
   margin: 0;
+  color: var(--cyera-black);
+}
+@container otp-tile (min-width: 560px) {
+  .otp-reveal__pairs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .otp-reveal__real {
   margin: calc(8px * var(--otp-ui)) 0 0;
@@ -1924,18 +1974,48 @@ html[data-cabinet='overlay'] .otp-touch {
 }
 
 /*
- * One tile. Natural for a skill dealt safe; Haze with the Deep Purple left bar for one dealt unsafe
- * -- UI_FOUNDATIONS section 5's two recap rows, so the reveal keeps the vocabulary the brand gave
- * it. The status is also the badge's shape and the word beside it.
+ * ONE CARD OPEN, NO HOLES (the client's screenshot, 2026-10-22: a turned card beside an unturned one
+ * left a ragged grid). While any card is open the list is one column, so the open card has the
+ * whole row and every other card keeps its place in walking order -- no `dense` packing, which
+ * would put the cards on screen in a different order from the one they are read in. Turning the last
+ * card back restores the grid. Without `:has()` the open card still spans the row; the rest of the
+ * grid simply does not reflow.
+ */
+.otp-tiles:has(> .otp-tile[data-open='true']) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.otp-tile[data-open='true'] {
+  grid-column: 1 / -1;
+}
+
+/*
+ * One tile. Natural for a call the player got right ("Caught it"); Haze with the Deep Purple left
+ * bar for one they got wrong ("Missed it") -- UI_FOUNDATIONS section 5's two recap rows, which are
+ * about the PLAYER'S call. They followed Safe/Unsafe until the 2026-10-22 review, so a perfect run
+ * wore the missed treatment four times. The call is also the badge's shape and the word beside it.
  */
 .otp-tile {
+  /* The card's own width, for the promise-and-did pair inside it (`.otp-reveal__pairs`). */
+  container: otp-tile / inline-size;
+  min-width: 0;
   border-radius: var(--otp-r-panel);
+  /* Transparent until the card is open, so turning it moves nothing by the border's width. */
+  border: 2px solid transparent;
   background: var(--cyera-natural);
   transform-origin: 50% 50%;
 }
-.otp-tile--bad {
+.otp-tile--missed {
   background: var(--cyera-haze);
   border-left: 5px solid var(--cyera-deep-purple);
+}
+
+/*
+ * AN OPEN CARD IS ONE BOX (the client's screenshot, 2026-10-22: the outline wrapped the header and
+ * the details spilled out below it). The Deep Purple edge belongs to the CARD, the `li`, so it goes
+ * round the face and the back together; the face is a button with no box of its own.
+ */
+.otp-tile[data-open='true'] {
+  border-color: var(--cyera-deep-purple);
 }
 
 /* The face is the whole top of the tile, and it is the button. */
@@ -1955,10 +2035,24 @@ html[data-cabinet='overlay'] .otp-touch {
   text-align: left;
   cursor: pointer;
 }
+/*
+ * The focus ring is drawn round the whole CARD, not round the button that is only its top: on an
+ * open card a ring round the face alone was the box the client saw stop at the header. Browsers
+ * without `:has()` keep the ring on the face, which is where it always was.
+ */
 .otp-ui .otp-tile__face:focus-visible {
   outline: 2px solid var(--cyera-deep-purple);
   outline-offset: 3px;
   box-shadow: none;
+}
+@supports selector(:has(*)) {
+  .otp-ui .otp-tile__face:focus-visible {
+    outline: none;
+  }
+  .otp-ui .otp-tile:has(> .otp-tile__face:focus-visible) {
+    outline: 2px solid var(--cyera-deep-purple);
+    outline-offset: 3px;
+  }
 }
 .otp-tile__face .otp-reveal__icon {
   margin: 0;
@@ -1986,12 +2080,29 @@ html[data-cabinet='overlay'] .otp-touch {
   font-size: 13px;
   margin: 0;
 }
-.otp-tile__mark .otp-recap__status {
-  margin: 0;
+/* The call leads: "Caught it" / "Missed it", at the weight of a row heading. */
+.otp-tile__call {
+  font-size: max(13px, calc(16px * var(--otp-ui)));
+  font-weight: 600;
+  line-height: 1.2;
   color: var(--cyera-black);
+}
+/* Under it, smaller: what the skill was and what the player did, one eyebrow-sized line. */
+.otp-tile__what {
+  font-size: max(11px, calc(12px * var(--otp-ui)));
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyera-deep-purple);
+}
+.otp-tile__what .otp-recap__status {
+  margin: 0;
+  color: inherit;
 }
 .otp-tile .otp-reveal__chose {
   margin: 0;
+  font-size: inherit;
+  letter-spacing: inherit;
 }
 
 /* "See why" / "Flip back": an underlined word at the end of the face, so the face says it turns. */
@@ -2012,7 +2123,7 @@ html[data-cabinet='overlay'] .otp-touch {
   margin-top: 0;
   margin-bottom: calc(8px * var(--otp-ui));
 }
-.otp-tile--bad .otp-tile__back .otp-recap__hidden {
+.otp-tile--missed .otp-tile__back .otp-recap__hidden {
   background: var(--cyera-natural);
 }
 
@@ -2042,13 +2153,4 @@ html[data-cabinet='overlay'] .otp-touch {
    the post heading is put back at the same specificity plus one. */
 h2.otp-section-label.otp-post__title {
   margin-top: calc(26px * var(--otp-ui));
-}
-
-@media (max-width: 480px) {
-  .otp-reveal__pairs {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .otp-reveal__pairs dd {
-    margin-bottom: calc(4px * var(--otp-ui));
-  }
 }

@@ -9,8 +9,12 @@ import { Cottage } from './Cottage';
 import { Results } from './Results';
 import { ProblemScreen } from './ProblemScreen';
 import { Hud } from './Hud';
-import { WorldFrame } from './components';
-import { strings } from './copy';
+import { Minimap } from './Minimap';
+import { DoorCheck } from './DoorCheck';
+import { NotationChip, WorldFrame } from './components';
+import { fill, strings } from './copy';
+import type { MapSketch } from '../world/minimap';
+import type { Vec } from '../world/logic';
 
 export interface AppProps {
   store: Store;
@@ -35,7 +39,20 @@ export interface AppProps {
    */
   loadFailed: readonly string[] | null;
   onRetryLoad(): void;
+  /** The minimap's picture of the forest, once the scene has read the map; null until then. */
+  sketch?: MapSketch | null;
+  /** Purple's feet in world pixels, for the minimap's marker. A stable function (main.ts). */
+  wherePurple?: () => Vec | null;
+  /**
+   * The door is asking whether to go in with somebody still unmet (ui/DoorCheck.tsx). Only ever
+   * true in the forest; main.ts holds it, because the walk has to pause with it.
+   */
+  doorAsking?: boolean;
+  onDoorStay?(): void;
+  onDoorGoIn?(): void;
 }
+
+const nowhere = (): Vec | null => null;
 
 function useStoreState(store: Store): v2.State {
   const [state, setState] = useState(store.getState());
@@ -154,6 +171,11 @@ export function App({
   music,
   loadFailed,
   onRetryLoad,
+  sketch = null,
+  wherePurple = nowhere,
+  doorAsking = false,
+  onDoorStay = () => {},
+  onDoorGoIn = () => {},
 }: AppProps) {
   const state = useStoreState(store);
   const { content } = store;
@@ -224,6 +246,17 @@ export function App({
             basket={hudBasket(state, content)}
             labels={content.ui.hud}
           />
+          {sketch && (
+            <Minimap
+              sketch={sketch}
+              met={state.met}
+              where={wherePurple}
+              summary={fill(strings['mapSummary'] ?? '', {
+                met: state.met.length,
+                total: content.characters.length,
+              })}
+            />
+          )}
         </div>
       )}
       {/* Mounted BEFORE the panels so the modal layers paint over it (document order is stacking). */}
@@ -233,6 +266,21 @@ export function App({
           number="01"
           title={content.ui.world.title}
           labelHidden
+          /*
+           * THE QUEST CHIP (UI_FOUNDATIONS section 5, screen 01): what the walk is for and how far
+           * through the cast the player is. Before it, nothing on Explore said there were seven
+           * people to find or how many were left (the client, 2026-10-22: "i cant find the
+           * character"). The minimap shows WHERE; this says HOW MANY.
+           */
+          aside={
+            <NotationChip
+              label={strings['worldGoal'] ?? ''}
+              count={fill(strings['worldMetCount'] ?? '', {
+                met: state.met.length,
+                total: content.characters.length,
+              })}
+            />
+          }
           music={{
             ...music,
             labels: {
@@ -259,6 +307,27 @@ export function App({
 
   function renderScreen() {
     switch (state.phase) {
+      case 'forest': {
+        if (!doorAsking) return null;
+        const unmet = content.characters.filter((c) => !state.met.includes(c.id));
+        if (unmet.length === 0) return null;
+        return (
+          <DoorCheck
+            key="door"
+            unmet={unmet.map((c) => c.name)}
+            total={content.characters.length}
+            title={strings['arriveTitle'] ?? ''}
+            words={{
+              ask: strings['doorAsk'] ?? '',
+              still: strings['doorStill'] ?? '',
+              stay: strings['doorStay'] ?? '',
+              goIn: strings['doorGoIn'] ?? '',
+            }}
+            onStay={onDoorStay}
+            onGoIn={onDoorGoIn}
+          />
+        );
+      }
       case 'title':
         return <Title ui={content.ui} onPlay={onStart} />;
       case 'howto':

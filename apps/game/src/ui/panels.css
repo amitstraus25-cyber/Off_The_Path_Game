@@ -323,6 +323,9 @@
 
 .otp-chip__count {
   color: var(--cyera-haze);
+  /* Every digit one width, so "1 of 7 met" becoming "2 of 7 met" does not slide the music control
+     along the header beside it (e2e/world-frame.spec.ts measures that travel). */
+  font-variant-numeric: tabular-nums;
 }
 
 .otp-panel__body {
@@ -458,13 +461,12 @@
   }
 
   /*
-   * The count is the longest string in the header ("3 of 3 skills decided" is 105px at 375) and
-   * the one UX_REVIEW finding 5 names as droppable. The chip still reads "Find Grandma", and the
-   * same count is on the Results screen at the end of the run.
+   * The count STAYS on a phone (the 2026-10-22 review). It used to be the first thing dropped here,
+   * when the header also carried three capability legs and "3 of 3 skills decided" was 105px at
+   * 375. v2's header has no legs, and on Explore the count -- "0 of 7 met" -- is the half of the
+   * chip that answers "how many are left?", which is the client's question. e2e/world-frame.spec.ts
+   * measures label, count and the music control inside the header at 320 and 375.
    */
-  .otp-world-frame__header .otp-chip__count {
-    display: none;
-  }
 
   /*
    * The screen's name, worth 80px here, is carried by the numeral beside it and by the quest chip
@@ -2156,4 +2158,66 @@ html[data-cabinet='overlay'] .otp-ui {
 .otp-foot .otp-mark {
   margin-left: 0;
   height: calc(14px * var(--otp-ui));
+}
+
+/* ---------------------------------------------------------------- the door asks first */
+
+/*
+ * "You haven't met N yet. Go in anyway?" (ui/DoorCheck.tsx). The offer's own vocabulary and
+ * nothing new: the modal layer and its dim, the numbered panel, the Shell card with its Deep Purple
+ * border and Haze ring, the dialogue line, the speaker eyebrow over the names, and the two pills the
+ * screens already use -- Keep looking filled Deep Purple, because it is the default, and Go in the
+ * same pill in outline. No Lime: a door is not a call to action, and Explore has none.
+ */
+.otp-door {
+  display: grid;
+  gap: calc(10px * var(--otp-ui));
+}
+
+.otp-door .otp-dialogue__line {
+  font-size: calc(18px * var(--otp-ui));
+  line-height: 1.2;
+  color: var(--cyera-black);
+}
+
+.otp-door .otp-dialogue__speaker {
+  margin: calc(2px * var(--otp-ui)) 0 0;
+}
+
+/* The names as chips on Natural: who to look for, in walking order. */
+.otp-door__who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--otp-ui));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.otp-door__who li {
+  padding: calc(4px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  border-radius: var(--otp-r-pill);
+  background: var(--cyera-natural);
+  font-size: max(12px, calc(15px * var(--otp-ui)));
+  font-weight: 500;
+  color: var(--cyera-deep-purple);
+}
+
+.otp-door__answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(10px * var(--otp-ui));
+  margin-top: calc(4px * var(--otp-ui));
+  padding-top: calc(12px * var(--otp-ui));
+  border-top: 1px solid var(--cyera-clay);
+}
+
+.otp-door__answers .otp-button {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 420px) {
+  .otp-door__answers {
+    flex-direction: column;
+  }
 }
