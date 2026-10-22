@@ -89,7 +89,7 @@
  * for the bank rock and its outline, `grass` and `shadow` for the land behind it. No raw hex, no
  * partial alpha, and no brand colour, because the forest stays a forest.
  */
-import { clamp01, Img, keyline, lumaOf, mix, shade, TILE, tone } from '../paint.ts';
+import { clamp01, Img, keyline, lumaOf, mix, shade, smooth, TILE, tone } from '../paint.ts';
 import type { RGBA, Side } from '../paint.ts';
 
 /**
@@ -938,6 +938,422 @@ function shore(side: Side): (img: Img) => void {
   };
 }
 
+/* --- the corners ------------------------------------------------------------ */
+
+/*
+ * ===========================================================================
+ * THE EIGHT CORNERS: WHERE THE BANK TURNS, IT TURNS IN ONE TILE.
+ * ===========================================================================
+ *
+ * The client, 2026-10-22: "look at all the stones along the bank of the river, make sure there's
+ * no issues there". There were, and they were all one fault. The river runs on a diagonal, so the
+ * bank is a staircase, and a staircase has two kinds of tile the four straight banks above cannot
+ * draw:
+ *
+ *   a POINT, land with water on two ADJACENT sides -- the nose of each step. The map laid
+ *            `shore-w` or `shore-e` there, whose land runs the whole height of the tile, so the
+ *            strip of lawn and its boulders ran on to the tile edge and stopped dead against the
+ *            open water of the next row: a square of water with a rock in it and no outline on its
+ *            land side. Counted on HEAD (2b42743): 40 cells, and one spit.
+ *   a COVE,  land whose water is only across a DIAGONAL -- the inside of each step. The map laid
+ *            plain grass there, so the waterline of the two tiles beside it ran into a lit lawn
+ *            square across a hard tile edge: the V-shaped inlet with a seam beside it, on every step
+ *            of the south-west reach. Counted on HEAD: 41 cells off the track and the deck.
+ *
+ * THE GEOMETRY IS COMPOSED, NOT DRAWN AGAIN, and that is what makes these seamless with what is
+ * already on the map. A straight bank is one mask, `isLand(side)`, read off one profile. A point
+ * is the land BOTH of its sides' masks agree on; a cove is the land EITHER of them claims. So the
+ * NW point is `n AND w` and the SE cove is `n OR w`, and every edge of either is drawn by exactly the
+ * profile the straight tile across that edge draws -- the west edge of a NW point is `shore-n`'s east
+ * edge, pixel for pixel, because `bankDepth` is periodic in the tile and `PHASE` is per side, not
+ * per tile. No new waterline was invented for these, and none could be: the neighbours already fix
+ * where it has to cross every edge.
+ *
+ * The same composition answers OUTSIDE the tile, which is the reason it is worth doing this way.
+ * Evaluated at x < 0, `n AND w` is `n` -- the shore-n to the west; at y < 0 it is `w` -- the bank
+ * coming down from the north; past the far corner it is open water. So each corner is painted on a
+ * 3x3-tile canvas holding its own neighbourhood, and cropped: a boulder that crosses an edge is
+ * ringed against the rock it continues into, and the foam and the dark channel are measured from
+ * the land actually on the far side of the seam, rather than from a wrap that assumes the tile
+ * repeats. These tiles do not repeat. They turn.
+ *
+ * THE STONES ARE THE STRAIGHT BANKS' STONES. A corner carries the boulder rows of both its sides, at
+ * the same positions the straight tiles put them -- so a stone the straight tile next door starts
+ * at its edge is finished here, and vice versa -- and keeps a stone of side A only where side A's
+ * bank actually RUNS: for a point, where the other side's land is under the stone's centre; for a
+ * cove, where it is not. That rule is evaluated at the stone's centre, in the composed geometry,
+ * so two tiles sharing a seam always agree on which stones cross it.
+ *
+ * THE NAMES. A point is named for its land, like the straight banks: `shore-nw` is land in the
+ * north-west corner with water to its east and south. A cove is named for its WATER, the one
+ * exception, because a cove's land is three quarters of the tile and has no corner to name:
+ * `shore-cove-se` is lawn with the river reaching into its south-east corner. Both keep the
+ * `shore-` prefix on purpose: every pass in `forest-map.ts` that asks whether a cell is a bank asks
+ * `startsWith('shore')`, and these are banks.
+ */
+type Corner = 'nw' | 'ne' | 'sw' | 'se';
+
+/** The two sides that meet at a corner: the sides a point's land touches. */
+const SIDES_AT: Record<Corner, readonly [Side, Side]> = {
+  nw: ['n', 'w'],
+  ne: ['n', 'e'],
+  sw: ['s', 'w'],
+  se: ['s', 'e'],
+};
+const ACROSS: Record<Corner, Corner> = { nw: 'se', ne: 'sw', sw: 'ne', se: 'nw' };
+
+/** `bankDepth`'s mean: the depth an arm's waterline calms towards as it turns. */
+const BANK_MEAN = 12;
+/** Over how many pixels from its straight neighbour an arm's wander fades, and to what share. */
+const CALM = 14;
+const CALM_FLOOR = 0.25;
+/** How hard the turn is rounded, at its fullest: a smooth min of this width blunts it by a quarter. */
+const ROUND = 10;
+/** The stone a bare point is given on its nose, and how near another stone must be to stand in for it. */
+const NOSE: Rock = [0, 0, 5.5, 2.2, true];
+const NOSE_CLEAR = 9;
+
+/** The 3x3 canvas a corner is composed on: its own tile in the middle, one tile of context round it. */
+const PAD = S;
+const WIDE = 3 * S;
+
+/** `ringPile` for a canvas that does not wrap. Same rule, same thickening; no edge is a seam here. */
+function ringOpen(img: Img, line: RGBA): void {
+  const at = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < img.w && y < img.h && img.get(x, y)[3] > 0;
+  const ring: [number, number][] = [];
+  for (let y = 0; y < img.h; y++)
+    for (let x = 0; x < img.w; x++) {
+      if (at(x, y)) continue;
+      let ix = 0;
+      let iy = 0;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if ((dx === 0 && dy === 0) || !at(x + dx, y + dy)) continue;
+          ix += dx;
+          iy += dy;
+          n++;
+        }
+      if (n === 0) continue;
+      ring.push([x, y]);
+      if (iy < 0) ring.push([x, y + 1]);
+      if (ix < 0 && iy <= 0) ring.push([x + 1, y]);
+    }
+  for (const [x, y] of ring) if (!at(x, y)) img.px(x, y, line);
+}
+
+/** `layRock` for a canvas that does not wrap: one stone, with the deep-shade rim where it overlaps. */
+function layOpen(pile: Img, cx: number, cy: number, rock: Rock): void {
+  const [, , r, seed, spec] = rock;
+  const one = new Img(pile.w, pile.h);
+  boulder(one, cx, cy, r, seed, spec);
+  const solidHere = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < one.w && y < one.h && one.get(x, y)[3] > 0;
+  for (let y = 0; y < pile.h; y++)
+    for (let x = 0; x < pile.w; x++) {
+      if (solidHere(x, y) || pile.get(x, y)[3] === 0) continue;
+      let touching = false;
+      for (let dy = -1; dy <= 1 && !touching; dy++)
+        for (let dx = -1; dx <= 1 && !touching; dx++)
+          if ((dx !== 0 || dy !== 0) && solidHere(x + dx, y + dy)) touching = true;
+      if (touching) pile.px(x, y, ROCK_CONTACT);
+    }
+  pile.blit(one, 0, 0);
+}
+
+/** The sprig positions of the straight banks, read as `[t, d]` on a side. */
+const SPRIGS: readonly (readonly [number, number])[] = [
+  [4, 2],
+  [19, 1],
+];
+
+/**
+ * A corner: `point` is land in corner `c` with water round it on two sides; `cove` is land with
+ * the water reaching into corner `c` only. See the long note above.
+ */
+function corner(kind: 'point' | 'cove', c: Corner): (img: Img) => void {
+  const [a, b] = kind === 'point' ? SIDES_AT[c] : SIDES_AT[ACROSS[c]];
+  const other = (s: Side): Side => (s === a ? b : a);
+  /*
+   * Which end of each arm meets a straight bank. A point's `n` arm runs off its west edge when the
+   * point is in the west, so it opens TOWARDS the other side; a cove's arms open AWAY from it.
+   * `open[s]` is true when arm `s` opens at the low end of its own along-bank axis (t = 0).
+   */
+  const openLow = (s: Side): boolean => {
+    const o = other(s);
+    const towardsLow = o === 'n' || o === 'w';
+    return kind === 'point' ? towardsLow : !towardsLow;
+  };
+  /** How far along arm `s` a point is from the edge where the straight bank comes in. */
+  const along = (s: Side, x: number, y: number): number => {
+    const [t] = toBank(s, x, y);
+    return openLow(s) ? t + 0.5 : S - 0.5 - t;
+  };
+  /*
+   * THE ARMS STRAIGHTEN AS THEY TURN, and that is the one liberty these tiles take with the bank's
+   * profile. Two waterlines that each wander five pixels either way, crossed at the corner, cross at
+   * whatever angle their wander gives them -- and at the profile's steepest (a slope of about 1.3)
+   * two of them can run nearly parallel, which on the first render drew a land finger one keyline
+   * wide out to every point and a sealed pond of water behind every cove's stones. So each arm's
+   * wander fades out over `CALM` pixels from the edge where it meets its straight neighbour, down
+   * to `CALM_FLOOR` of itself at the turn. At that edge it is the straight bank's own profile,
+   * exactly, with zero change of slope -- `smooth` is flat at both ends -- so the seam does not
+   * move by a pixel.
+   */
+  const reach = (s: Side, x: number, y: number): number => {
+    const [t, d] = toBank(s, x, y);
+    const k = clamp01(along(s, x, y) / CALM);
+    const g = 1 - (1 - CALM_FLOOR) * smooth(k);
+    return BANK_MEAN + (bankDepth(wrap(t) + PHASE[s]) - BANK_MEAN) * g - d;
+  };
+  /*
+   * ...AND THE TURN IS ROUNDED. `min` of two waterlines meeting at the profile's steepest is a wedge
+   * a keyline wide, which drew every point as a dark spike with nothing in it but outline. A smooth
+   * minimum (for a cove, maximum) blunts it by up to `ROUND / 4` pixels where the two lines are
+   * close -- and `ROUND` itself fades to nothing towards both open edges, so on the arms this is
+   * `min` and `max` exactly and the seams stay where the straight banks put them.
+   */
+  const raw = (x: number, y: number): number => {
+    const p = reach(a, x, y);
+    const q = reach(b, x, y);
+    const k = ROUND * smooth(clamp01(Math.min(along(a, x, y), along(b, x, y)) / CALM));
+    const h = k > 0 ? Math.max(k - Math.abs(p - q), 0) / k : 0;
+    return kind === 'point' ? Math.min(p, q) - (h * h * k) / 4 : Math.max(p, q) + (h * h * k) / 4;
+  };
+
+  /*
+   * The land on the wide canvas, and then made of ONE piece of land and ONE piece of water. Any
+   * water the river cannot reach from the open corner becomes lawn and any land cut off from the
+   * mainland becomes river: a corner has exactly one waterline, and a pond or an islet the size of
+   * a few pixels is the profile's arithmetic, not a feature.
+   */
+  const wet = new Uint8Array(WIDE * WIDE);
+  for (let y = 0; y < WIDE; y++)
+    for (let x = 0; x < WIDE; x++) wet[y * WIDE + x] = raw(x - PAD, y - PAD) > 0 ? 0 : 1;
+  const flood = (sx: number, sy: number, want: number): Uint8Array => {
+    const seen = new Uint8Array(WIDE * WIDE);
+    const stack: number[] = [sy * WIDE + sx];
+    seen[stack[0]!] = 1;
+    while (stack.length) {
+      const i = stack.pop()!;
+      const x = i % WIDE;
+      const y = (i - x) / WIDE;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= WIDE || ny >= WIDE) continue;
+        const j = ny * WIDE + nx;
+        if (seen[j] || wet[j] !== want) continue;
+        seen[j] = 1;
+        stack.push(j);
+      }
+    }
+    return seen;
+  };
+  const cornerAt = (q: Corner): [number, number] => [
+    q.endsWith('w') ? 0 : WIDE - 1,
+    q.startsWith('n') ? 0 : WIDE - 1,
+  ];
+  const [lx, ly] = cornerAt(kind === 'point' ? c : ACROSS[c]);
+  const [wx, wy] = cornerAt(kind === 'point' ? ACROSS[c] : c);
+  const mainland = flood(lx, ly, 0);
+  const river_ = flood(wx, wy, 1);
+  for (let i = 0; i < WIDE * WIDE; i++) {
+    if (wet[i] === 0 && !mainland[i]) wet[i] = 1;
+    else if (wet[i] === 1 && !river_[i]) wet[i] = 0;
+  }
+  const land = (x: number, y: number): boolean => {
+    const X = x + PAD;
+    const Y = y + PAD;
+    return X >= 0 && Y >= 0 && X < WIDE && Y < WIDE && wet[Y * WIDE + X] === 0;
+  };
+
+  /*
+   * How far inland, for the lawn's bands. The profile's own number wherever it is good -- which is
+   * everywhere on the arms, so the bands meet the straight tiles exactly -- and, where the tidying
+   * above turned water into lawn, the distance to the water that is actually left, so a filled pond
+   * does not leave its keyline behind as a ring in the grass. `dt - 1` never exceeds the profile's
+   * number where the profile is true (the first water pixel is at most one past the waterline), so
+   * taking the larger of the two changes nothing on the arms.
+   */
+  const dt = new Float32Array(WIDE * WIDE).fill(1e9);
+  for (let i = 0; i < WIDE * WIDE; i++) if (wet[i] === 1) dt[i] = 0;
+  const D = Math.SQRT2;
+  for (let y = 0; y < WIDE; y++)
+    for (let x = 0; x < WIDE; x++) {
+      const i = y * WIDE + x;
+      if (x > 0) dt[i] = Math.min(dt[i]!, dt[i - 1]! + 1);
+      if (y > 0) dt[i] = Math.min(dt[i]!, dt[i - WIDE]! + 1);
+      if (x > 0 && y > 0) dt[i] = Math.min(dt[i]!, dt[i - WIDE - 1]! + D);
+      if (x < WIDE - 1 && y > 0) dt[i] = Math.min(dt[i]!, dt[i - WIDE + 1]! + D);
+    }
+  for (let y = WIDE - 1; y >= 0; y--)
+    for (let x = WIDE - 1; x >= 0; x--) {
+      const i = y * WIDE + x;
+      if (x < WIDE - 1) dt[i] = Math.min(dt[i]!, dt[i + 1]! + 1);
+      if (y < WIDE - 1) dt[i] = Math.min(dt[i]!, dt[i + WIDE]! + 1);
+      if (x < WIDE - 1 && y < WIDE - 1) dt[i] = Math.min(dt[i]!, dt[i + WIDE + 1]! + D);
+      if (x > 0 && y < WIDE - 1) dt[i] = Math.min(dt[i]!, dt[i + WIDE - 1]! + D);
+    }
+  const depth = (x: number, y: number): number =>
+    Math.max(raw(x, y), dt[(y + PAD) * WIDE + x + PAD]! - 1);
+
+  /*
+   * Which stones. A stone is laid where the straight bank next door lays it and nowhere a
+   * neighbour would cut it:
+   *   - centred in the straight bank across an arm's open edge: always, because that tile always
+   *     draws it, and its part on this side of the seam has to be here;
+   *   - centred in this tile and reaching across its own arm's open edge: always, for the same
+   *     reason from the other side;
+   *   - centred in this tile and reaching any OTHER edge: never. Across those is open water or open
+   *     lawn, which draws no stone, so it would be sawn off at the seam -- exactly the square-edged
+   *     boulder the client was pointing at;
+   *   - otherwise, where its own bank runs: for a point, where the other side's land is under it;
+   *     for a cove, where it is not.
+   */
+  const inTile = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < S && y < S;
+  const inOpenNeighbour = (s: Side, x: number, y: number): boolean => {
+    const [t, d] = toBank(s, x, y);
+    if (d < 0 || d >= S) return false;
+    return openLow(s) ? t < 0 && t >= -S : t >= S && t < 2 * S;
+  };
+  const lays = (s: Side, cx: number, cy: number, r: number): boolean => {
+    if (inOpenNeighbour(s, cx, cy)) return true;
+    if (!inTile(cx, cy)) return false;
+    // `lump` peaks at 1.41 of the radius, `squat` takes 0.86 off the height, and the keyline
+    // and its thickening add two.
+    const rx = r * 1.41 + 2;
+    const ry = r * 1.41 * 0.86 + 2;
+    const crosses = { w: cx - rx < 0, e: cx + rx > S, n: cy - ry < 0, s: cy + ry > S };
+    const [t] = toBank(s, cx, cy);
+    const opens: Side = s === 'n' || s === 's' ? (openLow(s) ? 'w' : 'e') : openLow(s) ? 'n' : 's';
+    if (crosses[opens] && (openLow(s) ? t < S / 2 : t >= S / 2)) return true;
+    if ((Object.keys(crosses) as Side[]).some((e) => crosses[e])) return false;
+    return reach(other(s), cx, cy) > 0 === (kind === 'point');
+  };
+
+  return (img) => {
+    river(img, RIPPLES_A, SWIRLS_A);
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) if (land(x, y)) img.px(x, y, landTone(depth(x, y), x, y));
+
+    /*
+     * Sprigs from both sides' sets, kept only where the whole tuft lands on daylight lawn inside the
+     * tile. A sprig is five pixels wide and is not wrapped, so one that would cross an edge is
+     * dropped rather than cut.
+     */
+    for (const s of [a, b])
+      for (const [t, d] of SPRIGS) {
+        const [sx, sy] = toTile(s, wrap(t - PHASE[s]), d);
+        if (sx < 1 || sy < 1 || sx + 5 > S - 1 || sy + 3 > S - 1) continue;
+        let lawn = true;
+        for (let j = 0; j <= 2 && lawn; j++)
+          for (let i = 0; i <= 4 && lawn; i++)
+            if (!land(sx + i, sy + j) || depth(sx + i, sy + j) <= 5.5) lawn = false;
+        if (lawn) sprig(img, sx, sy);
+      }
+
+    /*
+     * The stones, both sides' rows, back row first, laid on the wide canvas at every repeat that can
+     * reach it, and ringed there so a stone crossing a seam is ringed against what it continues into.
+     */
+    const pile = new Img(WIDE, WIDE);
+    const laid: [number, number][] = [];
+    for (const row of [BACK, FRONT])
+      for (const rock of row)
+        for (const s of [a, b])
+          for (const k of [-1, 0, 1, 2]) {
+            const [cx, cy] = toTile(s, rock[0] - PHASE[s] + k * S, rock[1]);
+            if (cx < -PAD || cy < -PAD || cx >= S + PAD || cy >= S + PAD) continue;
+            if (!lays(s, cx, cy, rock[2])) continue;
+            layOpen(pile, cx + PAD, cy + PAD, rock);
+            laid.push([cx, cy]);
+          }
+    /*
+     * A POINT GETS A STONE ON ITS NOSE if neither row happened to put one there. Which stones a
+     * point inherits depends on where the two rows' phases fall, and on two of the four corners
+     * they fall clear of the land altogether -- which left the nose as a bare wedge of wet earth
+     * and keyline, the darkest and emptiest thing on the bank. The board's headlands are where its
+     * stones pile up. One front-row stone, wading off the tip, wholly inside the tile.
+     */
+    if (kind === 'point') {
+      const [ox, oy] = [c.endsWith('w') ? 0 : S - 1, c.startsWith('n') ? 0 : S - 1];
+      const [ux, uy] = [c.endsWith('w') ? 1 : -1, c.startsWith('n') ? 1 : -1];
+      let i = 0;
+      while (i < S && land(ox + ux * i, oy + uy * i)) i++;
+      const [tx, ty] = [ox + ux * (i + 1), oy + uy * (i + 1)];
+      if (!laid.some(([x, y]) => Math.hypot(x - tx, y - ty) < NOSE_CLEAR))
+        layOpen(pile, tx + PAD, ty + PAD, NOSE);
+    }
+    ringOpen(pile, ROCK_LINE);
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const p = pile.get(x + PAD, y + PAD);
+        if (p[3] > 0) img.px(x, y, p);
+      }
+
+    /*
+     * The shoreline distance field over the whole canvas, with no wrap on either axis: the land and
+     * the stones on the far side of every seam are on the canvas, so the foam and the dark channel
+     * at an edge are measured from what is actually there.
+     */
+    const solid = new Uint8Array(WIDE * WIDE);
+    for (let i = 0; i < WIDE * WIDE; i++)
+      solid[i] = wet[i] === 0 || pile.data[i * 4 + 3]! > 0 ? 1 : 0;
+    const dist = new Int8Array(WIDE * WIDE).fill(-1);
+    let front: number[] = [];
+    for (let i = 0; i < WIDE * WIDE; i++) if (solid[i] === 1) front.push(i);
+    for (let d = 1; d <= CHANNEL.length + 1 && front.length; d++) {
+      const next: number[] = [];
+      for (const i of front) {
+        const x = i % WIDE;
+        const y = (i - x) / WIDE;
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= WIDE || ny >= WIDE) continue;
+          const j = ny * WIDE + nx;
+          if (solid[j] === 1 || dist[j] !== -1) continue;
+          dist[j] = d;
+          next.push(j);
+        }
+      }
+      front = next;
+    }
+    for (let y = 0; y < S; y++)
+      for (let x = 0; x < S; x++) {
+        const d = dist[(y + PAD) * WIDE + x + PAD]!;
+        if (d < 1) continue;
+        // The surf runs along whichever bank this water is nearer, so it carries on from the
+        // straight tile across the seam on each arm.
+        const near = reach(a, x, y) >= reach(b, x, y) ? a : b;
+        const [bt] = toBank(near, x, y);
+        const surf = Math.sin((TAU * bt) / 8 + 1.3) + 0.6 * Math.sin((TAU * bt) / 16 + 0.4);
+        if (d === 1 || (d === 2 && surf > 0.45)) {
+          img.px(x, y, W_FOAM);
+          continue;
+        }
+        const k = Math.min(CHANNEL.length - 1, d - 2);
+        img.px(
+          x,
+          y,
+          snap(APRON_LO, APRON_HI, APRON_STEPS, CHANNEL[k]! + 0.05 * field(x, y, FOAM_PHASES)),
+        );
+      }
+  };
+}
+
 /* --- the fall ------------------------------------------------------------- */
 
 /**
@@ -1115,6 +1531,14 @@ export const WATER_TILES: Record<string, (img: Img) => void> = {
   'shore-e': shore('e'),
   'shore-w': shore('w'),
   waterfall,
+  'shore-nw': corner('point', 'nw'),
+  'shore-ne': corner('point', 'ne'),
+  'shore-sw': corner('point', 'sw'),
+  'shore-se': corner('point', 'se'),
+  'shore-cove-nw': corner('cove', 'nw'),
+  'shore-cove-ne': corner('cove', 'ne'),
+  'shore-cove-sw': corner('cove', 'sw'),
+  'shore-cove-se': corner('cove', 'se'),
 };
 
 /* --- the guard -------------------------------------------------------------- */

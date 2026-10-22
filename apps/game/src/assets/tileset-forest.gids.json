@@ -89,5 +89,13 @@
   "elder-tc-over-mr": 88,
   "elder-tc-over-ml": 89,
   "elder-tl-over-sapling-tr": 90,
-  "elder-tr-over-sapling-tl": 91
+  "elder-tr-over-sapling-tl": 91,
+  "shore-nw": 92,
+  "shore-ne": 93,
+  "shore-sw": 94,
+  "shore-se": 95,
+  "shore-cove-nw": 96,
+  "shore-cove-ne": 97,
+  "shore-cove-sw": 98,
+  "shore-cove-se": 99
 }

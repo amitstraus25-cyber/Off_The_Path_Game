@@ -312,6 +312,27 @@ export const TILE_NAMES: readonly string[] = [
   'elder-tc-over-ml',
   'elder-tl-over-sapling-tr',
   'elder-tr-over-sapling-tl',
+  /*
+   * The river's eight CORNERS, appended for the reason above, 2026-10-22: the client's "look at
+   * all the stones along the bank of the river". The bank is a staircase and the four straight
+   * banks cannot turn it, so every step drew either a strip of lawn running on into open water
+   * (a POINT laid as `shore-w`/`shore-e`) or a waterline running into lit grass across a tile edge
+   * (a COVE laid as grass). `shore-nw` and friends are points, named for their land like the
+   * straight four; `shore-cove-*` are coves, named for their WATER. The painters, and why they
+   * meet the straight banks pixel for pixel, are `corner()` in `tiles/w-water.ts`; placement is
+   * `bankFor` in `forest-map.ts`.
+   *
+   * 91 + 8 = 99 names is `Math.ceil(99 / 12)` = 9 rows, so the sheet grows from 384 x 256 to
+   * 384 x 288. Every existing gid keeps its value and its cell: these are gids 92 to 99.
+   */
+  'shore-nw',
+  'shore-ne',
+  'shore-sw',
+  'shore-se',
+  'shore-cove-nw',
+  'shore-cove-ne',
+  'shore-cove-sw',
+  'shore-cove-se',
 ];
 
 /*

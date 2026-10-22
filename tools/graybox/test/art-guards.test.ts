@@ -308,9 +308,13 @@ describe('the map', () => {
    * rebuild. Verified on the regeneration that committed them: all 83 earlier names keep their gid
    * in `tileset-forest.gids.json`, the only map cells that changed are the `decor-above` cells that
    * pass reports re-pointing (65), and the sheet grows to 384x256 because `ceil(91 / 12)` is 8.
+   *
+   * 99 since 2026-10-22, the river round: the eight bank CORNERS (`shore-nw` ... `shore-cove-se`)
+   * APPENDED at gids 92 to 99, laid only by the corner pass in `forest-map.ts` (`bankFor`). The
+   * sheet grows to 384x288 because `ceil(99 / 12)` is 9; all 91 earlier names keep their gid.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(91);
+    expect(TILE_NAMES).toHaveLength(99);
   });
 });
 

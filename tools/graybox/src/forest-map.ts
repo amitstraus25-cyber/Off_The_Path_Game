@@ -114,6 +114,45 @@ const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
   [0, -1],
 ];
 
+/**
+ * THE BANK TILE A CELL OF LAND NEEDS, read off its whole neighbourhood -- the four sides AND the
+ * four diagonals -- given whether each of the eight neighbours is drawn as water.
+ *
+ *   one wet side                 the straight bank, `shore-w` etc.: the side in the name is the land
+ *   two wet sides that meet      a POINT, `shore-nw` etc.: land holds the corner the two dry sides meet in
+ *   no wet side, one wet corner  a COVE, `shore-cove-se` etc.: named for the corner the water reaches into
+ *   nothing wet                  `null`: not a bank
+ *
+ * Anything else -- two OPPOSITE wet sides, three or four, two wet corners with no wet side, or a
+ * wet corner on the far side from a wet edge -- is `'unresolved'`. The tileset has no tile for
+ * those and the caller must not leave one on the map; see the corner pass.
+ *
+ * Exported so the map test can check the committed map cell by cell against the rule it was laid
+ * by. The four-sides-only rule this replaces is the bank loop under the river, which still runs
+ * first: every pass between there and the corner pass reads the ground it laid, and the forest they
+ * plant is unchanged by this.
+ */
+export function bankFor(wetAt: (dx: number, dy: number) => boolean): string | null | 'unresolved' {
+  const n = wetAt(0, -1);
+  const s = wetAt(0, 1);
+  const e = wetAt(1, 0);
+  const w = wetAt(-1, 0);
+  const corners = (['ne', 'nw', 'se', 'sw'] as const).filter((c) =>
+    wetAt(c.endsWith('e') ? 1 : -1, c.startsWith('s') ? 1 : -1),
+  );
+  const sides = [n, s, e, w].filter(Boolean).length;
+  if (sides === 0) {
+    if (corners.length === 0) return null;
+    return corners.length === 1 ? `shore-cove-${corners[0]}` : 'unresolved';
+  }
+  /** A wet corner is accounted for when one of the two sides it touches is wet. */
+  const covered = corners.every((c) => (c.startsWith('n') ? n : s) || (c.endsWith('e') ? e : w));
+  if (!covered) return 'unresolved';
+  if (sides === 1) return e ? 'shore-w' : w ? 'shore-e' : s ? 'shore-n' : 'shore-s';
+  if (sides === 2 && (n || s) && (e || w)) return `shore-${n ? 's' : 'n'}${e ? 'w' : 'e'}`;
+  return 'unresolved';
+}
+
 export interface GeneratedMap {
   json: string;
   /** Where the map generator decided each landmark sits, in pixels. */
@@ -5314,6 +5353,10 @@ export function generateForestMap(): GeneratedMap {
     const bank = nameAt(ground, x, y);
     if (!bank.startsWith('shore')) return false;
     if (bank === 'shore-n' || bank === 'shore-s') return true;
+    // A cove's water is one corner and nothing else carries it. (Coves are laid only by the
+    // corner pass at the bottom of the file, so this line changes nothing for the uncover pass
+    // that also calls this; it is for audit 1, which reads the finished map.)
+    if (bank.startsWith('shore-cove')) return true;
     return NEIGHBOURS.filter(([dx, dy]) => isWater(x + dx, y + dy)).length > 1;
   };
   let uncovered = 0;
@@ -7364,6 +7407,143 @@ export function generateForestMap(): GeneratedMap {
       `${wedged} left wedged against something`,
   );
 
+  // --- the bank turns its corners ----------------------------------------------------------------
+  /*
+   * ===========================================================================
+   * EVERY CORNER OF THE BANK GETS ITS CORNER TILE.
+   * ===========================================================================
+   *
+   * The client, 2026-10-22, again: "look at all the stones along the bank of the river, make sure
+   * there's no issues there". After the bridge join was fixed there were still two faults, and
+   * they were the same fault -- the bank loop under the river asks a cell's four SIDES and nothing
+   * else, and a diagonal river is a staircase, whose every step has two cells that question cannot
+   * describe:
+   *   - the NOSE of the step, land with water on two adjacent sides. It got `shore-w` or `shore-e`,
+   *     whose lawn and boulders run the full height of the tile, so the strip of bank ran on into
+   *     the open water of the next row and stopped at the tile edge: a square patch of water with a
+   *     rock in it and no outline on its land side -- (32,8), (29,4), (33,2) at the waterfall head.
+   *   - the INSIDE of the step, land whose water is only across a diagonal. It got grass, so the
+   *     waterline of the two bank tiles beside it ran straight into a lit lawn square: the V-shaped
+   *     inlet with a tile seam beside it, at (28,7) and on every step of the south-west reach.
+   * Counted on HEAD (2b42743): 41 noses and 41 insides off the deck and the track.
+   *
+   * `bankFor` reads all eight neighbours and the eight corner tiles in `tiles/w-water.ts` draw what
+   * it names. WHY IT RUNS HERE, at the bottom, and not in the bank loop: everything between there
+   * and here reads the ground tile -- the planting passes ask for lawn, the uncover pass and the
+   * river sweep ask for `shore` -- and several of them draw `rnd()` per cell they accept. Turning
+   * forty-one cells of grass into bank at the top would move every draw after the first of them and
+   * replant the wood. Here, it re-points ground tiles and nothing else, and the forest is the
+   * forest it was. The dredge pass, directly below, then lifts any opaque cover off a new cove
+   * exactly as it does off every other bank tile below the border band.
+   *
+   * WATER IS READ OFF THE DRAWN GROUND, not off `isWater` -- the waterfall is laid over the river's
+   * geometry after the bank loop, and the deck covers it -- for the same reason audit 1 does.
+   *
+   * THE DECK AND THE TRACK ARE NOT BANKS and keep their own tiles: a plank or a cell of sand with
+   * water across one corner is the crossing, and there is no path tile with a waterline in it.
+   *
+   * ONE SPIT IS FLOODED. A cell of land with water on two opposite sides, or on three, is a
+   * one-tile finger of bank the tileset cannot draw -- its land would have to be thinner than the
+   * bank's own profile -- and HEAD has exactly one, at (22,30), which drew as `shore-w` with its
+   * lawn running into the water above and below it. It becomes river: ground `water`, solid. It is
+   * a dead end with land on one side only, so no walk on the map runs through it and nothing is
+   * reachable through it; the audit's flood says so. A spit carrying anything -- decor, a crown,
+   * one of the cast -- is refused loudly instead, because flooding it would drown something.
+   */
+  {
+    const DRAWN_WET = new Set(['water', 'water-2', 'waterfall']);
+    const wetCell = (x: number, y: number): boolean => DRAWN_WET.has(nameAt(ground, x, y));
+    const isBankable = (x: number, y: number): boolean => {
+      const here = nameAt(ground, x, y);
+      return here.startsWith('grass') || here.startsWith('shore');
+    };
+    const castAt = (x: number, y: number): boolean =>
+      objects.some(
+        (o) =>
+          (o.name.startsWith('npc-') || o.name.startsWith('bystander-')) &&
+          Math.floor(o.x / TILE) === x &&
+          Math.floor(o.y / TILE) === y,
+      );
+    const flooded: [number, number][] = [];
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let y = 0; y < MAP_H; y++)
+        for (let x = 0; x < MAP_W; x++) {
+          if (!isBankable(x, y)) continue;
+          const n = wetCell(x, y - 1);
+          const s = wetCell(x, y + 1);
+          const e = wetCell(x + 1, y);
+          const w = wetCell(x - 1, y);
+          if (!((n && s) || (e && w))) continue;
+          if (at(below, x, y) !== 0 || at(above, x, y) !== 0 || castAt(x, y))
+            throw new Error(
+              `the bank at (${x},${y}) is a one-tile spit with water on opposite sides, and it ` +
+                `carries something, so it cannot be flooded. The tileset has no tile for a spit.`,
+            );
+          set(ground, x, y, gid('water'));
+          solid(x, y);
+          flooded.push([x, y]);
+          changed = true;
+        }
+    }
+    /*
+     * A cell under a crown quarter opaque in every pixel is not drawn at all -- `decor-above` covers
+     * it edge to edge -- so its ground is left as it is. Re-pointing it would change nothing anybody
+     * sees and would cost a real fault: the dredge below lifts cover off every bank tile, and the
+     * one such cell on HEAD, (24,33), is a boulder under an `elder-mc`. Lifted, it is a walkable
+     * cell Purple vanishes on, which is the ratchet in audit 12 going up by one.
+     */
+    const blind = new Map<string, boolean>();
+    const hiddenUnder = (x: number, y: number): boolean => {
+      const over = nameAt(above, x, y);
+      if (over === '') return false;
+      let known = blind.get(over);
+      if (known === undefined) {
+        const img = new Img(TILE, TILE);
+        TILE_PAINTERS[over]!(img);
+        known = true;
+        for (let i = 3; i < img.data.length && known; i += 4)
+          if (img.data[i] !== 255) known = false;
+        blind.set(over, known);
+      }
+      return known;
+    };
+    const turned: Record<string, number> = {};
+    let unseen = 0;
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        if (!isBankable(x, y)) continue;
+        const bank = bankFor((dx, dy) => wetCell(x + dx, y + dy));
+        if (bank === 'unresolved')
+          throw new Error(
+            `the bank at (${x},${y}) has a water neighbourhood no tile in the set can draw ` +
+              `(water on a corner the wet side does not reach). See bankFor.`,
+          );
+        if (bank === null) {
+          if (nameAt(ground, x, y).startsWith('shore'))
+            throw new Error(`(${x},${y}) is a bank with no water beside it`);
+          continue;
+        }
+        if (nameAt(ground, x, y) === bank) continue;
+        if (hiddenUnder(x, y)) {
+          unseen++;
+          continue;
+        }
+        set(ground, x, y, gid(bank));
+        turned[bank] = (turned[bank] ?? 0) + 1;
+      }
+    const total = Object.values(turned).reduce((p, q) => p + q, 0);
+    console.log(
+      `  corners: ${total} bank tile(s) re-pointed from the full neighbourhood (` +
+        Object.entries(turned)
+          .sort()
+          .map(([k, v]) => `${k} ${v}`)
+          .join(', ') +
+        `); ${unseen} left as drawn under a fully opaque crown; ${flooded.length} spit(s) flooded` +
+        (flooded.length ? ` -- ${flooded.map(([x, y]) => `(${x},${y})`).join(' ')}` : ''),
+    );
+  }
+
   // --- nothing grows in the river or on the road -------------------------------------------------
   /*
    * ===========================================================================
@@ -7668,15 +7848,37 @@ export function generateForestMap(): GeneratedMap {
       const here = nameAt(ground, x, y);
       if (here.startsWith('shore')) {
         shores[here] = (shores[here] ?? 0) + 1;
-        // The side in the name is the land, so the water must be on the other one.
-        const wetSide: Record<string, [number, number]> = {
-          'shore-w': [1, 0],
-          'shore-e': [-1, 0],
-          'shore-n': [0, 1],
-          'shore-s': [0, -1],
+        // The side in the name is the land, so the water must be on the other one -- both other
+        // sides for a point, and for a cove the one corner its name gives the water.
+        const wetSide: Record<string, [number, number][]> = {
+          'shore-w': [[1, 0]],
+          'shore-e': [[-1, 0]],
+          'shore-n': [[0, 1]],
+          'shore-s': [[0, -1]],
+          'shore-nw': [
+            [1, 0],
+            [0, 1],
+          ],
+          'shore-ne': [
+            [-1, 0],
+            [0, 1],
+          ],
+          'shore-sw': [
+            [1, 0],
+            [0, -1],
+          ],
+          'shore-se': [
+            [-1, 0],
+            [0, -1],
+          ],
+          'shore-cove-nw': [[-1, -1]],
+          'shore-cove-ne': [[1, -1]],
+          'shore-cove-sw': [[-1, 1]],
+          'shore-cove-se': [[1, 1]],
         };
-        const [dx, dy] = wetSide[here]!;
-        if (!DRAWN_WET.has(nameAt(ground, x + dx, y + dy))) miszoned.push([x, y]);
+        const wants = wetSide[here];
+        if (!wants || wants.some(([dx, dy]) => !DRAWN_WET.has(nameAt(ground, x + dx, y + dy))))
+          miszoned.push([x, y]);
         // A one-tile step has nothing either side to carry the waterline, so an opaque tile on it
         // hides the whole shoreline and the seam is bare again however good the ground tile is.
         if (!onBorder(x, y) && soleShoreline(x, y) && OPAQUE_FLOOR.has(nameAt(below, x, y)))
@@ -8516,11 +8718,54 @@ export function generateForestMap(): GeneratedMap {
    */
   {
     const RIVER_CROWNS = 2;
+    /*
+     * A COVE IS ASKED OF ITS PIXELS, since the corner pass, 2026-10-22. A step or a point carries
+     * its waterline along a whole edge and a trunk on it is a fault outright. A cove's water is one
+     * corner, and a trunk tile is opaque over barely half of itself -- so whether a tree on a cove
+     * stands IN the river is a question of where the two drawings overlap, and it is answered by
+     * rendering both and counting the cove's water pixels the trunk covers. The one case on the map
+     * is the elder at the waterfall head whose `elder-trunk-r` stands on `shore-cove-ne` at (27,3):
+     * its contact shadow and root flare cover 9 of the cove's 123 water pixels, the corner is open
+     * river beside it, and felling it would replant the treeline over the fall. More than a
+     * QUARTER of the water under the trunk is a tree standing in the cove, and fails.
+     */
+    const COVE_UNDER_TRUNK = 0.25;
+    const drawn = new Map<string, Img>();
+    const paintOf = (name: string): Img => {
+      let img = drawn.get(name);
+      if (!img) {
+        img = new Img(TILE, TILE);
+        TILE_PAINTERS[name]!(img);
+        drawn.set(name, img);
+      }
+      return img;
+    };
+    const coveUnderTrunk = (x: number, y: number): number => {
+      const cove = paintOf(nameAt(ground, x, y));
+      const trunk = paintOf(nameAt(below, x, y));
+      const flipped = (at(below, x, y) & FLIP_H) !== 0;
+      let wet = 0;
+      let under = 0;
+      for (let py = 0; py < TILE; py++)
+        for (let px = 0; px < TILE; px++) {
+          const c = cove.get(px, py);
+          if (!(c[2] > c[1] && c[1] > c[0])) continue;
+          wet++;
+          if (trunk.get(flipped ? TILE - 1 - px : px, py)[3] === 255) under++;
+        }
+      return wet === 0 ? 1 : under / wet;
+    };
     const rooted: [number, number][] = [];
     const overhung: [number, number][] = [];
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++) {
-        if (isTrunk(x, y) && soleShoreline(x, y)) rooted.push([x, y]);
+        if (
+          isTrunk(x, y) &&
+          soleShoreline(x, y) &&
+          (!nameAt(ground, x, y).startsWith('shore-cove') ||
+            coveUnderTrunk(x, y) > COVE_UNDER_TRUNK)
+        )
+          rooted.push([x, y]);
         if (isWater(x, y) && isCanopy(x, y)) overhung.push([x, y]);
       }
     fault('tree trunk(s) drawn on a bank step or corner, over the only waterline there', rooted);
