@@ -63,7 +63,7 @@ Workspaces, five: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + 
 **Phase 6 landed, so `apps/api` exists** — it holds the leaderboard logic, the schema and its tests —
 **and the deploy is Vercel's Build Output API, written by us.** `vercel.json` carries
 `installCommand`, `buildCommand` and the security headers, nothing else. The build ends with
-`apps/game/scripts/vercel-output.mjs`, which writes `.vercel/output`: the static game, the two
+`apps/game/scripts/vercel-output.mjs`, which writes `.vercel/output`: the static game, the three
 routes bundled into self-contained CommonJS, and the headers copied from `vercel.json`. **Vercel
 compiles none of our TypeScript.** The routes are `apps/api/api/start.ts`, `score.ts` and `top.ts` —
 the single copy; there used to be three. `test/docs-truth.test.ts` fails if the build stops running
