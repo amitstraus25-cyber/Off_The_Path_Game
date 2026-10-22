@@ -5,13 +5,18 @@ import map from '../src/assets/map-forest.json';
 import { readForestMap } from '../src/world/map';
 import { CAMERA_DEADZONE, cameraFollow, cameraTopLeft, TILE, WALK_SPEED } from '../src/world/logic';
 import {
-  cameraFor,
   CAMERA_FOCUS_Y,
   PURPLE_FEET_BELOW_SPAWN,
   REFERENCE_VIEWPORTS,
   snapCentreToRow,
 } from '@otp/core';
 import type { ForestMap } from '../src/world/map';
+/*
+ * The SHIPPED camera: the cabinet reserves its marquee and deck before `stageFit` sizes the world
+ * (ui/cabinet.ts), so core's `cameraFor` no longer describes the canvas the game builds. Asking it
+ * here would test a camera nobody sees -- docs/PAUL_BRIEF.md trap 1.
+ */
+import { cabinetFor as cameraFor } from '../src/ui/cabinet';
 
 /*
  * THE DARK BAND ACROSS THE TOP OF THE WORLD.
@@ -108,7 +113,7 @@ function openingEdge(viewport: { width: number; height: number }): {
   view: { width: number; height: number };
 } {
   /*
-   * The view is the canvas: `ui/stage.ts` sizes the game to `stageFit`'s view, and `viewFor`
+   * The view is the canvas: `ui/stage.ts` sizes the game to the cabinet's view, and `viewFor`
    * returns the whole canvas on every frame where `arrived` is false, which the opening shot is.
    */
   const view = cameraFor(viewport).view;
@@ -299,10 +304,22 @@ function walk(
   };
 }
 
-/** The two viewports whose lift is bigger than the deadzone, which is where all of this bites. */
-const BIG_LIFT = [REFERENCE_VIEWPORTS.phone, REFERENCE_VIEWPORTS.tablet];
+/**
+ * The viewports whose lift is bigger than the deadzone, which is where all of this bites.
+ *
+ * DERIVED, not listed. This was `[phone, tablet]` by hand, which was true of the camera at the
+ * time; the cabinet's marquee moved the phone's camera and its lift fell to 16px, under the 20px
+ * deadzone, and the hand-written list went on asserting it was a big-lift viewport. Asked of the
+ * real walk instead, so the set follows the camera -- and held to being non-empty, because a guard
+ * whose set quietly empties is a guard that passes on nothing.
+ */
+const BIG_LIFT = VIEWPORTS.filter((vp) => walk(vp, 1, 90, false).lift > CAMERA_DEADZONE.y);
 
 describe('the lift lives exactly as long as the camera stands still', () => {
+  it('has a big-lift viewport to measure at all', () => {
+    expect(BIG_LIFT.length, 'no reviewed viewport lifts past the deadzone').toBeGreaterThan(0);
+  });
+
   /*
    * Three seconds of the real follow with the camera's own target not moving on this axis, which
    * is the opening shot and is also a walk straight along the X axis: `purpleFocus`'s Y does not

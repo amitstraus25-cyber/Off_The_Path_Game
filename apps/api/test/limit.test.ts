@@ -45,19 +45,26 @@ describe('the write budget', () => {
 });
 
 describe('the recent runs', () => {
-  it('knows a run it was told about and nothing else', () => {
+  it('grants a run once, and refuses it for as long as it is held', () => {
     const recent = createRecentRuns();
-    expect(recent.has('a')).toBe(false);
-    // Asking does not record: only a run that reached the table is remembered.
-    expect(recent.has('a')).toBe(false);
-    recent.remember('a');
-    expect(recent.has('a')).toBe(true);
-    expect(recent.has('b')).toBe(false);
+    expect(recent.claim('a')).toBe(true);
+    expect(recent.claim('a')).toBe(false);
+    // Another run is unaffected.
+    expect(recent.claim('b')).toBe(true);
+  });
+
+  it('gives a run back, so a post that made no row can be tried again', () => {
+    const recent = createRecentRuns();
+    expect(recent.claim('a')).toBe(true);
+    recent.release('a');
+    expect(recent.claim('a')).toBe(true);
+    // Releasing something never held is not an error.
+    recent.release('never-held');
   });
 
   it('forgets the oldest rather than growing without end', () => {
     const recent = createRecentRuns(2);
-    for (const key of ['a', 'b', 'c']) recent.remember(key); // 'a' is dropped on 'c'.
-    expect([recent.has('a'), recent.has('b'), recent.has('c')]).toEqual([false, true, true]);
+    for (const key of ['a', 'b', 'c']) recent.claim(key); // 'a' is dropped on 'c'.
+    expect([recent.claim('b'), recent.claim('c'), recent.claim('a')]).toEqual([false, false, true]);
   });
 });

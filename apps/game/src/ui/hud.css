@@ -24,16 +24,15 @@
 }
 
 /*
- * On a touch device in landscape the joystick owns the bottom-left corner the clock lives in, the
- * same way the A button owns the basket's (panels.css lifts the basket over it). The clock lifts
- * over the stick by the stick's own height, read from the token that sizes it rather than copied:
- * the pad's gutter, then its diameter, then the same 12px gap the basket leaves over the button.
- * e2e/hud.spec.ts measures the overlap at zero instead of trusting this sum.
+ * The clock lifts over the joystick only where the joystick stands inside the world. That used to
+ * be every touch device in landscape; the cabinet's deck stands outside the screen in every
+ * landscape layout but one (ui/cabinet.ts), and that one is `overlay`, a window too small to
+ * reserve a deck at all. There the clock lifts over the stick by the stick's own height, read from
+ * the token that sizes it: the pad's gutter, then its diameter, then the same 12px gap the basket
+ * leaves over the button. e2e/hud.spec.ts measures the overlap at zero instead of trusting this sum.
  */
-@media (pointer: coarse) and (orientation: landscape) {
-  .otp-ui {
-    --otp-hud-timer-bottom: calc(var(--otp-pad-gutter) + var(--otp-pad-stick) + 12px);
-  }
+html[data-cabinet='overlay'] .otp-ui {
+  --otp-hud-timer-bottom: calc(var(--otp-pad-gutter) + var(--otp-pad-stick) + 12px);
 }
 
 /* Fills the world's box so the two pills can stand in its corners; takes no pointer events. */

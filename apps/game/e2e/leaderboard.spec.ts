@@ -54,8 +54,20 @@ const ADAPTER_TIMEOUT_MS = ((): number => {
     fileURLToPath(new URL('../src/net/leaderboard.ts', import.meta.url)),
     'utf8',
   );
-  const ms = /TIMEOUT_MS\s*=\s*(\d+)/.exec(src)?.[1];
+  // `\b` so START_TIMEOUT_MS, the shorter limit a run start is given, is not read for this one.
+  const ms = /\bTIMEOUT_MS\s*=\s*(\d+)/.exec(src)?.[1];
   if (!ms) throw new Error('TIMEOUT_MS is not in apps/game/src/net/leaderboard.ts');
+  return Number(ms);
+})();
+
+/** The shorter limit a run start is given, read out of the adapter for the same reason. */
+const START_TIMEOUT_MS = ((): number => {
+  const src = readFileSync(
+    fileURLToPath(new URL('../src/net/leaderboard.ts', import.meta.url)),
+    'utf8',
+  );
+  const ms = /\bSTART_TIMEOUT_MS\s*=\s*(\d+)/.exec(src)?.[1];
+  if (!ms) throw new Error('START_TIMEOUT_MS is not in apps/game/src/net/leaderboard.ts');
   return Number(ms);
 })();
 
@@ -176,6 +188,32 @@ test('a reply that never comes is given up on, in a real browser', async ({ page
   await expect(page.getByRole('status')).toContainText(DOWN, { timeout: 15000 });
   await expect(page.getByRole('button', { name: 'Post', exact: true })).toBeEnabled();
   await expect(page.locator('.otp-cta').first()).toBeVisible();
+});
+
+test('a start that hangs holds Begin for its own short limit, not the six seconds', async ({
+  page,
+}) => {
+  // A route left unfulfilled is a request that never answers.
+  await page.route('**/api/start', () => undefined);
+  await ready(page);
+
+  const pressed = Date.now();
+  await page.getByRole('button', { name: /Begin the walk/ }).click();
+  await page.getByRole('button', { name: /Start walking/ }).click();
+  await page.waitForFunction(() => window.__otp?.store.getState().phase === 'forest');
+  const held = Date.now() - pressed;
+
+  // The wait is the start's own limit, and a long way short of the score post's.
+  expect(held, 'the run began before the start gave up').toBeGreaterThanOrEqual(
+    START_TIMEOUT_MS - 500,
+  );
+  expect(held, 'Begin was held as long as a score post would be').toBeLessThan(ADAPTER_TIMEOUT_MS);
+
+  // And the run, dealt locally, says it cannot be posted: no token, no Post button.
+  await answerAllAndArrive(page, 'leave');
+  await toTheReveal(page);
+  await expect(page.locator('.otp-hero__score')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Post', exact: true })).toHaveCount(0);
 });
 
 /* ------------------------------------------------------------------ the board itself */
@@ -860,23 +898,23 @@ test('the retry and the restart do not look like the same control', async ({ pag
     });
 
   const retry = await look('.otp-board__retry button');
-  const restart = await look('.otp-actions button');
+  const restart = await look('.otp-replay [data-action="replay"]');
 
-  // Not one difference that a reviewer could call a shade: ground, outline and shape all move.
-  expect(retry.color, 'the two controls still take the same colour').not.toBe(restart.color);
+  // Not one difference that a reviewer could call a shade: ground and outline both move. (Both
+  // carry Off-white text now that the restart is a filled pill, so text colour is not one of them.)
   expect(retry.border, 'the two controls still carry the same outline').not.toBe(restart.border);
-  expect(
-    restart.underline,
-    'the restart is still a pill, not the footer link the deck draws',
-  ).toContain('underline');
-  expect(retry.underline).not.toContain('underline');
+  // Walk it again is a Deep Purple pill now, at the client's request for a clear replay button
+  // (2026-10-22), so the two differ by ground and outline rather than one being a footer link.
+  expect(retry.background, 'the two controls still sit on the same ground').not.toBe(
+    restart.background,
+  );
 
   // And neither of them has become the screen's second Lime.
   expect([retry.background, retry.color, retry.border]).not.toContain(LIME_RGB);
   expect([restart.background, restart.color, restart.border]).not.toContain(LIME_RGB);
 
   // Both are still real controls a thumb can hit: 44px is the floor every control here keeps.
-  for (const selector of ['.otp-board__retry button', '.otp-actions button']) {
+  for (const selector of ['.otp-board__retry button', '.otp-replay [data-action="replay"]']) {
     const box = (await page.locator(selector).boundingBox())!;
     expect(box.height, `${selector} is under the touch floor`).toBeGreaterThanOrEqual(44);
   }

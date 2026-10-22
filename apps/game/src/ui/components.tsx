@@ -50,8 +50,8 @@ export function Panel({ number, title, children, aside, heading }: PanelProps) {
  * superseded BRAND_AND_UI.md section 5 said "inline SVG". This is an <img> at the same vector
  * file instead, which keeps the original proportions and crispness the spec is asking for while
  * avoiding a real bug: the Brand Kit files carry ids (clip0_2322_2323) that go document-global
- * when inlined, so a second mark on the same screen -- the frame header plus the results footer --
- * would resolve its clip-path against the first and render wrong. An <img> also cannot be
+ * when inlined, so a second mark on the same screen -- the cabinet's marquee plus the results
+ * footer -- would resolve its clip-path against the first and render wrong. An <img> also cannot be
  * accidentally recoloured, and no SVG in the document can carry script.
  *
  * White on dark grounds, black on light, per the logo README. Never restyle it beyond height.
@@ -129,7 +129,7 @@ export function WorldFrame({
         )}
         {aside && <span class="otp-panel__aside otp-hud">{aside}</span>}
         {music && <MusicToggle on={music.on} onToggle={music.onToggle} labels={music.labels} />}
-        <CyeraMark />
+        {/* No Cyera mark here: the cabinet's marquee carries it over every screen (ui/marquee.ts). */}
       </header>
       {children}
     </div>

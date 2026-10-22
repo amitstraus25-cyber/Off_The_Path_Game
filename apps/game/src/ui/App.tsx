@@ -5,13 +5,13 @@ import type { Store } from '../store';
 import { hudBasket, remainingMs } from '../world/run';
 import { Dialogue } from './Dialogue';
 import { SkillCard } from './SkillCard';
-import { HowTo, Title, padIsHidden } from './Title';
+import { HowTo, Title, hasKeyboard } from './Title';
 import { Cottage } from './Cottage';
 import { Results } from './Results';
 import { ProblemScreen } from './ProblemScreen';
 import { Hud } from './Hud';
 import { WorldFrame } from './components';
-import { PENDING, strings } from './copy';
+import { strings } from './copy';
 
 export interface AppProps {
   store: Store;
@@ -215,7 +215,7 @@ export function App({
       {inWorld && (
         <div class="otp-world-anchor" key="world-hud">
           <h1 class="otp-visually-hidden" ref={forestHome} tabIndex={-1} data-autofocus>
-            {PENDING.exploreTitle}
+            {content.ui.world.title}
           </h1>
           <Hud
             remainingMs={remainingMs(state, store.elapsed())}
@@ -229,7 +229,7 @@ export function App({
         <WorldFrame
           key="world-frame"
           number="01"
-          title={PENDING.exploreTitle}
+          title={content.ui.world.title}
           labelHidden
           music={{
             ...music,
@@ -265,6 +265,7 @@ export function App({
         return character && skill ? (
           <Dialogue
             key={`offer-${character.id}`}
+            words={content.ui.offer}
             character={character}
             skill={skill}
             onInspect={() => void store.dispatch({ type: 'INSPECT', s: skill.id })}
@@ -276,6 +277,8 @@ export function App({
         return character && skill ? (
           <SkillCard
             key={`card-${skill.id}`}
+            words={content.ui.card}
+            answers={content.ui.offer}
             skill={skill}
             // The variant THIS run dealt. Before the card opens the two are word for word the same.
             card={v2.variantOf(state.good, skill).card}
@@ -302,7 +305,7 @@ export function App({
             run={run}
             onReplay={onReplay}
             onReadResearch={onReadResearch}
-            cannotPost={ending === 'late' ? PENDING.postLate : cannotPost}
+            cannotPost={ending === 'late' ? (strings['postLate'] ?? '') : cannotPost}
             onPost={onPost}
           />
         );
@@ -339,7 +342,7 @@ export function App({
     return (
       <section class="otp-visually-hidden" aria-label={strings['worldSummaryLabel'] ?? ''}>
         <p>
-          {padIsHidden() ? (strings['controlsHint'] ?? '') : (strings['controlsHintTouch'] ?? '')}
+          {hasKeyboard() ? (strings['controlsHint'] ?? '') : (strings['controlsHintTouch'] ?? '')}
         </p>
         <ul>
           {content.characters.map((c) => (

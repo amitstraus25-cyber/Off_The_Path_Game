@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { h, render } from 'preact';
-import { availableFor, stageFit, v2 } from '@otp/core';
+import { v2 } from '@otp/core';
 import rawContent from '../../../content/game.v2.json';
 import { createBus } from './bus';
 import type { Bus } from './bus';
@@ -13,9 +13,11 @@ import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
 import { watchStage } from './ui/stage';
+import { cabinetFor } from './ui/cabinet';
 import { App } from './ui/App';
 import { ProblemScreen } from './ui/ProblemScreen';
-import { PENDING, strings } from './ui/copy';
+import { marqueeText, strings } from './ui/copy';
+import { mountMarquee } from './ui/marquee';
 import { startRun, submit } from './net/leaderboard';
 import type { RunStart } from './net/leaderboard';
 import { emit } from './embed/postMessage';
@@ -50,6 +52,12 @@ const cssColor = (name: string): string =>
  * retry that restarts the scene and keeps the page (`loadFailed` below). This is the one with
  * nowhere to retry to, so its button reloads the page.
  */
+/*
+ * The cabinet's marquee goes up first, before anything that can fail: it is furniture, and the
+ * problem screen below stands inside the cabinet like every other screen.
+ */
+mountMarquee(document.body, marqueeText);
+
 let fatalShown = false;
 /** Set by `start()` once there is a music player to stop. A crash must not leave a bed playing. */
 let silence: () => void = () => {};
@@ -135,12 +143,11 @@ function mountWorld(
    * This was a literal `{ width: 480, height: 270 }` that fitStage overwrote on the first frame --
    * a camera size written down rather than derived, which is the exact mistake packages/core's
    * camera.ts exists to stop, and which cost this project two rounds of art composed against a
-   * rectangle that does not exist. Derived here from the same two pure functions ui/stage.ts
-   * calls, so the canvas is created at the size it is going to keep.
+   * rectangle that does not exist. Derived here from the same pure function ui/stage.ts calls --
+   * the cabinet's, which reserves the marquee and the deck first -- so the canvas is created at the
+   * size it is going to keep.
    */
-  const firstView = stageFit(
-    availableFor({ width: innerWidth, height: innerHeight }).available,
-  ).view;
+  const firstView = cabinetFor({ width: innerWidth, height: innerHeight }).view;
 
   const boot = new BootScene(manifest, bus);
 
@@ -261,15 +268,26 @@ async function start(): Promise<void> {
     },
     isActive: walkable,
   });
-  const touch = createTouchControls(input, {
-    walkGroup: strings['touchWalkLabel'] ?? '',
-    up: strings['touchWalkUp'] ?? '',
-    down: strings['touchWalkDown'] ?? '',
-    left: strings['touchWalkLeft'] ?? '',
-    right: strings['touchWalkRight'] ?? '',
-    stop: strings['touchWalkStop'] ?? '',
-    interact: strings['touchInteract'] ?? '',
-  });
+  const touch = createTouchControls(
+    input,
+    {
+      walkGroup: strings['touchWalkLabel'] ?? '',
+      up: strings['touchWalkUp'] ?? '',
+      down: strings['touchWalkDown'] ?? '',
+      left: strings['touchWalkLeft'] ?? '',
+      right: strings['touchWalkRight'] ?? '',
+      stop: strings['touchWalkStop'] ?? '',
+      interact: strings['touchInteract'] ?? '',
+    },
+    {
+      // A in an open offer opens its card: "A to talk or open a card" (the client).
+      onOpenCard: () => {
+        const { active } = store.getState();
+        const character = active ? v2.findCharacter(content, active) : undefined;
+        if (character) store.dispatch({ type: 'INSPECT', s: character.skillId });
+      },
+    },
+  );
   uiRoot.append(touch.root);
   const panels = document.createElement('div');
   uiRoot.prepend(panels);
@@ -284,7 +302,8 @@ async function start(): Promise<void> {
   /** Everything outside the store that has to agree with what is on screen. */
   const syncWorldChrome = (): void => {
     stage.dataset['phase'] = store.getState().phase;
-    touch.setVisible(walkable());
+    const { phase } = store.getState();
+    touch.setMode(walkable() ? 'play' : loadFailure === null && phase === 'talk' ? 'talk' : 'idle');
     // Reading a card should be the quiet moment, so the bed drops while a panel is up.
     music.duck(!walkable());
   };
@@ -353,7 +372,7 @@ async function start(): Promise<void> {
           void startTheRun(true);
         },
         onReadResearch: () => emit('otp:cta', {}),
-        cannotPost: token === null ? PENDING.postUnavailable : null,
+        cannotPost: token === null ? (strings['postUnavailable'] ?? '') : null,
         // Results renders no Post button without a token (`cannotPost`), so `token ?? ''` is
         // never sent; the server would refuse an empty one with a 400 if it ever were.
         onPost: (handle: string) =>

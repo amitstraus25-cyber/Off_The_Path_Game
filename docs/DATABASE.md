@@ -237,7 +237,9 @@ Run them in order. `0001` first, always — it is also the drift check.
 
 > **Updated 2026-10-22, Phase E.** The in-memory dedupe key is now the **run token's id**, not a
 > hash of the log: one token is one row (`409` on reuse), which also stops one token carrying many
-> different legal logs for its seed. It is still per instance. If durable single use is ever
+> different legal logs for its seed. The id is **reserved before the insert** (`RecentRuns.claim`)
+> and released if the insert fails or the write budget sheds it, so two concurrent posts of one
+> token cannot both write a row. It is still per instance. If durable single use is ever
 > wanted, the column `0002` proposes should hold a hash of the token id rather than of the log —
 > the token id is random and says even less than gameplay does — and the same D10 argument below
 > applies unchanged. **No migration was written for it this round and none is needed to ship.**

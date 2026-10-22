@@ -87,6 +87,85 @@ const character = z.strictObject({
 const ending = z.strictObject({ title: text, lines: z.array(text).min(1) });
 
 /**
+ * A line with named holes the screen fills in, such as `Offered by the {name}`. The schema holds
+ * every hole the screen fills to being in the line, because a template that lost its `{name}`
+ * renders as a sentence about nobody and nothing on screen says so.
+ */
+const template = (...holes: readonly string[]) =>
+  text.refine((line) => holes.every((hole) => line.includes(`{${hole}}`)), {
+    message: `must carry ${holes.map((hole) => `{${hole}}`).join(' and ')}`,
+  });
+
+/**
+ * THE CHROME'S KEYS, ALL OF THEM. This was `z.record(z.string(), text)` -- free-keyed, the shape
+ * v1's `strings` had -- so a key the UI read and the file lacked rendered as nothing and only
+ * apps/game/test/strings.test.ts, scanning the source, could notice. Strict now, like every other
+ * part of `ui`: a missing key fails `loadContent` at startup and a stray one fails it too.
+ * Adding a key is one line here and one in content/game.v2.json.
+ */
+export const CHROME_KEYS = [
+  'leaderboardDown',
+  'leaderboardRefused',
+  'leaderboardAlready',
+  'leaderboardClosed',
+  'handleAssigned',
+  'howToPlayWalkTouch',
+  'controlsHint',
+  'controlsHintTouch',
+  'touchWalkLabel',
+  'touchWalkUp',
+  'touchWalkDown',
+  'touchWalkLeft',
+  'touchWalkRight',
+  'touchWalkStop',
+  'touchInteract',
+  'musicLabel',
+  'musicOn',
+  'musicOff',
+  'loadFailedTitle',
+  'loadFailedBody',
+  'loadFailedRetry',
+  'crashTitle',
+  'crashBody',
+  'crashReload',
+  'arriveTitle',
+  'arriveAsk',
+  'arriveNext',
+  'researchFooter',
+  'postHeading',
+  'postUnavailable',
+  'postLate',
+  'handleLabel',
+  'handleReroll',
+  'handleHint',
+  'privacyLine',
+  'leaderboardTitle',
+  'leaderboardTitleHighlight',
+  'boardLoading',
+  'boardReady',
+  'boardEmpty',
+  'boardEmptyAfterPost',
+  'boardDown',
+  'boardRetry',
+  'boardYouLabel',
+  'boardRow',
+  'boardRowYou',
+  'post',
+  'replay',
+  'worldSummaryLabel',
+  'worldTravellerMet',
+  'worldTravellerUnmet',
+  'worldTravellerNear',
+  'worldBearings',
+  'worldDistances',
+] as const;
+export type ChromeKey = (typeof CHROME_KEYS)[number];
+
+const chrome = z.strictObject(
+  Object.fromEntries(CHROME_KEYS.map((key) => [key, text])) as Record<ChromeKey, typeof text>,
+);
+
+/**
  * EVERY OTHER WORD THE v2 SCREENS SAY, strictly keyed so a screen cannot ask for a string that is
  * not here and a typo in the file cannot pass as a new key. `hud` is exactly `HudLabels` in
  * apps/game/src/ui/Hud.tsx, so it is passed through as the HUD's `labels`. A `titleHighlight` is
@@ -94,9 +173,33 @@ const ending = z.strictObject({ title: text, lines: z.array(text).min(1) });
  * the title actually has.
  */
 const ui = z.strictObject({
-  landing: z.strictObject({ title: text, titleHighlight: text, subtitle: text, start: text }),
-  /** The user's ask: three or four short lines, read before the clock starts. */
-  howTo: z.strictObject({ title: text, steps: z.array(text).min(3).max(4) }),
+  /** The landing: its frame's title, the wordmark and its one Season Mix word, and the way in. */
+  landing: z.strictObject({
+    frameTitle: text,
+    title: text,
+    titleHighlight: text,
+    subtitle: text,
+    start: text,
+  }),
+  /** The user's ask: three or four short lines, read before the clock starts; `go` starts it. */
+  howTo: z.strictObject({ title: text, steps: z.array(text).min(3).max(4), go: text }),
+  /** The arcade cabinet's marquee: the words beside the Cyera logo across the top of every screen. */
+  cabinet: z.strictObject({ marquee: text }),
+  /** 01 Explore: the forest's frame title, which is also its hidden h1. */
+  world: z.strictObject({ title: text }),
+  /** 02 Offer: the frame title, the way to the card, the two answers and the way out. */
+  offer: z.strictObject({ title: text, openCard: text, take: text, leave: text, walkOn: text }),
+  /**
+   * 03 Card: the frame title, the provenance eyebrow (UI_FOUNDATIONS section 8, `OFFERED BY THE
+   * RABBIT`), the two row eyebrows and the way back to the conversation.
+   */
+  card: z.strictObject({
+    title: text,
+    offeredBy: template('name'),
+    ifTake: text,
+    ifLeave: text,
+    back: text,
+  }),
   hud: z.strictObject({
     time: text,
     basket: text,
@@ -120,6 +223,13 @@ const ui = z.strictObject({
     giveaway: text,
     realWorld: text,
     score: text,
+    /** The score's denominator, filled from `scoring.outOf` so the two cannot disagree. */
+    outOf: template('outOf'),
+    /** The replay hook: how many of the run's bad skills were left, out of how many were dealt. */
+    caught: template('caught', 'bad'),
+    /** The reveal's frame title, and a row's eyebrow when the player never answered. */
+    frameTitle: text,
+    unanswered: text,
     /** The question the player should leave with, and the research link's label. */
     question: text,
     cta: text,
@@ -127,10 +237,10 @@ const ui = z.strictObject({
   }),
   /**
    * The words of the chrome the rules do not touch: the touch pad, the music switch, the problem
-   * screens, the post form, the board, the forest's summary for a screen reader. Free-keyed because
-   * there are dozens; `apps/game/test/strings.test.ts` fails on a key the UI reads and this lacks.
+   * screens, the post form, the board, the forest's summary for a screen reader. Every key is
+   * named in `CHROME_KEYS` above.
    */
-  chrome: z.record(z.string(), text),
+  chrome,
 });
 
 export const contentSchema = z.strictObject({

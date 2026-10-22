@@ -25,8 +25,8 @@
  * here: Phase E added `start`, and a route file this script did not know about would be a function
  * that does not exist on the deployment -- a 404 on a route every test had passed. They export
  * `default { fetch }`; Vercel's Node launcher calls a classic `(req, res)` handler (its own example
- * reads `req.query`), so the small adapter below turns the Node request into a web `Request` and
- * the `Response` back.
+ * reads `req.query`), so apps/api/src/node-adapter.ts turns the Node request into a web `Request` and
+ * the `Response` back, reading at most 32 KB of body on the way.
  *
  * THE HEADERS COME FROM vercel.json, which stays the one source of truth that test/csp.test.ts
  * and every reviewer already read. Nothing here restates the CSP: it is copied, and the build
@@ -94,29 +94,15 @@ writeFileSync(
   )}\n`,
 );
 
-const adapter = (name) => `
+/*
+ * The `(req, res)` adapter is apps/api/src/node-adapter.ts, bundled in below: typed, tested and
+ * covered like the rest of the service, and it caps the request body at the handler's 32 KB while
+ * it is read rather than after the whole thing has been buffered.
+ */
+const entry = (name) => `
 const route = require(${JSON.stringify(at(`apps/api/api/${name}.ts`))}).default;
-const handle = typeof route === 'function' ? route : route.fetch;
-
-module.exports = async function handler(req, res) {
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : String(value));
-  }
-  const proto = req.headers['x-forwarded-proto'] || 'https';
-  const method = req.method || 'GET';
-  const request = new Request(proto + '://' + req.headers.host + req.url, {
-    method,
-    headers,
-    body: method === 'GET' || method === 'HEAD' || chunks.length === 0 ? undefined : Buffer.concat(chunks),
-  });
-  const response = await handle(request);
-  res.statusCode = response.status;
-  response.headers.forEach((value, key) => res.setHeader(key, value));
-  res.end(Buffer.from(await response.arrayBuffer()));
-};
+const { nodeHandler } = require(${JSON.stringify(at('apps/api/src/node-adapter.ts'))});
+module.exports = nodeHandler(typeof route === 'function' ? route : route.fetch);
 `;
 
 for (const name of ROUTES) {
@@ -124,7 +110,7 @@ for (const name of ROUTES) {
   mkdirSync(dir, { recursive: true });
   await esbuild.build({
     stdin: {
-      contents: adapter(name),
+      contents: entry(name),
       resolveDir: ROOT,
       loader: 'js',
       sourcefile: `${name}-entry.js`,

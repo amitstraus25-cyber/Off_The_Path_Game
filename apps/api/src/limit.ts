@@ -7,7 +7,7 @@
  * under twenty-five minted handles and fill the whole served page in twenty-five requests.
  *
  * What these do: per instance, they cap how many rows (and run starts) a minute can be written and
- * refuse a run token that this instance has already turned into a row. What they do NOT do: span instances. Vercel runs several
+ * refuse a run token that this instance has already turned into a row, or is in the middle of turning into one. What they do NOT do: span instances. Vercel runs several
  * and each gets its own module scope, so a caller who spreads a flood across cold starts is bounded
  * by the edge and not by this. That is not a reason to leave the near case open; it IS a reason the
  * README still asks for Vercel's rate limiting on /api/*. Durable single use would need a column the
@@ -56,28 +56,35 @@ export function createWriteBudget(
 }
 
 export interface RecentRuns {
-  /** True when this instance has already WRITTEN that run. */
-  has(id: string): boolean;
   /**
-   * Records a run that reached the table. Asking and recording are separate on purpose: a run
-   * remembered before the insert would be refused as a duplicate on the retry after a transient
-   * failure, which is a player losing a score to a blip in the database.
+   * Reserves a run's id, atomically: true for the first caller, false for anyone who asks while it
+   * is held. The check and the reservation are ONE synchronous step on purpose. Asking first and
+   * recording after the insert left the whole `await` between them, and two requests carrying the
+   * same token could both pass the question before either was recorded -- two rows from one token.
    */
-  remember(id: string): void;
+  claim(id: string): boolean;
+  /**
+   * Gives a reservation back, for a run that did NOT become a row (the insert failed, or the write
+   * budget shed it). That is what keeps a player who hit a blip in the database from being told
+   * "already on the board" on the retry. A reservation that is not released is a row.
+   */
+  release(id: string): void;
 }
 
 /** The last `max` runs this instance wrote, oldest dropped first. A Set iterates in insertion order. */
 export function createRecentRuns(max = 500): RecentRuns {
   const keys = new Set<string>();
   return {
-    has: (id) => keys.has(id),
-    remember(id) {
+    claim(id) {
+      if (keys.has(id)) return false;
       keys.add(id);
       if (keys.size > max) {
         // Past the cap the set holds at least `max + 1`, so there is always a first one to drop.
         const [oldest] = keys;
         keys.delete(oldest!);
       }
+      return true;
     },
+    release: (id) => void keys.delete(id),
   };
 }

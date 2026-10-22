@@ -11,7 +11,7 @@ import { newHandle } from '../net/leaderboard';
 import { readBoard as readTheBoard } from '../net/leaderboard';
 import type { BoardRead, PostOutcome } from '../net/leaderboard';
 import { CyeraMark, Highlighted, Panel } from './components';
-import { PENDING, strings } from './copy';
+import { fill, strings } from './copy';
 
 const CheckGlyph = () => (
   <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -479,14 +479,21 @@ export function Results({
     void readBoard();
   };
 
+  /*
+   * The bad skills this run dealt, and how many of them stayed out of the basket. Unanswered counts
+   * as left, the same rule core scores by, so "caught" can never disagree with the score.
+   */
+  const dealtBad = run.entries.filter((row) => !row.good).length;
+  const caught = run.entries.filter((row) => !row.good && row.verdict !== 'take').length;
+
   /** What the player said to it, in the reveal's words. Unanswered counts as left (core). */
   const chose = (verdict: v2.Verdict | null): string =>
-    verdict === 'take' ? r.took : verdict === 'leave' ? r.left : PENDING.unanswered;
+    verdict === 'take' ? r.took : verdict === 'leave' ? r.left : r.unanswered;
 
   return (
     <div class="otp-screen">
       <div class="otp-screen__inner">
-        <Panel number="05" title={PENDING.revealTitle}>
+        <Panel number="05" title={r.frameTitle}>
           <div class="otp-screen__body" ref={body} tabIndex={-1} data-autofocus>
             {/* The reveal is the subject of this page, so its title is the page's one h1. */}
             <h1 class="otp-reveal__title">
@@ -517,10 +524,30 @@ export function Results({
                         <dd data-reveal-line="">{row.line}</dd>
                       </dl>
                       {row.giveaway !== null && (
-                        <p class="otp-recap__hidden" data-giveaway="">
+                        /*
+                         * The bad card as the player was shown it, with the one line that gave it
+                         * away marked: the lesson is that the line was ON the card, among lines
+                         * that read just like it. `<mark>` is the element for "this is the part
+                         * that matters here", and it carries a shape (the "!") and a word (the
+                         * title above) as well as the Haze ground -- never a colour alone.
+                         */
+                        <div class="otp-recap__hidden" data-giveaway="">
                           <span class="otp-recap__hidden-title">{r.giveaway}</span>
-                          {row.giveaway}
-                        </p>
+                          <ul class="otp-reveal__card">
+                            {skill.bad.card.take.map((line) =>
+                              line === row.giveaway ? (
+                                <li key={line} class="otp-reveal__line" data-giveaway-line="">
+                                  {/* The "!" is drawn by CSS, so the line's text is the line. */}
+                                  <mark class="otp-reveal__mark">{line}</mark>
+                                </li>
+                              ) : (
+                                <li key={line} class="otp-reveal__line">
+                                  {line}
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
                       )}
                       <p class="otp-reveal__real" data-real-world="">
                         <span class="otp-reveal__term">
@@ -539,9 +566,25 @@ export function Results({
                 <h2 class="otp-section-label">{r.score}</h2>
                 {/* The explicit space keeps "100 out of 100" from reading as "100out of 100". */}
                 <p class="otp-hero__score">
-                  {run.total} <small>{PENDING.outOf}</small>
+                  {run.total} <small>{fill(r.outOf, { outOf: run.outOf })}</small>
                 </p>
               </div>
+            </div>
+            {/*
+              THE REPLAY HOOK. How many of the wolf's skills the player caught -- left, or walked
+              past, which core counts as left -- out of how many this run dealt, and the way back
+              into the forest beside it, while the number is the last thing read. The next deal is
+              a new one (main.ts asks the server for a fresh seed), so "again" is a different
+              forest's worth of cards, not the same answers typed twice.
+
+              Walk it again is the SECONDARY style, a Deep Purple pill: this screen's one Lime is
+              the research call to action below, and it stays that.
+            */}
+            <div class="otp-replay" data-caught={caught} data-bad={dealtBad}>
+              <p class="otp-replay__caught">{fill(r.caught, { caught, bad: dealtBad })}</p>
+              <button type="button" class="otp-button" data-action="replay" onClick={onReplay}>
+                {r.again}
+              </button>
             </div>
             {ending && (
               <div class="otp-reveal__ending" data-ending={run.ending}>
@@ -683,13 +726,6 @@ export function Results({
                 </div>
               )}
             </section>
-
-            {/* Different in kind from the board's retry: an underlined text action, not a pill. */}
-            <div class="otp-actions">
-              <button type="button" class="otp-link-action" data-action="replay" onClick={onReplay}>
-                {r.again}
-              </button>
-            </div>
 
             <p class="otp-foot">
               {s('researchFooter')}

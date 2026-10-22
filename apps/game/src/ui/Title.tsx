@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { v2 } from '@otp/core';
-import { CyeraMark, Highlighted, WorldFrame } from './components';
-import { PENDING, strings } from './copy';
+import { Highlighted, WorldFrame } from './components';
+import { strings } from './copy';
 
 export interface TitleProps {
   ui: v2.Content['ui'];
@@ -17,22 +17,25 @@ export interface HowToProps {
 }
 
 /**
- * The media query that decides whether the on-screen pad exists, copied from the rule in
- * tokens.css that hides `.otp-touch`. The hint and the pad have to answer the same question --
- * "will this player be given a joystick?" -- and before this they answered two different ones
- * (UX_REVIEW finding 11).
+ * Whether this machine has a keyboard to walk with: a fine pointer that hovers is a desktop.
+ *
+ * THIS USED TO BE `PAD_HIDDEN_QUERY`, the rule in tokens.css that stopped drawing the joystick and
+ * the A button on a desktop, and the hint and the pad had to answer the same question (UX_REVIEW
+ * finding 11). The arcade cabinet (the client's decision, 2026-10-22) draws the deck on EVERY
+ * machine and the stick and A work with a mouse, so that rule is gone -- but the question the
+ * hint asks never was "is there a pad?". It is "what does this player walk with?", and a desktop
+ * player has a keyboard as well as a deck, and the keyboard is still the better input there. So the
+ * query stays, named for what it now decides; apps/game/test/title.test.ts holds that no stylesheet
+ * hides the pad behind it again.
  *
  * `(pointer: coarse)` is not the complement of this. A device with a fine primary pointer and no
- * hover -- a pen-first tablet, a TV remote, a kiosk stylus -- is coarse-negative, so it used to
- * read the keyboard line, while this query is also false for it so the CSS *does* draw the pad.
- * That player was shown arrow keys they may not have and told nothing about the stick under their
- * thumb. apps/game/test/title.test.ts holds this constant against the stylesheet, so if the pad's
- * rule moves the hint fails the build rather than drifting quietly.
+ * hover -- a pen-first tablet, a TV remote, a kiosk stylus -- is coarse-negative and has no
+ * keyboard to speak of, so it is given the deck's line.
  */
-export const PAD_HIDDEN_QUERY = '(pointer: fine) and (hover: hover)';
+export const KEYBOARD_QUERY = '(pointer: fine) and (hover: hover)';
 
 /**
- * Whether this player is being given the on-screen pad, asked of the browser.
+ * Whether this player walks with a keyboard, asked of the browser.
  *
  * Shared because two screens have to answer it the same way: the title's hint, and the world
  * summary a screen reader reads instead of the canvas (`App.tsx`). The summary used to print
@@ -42,90 +45,34 @@ export const PAD_HIDDEN_QUERY = '(pointer: fine) and (hover: hover)';
  * not, which is finding 11's defect inside finding 16's fix.
  *
  * With no `matchMedia` there is no player to be wrong about -- a server or a test renderer -- so
- * it answers "hidden", which is also what every capture shows.
+ * it answers "keyboard", which is also what every capture shows.
  */
-export const padIsHidden = (): boolean =>
-  typeof matchMedia !== 'function' || matchMedia(PAD_HIDDEN_QUERY).matches;
+export const hasKeyboard = (): boolean =>
+  typeof matchMedia !== 'function' || matchMedia(KEYBOARD_QUERY).matches;
+
+/*
+ * No wordmark logic here any more. The card drew its own Cyera mark wherever the frame header had
+ * dropped one (below 560px), so the screen always carried exactly one. The cabinet's marquee now
+ * carries the logo across the top of every screen at every width, so neither the header nor the
+ * card draws one, and "exactly one" holds by construction rather than by a media query and a hook
+ * kept in step with it.
+ */
 
 /**
- * The media query that drops the Cyera wordmark out of the world frame's header, copied from the
- * rule in panels.css that sets `.otp-world-frame__header .otp-mark { display: none }`.
+ * The line under the CTA, for a player with a keyboard or without one.
  *
- * The header cannot grow and cannot wrap -- ui/stage.ts reserves exactly --otp-world-header pixels
- * above the canvas -- so below 560px it gives up the mark, and the hero screen of a marketing asset
- * was left carrying no brand at all: at 375 the header reads "00" and nothing else
- * (docs/DESIGN_BOARD.md section 3, "the screens").
+ * Narrow and fine-pointer is a desktop window, not a phone: the keyboard is there at every width,
+ * so the keyboard line is the true one at 375 just as it is at 1280. A mouse at 375 is a
+ * reviewer's window, not a device anyone plays on.
+ *
+ * Without a keyboard the keyboard line is not merely incomplete, it is wrong about the machine, so
+ * the deck's line replaces it rather than joining it. If content has no touch line the screen stays
+ * quiet: a missing string is better than a keyboard hint on a phone.
+ *
+ * Pure and exported so the branch is testable without a DOM; the component supplies `keyboard`.
  */
-export const FRAME_MARK_HIDDEN_QUERY = '(max-width: 560px)';
-
-/**
- * Whether the frame header has dropped the wordmark, so the title card has to carry it.
- *
- * It is asked rather than always drawn because the answer must be exactly one mark. The board's
- * page shows one; `WorldFrame` draws one in the header above 560px, and a second in the card
- * underneath it would be two wordmarks on one screen, which the logo README does not allow.
- *
- * With no `matchMedia` -- a server or a test renderer -- it answers "not hidden", which is the
- * conservative end: the screen may then be judged for a missing mark, but it can never ship two.
- * The opposite default to `padIsHidden` above, for that reason and not by accident.
- */
-export const frameMarkIsHidden = (): boolean =>
-  typeof matchMedia === 'function' && matchMedia(FRAME_MARK_HIDDEN_QUERY).matches;
-
-/**
- * The same question, asked continuously instead of once.
- *
- * `padIsHidden` above is matched per render and the comment there defends that, correctly: pointer
- * and hover describe the machine, and a machine does not change mid-screen. WIDTH IS NOT LIKE
- * THAT. It changes whenever a desktop window is dragged narrower and whenever a tablet is turned,
- * and `Title` has no prop that changes when it happens -- so the answer taken at mount was the
- * answer the screen kept. Measured on the running build, at 560px, before this hook existed:
- *
- *   load at 1280, narrow to 375   ->  0 marks   (header drops its copy, the card never adds one)
- *   load at 375,  widen to 1280   ->  2 marks   (header adds its copy, the card still has one)
- *
- * Zero is the hero screen of a marketing asset carrying no brand at all, which is the defect
- * docs/DESIGN_BOARD.md section 3 raised against 375 in the first place. Two is the one outcome
- * reference/brand/logos/README.md does not allow, reached by the ordinary act of maximising a
- * window. The invariant the card's mark exists to keep -- exactly one mark on the screen -- held
- * only for a player who never resized.
- *
- * Lazily seeded from `frameMarkIsHidden` so the first paint is already right and nothing flashes,
- * and so a renderer with no `matchMedia` keeps that function's conservative answer: not hidden,
- * no second mark, never two.
- */
-export function useFrameMarkHidden(): boolean {
-  const [hidden, setHidden] = useState(frameMarkIsHidden);
-
-  useEffect(() => {
-    if (typeof matchMedia !== 'function') return;
-    const query = matchMedia(FRAME_MARK_HIDDEN_QUERY);
-    const sync = (): void => setHidden(query.matches);
-    // Once on mount as well: the viewport can cross 560px between the lazy seed and this effect.
-    sync();
-    query.addEventListener('change', sync);
-    return () => query.removeEventListener('change', sync);
-  }, []);
-
-  return hidden;
-}
-
-/**
- * The line under the CTA, for a player the pad is or is not drawn for.
- *
- * Narrow and fine-pointer is a desktop window, not a phone: the pad is hidden at every width by
- * the query above, the keyboard is the only way to walk, and so the keyboard line is the true one
- * at 375 just as it is at 1280. The screenshots are what mislead there, not the screen -- a mouse
- * at 375 is a reviewer's window, not a device anyone plays on.
- *
- * Where the pad *is* drawn the keyboard line is not merely incomplete, it is wrong about the
- * machine, so the touch line replaces it rather than joining it. If content has no touch line the
- * screen stays quiet: a missing string is better than a keyboard hint on a phone.
- *
- * Pure and exported so the branch is testable without a DOM; the component supplies `padHidden`.
- */
-export function titleHint(strings: Readonly<Record<string, string>>, padHidden: boolean): string {
-  if (!padHidden) return strings['howToPlayWalkTouch'] ?? '';
+export function titleHint(strings: Readonly<Record<string, string>>, keyboard: boolean): string {
+  if (!keyboard) return strings['howToPlayWalkTouch'] ?? '';
   return strings['controlsHint'] ?? '';
 }
 
@@ -196,13 +143,12 @@ export function chooseFit(
  *     skipped, and the observer's next callback settles it against a real box;
  *   - the dock's own size, for a canvas that changes without the window doing so;
  *   - the fonts settling, because Haffer arrives after the first paint on a cold load and the
- *     hint wraps differently once it has;
- *   - `markHidden`, because the card's own wordmark appears at 560px and is a block of content.
+ *     hint wraps differently once it has.
  *
  * Each ask starts from rung 0 rather than from the rung last chosen, so a window that is dragged
  * taller gets its prose back: the ladder only ever descends for as long as the room is missing.
  */
-function useTitleFit(panel: { current: HTMLDivElement | null }, markHidden: boolean): void {
+function useTitleFit(panel: { current: HTMLDivElement | null }): void {
   useLayoutEffect(() => {
     const card = panel.current;
     const scroller = card?.querySelector<HTMLElement>('.otp-title__scroll');
@@ -238,7 +184,7 @@ function useTitleFit(panel: { current: HTMLDivElement | null }, markHidden: bool
       observer?.disconnect();
       fonts?.removeEventListener?.('loadingdone', settle);
     };
-  }, [markHidden]);
+  }, []);
 }
 
 /**
@@ -252,12 +198,15 @@ function useTitleFit(panel: { current: HTMLDivElement | null }, markHidden: bool
  */
 function TitleCard({
   children,
+  frameTitle,
   action,
   onAction,
   busy = false,
   focus = false,
 }: {
   children: ComponentChildren;
+  /** The frame's title (`ui.landing.frameTitle`): the landing and the how-to share the frame. */
+  frameTitle: string;
   action: string;
   onAction(): void;
   busy?: boolean;
@@ -268,18 +217,13 @@ function TitleCard({
   useEffect(() => {
     if (focus) cta.current?.focus({ preventScroll: true });
   }, []);
-  const hint = titleHint(strings, padIsHidden());
-  /*
-   * Subscribed, not sampled -- see useFrameMarkHidden. This is the one question on the screen
-   * whose answer a player can change without touching the game.
-   */
-  const markHidden = useFrameMarkHidden();
+  const hint = titleHint(strings, hasKeyboard());
   const panel = useRef<HTMLDivElement>(null);
-  useTitleFit(panel, markHidden);
+  useTitleFit(panel);
 
   return (
     <>
-      <WorldFrame number="00" title="Title" />
+      <WorldFrame number="00" title={frameTitle} />
       <div class="otp-title-dock">
         <div class="otp-title-panel" ref={panel}>
           {/*
@@ -287,11 +231,7 @@ function TitleCard({
             stays outside it, pinned by the flex column, so the one call to action is on screen at
             scrollTop 0 at every reference viewport by construction (e2e/css-contract.spec.ts).
           */}
-          <div class="otp-title__scroll">
-            {/* Drawn only where the frame header has dropped its own copy: exactly one mark. */}
-            {markHidden && <CyeraMark on="light" />}
-            {children}
-          </div>
+          <div class="otp-title__scroll">{children}</div>
           <div class="otp-title__foot">
             {/*
               `aria-disabled` rather than `disabled` while the start is out, so the button keeps
@@ -331,7 +271,7 @@ function TitleCard({
 export function Title({ ui, onPlay }: TitleProps) {
   const l = ui.landing;
   return (
-    <TitleCard action={l.start} onAction={onPlay}>
+    <TitleCard frameTitle={l.frameTitle} action={l.start} onAction={onPlay}>
       <h1 class="otp-title__mark">
         <Highlighted text={l.title} word={l.titleHighlight} />
       </h1>
@@ -347,7 +287,13 @@ export function Title({ ui, onPlay }: TitleProps) {
  */
 export function HowTo({ ui, onGo, busy }: HowToProps) {
   return (
-    <TitleCard action={PENDING.howToGo} onAction={onGo} busy={busy} focus>
+    <TitleCard
+      frameTitle={ui.landing.frameTitle}
+      action={ui.howTo.go}
+      onAction={onGo}
+      busy={busy}
+      focus
+    >
       <h1 class="otp-title__mark otp-howto__title">{ui.howTo.title}</h1>
       <ol class="otp-howto" data-howto="">
         {ui.howTo.steps.map((step) => (

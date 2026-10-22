@@ -584,10 +584,10 @@ test.describe('the brand', () => {
  *
  * 375, 768 and 1280 are the three the Definition of Done names; the rest are where the HUD has
  * actually been wrong before -- the narrowest phone the stage supports, and the two landscape
- * phones where the stick and the A button stand INSIDE the world and the pills have to lift over
- * them. `touch` decides whether the pad is drawn at all (`(pointer: fine) and (hover: hover)`
- * hides the stick and the button), so each case first asserts the pad is on screen exactly when
- * it should be: an overlap test run against a pad that is `display: none` proves nothing.
+ * phones where the stick and the A button used to stand INSIDE the world and the pills had to lift
+ * over them. The arcade cabinet draws the deck on every device and puts it outside the screen in
+ * landscape (ui/cabinet.ts), so each case first asserts the pad is on screen: an overlap test run
+ * against a pad that is `display: none` proves nothing.
  */
 const SIZES: (Viewport & { name: string })[] = [
   { name: '375x812 phone', width: 375, height: 812, touch: true },
@@ -638,12 +638,12 @@ test.describe('the layout', () => {
 
         // The setup is what it says it is.
         expect(m.coarse, 'the context is not the device this case names').toBe(size.touch);
-        if (size.touch)
-          expect(m.pad.map((p) => p.name).sort(), 'no pad drawn on a touch device').toEqual([
-            'otp-a-button',
-            'otp-stick',
-          ]);
-        else expect(m.pad, 'a pad is drawn for a mouse').toEqual([]);
+        // The cabinet's deck is drawn for a mouse as well as a thumb (the client, 2026-10-22), so
+        // every case measures the pills against a pad that is really on screen.
+        expect(m.pad.map((p) => p.name).sort(), `no pad drawn at ${size.name}`).toEqual([
+          'otp-a-button',
+          'otp-stick',
+        ]);
 
         type B = { l: number; t: number; r: number; b: number };
         const area = (a: B, c: B): number =>

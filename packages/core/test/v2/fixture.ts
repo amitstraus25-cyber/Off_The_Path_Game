@@ -16,6 +16,9 @@
  * their second line, the locksmith's its only one. Those numbers are written here for the reader;
  * the tests recompute them.
  */
+import { CHROME_KEYS } from '../../src/v2/content.ts';
+import type { ChromeKey } from '../../src/v2/content.ts';
+
 const realWorld = (term: string) => ({
   term: `Fixture ${term}`,
   note: `Fixture: what ${term} stands for.`,
@@ -117,6 +120,7 @@ export const raw = {
   },
   ui: {
     landing: {
+      frameTitle: 'Fixture frame',
       title: 'Fixture title',
       titleHighlight: 'title',
       subtitle: 'Fixture subtitle.',
@@ -125,6 +129,23 @@ export const raw = {
     howTo: {
       title: 'Fixture how',
       steps: ['Fixture: walk.', 'Fixture: read.', 'Fixture: decide.'],
+      go: 'Fixture go',
+    },
+    cabinet: { marquee: 'Fixture marquee' },
+    world: { title: 'Fixture world' },
+    offer: {
+      title: 'Fixture offer',
+      openCard: 'Fixture open',
+      take: 'Fixture take',
+      leave: 'Fixture leave',
+      walkOn: 'Fixture walk on',
+    },
+    card: {
+      title: 'Fixture card',
+      offeredBy: 'Fixture from {name}',
+      ifTake: 'Fixture if take',
+      ifLeave: 'Fixture if leave',
+      back: 'Fixture back',
     },
     hud: {
       time: 'Fixture time',
@@ -146,11 +167,19 @@ export const raw = {
       giveaway: 'Fixture giveaway',
       realWorld: 'Fixture real world',
       score: 'Fixture score',
+      outOf: 'Fixture of {outOf}',
+      caught: 'Fixture caught {caught} of {bad}',
+      frameTitle: 'Fixture frame',
+      unanswered: 'Fixture unanswered',
       question: 'Fixture question?',
       cta: 'Fixture cta',
       again: 'Fixture again',
     },
-    chrome: { post: 'Fixture post' },
+    // Every chrome key, each saying which one it is: the schema is strict about all of them.
+    chrome: Object.fromEntries(CHROME_KEYS.map((key) => [key, `Fixture ${key}`])) as Record<
+      ChromeKey,
+      string
+    >,
   },
 };
 

@@ -17,7 +17,10 @@ import type { Page } from '@playwright/test';
 // The camera, asked rather than quoted. cameraFor() is the one place the game and the art tooling
 // both derive the view from, so a test that wants to know whether a viewport is portrait, or what
 // zoom it runs at, asks it instead of restating a rectangle that was wrong for three rounds.
-import { REFERENCE_VIEWPORTS, TILE, TITLE_CARD_W, cameraFor } from '@otp/core';
+import { REFERENCE_VIEWPORTS, TILE, TITLE_CARD_W } from '@otp/core';
+// The SHIPPED camera: the cabinet reserves its marquee and deck first (ui/cabinet.ts says why this
+// is not core's `cameraFor` any more), imported under the old name so every call below reads it.
+import { cabinetFor as cameraFor } from '../src/ui/cabinet';
 import type { Size } from '@otp/core';
 import { answerAllAndArrive, startGame, toTheReveal } from './helpers';
 

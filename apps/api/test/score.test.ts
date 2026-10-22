@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MAX_LOG_EVENTS, v2 } from '@otp/core';
 import { CLOCK_SKEW_MS, MIN_RUN_MS, POST_WINDOW_MS, handleScore } from '../src/handlers.ts';
 import { createRecentRuns, createWriteBudget } from '../src/limit.ts';
 import { createRunTokens, signingKey } from '../src/token.ts';
 import { CONFIG, T0, TOKENS, harness, noStore, postChunked, postScore, ticketed } from './fake.ts';
-import type { Clock } from './fake.ts';
+import type { Call, Clock } from './fake.ts';
+import { createStore } from '../src/store.ts';
 import { claimedMs, content, runOf } from './helpers.ts';
 
 /*
@@ -182,8 +183,8 @@ describe('the run token', () => {
   });
 
   it('lets a run be posted again when the table, not the player, was the problem', async () => {
-    // A run is remembered when it becomes a row, not when it is submitted, so the retry after a
-    // 503 is a 200 and not "already on the board".
+    // A reservation is released when no row results, so the retry after a 503 is a 200 and not
+    // "already on the board".
     const instance = { recent: createRecentRuns(), clock: { now: T0 } };
     const failed = harness(() => new Response('', { status: 503 }), instance);
     const run = ticketed(instance.clock);
@@ -192,6 +193,78 @@ describe('the run token', () => {
     expect((await handleScore(postScore(run), failed.deps)).status).toBe(503);
     expect((await handleScore(postScore(run), retry.deps)).status).toBe(200);
     expect(retry.written()).toEqual({ handle: HANDLE, score: 100 });
+  });
+
+  it('lets a run be posted again when the budget, not the player, shed it', async () => {
+    // The 429 made no row either: the token must not be spent by a write that never happened.
+    const instance = { recent: createRecentRuns(), clock: { now: T0 } };
+    const shed = harness(undefined, { ...instance, budget: createWriteBudget(0, 60_000, () => 0) });
+    const run = ticketed(instance.clock);
+    const retry = harness(undefined, instance);
+
+    expect((await handleScore(postScore(run), shed.deps)).status).toBe(429);
+    expect((await handleScore(postScore(run), retry.deps)).status).toBe(200);
+  });
+
+  /** A table that answers `status` only when the test lets it, so two posts can overlap for sure. */
+  function gatedTable(status: number): {
+    store: ReturnType<typeof createStore>;
+    calls: Call[];
+    open: () => void;
+  } {
+    let open = (): void => undefined;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const calls: Call[] = [];
+    const store = createStore(CONFIG, async (url, init) => {
+      calls.push({ url, init });
+      await gate;
+      return new Response(null, { status });
+    });
+    return { store, calls, open: () => open() };
+  }
+
+  it('is single use even when two posts of one token are in flight at once', async () => {
+    /*
+     * THE RACE. The insert is an await, and the token used to be checked before it and recorded
+     * after it, so a second request that arrived while the first insert was still pending found
+     * nothing recorded and wrote a second row. The table here answers only when the test lets it,
+     * so the second request is provably made while the first is still waiting on it.
+     */
+    const instance = { recent: createRecentRuns(), clock: { now: T0 } };
+    const run = ticketed(instance.clock);
+    const { deps } = harness(undefined, instance);
+    const table = gatedTable(201);
+
+    const first = handleScore(postScore(run), { ...deps, store: table.store });
+    // Let the first reach the table before the second is sent.
+    await vi.waitFor(() => expect(table.calls).toHaveLength(1));
+    const second = await handleScore(postScore({ ...run, handle: 'quiet-thicket-11' }), {
+      ...deps,
+      store: table.store,
+    });
+
+    expect(second.status).toBe(409);
+    expect(table.calls).toHaveLength(1);
+    table.open();
+    expect((await first).status).toBe(200);
+    expect(table.calls).toHaveLength(1);
+  });
+
+  it('releases the token when the insert it was waiting on fails, so the retry gets through', async () => {
+    const instance = { recent: createRecentRuns(), clock: { now: T0 } };
+    const run = ticketed(instance.clock);
+    const { deps } = harness(undefined, instance);
+    const table = gatedTable(503);
+
+    const first = handleScore(postScore(run), { ...deps, store: table.store });
+    await vi.waitFor(() => expect(table.calls).toHaveLength(1));
+    // Turned away while the first holds it...
+    expect((await handleScore(postScore(run), { ...deps, store: table.store })).status).toBe(409);
+    table.open();
+    expect((await first).status).toBe(503);
+    // ...and let through once the first has failed and given it back.
+    const retry = harness(undefined, instance);
+    expect((await handleScore(postScore(run), retry.deps)).status).toBe(200);
   });
 });
 

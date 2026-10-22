@@ -84,7 +84,7 @@ const isJson = (request: Request): boolean =>
  * at the limit, so a hostile caller cannot buy a bigger budget by omitting `content-length` or by
  * sending characters that take four bytes each.
  */
-const MAX_BODY_BYTES = 32 * 1024;
+export const MAX_BODY_BYTES = 32 * 1024;
 
 const UNAVAILABLE = 'the leaderboard is unavailable';
 
@@ -95,6 +95,7 @@ const UNAVAILABLE = 'the leaderboard is unavailable';
  * promised rather than bytes a caller sends. It is still worth checking first -- it refuses a
  * declared megabyte without reading a byte of it -- but the gate is the byte count below, taken
  * as the body arrives, which is why nothing here ever holds more than 32 KB of someone else's JSON.
+ * (src/node-adapter.ts applies the same cap before a request reaches this file at all.)
  */
 async function readCapped(request: Request, max: number): Promise<string | null> {
   const stream = request.body;
@@ -237,8 +238,12 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
    * One token is one row: the same token posted again -- with this log, another log, or under
    * twenty-five other handles -- is the same run, and 409 says so. Per instance only; src/limit.ts
    * is honest about the bound and the README says what would make it durable.
+   *
+   * RESERVED HERE, BEFORE THE AWAIT, and released if no row results. The insert below yields to
+   * other requests, so a check made now and a record made after it let two concurrent posts of one
+   * token both through. `claim` is check and reservation in one synchronous step.
    */
-  if (deps.recent.has(ticket.id)) {
+  if (!deps.recent.claim(ticket.id)) {
     note('refused a run this instance has already written');
     return fail(409, 'that run is already on the board');
   }
@@ -246,6 +251,7 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
   // Spent here and nowhere earlier, so only a row that is about to exist costs anything: a caller
   // sending nonsense cannot exhaust the budget and take the board down for everyone else.
   if (!deps.budget.take()) {
+    deps.recent.release(ticket.id);
     note('shed a write: this instance has spent its write budget');
     return fail(429, UNAVAILABLE, { 'retry-after': '60' });
   }
@@ -253,12 +259,12 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
   try {
     await deps.store.add({ handle: parsed.data.handle, score: run.total });
   } catch (err) {
+    // Not a row, so not spent: a player whose insert hit a blip can post again.
+    deps.recent.release(ticket.id);
     note(`could not store a score: ${err instanceof Error ? err.message : 'unknown error'}`);
     return fail(503, UNAVAILABLE);
   }
 
-  // Remembered only now that it is a row, so a player whose insert hit a blip can post again.
-  deps.recent.remember(ticket.id);
   return json({ handle: parsed.data.handle, score: run.total });
 }
 

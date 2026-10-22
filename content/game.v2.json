@@ -256,6 +256,7 @@
   },
   "ui": {
     "landing": {
+      "frameTitle": "Title",
       "title": "Off the Path",
       "titleHighlight": "Path",
       "subtitle": "That's not my grandma",
@@ -268,7 +269,28 @@
         "Open each card and read what the skill does.",
         "Take the skill or leave it.",
         "Reach Grandma's door before 3:00."
-      ]
+      ],
+      "go": "Start walking"
+    },
+    "cabinet": {
+      "marquee": "Off the Path"
+    },
+    "world": {
+      "title": "Explore"
+    },
+    "offer": {
+      "title": "Offer",
+      "openCard": "Open the card",
+      "take": "Take it",
+      "leave": "Leave it",
+      "walkOn": "Walk on"
+    },
+    "card": {
+      "title": "Card",
+      "offeredBy": "Offered by the {name}",
+      "ifTake": "If you take it",
+      "ifLeave": "If you leave it",
+      "back": "Go back"
     },
     "hud": {
       "time": "Time left",
@@ -290,6 +312,10 @@
       "giveaway": "The line that gave it away",
       "realWorld": "In the real world",
       "score": "Your score",
+      "outOf": "out of {outOf}",
+      "caught": "You caught {caught} of {bad}",
+      "frameTitle": "Reveal",
+      "unanswered": "You walked past",
       "question": "Who wrote the instructions your agent follows?",
       "cta": "Read the research",
       "again": "Walk it again"
@@ -320,8 +346,11 @@
       "crashReload": "Reload the game",
       "arriveTitle": "Arrive",
       "arriveAsk": "Step inside",
+      "arriveNext": "Go on",
       "researchFooter": "The Off the Path research, by",
       "postHeading": "Post your score",
+      "postUnavailable": "Posting is unavailable for this run.",
+      "postLate": "A run that ends after dark is not posted.",
       "handleLabel": "Your name on the board",
       "handleReroll": "Try another name",
       "handleHint": "The board hands out its own names: two words and a number.",

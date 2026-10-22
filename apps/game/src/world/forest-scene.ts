@@ -741,7 +741,7 @@ export class ForestScene extends Phaser.Scene {
     if (!this.arrived && this.run.atCottage()) this.stageArrival();
 
     if (exploring) {
-      this.move(input.x, input.y, deltaMs);
+      this.move(input.x, input.y, deltaMs, input.carry);
       // One proximity test per frame, shared by the bubble, the announcement and the A button,
       // rather than three scans of the cast that can disagree with each other by a pixel.
       const target = this.updatePrompts();
@@ -821,9 +821,16 @@ export class ForestScene extends Phaser.Scene {
     this.syncCamera();
   }
 
-  private move(ix: number, iy: number, deltaMs: number): void {
+  /**
+   * `carry` is what a bounded walk still owes (`Input.walkFor`), or null. A frame never walks past
+   * it, and spends what it ATTEMPTED rather than what the collision let through, so a press into a
+   * tree still ends instead of pushing at the trunk forever.
+   */
+  private move(ix: number, iy: number, deltaMs: number, carry: number | null = null): void {
     const direction = movementVector({ x: ix, y: iy });
-    const distance = (WALK_SPEED * deltaMs) / 1000;
+    const frame = (WALK_SPEED * deltaMs) / 1000;
+    const distance = carry === null ? frame : Math.min(frame, carry);
+    if (carry !== null && (direction.x !== 0 || direction.y !== 0)) this.controls.spend(distance);
     this.step.x = direction.x * distance;
     this.step.y = direction.y * distance;
 

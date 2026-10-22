@@ -4,44 +4,33 @@
  * e2e/title-claims.spec.ts already checks the phone, where the lie was loudest. What it cannot see
  * is the predicate: it emulates a coarse pointer, and the branch that was wrong is the *other*
  * side of a query whose negation does not mean what it looks like. `(pointer: coarse)` is false
- * for a pen-first tablet or a kiosk stylus, which then read the keyboard line -- while tokens.css,
- * which hides the pad on `(pointer: fine) and (hover: hover)`, drew them a joystick. Playwright
- * cannot emulate pointer/hover, so the branch is checked here instead, against the real
- * stylesheet.
+ * for a pen-first tablet or a kiosk stylus, which then read the keyboard line while it had no
+ * keyboard. Playwright cannot emulate pointer/hover, so the branch is checked here instead.
  *
  * The decision this records: a narrow viewport with a fine pointer reads the keyboard line, and
- * that is correct rather than merely tolerated. Width is not an input modality -- the pad is
- * hidden at 375 and at 1280 alike -- so what misleads a reviewer at 375 is the capture using a
- * mouse, not the sentence.
+ * that is correct rather than merely tolerated. Width is not an input modality -- a desktop window
+ * at 375 has its keyboard as surely as one at 1280 -- so what misleads a reviewer at 375 is the
+ * capture using a mouse, not the sentence. The cabinet's deck is drawn on every machine now; the
+ * keyboard is still the better input where there is one, so the hint names it.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import raw from '../../../content/game.v2.json';
-import { FIT_LAST, PAD_HIDDEN_QUERY, chooseFit, titleHint } from '../src/ui/Title';
+import { FIT_LAST, KEYBOARD_QUERY, chooseFit, titleHint } from '../src/ui/Title';
 
 const strings: Record<string, string> = raw.ui.chrome;
 const TOKENS = fileURLToPath(new URL('../src/ui/tokens.css', import.meta.url));
 const SCREENS = fileURLToPath(new URL('../src/ui/screens.css', import.meta.url));
 
 /** Every `@media` condition under which the stylesheet hides the on-screen pad. */
-function padHidingQueries(): string[] {
-  const css = readFileSync(TOKENS, 'utf8');
+function padHidingQueries(css: string = readFileSync(TOKENS, 'utf8')): string[] {
   return css
     .split('@media')
     .slice(1)
     .flatMap((chunk) => {
       const condition = chunk.slice(0, chunk.indexOf('{')).trim().replace(/\s+/g, ' ');
-      /*
-       * The pad's own rule inside this block, however the formatter has broken the lines.
-       *
-       * This used to look for `.otp-touch { ... display: none }` -- the whole pad hidden at once.
-       * It no longer is, and deliberately: the five named walk buttons now STAY in the tree on a
-       * fine pointer so a keyboard player has more than one focusable control on Explore, and only
-       * the two thumb controls are hidden. So the question this asks is unchanged -- "under which
-       * query does the stylesheet stop drawing the pad?" -- but the answer is written on the
-       * children now. Matching either keeps the guard honest if the rule moves back to the parent.
-       */
+      // The pad's own rule, or its two thumb controls', however the formatter broke the lines.
       const hides =
         /\.otp-touch(?:\s+\.otp-(?:stick|a-button)|\s*,|\s*)*\s*\{[^}]*display:\s*none/.test(chunk);
       return hides ? [condition] : [];
@@ -49,11 +38,11 @@ function padHidingQueries(): string[] {
 }
 
 describe('the title hint describes the machine the player is actually on', () => {
-  it('reads the keyboard line wherever the pad is hidden, narrow or wide', () => {
+  it('reads the keyboard line wherever there is a keyboard, narrow or wide', () => {
     expect(titleHint(strings, true)).toBe(strings['controlsHint']);
   });
 
-  it('reads the pad line wherever the pad is drawn', () => {
+  it('reads the deck line wherever there is no keyboard', () => {
     expect(titleHint(strings, false)).toBe(strings['howToPlayWalkTouch']);
   });
 
@@ -82,14 +71,20 @@ describe('the title hint describes the machine the player is actually on', () =>
     expect(titleHint({ controlsHint: 'keys' }, false)).toBe('');
   });
 
-  it('branches on the same query that governs the pad', () => {
-    const queries = padHidingQueries();
-    // A guard that stops matching is worse than no guard: this project has shipped one.
-    expect(queries, 'no @media rule in tokens.css hides .otp-touch any more').not.toEqual([]);
-    expect(
-      queries,
-      'the hint and the pad must answer the same question -- update PAD_HIDDEN_QUERY with the rule',
-    ).toContain(PAD_HIDDEN_QUERY);
+  it('asks about the keyboard, never about whether the pad is drawn', () => {
+    /*
+     * The arcade cabinet draws the deck -- joystick and A button -- on every machine, and they work
+     * with a mouse (the client, 2026-10-22). The hint's question was always "what does this player
+     * walk with?", so it is asked of the pointer, and NO rule in tokens.css may hide the pad on that
+     * query again: that would put the keyboard line over a deck the desktop player can no longer see,
+     * and a mouse player would lose the only controls the cabinet gives them.
+     */
+    expect(KEYBOARD_QUERY).toBe('(pointer: fine) and (hover: hover)');
+    expect(padHidingQueries(), 'a rule in tokens.css hides the deck again').toEqual([]);
+    // The guard is only worth its silence if it can see a hiding rule at all: the one that used to
+    // stand in tokens.css, verbatim.
+    const old = `@media ${KEYBOARD_QUERY} {\n  .otp-touch .otp-stick,\n  .otp-touch .otp-a-button {\n    display: none;\n  }\n}`;
+    expect(padHidingQueries(old)).toEqual([KEYBOARD_QUERY]);
   });
 });
 

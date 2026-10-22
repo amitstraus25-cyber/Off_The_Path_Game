@@ -127,7 +127,8 @@
 
 .otp-layer {
   position: fixed;
-  inset: 0;
+  /* The cabinet's screen box (ui/cabinet.ts): a layer never paints over the marquee or the deck. */
+  inset: var(--otp-cab-top) var(--otp-cab-side) var(--otp-cab-bottom);
   display: grid;
   justify-items: center;
   align-content: end;
@@ -1697,12 +1698,13 @@
 .otp-panel__aside + .otp-mark {
   margin-left: 0;
 }
-/* On a phone the header belongs to the step and the chip the player is actually reading. */
-@media (max-width: 560px) {
-  .otp-world-frame__header .otp-mark {
-    display: none;
-  }
+/* The music switch takes the header's free space when nothing else does (Explore has no aside). */
+.otp-world-frame__header > .otp-panel__title + .otp-music {
+  margin-left: auto;
 }
+
+/* No mark in the world frame's header any more: the cabinet's marquee carries the logo across the
+   top of every screen (ui/marquee.ts), so a second one here would be two on one screen. */
 
 /* Portrait: the goals move out of the world and into the strip below it.
    Inside the world they ran into the basket in the opposite corner -- three goal labels need real
@@ -1786,22 +1788,12 @@
   }
 
   /*
-   * And the A button owns the bottom-right corner the basket was in. It is a 72px disc sitting 16px
-   * off the viewport's bottom edge (ui/tokens.css), and on a landscape phone it covered the last
-   * TWO basket slots outright -- a 24x20 slot with a 24x20 overlap at 812x375, 844x390 and 740x360
-   * -- so the run's own record of what it is carrying was behind the button the player presses to
-   * add to it. The basket therefore lifts to sit above the button rather than under it: the
-   * button's own height plus a gap, measured from the corner the basket already uses.
-   *
-   * The 72 is `--otp-pad-button` now rather than a copy of it, and the lift is applied to the TOKEN
-   * rather than to the basket, so the transient toast layer -- which is placed against the basket's
-   * top edge in both orientations -- lifts with it instead of having to be told separately.
-   * e2e/css-contract.spec.ts and e2e/ui.spec.ts both assert the overlap is zero rather than
-   * trusting any of these numbers to stay put.
+   * No basket lift here any more. On a landscape phone the A button used to be a 72px disc over the
+   * world's bottom-right corner, and the basket was lifted above it by the button's height. The
+   * cabinet puts the deck OUTSIDE the screen in every landscape layout -- under it, or beside it on a
+   * phone held sideways (ui/cabinet.ts) -- so nothing covers that corner and the basket sits where it
+   * sits on a desktop. The one exception is `overlay`, whose lift is below (OVERLAY, ui/cabinet.ts).
    */
-  .otp-ui {
-    --otp-hud-basket-bottom: calc(14px * var(--otp-ui) + var(--otp-pad-button) + 14px);
-  }
 }
 
 /*
@@ -1865,6 +1857,16 @@
   right: auto;
   width: max-content;
   max-width: calc(100% - 28px * var(--otp-ui));
+}
+
+/*
+ * OVERLAY (ui/cabinet.ts): a window too small to reserve a deck draws it over the world, so the
+ * A button owns the basket's corner again and the basket lifts above it -- the button's own height
+ * plus a gap, applied to the TOKEN so the toast layer placed against the basket lifts with it.
+ * e2e/hud.spec.ts asserts the overlap is zero rather than trusting the sum.
+ */
+html[data-cabinet='overlay'] .otp-ui {
+  --otp-hud-basket-bottom: calc(14px * var(--otp-ui) + var(--otp-pad-button) + 14px);
 }
 
 /*

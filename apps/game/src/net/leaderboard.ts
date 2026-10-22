@@ -96,6 +96,13 @@ const SCORE_PATH = '/api/score';
 const TOP_PATH = '/api/top';
 /** Past this the board is down as far as the player is concerned. */
 const TIMEOUT_MS = 6000;
+/**
+ * Past this a run start is not coming, and the player is waiting on it: Begin is held until the
+ * start answers (main.ts, `startTheRun`), so this is time added to the title screen. It is much
+ * shorter than `TIMEOUT_MS` because what it costs is different -- a slow score post only delays a
+ * notice, a slow start delays the game. On timeout the run deals locally and cannot be posted.
+ */
+const START_TIMEOUT_MS = 2500;
 
 /** A unit interval from the browser's CSPRNG, for the one injected randomness core allows. */
 const unit = (): number => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
@@ -121,9 +128,13 @@ interface Reply {
 const readJson = async (res: Response): Promise<unknown> => res.json();
 
 /** One request. Returns null for anything that is not a reply: no throw ever leaves here. */
-async function ask(path: string, init: RequestInit): Promise<Reply | null> {
+async function ask(
+  path: string,
+  init: RequestInit,
+  timeoutMs: number = TIMEOUT_MS,
+): Promise<Reply | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(path, {
       ...init,
@@ -142,7 +153,7 @@ async function ask(path: string, init: RequestInit): Promise<Reply | null> {
      * back a perfectly good Response whose body never produces a chunk. Reading it after the
      * `finally` below had cleared the timer -- on a signal already spent -- was a promise that
      * never settled and a Post button disabled forever with nothing to show for it. Aborting the
-     * signal errors the body stream too, so this read is bounded by the same six seconds as the
+     * signal errors the body stream too, so this read is bounded by the same limit as the
      * request that carried it.
      *
      * An error status is not read at all: this client acts on the status alone, so there is no
@@ -221,13 +232,17 @@ const isRunStart = (body: unknown): body is RunStart => {
 
 /** Asks the server to start a run. Null for anything but a seed and a token we can believe. */
 export async function startRun(): Promise<RunStart | null> {
-  const reply = await ask(START_PATH, {
-    method: 'POST',
-    // JSON on purpose: the route refuses anything else, so a cross-origin page cannot start one
-    // without a preflight it fails.
-    headers: { 'content-type': 'application/json' },
-    body: '{}',
-  });
+  const reply = await ask(
+    START_PATH,
+    {
+      method: 'POST',
+      // JSON on purpose: the route refuses anything else, so a cross-origin page cannot start one
+      // without a preflight it fails.
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    },
+    START_TIMEOUT_MS,
+  );
   if (!reply?.ok || !isRunStart(reply.body)) return null;
   return { seed: reply.body.seed, token: reply.body.token };
 }

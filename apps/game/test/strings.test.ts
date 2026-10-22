@@ -12,15 +12,15 @@
  * So the rule is mechanical: scan the UI for `strings['key']` and `s('key')` reads and fail on any
  * key the file does not ship.
  *
- * `PENDING` in ui/copy.ts is the short list of v2 words no content key has yet. It is checked
- * here only for being non-empty strings.
+ * There is no `PENDING` list any more: every word v2 introduced has a schema-validated key in `ui`,
+ * and the last test below fails if a list of unkeyed words comes back.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { v2 } from '@otp/core';
 import raw from '../../../content/game.v2.json';
-import { PENDING } from '../src/ui/copy';
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url));
 
@@ -68,8 +68,16 @@ describe('the UI only reads strings the content file carries', () => {
     expect(reads.has('leaderboardTitle'), 'the scanner finds an ordinary shipped key').toBe(true);
   });
 
-  it('holds no empty word in the pending list', () => {
-    for (const [key, value] of Object.entries(PENDING))
-      expect(value.trim(), `PENDING.${key} renders as nothing`).not.toBe('');
+  it('keeps no list of words outside the content file', async () => {
+    // The words v2 introduced before it had keys sat in a `PENDING` object in ui/copy.ts. They are
+    // all content now; a list like it coming back is copy research never sees.
+    const copy = await import('../src/ui/copy');
+    expect(Object.keys(copy).sort()).toEqual(['fill', 'marqueeText', 'strings']);
+    for (const path of sources(SRC))
+      expect(readFileSync(path, 'utf8'), path).not.toMatch(/\bPENDING\s*[.=[]/);
+  });
+
+  it('ships every chrome key the schema names, and no other', () => {
+    expect([...shipped].sort()).toEqual([...v2.CHROME_KEYS].sort());
   });
 });

@@ -93,6 +93,30 @@ describe('schema', () => {
     expect(() => loadContent(noHud)).toThrow(/ui\.hud/);
   });
 
+  it('holds the chrome to its named keys, no fewer and no more', () => {
+    const missing = variant();
+    delete (missing.ui.chrome as Record<string, unknown>)['postLate'];
+    expect(() => loadContent(missing)).toThrow(/ui\.chrome\.postLate/);
+    const stray = variant();
+    (stray.ui.chrome as Record<string, unknown>)['postLater'] = 'Fixture: a typo of a key.';
+    expect(() => loadContent(stray)).toThrow(ContentError);
+    expect(() => loadContent(variant())).not.toThrow();
+  });
+
+  it('holds every template to the holes its screen fills', () => {
+    const cases: [string, (c: ReturnType<typeof variant>) => void, RegExp][] = [
+      ['offeredBy', (c) => void (c.ui.card.offeredBy = 'Fixture from someone'), /\{name\}/],
+      ['outOf', (c) => void (c.ui.reveal.outOf = 'Fixture of a hundred'), /\{outOf\}/],
+      ['caught', (c) => void (c.ui.reveal.caught = 'Fixture caught {caught}'), /\{bad\}/],
+      ['caught', (c) => void (c.ui.reveal.caught = 'Fixture caught of {bad}'), /\{caught\}/],
+    ];
+    for (const [key, spoil, hole] of cases) {
+      const v = variant();
+      spoil(v);
+      expect(() => loadContent(v), key).toThrow(hole);
+    }
+  });
+
   it('holds the how-to to three or four lines', () => {
     for (const n of [2, 5]) {
       const v = variant();

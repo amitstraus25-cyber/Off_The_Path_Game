@@ -1,4 +1,4 @@
-import { TILE, WALK_SPEED } from '../world/logic';
+import { TILE } from '../world/logic';
 import type { Input } from '../world/input';
 
 /**
@@ -9,8 +9,33 @@ import type { Input } from '../world/input';
  */
 export interface TouchControls {
   readonly root: HTMLElement;
-  setVisible(visible: boolean): void;
+  /**
+   * What the deck is for right now (see `DeckMode`). It replaced `setVisible`: the deck is the
+   * cabinet's control panel and furniture holds still, so it is never taken away -- what changes is
+   * which of its controls answer.
+   */
+  setMode(mode: DeckMode): void;
   destroy(): void;
+}
+
+/**
+ * THE DECK'S THREE MODES, one per kind of screen.
+ *
+ *   play  the forest: the stick walks, A talks to whoever is within reach. A is that screen's one
+ *         call to action, so it is the one that wears Lime.
+ *   talk  an offer is open: the stick is still, A opens the card -- "A to talk or open a card", the
+ *         client's words for it. A keeps the Lime: the offer panel has none of its own.
+ *   idle  everything else (title, how-to, the card, the cottage, the reveal, a problem screen):
+ *         neither control answers, and A is Lilac, because on Title and Results the one Lime
+ *         belongs to that screen's own call to action.
+ *
+ * Written to `data-mode` on the deck, where screens.css reads it.
+ */
+export type DeckMode = 'play' | 'talk' | 'idle';
+
+export interface TouchActions {
+  /** A, pressed while an offer is open: open its card. */
+  onOpenCard?(): void;
 }
 
 /**
@@ -57,8 +82,27 @@ const WITHIN_REACH = 'otp:within-reach';
  * press is never a commitment: she also stops the instant anyone comes within reach, and the Stop
  * button is there for the rest.
  */
-const STEP_TILES = 4;
-const STEP_MS = Math.round((TILE * STEP_TILES * 1000) / WALK_SPEED);
+export const STEP_TILES = 4;
+/** One press's carry in game pixels. A distance, owed to `Input.walkFor`, never a duration. */
+export const STEP_PX = TILE * STEP_TILES;
+
+/**
+ * A press on the stick shorter than this is a CLICK, and a click walks one step the way it
+ * pointed; held longer, the stick is a stick and walks for as long as it is held. "Click or hold
+ * the joystick to walk" (the client). Long enough for a deliberate tap, short enough that a thumb
+ * resting on the stick is plainly a hold. Measured against WALK_SPEED it is under a tile of walking,
+ * so a hold that is let go just past it has not already gone further than the click would have.
+ */
+export const CLICK_MS = 250;
+
+/** Below this share of the stick's radius a press points nowhere, so a resting thumb is still. */
+const DEAD_ZONE = 0.2;
+
+/** The quarter a press points into, or null inside the dead zone: one of the four walk vectors. */
+export function stepFor(nx: number, ny: number): { x: number; y: number } | null {
+  if (Math.hypot(nx, ny) < DEAD_ZONE) return null;
+  return Math.abs(nx) >= Math.abs(ny) ? { x: Math.sign(nx), y: 0 } : { x: 0, y: Math.sign(ny) };
+}
 
 /**
  * The four directions, as real buttons.
@@ -96,7 +140,11 @@ export function activationKey(key: string): boolean {
   return key === ' ' || key === 'Enter';
 }
 
-export function createTouchControls(input: Input, labels: TouchLabels): TouchControls {
+export function createTouchControls(
+  input: Input,
+  labels: TouchLabels,
+  actions: TouchActions = {},
+): TouchControls {
   const root = document.createElement('div');
   root.className = 'otp-touch';
 
@@ -159,29 +207,32 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   pad.setAttribute('aria-label', labels.walkGroup);
 
   root.append(pad, stick, button);
+  root.dataset['mode'] = 'idle';
+  pad.hidden = true;
+  button.disabled = true;
 
   let stickPointer: number | null = null;
-  /** Running while a pressed walk button is still carrying Purple. */
-  let walkTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When the stick was pressed, and which way it last pointed: a short press is a click. */
+  let pressedAt = 0;
+  let pointed = { x: 0, y: 0 };
+  let mode: DeckMode = 'idle';
 
   const stopWalking = (): void => {
-    clearTimeout(walkTimer);
-    walkTimer = undefined;
     input.setStick(0, 0);
   };
 
   /**
-   * One press, one step: hold the stick in a direction for as long as four tiles takes.
+   * One press, one step: four tiles in that direction, and then she stops by herself.
    *
    * A screen reader delivers a single activation, never a hold, so a control that only answers a
    * held pointer is inert to it. This answers the activation with a bounded walk instead -- long
    * enough to get somewhere, short enough that nothing runs away -- and a second press in any
-   * direction replaces the first rather than queueing behind it.
+   * direction replaces the first rather than queueing behind it. The walk is owed as DISTANCE
+   * (`Input.walkFor`), so a slow frame rate makes it slower and never shorter.
    */
   const stepWalk = (x: number, y: number): void => {
-    clearTimeout(walkTimer);
-    input.setStick(x, y);
-    walkTimer = setTimeout(stopWalking, STEP_MS);
+    if (mode !== 'play') return;
+    input.walkFor(x, y, STEP_PX);
   };
 
   /**
@@ -228,12 +279,13 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
       typeof detail === 'object' && detail !== null && 'id' in detail
         ? (detail as { id: unknown }).id
         : null;
-    if (walkTimer !== undefined && typeof id === 'string') stopWalking();
+    if (input.carrying() && typeof id === 'string') stopWalking();
   };
   window.addEventListener(WITHIN_REACH, onWithinReach);
 
   const reset = (): void => {
     stickPointer = null;
+    pointed = { x: 0, y: 0 };
     knob.style.transform = '';
     stopWalking();
   };
@@ -246,16 +298,16 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
     const nx = (dx / distance) * (clamped / STICK_RADIUS);
     const ny = (dy / distance) * (clamped / STICK_RADIUS);
     knob.style.transform = `translate(${nx * STICK_RADIUS}px, ${ny * STICK_RADIUS}px)`;
+    pointed = { x: nx, y: ny };
     // A small dead zone stops a resting thumb from nudging Purple.
-    input.setStick(Math.abs(nx) < 0.2 ? 0 : nx, Math.abs(ny) < 0.2 ? 0 : ny);
+    input.setStick(Math.abs(nx) < DEAD_ZONE ? 0 : nx, Math.abs(ny) < DEAD_ZONE ? 0 : ny);
   };
 
   const onStickDown = (e: PointerEvent): void => {
-    if (stickPointer !== null) return;
-    // A thumb on the stick takes the stick back from a walk button mid-step.
-    clearTimeout(walkTimer);
-    walkTimer = undefined;
+    if (stickPointer !== null || mode !== 'play') return;
+    // A thumb on the stick takes the stick back from a walk button mid-step (setStick ends a carry).
     stickPointer = e.pointerId;
+    pressedAt = e.timeStamp;
     stick.setPointerCapture(e.pointerId);
     moveKnob(e);
     e.preventDefault();
@@ -264,11 +316,22 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
     if (e.pointerId === stickPointer) moveKnob(e);
   };
   const onStickUp = (e: PointerEvent): void => {
-    if (e.pointerId === stickPointer) reset();
+    if (e.pointerId !== stickPointer) return;
+    const click = e.type === 'pointerup' && e.timeStamp - pressedAt < CLICK_MS;
+    const step = click ? stepFor(pointed.x, pointed.y) : null;
+    reset();
+    // A click on an arrow walks a step that way: the mouse's way to walk, and a tap's.
+    if (step) stepWalk(step.x, step.y);
   };
   const onButton = (e: PointerEvent): void => {
-    input.pressInteract();
     e.preventDefault();
+    press();
+  };
+
+  /** A, whichever way it was pressed: talk in the forest, open the card in an offer, else nothing. */
+  const press = (): void => {
+    if (mode === 'play') input.pressInteract();
+    else if (mode === 'talk') actions.onOpenCard?.();
   };
 
   /**
@@ -352,7 +415,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
    */
   const onButtonClick = (e: MouseEvent): void => {
     if (e.detail !== 0) return;
-    input.pressInteract();
+    press();
   };
 
   stick.addEventListener('pointerdown', onStickDown);
@@ -365,9 +428,15 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
 
   return {
     root,
-    setVisible(visible) {
-      root.hidden = !visible;
-      if (!visible) reset();
+    setMode(next) {
+      if (next === mode) return;
+      mode = next;
+      root.dataset['mode'] = next;
+      // The walk buttons are for walking: out of the tab order and the tree when nothing walks.
+      pad.hidden = next !== 'play';
+      // Nothing to press on an idle screen, so nothing that claims to be pressable.
+      button.disabled = next === 'idle';
+      if (next !== 'play') reset();
     },
     destroy() {
       reset();

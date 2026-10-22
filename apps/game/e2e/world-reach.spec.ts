@@ -25,6 +25,7 @@ import type { Browser, Page } from '@playwright/test';
 import { probe, startGame, tag, tagOf, talkingDistance, walkTo } from './helpers';
 // The real constant, as helpers.ts does it: a threshold copied by hand is a threshold that rots.
 import { INTERACT_RADIUS } from '../src/world/logic';
+import { STEP_PX } from '../src/ui/touch-controls';
 
 /** The scene's own event name. A typo in any of the three files that spell it fails this file. */
 const WITHIN_REACH = 'otp:within-reach';
@@ -44,7 +45,7 @@ const NEAR = '[data-announce="near"]';
 const activate = (page: Page, name: string): Promise<void> =>
   page.getByRole('button', { name, exact: true }).evaluate((el) => (el as HTMLElement).click());
 
-/** A phone, which is the only place the pad is on screen: on a fine pointer it is display: none. */
+/** A phone: the touch half of the pad. The cabinet draws the deck on a desktop too (cabinet.spec). */
 const touchPage = async (browser: Browser): Promise<Page> => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -137,28 +138,52 @@ test('the pad offers real controls, not a drag surface', async ({ browser }) => 
   await touch.context().close();
 });
 
+/**
+ * Waits for Purple to stop: two reads a beat apart that agree, after she has moved at all.
+ *
+ * WAITED FOR, NEVER TIMED. This test slept 1400ms and then measured, on the theory that a press
+ * carries her for about a second. On a starved CI runner Phaser clamps each frame's delta, so the
+ * same second of wall clock covered 34px and the test failed at 34 against a floor of 48 with
+ * nothing broken. The press is owed as distance now (`Input.walkFor`), so it always finishes; what
+ * this waits for is that finish, however long the machine takes to get there.
+ */
+async function settled(page: Page, from: number): Promise<number> {
+  let last = (await probe(page)).position.x;
+  await expect
+    .poll(async () => (last = (await probe(page)).position.x) - from, {
+      message: 'she never set off',
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(0);
+  for (let i = 0; i < 60; i += 1) {
+    await page.waitForTimeout(300);
+    const now = (await probe(page)).position.x;
+    if (now === last) return now;
+    last = now;
+  }
+  throw new Error('Purple was still walking 18 seconds after one press');
+}
+
 test('one activation of a walk button carries Purple, and stops by itself', async ({ browser }) => {
   const touch = await touchPage(browser);
 
   const before = await probe(touch);
   await activate(touch, 'Walk right');
-  await touch.waitForTimeout(1400);
-  const after = await probe(touch);
+  const after = await settled(touch, before.position.x);
 
   /*
-   * The press is designed to carry her four tiles. The floor asserted is the interact radius,
-   * because that is the invariant rather than the tuning: a press that cannot cover the radius can
-   * never change who is within reach, which is the whole point of having the control. A tighter
-   * bound was tried and is wrong -- Phaser clamps its frame delta, so a run on a loaded machine
-   * covers real ground short of the four tiles (81px of 128 on one, measured) with nothing broken.
+   * The press carries her four tiles, and it is DISTANCE now, so the full carry is asserted as an
+   * upper bound and the interact radius as the floor: a press that cannot cover the radius can
+   * never change who is within reach, which is the whole point of having the control. Between
+   * the two, a tree in the way may stop her short; a slow machine may not.
    */
-  expect(after.position.x - before.position.x, 'px walked east on one press').toBeGreaterThan(
-    INTERACT_RADIUS,
-  );
+  const walked = after - before.position.x;
+  expect(walked, 'px walked east on one press').toBeGreaterThan(INTERACT_RADIUS);
+  expect(walked, 'one press is one step: four tiles at most').toBeLessThanOrEqual(STEP_PX + 0.5);
 
   // Bounded: a press is a step, not a commitment. Nothing runs off across the map.
   await touch.waitForTimeout(600);
-  expect((await probe(touch)).position.x).toBeCloseTo(after.position.x, 0);
+  expect((await probe(touch)).position.x).toBeCloseTo(after, 0);
 
   await touch.context().close();
 });
@@ -168,15 +193,18 @@ test('the walk stops the moment someone comes within reach', async ({ browser })
 
   const before = await probe(touch);
   await activate(touch, 'Walk right');
-  await touch.waitForTimeout(150);
 
   /*
    * She has to be WALKING before the stop can mean anything. Without this the test passes on a pad
    * whose buttons do nothing at all -- which it did, the first time this fix was broken on purpose
    * to check the guard: a Purple who never set off is trivially a Purple who did not overshoot.
+   * Polled rather than slept for: 150ms of wall clock is not 5px of walking on a starved runner.
    */
-  const underway = await probe(touch);
-  expect(underway.position.x - before.position.x, 'underway before the event').toBeGreaterThan(5);
+  await expect
+    .poll(async () => (await probe(touch)).position.x - before.position.x, {
+      message: 'underway before the event',
+    })
+    .toBeGreaterThan(5);
 
   await touch.evaluate(
     (event) => window.dispatchEvent(new CustomEvent(event, { detail: { id: 'rabbit' } })),

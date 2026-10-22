@@ -1,4 +1,6 @@
-import { availableFor, pixelSnap, stageFit } from '../world/logic';
+import { pixelSnap } from '../world/logic';
+import { DECK, cabinetFor } from './cabinet';
+import type { CabinetFit } from './cabinet';
 
 /*
  * FRAME, MARGIN and PORTRAIT_WORLD used to be declared here, and the arithmetic that turns a
@@ -66,10 +68,13 @@ export function fitStage(
   canvas: HTMLCanvasElement,
   resize: StageSizer,
 ): number {
-  // Reading the window is this module's job; working out what fits inside it is camera.ts's.
-  const { portrait, available } = availableFor({ width: innerWidth, height: innerHeight });
-
-  const { zoom, view } = stageFit(available);
+  // Reading the window is this module's job; working out what fits inside it is the cabinet's
+  // (ui/cabinet.ts), which reserves its marquee and deck and hands the rest to camera.ts.
+  const cabinet = cabinetFor({ width: innerWidth, height: innerHeight });
+  const { portrait, zoom, view } = cabinet;
+  // The screen box first: the stage centres the canvas inside it, so it has to be in place before
+  // the canvas is measured below.
+  publishCabinet(cabinet);
   // Phaser first: Scale.NONE means the canvas attributes follow the camera, and the CSS size below
   // is what actually scales it.
   resize(view.width, view.height);
@@ -96,6 +101,21 @@ export function fitStage(
   root.setProperty('--otp-canvas-x', `${rect.left}px`);
   root.setProperty('--otp-canvas-y', `${rect.top}px`);
   return zoom;
+}
+
+/**
+ * The cabinet's reservation, as the stylesheet reads it: `--otp-cab-top/bottom/side` inset the
+ * stage and every screen-sized layer to the screen box, `--otp-cab-deck` sizes the deck, and
+ * `data-cabinet` on <html> says where the deck went. Written from the numbers `cabinetFor` used,
+ * so the CSS cannot hold a different idea of the cabinet than the camera was sized against.
+ */
+function publishCabinet(cabinet: CabinetFit): void {
+  const root = document.documentElement;
+  root.dataset['cabinet'] = cabinet.place;
+  root.style.setProperty('--otp-cab-top', `${cabinet.top}px`);
+  root.style.setProperty('--otp-cab-bottom', `${cabinet.bottom}px`);
+  root.style.setProperty('--otp-cab-side', `${cabinet.side}px`);
+  root.style.setProperty('--otp-cab-deck', `${DECK}px`);
 }
 
 export function watchStage(

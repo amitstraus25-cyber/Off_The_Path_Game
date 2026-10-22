@@ -1,6 +1,6 @@
 import type { v2 } from '@otp/core';
 import { Panel, useFocusTrap } from './components';
-import { PENDING } from './copy';
+import { fill } from './copy';
 import { iconUrl, initials } from './Hud';
 
 /*
@@ -65,10 +65,13 @@ export function SkillIcon({ skill }: { skill: v2.Skill }) {
 }
 
 export interface SkillCardProps {
+  /** The card's words (`ui.card`), and the two answers it shares with the offer (`ui.offer`). */
+  words: v2.Content['ui']['card'];
+  answers: Pick<v2.Content['ui']['offer'], 'take' | 'leave'>;
   skill: v2.Skill;
   /** The variant THIS run dealt. Before the card opens the two are word for word the same. */
   card: v2.Variant['card'];
-  /** Who handed this over, shown as the provenance eyebrow. */
+  /** Who handed this over, by name; the eyebrow says it through `ui.card.offeredBy`. */
   offeredBy: string;
   onVerdict(verdict: v2.Verdict): void;
   /** Leaves the card without answering, back to the conversation. */
@@ -80,7 +83,15 @@ export interface SkillCardProps {
  * in one neutral style: the card never signals danger (UI_FOUNDATIONS section 5). The bad card is
  * the good one with one line swapped, so the only way to tell is to read the lines.
  */
-export function SkillCard({ skill, card, offeredBy, onVerdict, onBack }: SkillCardProps) {
+export function SkillCard({
+  words,
+  answers,
+  skill,
+  card,
+  offeredBy,
+  onVerdict,
+  onBack,
+}: SkillCardProps) {
   const trap = useFocusTrap();
   return (
     <div
@@ -91,7 +102,7 @@ export function SkillCard({ skill, card, offeredBy, onVerdict, onBack }: SkillCa
       aria-label={skill.name}
       data-card={skill.id}
     >
-      <Panel number="03" title={PENDING.cardTitle} heading>
+      <Panel number="03" title={words.title} heading>
         {/* Focus lands on the card, not on an answer: nothing is ever pre-selected. */}
         <div class="otp-card" tabIndex={-1} data-autofocus>
           <div class="otp-card__nav">
@@ -99,7 +110,7 @@ export function SkillCard({ skill, card, offeredBy, onVerdict, onBack }: SkillCa
               <span class="otp-card__back-glyph" aria-hidden="true">
                 <BackGlyph />
               </span>
-              {PENDING.back}
+              {words.back}
             </button>
           </div>
 
@@ -108,12 +119,15 @@ export function SkillCard({ skill, card, offeredBy, onVerdict, onBack }: SkillCa
               <SkillIcon skill={skill} />
             </div>
             <div class="otp-card__main">
-              <p class="otp-card__eyebrow">{offeredBy}</p>
+              {/* Provenance first (UI_FOUNDATIONS section 8): `OFFERED BY THE RABBIT`, cased by CSS. */}
+              <p class="otp-card__eyebrow" data-offered-by="">
+                {fill(words.offeredBy, { name: offeredBy })}
+              </p>
               <h3 class="otp-card__title">{skill.name}</h3>
 
               <div class="otp-row">
                 <div>
-                  <p class="otp-row__eyebrow">{PENDING.cardTake}</p>
+                  <p class="otp-row__eyebrow">{words.ifTake}</p>
                   <ul class="otp-card__lines" data-card-take="">
                     {card.take.map((line) => (
                       <li class="otp-row__heading" key={line}>
@@ -125,7 +139,7 @@ export function SkillCard({ skill, card, offeredBy, onVerdict, onBack }: SkillCa
               </div>
               <div class="otp-row">
                 <div>
-                  <p class="otp-row__eyebrow">{PENDING.cardLeave}</p>
+                  <p class="otp-row__eyebrow">{words.ifLeave}</p>
                   <p class="otp-row__heading" data-card-leave="">
                     {card.leave}
                   </p>
@@ -146,7 +160,7 @@ export function SkillCard({ skill, card, offeredBy, onVerdict, onBack }: SkillCa
               <span class="otp-verdict__glyph" aria-hidden="true">
                 <TakeGlyph />
               </span>
-              <span class="otp-verdict__label">{PENDING.take}</span>
+              <span class="otp-verdict__label">{answers.take}</span>
             </button>
             <button
               type="button"
@@ -159,7 +173,7 @@ export function SkillCard({ skill, card, offeredBy, onVerdict, onBack }: SkillCa
               <span class="otp-verdict__glyph" aria-hidden="true">
                 <LeaveGlyph />
               </span>
-              <span class="otp-verdict__label">{PENDING.leave}</span>
+              <span class="otp-verdict__label">{answers.leave}</span>
             </button>
           </div>
         </div>

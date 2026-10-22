@@ -1,9 +1,10 @@
 import type { v2 } from '@otp/core';
 import { Panel, useFocusTrap } from './components';
-import { PENDING } from './copy';
 import { TakeGlyph, LeaveGlyph } from './SkillCard';
 
 export interface OfferProps {
+  /** The offer panel's words (`ui.offer`). */
+  words: v2.Content['ui']['offer'];
   character: v2.Character;
   skill: v2.Skill;
   onInspect(): void;
@@ -28,7 +29,7 @@ export interface OfferProps {
  * The answers are guarded with `deliberate`: the panel mounts under the pointer that opened it,
  * and a double-click's second half must not become a verdict (components.tsx).
  */
-export function Dialogue({ character, skill, onInspect, onVerdict, onWalkOn }: OfferProps) {
+export function Dialogue({ words, character, skill, onInspect, onVerdict, onWalkOn }: OfferProps) {
   const trap = useFocusTrap();
   return (
     <div
@@ -39,7 +40,7 @@ export function Dialogue({ character, skill, onInspect, onVerdict, onWalkOn }: O
       aria-label={`${character.name}: ${skill.name}`}
       data-offer={character.id}
     >
-      <Panel number="02" title={PENDING.offerTitle} heading>
+      <Panel number="02" title={words.title} heading>
         <div class="otp-dialogue otp-dialogue--bare">
           <div class="otp-dialogue__text">
             <p class="otp-dialogue__speaker">{character.name}</p>
@@ -59,7 +60,7 @@ export function Dialogue({ character, skill, onInspect, onVerdict, onWalkOn }: O
                 data-autofocus
                 onClick={onInspect}
               >
-                {PENDING.openCard} <span aria-hidden="true">→</span>
+                {words.openCard} <span aria-hidden="true">→</span>
               </button>
               <button
                 type="button"
@@ -67,7 +68,7 @@ export function Dialogue({ character, skill, onInspect, onVerdict, onWalkOn }: O
                 data-action="walk-on"
                 onClick={onWalkOn}
               >
-                {PENDING.walkOn}
+                {words.walkOn}
               </button>
             </div>
             <div class="otp-verdicts" role="group" aria-label={skill.name}>
@@ -82,7 +83,7 @@ export function Dialogue({ character, skill, onInspect, onVerdict, onWalkOn }: O
                 <span class="otp-verdict__glyph" aria-hidden="true">
                   <TakeGlyph />
                 </span>
-                <span class="otp-verdict__label">{PENDING.take}</span>
+                <span class="otp-verdict__label">{words.take}</span>
               </button>
               <button
                 type="button"
@@ -95,7 +96,7 @@ export function Dialogue({ character, skill, onInspect, onVerdict, onWalkOn }: O
                 <span class="otp-verdict__glyph" aria-hidden="true">
                   <LeaveGlyph />
                 </span>
-                <span class="otp-verdict__label">{PENDING.leave}</span>
+                <span class="otp-verdict__label">{words.leave}</span>
               </button>
             </div>
           </div>

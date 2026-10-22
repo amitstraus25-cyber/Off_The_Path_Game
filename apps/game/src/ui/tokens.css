@@ -202,6 +202,29 @@
   --otp-pad-stick: 96px;
   --otp-pad-button: 72px;
   --otp-pad-gutter: 16px;
+
+  /*
+   * THE ARCADE CABINET'S RESERVATION. ui/stage.ts overwrites all four from ui/cabinet.ts the moment
+   * it sizes the canvas, so the stylesheet never quotes the cabinet's numbers; these are only what
+   * a renderer that has not published yet gets (a test harness, the first frame), and they are the
+   * portrait answer, which reserves the marquee and nothing else.
+   *
+   *   --otp-cab-top     the marquee across the top
+   *   --otp-cab-bottom  the deck under the screen (landscape `below`; 0 otherwise)
+   *   --otp-cab-side    each deck column beside it (landscape `sides`; 0 otherwise)
+   *   --otp-cab-deck    the deck's depth, whichever way it faces
+   */
+  --otp-cab-top: 40px;
+  --otp-cab-bottom: 0px;
+  --otp-cab-side: 0px;
+  --otp-cab-deck: 120px;
+  /*
+   * The cabinet's soft Lilac glow, the client's ask. Lilac at a third, spread wide, and only ever on
+   * the cabinet itself -- the marquee, the screen's surround, the deck -- never on a panel or a card,
+   * which keep UI_FOUNDATIONS section 4's no-elevation rule. A glow on furniture is light, not depth.
+   */
+  --otp-cab-glow: 0 0 22px 2px color-mix(in srgb, var(--cyera-lilac) 34%, transparent);
+  --otp-cab-glow-bright: 0 0 30px 4px color-mix(in srgb, var(--cyera-lilac) 48%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -235,9 +258,48 @@ body {
    * panels instead of fighting them. `color` moves with it or every unstyled node inherits
    * Offwhite on Shell at 1.1:1; Black on Shell is 17.5:1, which section 6 already tabulates.
    */
-  background: var(--cyera-shell);
+  /*
+   * THE CABINET'S BODY, the client's decision of 2026-10-22: dark Cyera purple, near-black at the
+   * marquee to Deep Purple at the deck, the way the photograph's cabinet is dark around a lit screen.
+   *
+   * This reverses, on purpose and on the client's word, the move recorded here before: the page
+   * ground had been taken OFF near-black to Shell because the title screen measured 36-48%
+   * near-black against the approved board's 12-14%. Most of the near-black then was a dead field
+   * around the world. The cabinet's dark is a surround with a job -- it frames the screen and holds
+   * the controls -- and every panel over the world keeps its Shell ground. The measurement still
+   * moves; docs/PLAN.md records that it was the client's call and not a drift.
+   */
   color: var(--cyera-black);
   font-family: var(--cyera-font-sans);
+}
+
+/*
+ * The page's one solid ground is the ROOT's, under the gradient layer below, and the body is clear.
+ * reference/brand/cyera-theme.css gives `body` an Offwhite ground, which would paint over the
+ * gradient layer (it sits at z-index -1 inside the root's stacking context, above the root's
+ * background and below the body's): measured, the strip of cabinet beside a landscape phone's
+ * screen came out Offwhite with a Lilac glow on it. So the body's is cleared here, explicitly.
+ */
+html {
+  background: var(--cyera-black);
+}
+body {
+  background: transparent;
+}
+
+/*
+ * The gradient itself is painted on a fixed layer under everything rather than as the page's
+ * background-image, so the page's ground stays one solid colour. That is what anything measuring
+ * "what is behind this text" walks up to (e2e/heading-contrast.spec.ts), and a gradient there is a
+ * ground it cannot measure; Black is the darker end, so a measurement against it is the strict one.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, var(--cyera-black) 0%, var(--cyera-deep-purple) 100%);
+  pointer-events: none;
 }
 
 /* `place-items` sets BOTH axes, so this is the whole of the stage's default alignment: a second
@@ -246,7 +308,8 @@ body {
    only rule that changes it, and it wins on specificity rather than on source order. */
 .otp-stage {
   position: fixed;
-  inset: 0;
+  /* The cabinet's screen box: the canvas is centred between the marquee and the deck. */
+  inset: var(--otp-cab-top) var(--otp-cab-side) var(--otp-cab-bottom);
   display: grid;
   place-items: center;
 }
@@ -356,6 +419,38 @@ body {
   box-shadow: 0 0 0 3px var(--cyera-haze);
   color: var(--cyera-black);
   font: 700 30px/1 var(--cyera-font-sans);
+  cursor: pointer;
+}
+
+/*
+ * A IS THE CALL TO ACTION WHILE YOU PLAY, AND ONLY THEN. On the forest, and in an open offer where
+ * it opens the card, A is the one thing to press, so it wears that screen's one Lime. Everywhere
+ * else -- Title and Results above all, whose own call to action owns the Lime -- it stays Lilac and
+ * is disabled (ui/touch-controls.ts `DeckMode`). The ring stays Haze either way.
+ */
+.otp-touch:is([data-mode='play'], [data-mode='talk']) .otp-a-button {
+  background: var(--cyera-lime);
+}
+
+.otp-a-button:disabled {
+  cursor: default;
+}
+
+.otp-touch[data-mode='idle'] .otp-stick,
+.otp-touch[data-mode='talk'] .otp-stick {
+  cursor: default;
+}
+
+.otp-touch[data-mode='play'] .otp-stick {
+  cursor: pointer;
+}
+
+/* An idle control takes no pointer: nothing it could do, and nothing under it it may stand on.
+   It is dimmed too, so on Title, the card, arrive and Results it reads as resting rather than as
+   a full-strength button that does nothing when clicked (review of 2026-10-22). */
+.otp-touch[data-mode='idle'] :is(.otp-stick, .otp-a-button) {
+  pointer-events: none;
+  opacity: 0.55;
 }
 
 .otp-stick:focus-visible,
@@ -407,44 +502,16 @@ body {
 }
 
 /*
- * THE PAD ON A DESKTOP POINTER, AND THE FIVE CONTROLS THAT MUST SURVIVE IT.
+ * THE PAD ON A DESKTOP POINTER: DRAWN, AND IT WORKS.
  *
- * This block used to set the pad itself to display-none, which took the whole pad out of the
- * document -- and the pad is where `ui/touch-controls.ts` puts the five named walk buttons that
- * stand behind the joystick, because a joystick answers an activation with a (0, 0) vector and moves
- * Purple exactly 0px. (Written in prose rather than as a selector and a declaration: `test/title.test.ts`
- * greps this file for that pair, and a comment that spells it out is a guard matching a sentence --
- * which is how that test came to report the reduced-motion block as the rule that hides the pad.)
- * Enumerating the focusable controls on Explore at 1280x800 therefore returned exactly ONE:
- * the music toggle. A keyboard or screen-reader player on a desktop had no way to walk, no way to
- * stop, and no way to interact -- half of why the run cannot be finished without sight -- and the
- * arrow keys that are the answer for a sighted keyboard player are not discoverable by, or reachable
- * from, anything in the accessible tree.
- *
- * So the pad's two THUMB controls go and its five BUTTONS stay. The pad's own box collapses to
- * nothing -- its padding goes and both of its drawn children are gone, and the group is out of flow
- * -- and that group keeps `.otp-visually-hidden`'s treatment until it is focused, at which point it
- * becomes a real row of pills: the skip-link pattern. That answers the other half of the finding
- * touch-controls.ts records: a sighted player tabbing through used to find five controls with no
- * focus ring, because the remedy was "a dozen lines in ui/tokens.css" that nobody had written.
- *
- * The arrow keys still work and are still the better input here. These are the fallback, and on
- * Explore they are the only controls a player who cannot see the forest has.
+ * A rule here used to hide the two thumb controls on `(pointer: fine) and (hover: hover)` and keep
+ * only the five named walk buttons in the document, because on a desktop the stick and A were
+ * thumb controls nobody could use. The arcade cabinet (the client, 2026-10-22) draws the deck on
+ * every machine and the stick and A work with a mouse: hold the stick to walk, click an arrow to
+ * step, click A to talk (ui/touch-controls.ts). So nothing hides them, and apps/game/test/
+ * title.test.ts fails if a rule that does comes back. The walk buttons stay exactly as they were --
+ * the keyboard and screen-reader path -- and the arrow keys are still the better input here.
  */
-@media (pointer: fine) and (hover: hover) {
-  .otp-touch {
-    /* Nothing of the pad itself is drawn, but the element stays in the document. `space-between`
-       has nothing left to space out here; `center` is what puts the focused walk row in the middle
-       of the bottom edge, where a skip link belongs. */
-    padding: 0;
-    justify-content: center;
-  }
-
-  .otp-touch .otp-stick,
-  .otp-touch .otp-a-button {
-    display: none;
-  }
-}
 
 /*
  * The walk group, wherever it is: hidden until a keyboard reaches it, then a row of pills above the

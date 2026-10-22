@@ -3,6 +3,13 @@ import type { Page } from '@playwright/test';
 import { TILE } from '../src/world/logic';
 import { ready } from './helpers';
 import type { RunState } from './helpers';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+/** The shipped content, read as a file: Playwright's loader takes no JSON import. */
+const raw = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
+) as { ui: { cabinet: { marquee: string }; reveal: { caught: string; again: string } } };
 
 /*
  * THE v2 GAME, PLAYED THROUGH THE PAGE: landing, how-to, seven offers in walking order, the
@@ -220,10 +227,29 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
     );
     const giveaway = s.bad.card.take.find((line) => !s.good.card.take.includes(line))!;
     if (isGood) await expect(row.locator('[data-giveaway]')).toHaveCount(0);
-    else await expect(row.locator('[data-giveaway]')).toContainText(giveaway);
+    else {
+      await expect(row.locator('[data-giveaway]')).toContainText(giveaway);
+      // The bad card as it was dealt, every line of it, with exactly the giveaway marked.
+      await expect(row.locator('.otp-reveal__card > li')).toHaveText(s.bad.card.take);
+      await expect(row.locator('[data-giveaway-line]')).toHaveCount(1);
+      await expect(row.locator('[data-giveaway-line] mark')).toContainText(giveaway);
+    }
     await expect(row.locator('[data-real-world]')).toContainText(s.realWorld.term);
     await expect(row.locator('[data-real-world]')).toContainText(s.realWorld.note);
   }
+
+  // The replay hook: the bad skills left (unanswered counts as left), out of the bad skills dealt.
+  const dealtBad = people.filter((c) => !good.includes(c.skillId));
+  const caught = dealtBad.filter((c) => verdicts[c.skillId] !== 'take').length;
+  await expect(page.locator('.otp-replay__caught')).toHaveText(
+    raw.ui.reveal.caught
+      .replace('{caught}', String(caught))
+      .replace('{bad}', String(dealtBad.length)),
+  );
+  // Walk it again is right there with it, and it is not the screen's Lime.
+  const again = page.locator('.otp-replay [data-action="replay"]');
+  await expect(again).toHaveText(raw.ui.reveal.again);
+  await expect(again).toHaveClass(/\botp-button\b/);
 });
 
 test('the greedy run takes everything unread and lets the wolf in at 0', async ({ page }) => {

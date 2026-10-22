@@ -43,22 +43,26 @@ stage.append(canvas);
 watchStage(stage, canvas, () => undefined);
 
 const input: Input = {
-  read: () => ({ x: 0, y: 0, interactPressed: false }),
+  read: () => ({ x: 0, y: 0, interactPressed: false, carry: null }),
   setStick: () => undefined,
   pressInteract: () => undefined,
+  walkFor: () => undefined,
+  spend: () => undefined,
+  carrying: () => false,
   destroy: () => undefined,
 };
-ui.append(
-  createTouchControls(input, {
-    walkGroup: 'Walk',
-    up: 'Up',
-    down: 'Down',
-    left: 'Left',
-    right: 'Right',
-    stop: 'Stop',
-    interact: 'Interact',
-  }).root,
-);
+const deck = createTouchControls(input, {
+  walkGroup: 'Walk',
+  up: 'Up',
+  down: 'Down',
+  left: 'Left',
+  right: 'Right',
+  stop: 'Stop',
+  interact: 'Interact',
+});
+// The forest's deck: both thumb controls live, as on Explore.
+deck.setMode('play');
+ui.append(deck.root);
 
 const anchor = document.createElement('div');
 anchor.className = 'otp-world-anchor';

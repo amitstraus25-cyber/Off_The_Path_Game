@@ -28,7 +28,13 @@ const SKILL_OF: Record<string, string> = {
 /** The furniture a player should never see leave: frame, header band, wordmark, discs. */
 const FRAME = '.otp-world-frame';
 const HEADER = '.otp-world-frame__header';
-const MARK = `${HEADER} .otp-mark`;
+/*
+ * The one Cyera wordmark is the cabinet's marquee now (ui/marquee.ts), across the top of every
+ * screen; the frame header no longer carries one. It still must never leave, and never double.
+ */
+const MARK = '.otp-marquee__logo';
+/** The lightest thing in the frame's header: its Offwhite title, for the paint-order test. */
+const LIT = `${HEADER} .otp-panel__title`;
 const DISCS = '.otp-hud .otp-leg';
 const MUSIC = '.otp-music';
 /** The world's live region: it must be mutated in place, never replaced. */
@@ -224,16 +230,16 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
    * it also catches the dim being dropped. Measured: 251 on Explore, 120.5 under the card -- and
    * 251 under the card with the frame mounted after the switch.
    */
-  const undimmed = await maxLuma(page, MARK);
-  expect(undimmed, 'the wordmark is at full white with nothing over it').toBeGreaterThan(200);
+  const undimmed = await maxLuma(page, LIT);
+  expect(undimmed, 'the header title is near white with nothing over it').toBeGreaterThan(200);
 
   await step(page, { type: 'MEET', c: 'rabbit' }, 'talk');
   await step(page, { type: 'INSPECT', s: SKILL_OF['rabbit']! }, 'card');
 
   const card = page.locator('.otp-card');
   await expect(card).toBeVisible();
-  const dimmed = await maxLuma(page, MARK);
-  expect(dimmed, 'the card is painted over the frame, so the wordmark is in shade').toBeLessThan(
+  const dimmed = await maxLuma(page, LIT);
+  expect(dimmed, 'the card is painted over the frame, so its title is in shade').toBeLessThan(
     undimmed * 0.75,
   );
 

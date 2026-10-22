@@ -34,6 +34,32 @@ everything the 2026-10-21 sweep found that is not yet fixed.
 
 ### In progress
 
+- **Client round 2026-10-22 (built, not committed, not ticked).** Four asks, all approved by the
+  client in chat:
+  - **The arcade cabinet is THE presentation**, reversing the "no to the cabinet" above on the
+    client's word. A marquee (the supplied white Cyera logo beside "Off the Path"), a dark purple
+    body with a soft Lilac glow (still under reduced motion), the world in a bezel, and a deck with
+    a joystick and an A button that work with mouse, touch and keyboard. `ui/cabinet.ts` reserves
+    the marquee (40px) and the deck (120px) BEFORE `stageFit`, so integer zoom holds: 1280x800 keeps
+    zoom 2 with the deck below; phones keep the deck in the docked strip and lose only the marquee;
+    a phone held sideways, and the client's 1673x449, put the stick and A beside the screen. Lime
+    is A's only while you play (forest, and an open offer where A opens the card); on Title and
+    Results the CTA keeps it and A is Lilac and disabled. The page ground is dark again, by the
+    client's decision; the near-black share it moves is not a drift.
+    **Known gap, not mine to close:** `cameraFor()` in `packages/core/src/camera.ts` does not know
+    the cabinet, so `pnpm world` and the graybox composition guards now frame a camera the game no
+    longer builds (trap 1). `cabinetFor` is written to be lifted into camera.ts as-is.
+  - **The reveal's replay hook**: each bad card replayed with its giveaway line marked, "You caught
+    N of 4", and Walk it again as a secondary pill beside it (the research CTA keeps the Lime).
+  - **Copy into content**: the last unkeyed words (`PENDING`) are `ui.howTo.go`, `ui.world`,
+    `ui.offer`, `ui.card` (with `offeredBy`, "Offered by the {name}", now on the card),
+    `ui.reveal.{outOf,caught,frameTitle,unanswered}`, `ui.landing.frameTitle`, `ui.cabinet`, and
+    chrome's `postUnavailable` / `postLate` / `arriveNext`. `ui.chrome` is a strict object of
+    `v2.CHROME_KEYS` now, not a free record; templates are schema-held to their `{holes}`.
+  - **The walk-button flake**: a press carries four tiles as DISTANCE (`Input.walkFor`), not as a
+    timer, so a slow phone or a starved runner walks it slower and never shorter; the e2e waits for
+    the carry to finish. The same treatment for the walk-underway and stick-hold assertions.
+
 - **v2 Phase A is done** (`87c80ff`): the new rules are in `packages/core/src/v2`, beside v1, at
   100% coverage. **Phase B, the six or seven real skills, is next** and waits on your go.
 - **The readiness blockers are fixed** (`51574fc`), with the question button and the privacy line.

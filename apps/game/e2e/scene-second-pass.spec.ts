@@ -178,6 +178,14 @@ test('the ground under every figure in shot is darker for their standing on it',
   page,
 }) => {
   test.setTimeout(60_000);
+  /*
+   * A window tall enough to have three figures in the opening shot. This ran at Playwright's
+   * default 1280x720, which held three until the arcade cabinet's marquee and deck took 160px of
+   * height out of the world (ui/cabinet.ts): the same window now frames Purple and the Rabbit only,
+   * and the guard below rightly refused to measure two. 1440x900 opens on the camera 1280x720 used
+   * to, give or take a row, so the shot under test is the one this was written against.
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await startGame(page);
   // The opening shot, settled: a puff of Purple's dust mid-fade would be in the difference too.

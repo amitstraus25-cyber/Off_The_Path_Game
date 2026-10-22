@@ -113,7 +113,7 @@ export function Cottage({ ending, words, onFinish }: CottageProps) {
             <button
               type="button"
               class="otp-advance"
-              aria-label="Go on"
+              aria-label={strings['arriveNext'] ?? ''}
               onClick={() => setShown((n) => Math.min(beats.length, n + 1))}
             >
               <Caret />

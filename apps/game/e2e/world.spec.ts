@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import { REFERENCE_VIEWPORTS, TILE, cameraFor } from '@otp/core';
+import { REFERENCE_VIEWPORTS, TILE } from '@otp/core';
+import { cabinetFor as cameraFor } from '../src/ui/cabinet';
+import { CLICK_MS } from '../src/ui/touch-controls';
 import type { Size } from '@otp/core';
 import {
   hold,
@@ -145,7 +147,16 @@ test('touch controls move Purple and stop her on release', async ({ browser }) =
   await page.mouse.move(centre.x, centre.y);
   await page.mouse.down();
   await page.mouse.move(centre.x + 40, centre.y, { steps: 4 });
-  await page.waitForTimeout(900);
+  /*
+   * Held UNTIL she has walked, not for a fixed time: 900ms of wall clock is 30px only at the frame
+   * rate it was timed on, and a starved runner's capped frames cover less. Then held a little past
+   * the stick's click window (touch-controls.ts CLICK_MS), so the release is a release and not a
+   * click that walks a step of its own.
+   */
+  await expect
+    .poll(async () => (await probe(page)).position.x - before.position.x, { timeout: 15_000 })
+    .toBeGreaterThan(30);
+  await page.waitForTimeout(CLICK_MS);
   await page.mouse.up();
   await page.waitForTimeout(120);
 
@@ -174,6 +185,11 @@ test('touch controls move Purple and stop her on release', async ({ browser }) =
  * disagrees with it means the art is being framed for a rectangle the player does not have. If a
  * letterbox is ever wanted here, it belongs in `stageFit` so that both sides move together; one
  * applied in ui/stage.ts alone is exactly what this is written to fail on.
+ *
+ * `cameraFor` HERE IS THE CABINET'S (`cabinetFor`, imported under the old name). The arcade cabinet
+ * reserves its marquee and deck before `stageFit` sizes the world, so core's `cameraFor` no longer
+ * describes the shipped canvas. ui/cabinet.ts says why it is not in core yet and that the graybox
+ * tooling is composing against the old camera until it is.
  */
 const FIT_VIEWPORTS: Size[] = [
   // The viewport this test has always run at, kept so it still covers what it used to.

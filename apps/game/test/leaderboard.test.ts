@@ -224,12 +224,30 @@ describe('startRun', () => {
     }
   });
 
-  it('gives up rather than hanging, so a dead board never holds the title screen', async () => {
+  it('gives up after a couple of seconds, so a hanging start barely holds Begin', async () => {
+    // Not the six seconds a score post is given: the player is waiting on this one.
     vi.useFakeTimers();
     vi.stubGlobal('fetch', neverAnswers);
-    const pending = startRun();
-    await vi.advanceTimersByTimeAsync(10000);
+    let answer: unknown = 'pending';
+    const pending = startRun().then((r) => (answer = r));
+    await vi.advanceTimersByTimeAsync(2400);
+    expect(answer).toBe('pending');
+    await vi.advanceTimersByTimeAsync(200);
     await expect(pending).resolves.toBeNull();
+    expect(answer).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('leaves the board and the score post their longer limit', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', neverAnswers);
+    let settled = false;
+    const post = submit('brave-lantern-42', log, TOKEN).then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1500);
+    await post;
+    expect(settled).toBe(true);
     vi.useRealTimers();
   });
 });
