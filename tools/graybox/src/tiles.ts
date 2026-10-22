@@ -367,6 +367,18 @@ export const TILE_NAMES: readonly string[] = [
    * existing gid keeps its value and its cell: this is gid 112.
    */
   'mailbox',
+  /*
+   * The three Cyera signs, appended 2026-10-23 on the client's word (`tiles/s-props.ts`, "three
+   * signs that say Cyera"): the forest notice's new right half, now that "RESEARCH" needs a page
+   * two tiles wide; the "Cyera Speed!" board by the waterfall; and the two halves of the blank
+   * board the game lays the supplied logo SVG over. Gids 113 to 116.
+   *
+   * 112 + 4 = 116 names still fits the sheet's 10 rows (120 cells), so it stays 384 x 320.
+   */
+  'notice-board-r',
+  'sign-speed',
+  'sign-logo-l',
+  'sign-logo-r',
 ];
 
 /*

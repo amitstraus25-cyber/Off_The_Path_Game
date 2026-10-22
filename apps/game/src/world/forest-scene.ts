@@ -36,6 +36,7 @@ import type { ForestMap, MapObject } from './map';
 import { sketchMap } from './minimap';
 import type { MapSketch } from './minimap';
 import { readForks } from './forks';
+import { faceOnCanvas, isSign, NEAR_SIGN, signKey, signNear } from './signs';
 import type { Fork } from './forks';
 import { brightestWarm, openDoor } from './door';
 import gids from '../assets/tileset-forest.gids.json';
@@ -596,6 +597,10 @@ export class ForestScene extends Phaser.Scene {
   private notices: MapObject[] = [];
   /** Who was last announced as within reach, so the announcement is made once per arrival. */
   private withinReach: string | null = null;
+  /** The map's `sign-*` objects: the three Cyera signs (world/signs.ts). */
+  private signs: MapObject[] = [];
+  /** Which sign was last announced as near, so the caption changes once per arrival. */
+  private nearSign: string | null = null;
   /**
    * Which triggers Purple is standing on, against the run they last fired for.
    *
@@ -744,6 +749,7 @@ export class ForestScene extends Phaser.Scene {
     this.windowWolf = this.createWindowWolf();
     // Objects named `notice-<id>` hand their id straight to the content's notices.
     this.notices = this.map.objects.filter((o) => o.name.startsWith('notice-'));
+    this.signs = this.map.objects.filter(isSign);
 
     // A replay resets the store, but Purple is a world object and has to be sent home as well.
     this.bus.on('restartRun', () => this.resetToSpawn());
@@ -1617,6 +1623,7 @@ export class ForestScene extends Phaser.Scene {
       // rather than three scans of the cast that can disagree with each other by a pixel.
       const target = this.updatePrompts();
       this.announceWithinReach(target);
+      this.announceSign(signNear(this.signs, this.position));
       if (input.interactPressed) this.interact(target);
       this.checkNotices(state);
       this.checkCottage(state);
@@ -1866,6 +1873,38 @@ export class ForestScene extends Phaser.Scene {
   private clearReach(): void {
     for (const npc of this.npcs) this.hidePrompt(npc);
     this.announceWithinReach(null);
+    // And the sign's caption, for the same reason: a panel up, the arrival, a replay.
+    this.announceSign(null);
+  }
+
+  /**
+   * The sign Purple is near, said once on the edge (`NEAR_SIGN`, world/signs.ts): the key only, so
+   * the caption's words are content's. Edge-triggered for the live region's sake, as the reach is.
+   */
+  private announceSign(key: string | null): void {
+    if (key === this.nearSign) return;
+    this.nearSign = key;
+    window.dispatchEvent(new CustomEvent(NEAR_SIGN, { detail: { key } }));
+  }
+
+  /** The keys of the signs that carry a face the DOM lays a logo over (ui/WorldSigns.tsx). */
+  get signFaces(): readonly string[] {
+    return this.signs.filter((s) => s.face).map((s) => signKey(s.name));
+  }
+
+  /**
+   * Where a sign's blank face is on the canvas this frame, in GAME pixels, or null when it is off
+   * the camera, hidden behind Purple, or the scene is not built (world/signs.ts `faceOnCanvas`).
+   */
+  signFace(key: string): Rect | null {
+    const main = this.cameras?.main;
+    const sign = this.signs.find((s) => signKey(s.name) === key);
+    if (!main || !sign) return null;
+    const p = this.purple;
+    const purple = p?.visible
+      ? { x: p.x - p.width / 2, y: p.y - p.height, width: p.width, height: p.height }
+      : null;
+    return faceOnCanvas(sign, main, purple);
   }
 
   private interact(target: Npc | null): void {

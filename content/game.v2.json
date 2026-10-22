@@ -299,7 +299,19 @@
       "marquee": "Off the Path"
     },
     "world": {
-      "title": "Explore"
+      "title": "Explore",
+      "signs": {
+        "research": {
+          "caption": "I ♥ Cyera Research",
+          "spoken": "I love Cyera Research"
+        },
+        "speed": {
+          "caption": "Cyera Speed!"
+        },
+        "logo": {
+          "caption": "Cyera"
+        }
+      }
     },
     "offer": {
       "title": "Offer",

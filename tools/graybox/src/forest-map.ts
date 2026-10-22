@@ -12,6 +12,7 @@ import {
 import { Img, lumaOf, noise, valueNoise2D } from './paint.ts';
 import { COLUMNS, TILE, TILE_NAMES, TILE_PAINTERS, gid } from './tiles.ts';
 import { SEALED_BANK } from './tiles/w-water.ts';
+import { LOGO_FACE } from './tiles/s-props.ts';
 
 export const MAP_W = 60;
 export const MAP_H = 42;
@@ -3931,6 +3932,38 @@ export function generateForestMap(): GeneratedMap {
    */
   place('notice-post', 43, 19, 'notice-board');
   /*
+   * ...AND SINCE 2026-10-23 IT SAYS "I ♥ CYERA RESEARCH", WHICH TAKES TWO TILES OF PAGE.
+   *
+   * The client's ask: the notice's paper lettered in the sign font. "RESEARCH" is 31 pixels and a
+   * page on one tile cannot carry it (s-props.ts, `NOTICE_PAGE`), so the page widens EAST onto
+   * `notice-board-r` at (44,19) and the post moves to the seam. East, because west of (43,19) is the
+   * sand of the approach -- (41,19) and (42,19) are the road's own north edge here -- and a notice on
+   * the carriageway is the signpost's old fault.
+   *
+   * Only the LANDMARKS are written here. The tiles are laid in the second pass (section 6 there),
+   * after every planting pass, and that is a measured choice rather than tidiness: laid here, the
+   * three new solid cells changed what the planting passes after this point drew -- the wood is
+   * planted off a noise stream and a new obstacle moves every later draw -- and the generation came
+   * back with five more walkable cells under opaque crowns, a crown over the river at (33,1), and
+   * trees moved at (10,2) and (13,2), forty tiles from any sign. Laid last, nothing else on the map
+   * moves: the cmp against the committed map is the proof.
+   *
+   *   the notice's east half   (44,19): a sapling's west trunk until now; see section 6 for the fell.
+   *   "Cyera Speed!"           (36,3): the clearing on the river's right bank at the head of the
+   *                            waterfall, directly under the low hedge (35..37, 2) and a tile east of
+   *                            the bank stones (34..36, 1), where the client's screenshot put it.
+   *                            Open lawn from x 34 to 38 and rows 3 to 6, so one solid cell in its
+   *                            north row closes no way through.
+   *   the logo board           (20..21, 22): the left bank's clearing near the spawn, at its lower
+   *                            right, where the client's screenshot put it -- two rows south of the
+   *                            road to the bridge (row 20 there), the bank at (22,22) east of it and a
+   *                            sapling at (18..19, 22) west. Off the sand and off both walk rows.
+   */
+  landmarks['notice-post-r'] = { x: 44 * TILE, y: 19 * TILE };
+  landmarks['sign-speed'] = { x: 36 * TILE, y: 3 * TILE };
+  landmarks['sign-logo'] = { x: 20 * TILE, y: 22 * TILE };
+  landmarks['sign-logo-r'] = { x: 21 * TILE, y: 22 * TILE };
+  /*
    * THE WELL GLADE, and the one thing on this map a player can aim at.
    *
    * The well used to stand alone on the bank at (23,24), a single tile in an unbroken field of
@@ -5841,6 +5874,33 @@ export function generateForestMap(): GeneratedMap {
     // Grandma's mailbox. APPENDED, like the forks, so every object above keeps its id. A `prop-*`,
     // so audit 5 holds it solid and guard 7k holds it whole in every composed frame it is in.
     { name: 'prop-mailbox', ...landmarks['mailbox']!, width: TILE, height: TILE },
+    /*
+     * THE THREE CYERA SIGNS (the client, 2026-10-23). APPENDED, like the forks and the mailbox, so
+     * every object above keeps its id. `sign-<key>`: the game reads `<key>` and looks its caption up
+     * in content's `ui.world.signs`, so the map names a sign and content says what it says. Audit 5
+     * holds a `sign-*` solid over every tile, as it holds a `prop-*`; guard 7k holds it whole.
+     *
+     * The research sign is the forest notice's own two tiles; its zero-click rect is still
+     * `notice-forest-post`, on the road below, and this object is only the thing that is drawn.
+     *
+     * `sign-logo` carries the blank face the DOM lays the logo over, as Tiled properties in art
+     * pixels from the object's top-left -- read from `LOGO_FACE` in s-props.ts, the painter that drew
+     * it, so the face is written once and the game cannot be pointed at a rectangle nobody painted.
+     */
+    { name: 'sign-research', ...landmarks['notice-post']!, width: TILE * 2, height: TILE },
+    { name: 'sign-speed', ...landmarks['sign-speed']!, width: TILE, height: TILE },
+    {
+      name: 'sign-logo',
+      ...landmarks['sign-logo']!,
+      width: TILE * 2,
+      height: TILE,
+      properties: [
+        { name: 'faceX', type: 'int', value: LOGO_FACE.x },
+        { name: 'faceY', type: 'int', value: LOGO_FACE.y },
+        { name: 'faceW', type: 'int', value: LOGO_FACE.w },
+        { name: 'faceH', type: 'int', value: LOGO_FACE.h },
+      ],
+    },
   ].map((o, i) => ({ id: i + 1, rotation: 0, visible: true, ...o }));
 
   // The gate tiles must stay walkable even after the fence loop.
@@ -7877,6 +7937,41 @@ export function generateForestMap(): GeneratedMap {
     solid(mx, my);
   }
 
+  /*
+   * 6. THE NOTICE'S SECOND HALF AND THE TWO CYERA SIGNS, laid last for the mailbox's reason -- no
+   * planting pass may put a bush or a crown over a sign -- and for the one recorded at their
+   * landmarks: laid any earlier, they move the wood. Every cell is read back off its landmark, so
+   * the landmark is the one place a sign's position is written.
+   *
+   * THE SAPLING UNDER THE NOTICE'S EAST HALF IS FELLED BY HAND, because the register's own felling
+   * (`clearArea`) runs before the canopy rebuild and would move it. Its two crown cells go back to
+   * open sky and its west trunk is the notice. Its EAST trunk cell (45,19) STAYS SOLID and becomes a
+   * boulder: opened, it would be a new way down from the lawn north of the gate approach onto the
+   * road, a shorter walk to the cottage than the one `packages/core`'s clock test measures the tour
+   * on, and the signs must not move that clock. A boulder is on MUST_STOP_HER, so it is drawn as the
+   * thing that stops her.
+   */
+  {
+    const nx = Math.floor(landmarks['notice-post-r']!.x / TILE);
+    const ny = Math.floor(landmarks['notice-post-r']!.y / TILE);
+    for (const dx of [0, 1]) set(above, nx + dx, ny - 1, 0);
+    set(below, nx + 1, ny, gid('rock'));
+    set(above, nx + 1, ny, 0);
+    solid(nx + 1, ny);
+  }
+  for (const [name, tile] of [
+    ['notice-post-r', 'notice-board-r'],
+    ['sign-speed', 'sign-speed'],
+    ['sign-logo', 'sign-logo-l'],
+    ['sign-logo-r', 'sign-logo-r'],
+  ] as const) {
+    const sx = Math.floor(landmarks[name]!.x / TILE);
+    const sy = Math.floor(landmarks[name]!.y / TILE);
+    set(below, sx, sy, gid(tile));
+    set(above, sx, sy, 0);
+    solid(sx, sy);
+  }
+
   console.log(
     `  second pass: ${castTiles.size} of the cast made solid, the facade's gable row closed, ` +
       `${behindTheRail} tile(s) sealed behind the enclosure's north rail, ` +
@@ -8070,6 +8165,11 @@ export function generateForestMap(): GeneratedMap {
     'notice-board',
     // Grandma's mailbox, 2026-10-23: a post, so a thing in the way.
     'mailbox',
+    // The forest notice's second half and the two Cyera signs, 2026-10-23: posts and stakes.
+    'notice-board-r',
+    'sign-speed',
+    'sign-logo-l',
+    'sign-logo-r',
     'roof-l',
     'roof-m',
     'roof-r',
@@ -8297,7 +8397,8 @@ export function generateForestMap(): GeneratedMap {
     const r = rectOf(o.name);
     const bad: [number, number][] = [];
     const isCast = o.name.startsWith('npc-') || o.name.startsWith('bystander-');
-    const wantsSolid = o.name.startsWith('prop-') || isCast;
+    // A `sign-*` is a thing in the way exactly as a `prop-*` is (the Cyera signs, 2026-10-23).
+    const wantsSolid = o.name.startsWith('prop-') || o.name.startsWith('sign-') || isCast;
     for (let y = r.y0; y <= r.y1; y++)
       for (let x = r.x0; x <= r.x1; x++) if (walkableAt(x, y) === wantsSolid) bad.push([x, y]);
     fault(`tile(s) of "${o.name}" that are ${wantsSolid ? 'not solid' : 'not walkable'}`, bad);
@@ -8339,7 +8440,7 @@ export function generateForestMap(): GeneratedMap {
    * would let the art drift off the thing it belongs to.
    */
   {
-    const NOTICE_TILES = new Set(['notice-board', 'door-note']);
+    const NOTICE_TILES = new Set(['notice-board', 'notice-board-r', 'door-note']);
     const noticeArt: [number, number][] = [];
     for (let y = 0; y < MAP_H; y++)
       for (let x = 0; x < MAP_W; x++)
@@ -9768,7 +9869,8 @@ export function generateForestMap(): GeneratedMap {
     ];
     for (const [what, frame, portrait] of composed)
       for (const o of objects) {
-        if (!o.name.startsWith('prop-') && !o.name.startsWith('npc-')) continue;
+        // A `sign-*` is a drawn structure as a `prop-*` is (2026-10-23), and is held whole the same.
+        if (!/^(prop|npc|sign)-/.test(o.name)) continue;
         // `rectOf` is inclusive at both ends; a frame is half-open, so take the span to x1 + 1.
         const r = rectOf(o.name);
         const [x0, x1, y0, y1] = [r.x0, r.x1 + 1, r.y0, r.y1 + 1];
@@ -9782,6 +9884,29 @@ export function generateForestMap(): GeneratedMap {
         ].filter(Boolean);
         if (o.name === 'prop-stall' && portrait && sides.length === 1 && sides[0] === 'east')
           continue;
+        /*
+         * THE NOTICE'S EAST HALF AT THE PHONE'S PAYOFF FRAME (2026-10-23), and it is not a waiver: it
+         * is the same rule asked of the PIXELS rather than of the rectangle. Since the notice is two
+         * tiles its rectangle reaches column 44, and the phone's payoff frame opens at x 44.75, so the
+         * rectangle is cut. What that frame shows of the notice is the last quarter of
+         * `notice-board-r`, and the page, its ring and its tufts all end well west of that quarter --
+         * the drawn east edge is measured here off the tile against the lawn it is painted on, so a
+         * wider page that did reach the frame edge would fire this exactly as before.
+         */
+        if (o.name === 'sign-research' && sides.length === 1 && sides[0] === 'west') {
+          const drawn = new Img(TILE, TILE);
+          TILE_PAINTERS['notice-board-r']!(drawn);
+          const lawn = new Img(TILE, TILE);
+          TILE_PAINTERS['grass-1']!(lawn);
+          let east = -1;
+          for (let y = 0; y < TILE; y++)
+            for (let x = 0; x < TILE; x++) {
+              const a = drawn.get(x, y);
+              const b = lawn.get(x, y);
+              if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) east = Math.max(east, x);
+            }
+          if (r.x1 + (east + 1) / TILE <= frame.x0) continue;
+        }
         faults.push(
           `${o.name} is cut by the ${sides.join(' and ')} edge of ${what} ` +
             `(its rectangle is columns ${r.x0}-${r.x1}, rows ${r.y0}-${r.y1}; the frame is ` +

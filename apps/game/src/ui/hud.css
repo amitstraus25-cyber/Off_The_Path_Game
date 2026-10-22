@@ -497,6 +497,48 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   transform: rotate(90deg);
 }
 
+/* ------------------------------------------------------------------ the logo on its board */
+
+/*
+ * THE CYERA LOGO ON THE BLANK BOARD IN THE WOOD (ui/WorldSigns.tsx). The layer is the world's own
+ * box and clips to it, like the fork signs' above; each sign's box is its board's blank face
+ * exactly, set by the component in CSS pixels, and the official SVG sits centred inside it at its own
+ * proportions. Nothing here colours, filters or reshapes the mark: `object-fit: contain` is what
+ * keeps the box's shape from stretching it, and the padding is the board's margin round the mark.
+ */
+.otp-worldsigns {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.otp-worldsign {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.otp-worldsign[hidden] {
+  display: none;
+}
+
+.otp-worldsign__logo {
+  display: block;
+  /*
+   * 84% of the face's width, so the mark stands clear of the board's frame by a twelfth of the
+   * face each side. A width and not padding on the box: a padding percentage resolves against the
+   * LAYER's width, which on a 1240px world made the box twice the face and the mark zero wide.
+   */
+  width: 84%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
 /* ------------------------------------------------------------------------------ the toast */
 
 /*
@@ -523,4 +565,14 @@ html .otp-ui .otp-layer.otp-layer--toast {
 html .otp-ui .otp-layer.otp-layer--toast .otp-toast {
   margin-bottom: 0;
   max-width: calc(100% - 28px * var(--otp-ui));
+}
+
+/*
+ * THE SIGN'S CAPTION shares the slot, above the toast (ui/App.tsx). Both lines stay in the document
+ * while empty so their live regions keep announcing, and both fold to nothing while they are, so a
+ * caption alone sits where the toast would and a toast alone never moves for the caption.
+ */
+html .otp-ui .otp-layer.otp-layer--toast .otp-toast:empty {
+  padding-block: 0;
+  border-block-width: 0;
 }

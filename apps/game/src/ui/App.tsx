@@ -13,6 +13,9 @@ import { Minimap } from './Minimap';
 import { DoorCheck } from './DoorCheck';
 import { ForkSigns } from './ForkSigns';
 import type { SignBoards } from './ForkSigns';
+import { WorldSigns } from './WorldSigns';
+import type { SignFaces } from './WorldSigns';
+import { NEAR_SIGN } from '../world/signs';
 import { NotationChip, WorldFrame } from './components';
 import { fill, strings } from './copy';
 import type { MapSketch } from '../world/minimap';
@@ -62,7 +65,7 @@ export interface AppProps {
    * labels stand on, and where the cast stand so the minimap can step back from them. Null until
    * the scene is built.
    */
-  signs?: (SignBoards & { castOnCanvas(): readonly Rect[] }) | null;
+  signs?: (SignBoards & SignFaces & { castOnCanvas(): readonly Rect[] }) | null;
 }
 
 const nowhere = (): Vec | null => null;
@@ -146,6 +149,30 @@ function useWithinReach(): string | null {
     return () => void window.removeEventListener(WITHIN_REACH, onReach);
   }, []);
   return id;
+}
+
+/**
+ * Which of the Cyera signs the scene says Purple is near, by key (world/signs.ts `NEAR_SIGN`).
+ *
+ * The key, and only the key, for `WITHIN_REACH`'s reason: the words are looked up in content below,
+ * so an event dispatched by anything else on the page can name at most a key, and a key content does
+ * not have puts nothing in the caption.
+ */
+function useNearSign(): string | null {
+  const [key, setKey] = useState<string | null>(null);
+  useEffect(() => {
+    const onNear = (event: Event): void => {
+      const detail: unknown = (event as CustomEvent<unknown>).detail;
+      const value =
+        typeof detail === 'object' && detail !== null && 'key' in detail
+          ? (detail as { key: unknown }).key
+          : null;
+      setKey(typeof value === 'string' ? value : null);
+    };
+    window.addEventListener(NEAR_SIGN, onNear);
+    return () => void window.removeEventListener(NEAR_SIGN, onNear);
+  }, []);
+  return key;
 }
 
 /**
@@ -240,6 +267,7 @@ export function App({
   const state = useStoreState(store);
   const { content } = store;
   const withinReach = useWithinReach();
+  const nearSign = useNearSign();
   const bearings = useBearings();
   const character = state.active ? v2.findCharacter(content, state.active) : undefined;
   const skill = character ? v2.findSkill(content, character.skillId) : undefined;
@@ -284,6 +312,19 @@ export function App({
     return () => clearTimeout(timer);
   }, [inForest, hintGone]);
 
+  /*
+   * THE SIGN'S CAPTION (the client, 2026-10-23): one line, what the sign Purple is near says, from
+   * content's `ui.world.signs`. Looked up with an own-property test, so a forged key -- `toString`,
+   * `__proto__` -- finds nothing rather than something off the prototype.
+   */
+  const signWords = content.ui.world.signs as Readonly<
+    Record<string, { caption: string; spoken?: string | undefined }>
+  >;
+  const sign =
+    inForest && nearSign !== null && Object.hasOwn(signWords, nearSign)
+      ? signWords[nearSign]!
+      : null;
+
   const reachName = withinReach ? (v2.findCharacter(content, withinReach)?.name ?? null) : null;
   const reachLine = reachName
     ? [reachName, strings['worldTravellerNear']].filter(Boolean).join(', ')
@@ -315,6 +356,8 @@ export function App({
           <h1 class="otp-visually-hidden" ref={forestHome} tabIndex={-1} data-autofocus>
             {content.ui.world.title}
           </h1>
+          {/* Before the HUD, so the clock, the basket and the Way Teller's chips paint over a logo. */}
+          {signs && <WorldSigns faces={signs} />}
           <Hud
             remainingMs={remaining}
             faceMs={winding.face}
@@ -352,6 +395,30 @@ export function App({
       */}
       {inWorld && (
         <div class="otp-layer otp-layer--toast" key="world-toast">
+          {/*
+            THE SIGN'S CAPTION, in the toast's own style and slot, ABOVE the toast so a perk's line
+            never lands on top of it and never moves when it comes and goes. Polite, atomic, and
+            mounted for the whole walk like the toast, so its region is there before its first line.
+            Where content gives a `spoken` form (the heart), a screen reader hears that and the eye
+            reads the caption: "I love Cyera Research", never "I black heart suit Cyera Research".
+          */}
+          <p
+            class="otp-toast otp-toast--sign"
+            aria-live="polite"
+            aria-atomic="true"
+            data-sign-caption={sign ? (nearSign ?? '') : ''}
+          >
+            {sign ? (
+              sign.spoken ? (
+                <>
+                  <span aria-hidden="true">{sign.caption}</span>
+                  <span class="otp-visually-hidden">{sign.spoken}</span>
+                </>
+              ) : (
+                sign.caption
+              )
+            ) : null}
+          </p>
           <p class="otp-toast" role="status" aria-live="polite" aria-atomic="true" data-toast="">
             {toast || null}
           </p>

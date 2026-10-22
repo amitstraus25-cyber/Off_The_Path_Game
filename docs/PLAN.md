@@ -89,6 +89,37 @@ morning interactions (`3e2473e`, `02420d6`), the afternoon screens (`8c4dc49`), 
 `3c88684`). The records of each round stay below under "Shipped in the client rounds of
 2026-10-22". What remains is waiting on a person or is planned.
 
+**The three Cyera signs (the client, 2026-10-23), in the working tree and NOT committed.**
+
+- [x] The forest notice reads "I ♥ / CYERA / RESEARCH" in a 3 x 5 pixel font, the heart in Deep
+      Purple. "RESEARCH" does not fit a one-tile page, so the notice is two tiles (`notice-board`
+      plus the appended `notice-board-r`, gid 113) with the post at the seam; the sapling at
+      (44..45, 18..19) is felled for it and its east trunk cell (45,19) is a boulder, so it stays
+      solid and the core clock's tour is unchanged at 113 tiles, leg for leg.
+- [x] A wooden "CYERA / SPEED!" board on two stakes at (36,3), the clearing at the waterfall's head
+      under the low hedge (`sign-speed`, gid 114).
+- [x] A blank dark board on two stakes at (20..21, 22), the left bank's clearing near the spawn at
+      its lower right (`sign-logo-l`/`-r`, gids 115 and 116), with the supplied
+      `cyera-logo-white.svg` laid over its face in the DOM (`ui/WorldSigns.tsx`): never painted,
+      `aria-hidden`, `alt=""`, hidden off the camera and while Purple stands in front of it. The
+      face is published on the `sign-logo` object's properties from the painter's `LOGO_FACE`.
+- [x] `sign-research`, `sign-speed`, `sign-logo` map objects (ids 22 to 24); audit 5 holds a
+      `sign-*` solid and guard 7k holds it whole. Laid in the generator's second pass, because laid
+      with the other landmarks they moved the wood forty tiles away; the regeneration changed 12 map
+      cells and 5 tileset cells, every one claimed.
+- [x] A polite one-line caption in the toast's slot while Purple is within two tiles of a sign:
+      `ui.world.signs` in `content/game.v2.json` (schema in core `v2/content.ts`), with a `spoken`
+      form for the heart ("I love Cyera Research").
+- [x] Guards: lettering contrast and margins, the logo face blank and dark (`s-props.ts`);
+      `test/signs.test.ts`; `e2e/forest-signs.spec.ts`, which measures the logo's box against the
+      board's own pixels at 1280x800 and 375x812.
+- **Deferred / assumed.** The Deep Purple heart and the Cyera lettering on world props are a
+  client-requested exception to PIXEL_STANDARD section 2 and CLAUDE.md rule 4's reading in
+  s-props.ts, and want a brand reviewer's yes. The two placements are read from a description of
+  the client's screenshots, not the screenshots. The logo is not dimmed by the dusk wash (it is
+  DOM; dimming it would mean filtering the mark). The three captions have not been through
+  `docs/COPY_REVIEW.md`.
+
 ### Planned
 
 - **Phase 7, the release candidate:** the host side of the embed (the responsive container and a

@@ -326,8 +326,21 @@ const ui = z.strictObject({
   }),
   /** The arcade cabinet's marquee: the words beside the Cyera logo across the top of every screen. */
   cabinet: z.strictObject({ marquee: text }),
-  /** 01 Explore: the forest's frame title, which is also its hidden h1. */
-  world: z.strictObject({ title: text }),
+  /**
+   * 01 Explore: the forest's frame title, which is also its hidden h1; and what the three Cyera
+   * signs in the wood say (the client, 2026-10-23). Each sign is a `sign-<key>` object on the map,
+   * and its `caption` is the one line shown politely while Purple is near it. `spoken`, where given,
+   * is what a screen reader hears instead -- the caption's heart is a glyph, and "I black heart suit"
+   * is not what the sign says. apps/game/test/signs.test.ts holds the keys to the map's objects.
+   */
+  world: z.strictObject({
+    title: text,
+    signs: z.strictObject({
+      research: z.strictObject({ caption: text, spoken: text.optional() }),
+      speed: z.strictObject({ caption: text, spoken: text.optional() }),
+      logo: z.strictObject({ caption: text, spoken: text.optional() }),
+    }),
+  }),
   /**
    * 02 Offer: the frame title, the two answers and the way out. ONE PANEL since 2026-10-22 (the
    * client: "I want the card to open automatically"): who is speaking, then the card itself, then

@@ -147,7 +147,14 @@ export const raw = {
       go: 'Fixture go',
     },
     cabinet: { marquee: 'Fixture marquee' },
-    world: { title: 'Fixture world' },
+    world: {
+      title: 'Fixture world',
+      signs: {
+        research: { caption: 'Fixture research sign', spoken: 'Fixture research sign, spoken' },
+        speed: { caption: 'Fixture speed sign' },
+        logo: { caption: 'Fixture logo sign' },
+      },
+    },
     offer: {
       title: 'Fixture offer',
       take: 'Fixture take',

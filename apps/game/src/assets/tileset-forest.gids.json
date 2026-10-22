@@ -110,5 +110,9 @@
   "bank-stones-cove-ne": 109,
   "bank-stones-cove-sw": 110,
   "bank-stones-cove-se": 111,
-  "mailbox": 112
+  "mailbox": 112,
+  "notice-board-r": 113,
+  "sign-speed": 114,
+  "sign-logo-l": 115,
+  "sign-logo-r": 116
 }

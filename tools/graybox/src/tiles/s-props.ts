@@ -1568,7 +1568,7 @@ function arrowBoard(
  * subtract the right ground and be left with the post. A guard that assumed the variant would be
  * measuring grass as if it were timber the first time a painter changed its mind.
  */
-const POST_GROUND = { signpost: 2, 'notice-board': 1, mailbox: 0 } as const;
+const POST_GROUND = { signpost: 2, 'notice-board': 1, 'notice-board-r': 1, mailbox: 0 } as const;
 
 const signpost: Painter = (img) => {
   groundUnder(img, POST_GROUND.signpost);
@@ -1867,76 +1867,390 @@ function writing(
 /** A nail head: the one cool near-black on a warm page, which is what says the sheet is fixed. */
 const nail = (s: Img, x: number, y: number): void => s.px(x, y, LINE.metal);
 
+/* ------------------------------------------------------ three signs that say Cyera */
+
 /*
- * THE NOTICE NAILED TO A POST, on the gate approach.
+ * ===========================================================================
+ * LETTERING ON THE CANVAS, AND WHY THIS IS NOT THE THING RULE 4 FORBIDS.
+ * ===========================================================================
  *
- * The page is 18 x 19 on a 32 x 32 tile -- a third of the tile's area -- and it is deliberately far
- * bigger than a sheet of paper would be against a six-pixel post. The alternative is honest scale
- * and an illegible mark: the brass light on Grandma's door is 8 x 7 and is the smallest thing on
- * that facade that reads at all, so anything the player is asked to walk to has to be larger than
- * that by some margin. Portrait, because a document is portrait and the signpost's arms are
- * landscape, and that is the second thing the silhouette says after "pale".
+ * The client asked on 2026-10-23 for three signs in the wood: the forest notice to read
+ * "I ♥ Cyera Research", a new wooden sign reading "Cyera Speed!", and a blank board carrying the
+ * Cyera logo. Everything above this line says a legible word at this size would be a smear and that
+ * CLAUDE.md rule 4 keeps text off the canvas, so the departure is worth stating exactly.
+ *
+ * Rule 4 is about UI TEXT: a panel, a label, an instruction the player has to read to play. None of
+ * these is that. They are lettering painted on a prop, the way the market stall's sign carries a
+ * compass -- set dressing that happens to spell something -- and every one of them has a DOM caption
+ * (`ui.world.signs` in content/game.v2.json, said politely when Purple is near) so nothing a player
+ * or a screen reader needs lives only in the pixels. The LOGO is not painted at all: rule 5 forbids
+ * redrawing it, so its board is painted blank and the supplied SVG is laid over it in the DOM.
+ *
+ * THE FONT is three by five with one column between letters, the smallest a capital alphabet can be
+ * and stay unambiguous. At the game's zoom 2 a letter is 6 x 10 CSS pixels; at a phone's zoom 1 it is
+ * 3 x 5 CSS pixels, drawn on six by ten device pixels on every phone with a 2x screen. Nothing
+ * smaller reads, and anything bigger would not fit "RESEARCH" on any board a post can carry.
+ * Capitals only, because a lower-case "y" or "e" needs a descender and a bowl that five rows cannot
+ * hold. Only the letters these three signs spell are drawn; a sign that asks for another one throws.
  */
-const NOTICE_PAGE = { x: 7, y: 8, w: 18, h: 19 } as const;
+const GLYPHS: Record<string, readonly string[]> = {
+  A: ['.#.', '#.#', '###', '#.#', '#.#'],
+  C: ['.##', '#..', '#..', '#..', '.##'],
+  D: ['##.', '#.#', '#.#', '#.#', '##.'],
+  E: ['###', '#..', '##.', '#..', '###'],
+  H: ['#.#', '#.#', '###', '#.#', '#.#'],
+  I: ['###', '.#.', '.#.', '.#.', '###'],
+  P: ['##.', '#.#', '##.', '#..', '#..'],
+  R: ['##.', '#.#', '##.', '#.#', '#.#'],
+  S: ['.##', '#..', '.#.', '..#', '##.'],
+  Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
+  '!': ['#', '#', '#', '.', '#'],
+  /*
+   * The heart, five wide so its two lobes are separate pixels -- at three wide it is a triangle.
+   * It is the one glyph not drawn in the sign's ink: see `heartInk`.
+   */
+  '♥': ['.#.#.', '#####', '#####', '.###.', '..#..'],
+  // A word space: one blank column, which with the gap either side of it is three.
+  ' ': ['.', '.', '.', '.', '.'],
+};
 
-const noticeBoard: Painter = (img) => {
-  groundUnder(img, POST_GROUND['notice-board']);
-  cast(img, 16, 30.5, 8.6, 2.6);
+/** Rows in every glyph. */
+const LETTER_H = 5;
 
-  stand(img, (s) => {
+/** The blank column between two glyphs. */
+const LETTER_GAP = 1;
+
+/** How wide a line of lettering is, in pixels. */
+function measure(text: string): number {
+  let w = 0;
+  for (const ch of text) {
+    const g = GLYPHS[ch];
+    if (!g) throw new Error(`the sign font has no "${ch}" -- draw it in GLYPHS before using it`);
+    w += g[0]!.length + LETTER_GAP;
+  }
+  return Math.max(0, w - LETTER_GAP);
+}
+
+/**
+ * Letters one line of `text` with its top-left at (x, y), every glyph pixel in `ink(ch, gx, gy)` --
+ * the glyph's own column and row passed so a glyph can carry a highlight. Hard pixels only.
+ */
+function letter(
+  s: Img,
+  text: string,
+  x: number,
+  y: number,
+  ink: (ch: string, gx: number, gy: number) => RGBA,
+): void {
+  let at = x;
+  for (const ch of text) {
+    const g = GLYPHS[ch]!;
+    for (let gy = 0; gy < LETTER_H; gy++)
+      for (let gx = 0; gx < g[gy]!.length; gx++)
+        if (g[gy]![gx] === '#') s.px(at + gx, y + gy, ink(ch, gx, gy));
+    at += g[0]!.length + LETTER_GAP;
+  }
+}
+
+/** Letters `text` centred across the span x0..x0+w-1. */
+function letterCentred(
+  s: Img,
+  text: string,
+  x0: number,
+  w: number,
+  y: number,
+  ink: (ch: string, gx: number, gy: number) => RGBA,
+): void {
+  letter(s, text, x0 + Math.floor((w - measure(text)) / 2), y, ink);
+}
+
+/*
+ * THE HEART IS BRAND PURPLE, on the client's word. PIXEL_STANDARD section 2 keeps Purple's hues off
+ * the props -- the protagonist and the attacker are meant to be the only saturated figures in frame
+ * -- and this is a deliberate, client-requested exception the size of one 5 x 5 glyph. It is Deep
+ * Purple #441363 (`cloak` level 0, the brand's primary purple), not Lilac: on cream paper Lilac sits
+ * within forty luma of the page and the heart would go to a smudge, where Deep Purple stands two
+ * hundred below it. One Aubergine pixel on the west lobe is the light from the top left -- Lilac
+ * there was tried and stood only 75 luma off the page, which the guard at the foot of this file
+ * fails, because a pale pixel in a five-pixel glyph eats the lobe. FOR BRAND REVIEW.
+ */
+const heartInk = (gx: number, gy: number): RGBA =>
+  gx === 1 && gy === 0 ? shade('cloak', 1) : shade('cloak', 0);
+
+/**
+ * Paints a prop that is wider than one tile on its own transparent sheet, rounds it off and rings it
+ * exactly as `stand()` does for one tile, and returns the sheet for each tile to cut its column from.
+ * One sheet rather than one `stand()` per tile, so `ring` and `bank` see the whole object and draw no
+ * seam down the tile boundary.
+ */
+function standSheet(tiles: number, draw: (s: Img) => void, line: RGBA = LINE.wood): Img {
+  const s = new Img(TILE * tiles, TILE);
+  draw(s);
+  bank(s);
+  ring(s, line);
+  return s;
+}
+
+/** Lays column `slot` of a sheet from `standSheet` onto a tile, over whatever ground it has. */
+function cutColumn(img: Img, sheet: Img, slot: number): void {
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const c = sheet.get(slot * TILE + x, y);
+      if (c[3] !== 0) img.px(x, y, c);
+    }
+}
+
+/**
+ * The tuft ring every post here wears at its foot, at sheet coordinates, cut to the tile at `slot`.
+ * Three blades of unequal height in the grass ramp's two darkest stops -- see the note on the
+ * signpost for why those two and not the lit tips.
+ */
+function tufts(img: Img, at: readonly (readonly [number, number])[], slot = 0): void {
+  for (const [sx, by] of at)
+    for (const [dx, up] of [
+      [0, 1],
+      [1, 2],
+      [2, 1],
+    ] as const) {
+      const x = sx + dx - slot * TILE;
+      if (x < 0 || x >= TILE) continue;
+      for (let j = 0; j < up; j++) img.px(x, by - j, shade('grass', j === up - 1 ? 1 : 0));
+    }
+}
+
+/*
+ * THE NOTICE NAILED TO A POST, on the gate approach -- and since 2026-10-23 it says something.
+ *
+ * "I ♥ / CYERA / RESEARCH", three lines, in the sign font. RESEARCH is 31 pixels, and the page was
+ * 18 wide on a 32-pixel tile, so the page could not carry the word and no page on one tile could:
+ * 31 plus a three-pixel margin a side is 37. So the notice is TWO tiles now, `notice-board` and
+ * `notice-board-r`, and the page is 38 x 24 -- the same paper, the same nails, the same dog ear and
+ * the same capped post, made wide enough for the line, which is the brief's "widen the paper in the
+ * same hand". The post moves to the seam so it stands under the middle of the page: a sheet that
+ * wide nailed to a post at one end would read as a flag.
+ *
+ * Landscape now, where it was portrait, and that costs the pair less than it looks. Portrait was the
+ * SECOND thing the silhouette said; "pale" was the first, and the pale share holds (guarded below on
+ * both halves). The arms of the signpost are still timber from end to end and point; this is still a
+ * page, and it is now the only thing in the wood with writing on it that a player can read.
+ *
+ * The page stands three rows from the tile's top, which leaves five rows of post below it -- the
+ * same five the portrait page left -- so it still reads as a sheet on a post rather than a panel on
+ * the ground. Ruled strokes of writing are gone: there is real lettering where they stood.
+ *
+ * The ink is the cream's own keyline (`LINE.cloth`), a warm near-black, so the letters stand some two
+ * hundred luma under the page they are written on. The heart is the exception; see `heartInk`.
+ */
+const NOTICE_PAGE = { x: 13, y: 3, w: 38, h: 24 } as const;
+
+/** The post under the notice, centred on the seam between its two tiles. */
+const NOTICE_POST = { x: 29, w: 6 } as const;
+
+/** Where each line of the notice starts, top row, on the sheet. */
+const NOTICE_LINES = [
+  { text: 'I ♥', y: 6 },
+  { text: 'CYERA', y: 12 },
+  { text: 'RESEARCH', y: 18 },
+] as const;
+
+function paintNoticeSheet(): Img {
+  return standSheet(2, (s) => {
     // The post reaches the tile's last row, as the signpost's does: a post that stops short floats.
-    postV(s, 13, 3, 6, 29);
-    capBlock(s, 12, 1, 8, 3);
+    postV(s, NOTICE_POST.x, 2, NOTICE_POST.w, 30);
+    capBlock(s, NOTICE_POST.x - 1, 1, NOTICE_POST.w + 2, 2);
 
     const { x, y, w, h } = NOTICE_PAGE;
     paper(s, x, y, w, h);
 
     // The page against the post, top and bottom, where `ring()` cannot see the edge: opaque on
     // opaque. Then the page's own shadow falling down the post below it.
-    s.rect(13, y, 6, 1, LINE.cloth);
-    s.rect(13, y + h - 1, 6, 1, LINE.cloth);
-    sinkRun(s, 13, y + h, 6, 1, 54);
-    sinkRun(s, 13, y + h + 1, 6, 1, 24);
+    s.rect(NOTICE_POST.x, y, NOTICE_POST.w, 1, LINE.cloth);
+    s.rect(NOTICE_POST.x, y + h - 1, NOTICE_POST.w, 1, LINE.cloth);
+    sinkRun(s, NOTICE_POST.x, y + h, NOTICE_POST.w, 1, 54);
+    sinkRun(s, NOTICE_POST.x, y + h + 1, NOTICE_POST.w, 1, 24);
 
-    nail(s, x + 2, y + 2);
-    nail(s, x + w - 3, y + 2);
+    nail(s, x + 2, y + 1);
+    nail(s, x + w - 3, y + 1);
 
-    // A heading of two short lines, a rule under it, then the body. The rule is the cheapest mark
-    // that says "this is a notice and not a page of a book".
-    writing(s, x + 3, y + 3, w - 6, [0, 4], 150);
-    sinkRun(s, x + 3, y + 7, w - 6, 1, 70);
-    writing(s, x + 3, y + 9, w - 6, [0, 2, 0, 5], 105);
+    for (const line of NOTICE_LINES)
+      letterCentred(s, line.text, x, w, line.y, (ch, gx, gy) =>
+        ch === '♥' ? heartInk(gx, gy) : LINE.cloth,
+      );
 
     /*
      * The dog ear: the sheet's own back, folded up at the foot, with the fold in near-black.
      *
-     * It is four pixels and it is the difference between paper and a painted panel. A rectangle
-     * with writing on it is a sign; a rectangle with one corner turned up is a thing somebody
-     * pinned there, which is the whole proposition of this prop.
+     * It is a handful of pixels and it is the difference between paper and a painted panel. A
+     * rectangle with writing on it is a sign; a rectangle with one corner turned up is a thing
+     * somebody pinned there, which is the whole proposition of this prop. Four now, not five: at
+     * five its tip reached the foot of RESEARCH's last letter.
      */
-    const EAR = 5;
+    const EAR = 4;
     for (let j = 0; j < EAR; j++)
       for (let i = 0; i + j < EAR; i++) s.px(x + w - 1 - i, y + h - 1 - j, band('wall', 0.08, 4));
     for (let k = 0; k < EAR; k++) s.px(x + w - EAR + k, y + h - 1 - k, LINE.cloth);
   });
+}
 
-  /*
-   * The same tuft ring the signpost wears at its foot, in the grass ramp's two darkest stops, so
-   * the post grows out of the lawn rather than standing on it. See the note on the signpost.
-   */
-  for (const [bx, by] of [
-    [9, 29],
-    [12, 30],
-    [18, 30],
-    [21, 29],
-  ] as const)
-    for (const [dx, up] of [
-      [0, 1],
-      [1, 2],
-      [2, 1],
-    ] as const)
-      for (let j = 0; j < up; j++) img.px(bx + dx, by - j, shade('grass', j === up - 1 ? 1 : 0));
+let noticeSheet: Img | undefined;
+
+/** One half of the notice. The pool and the tufts are laid per tile, at sheet coordinates. */
+const noticeHalf =
+  (slot: 0 | 1): Painter =>
+  (img) => {
+    noticeSheet ??= paintNoticeSheet();
+    groundUnder(img, POST_GROUND['notice-board']);
+    cast(img, NOTICE_POST.x + NOTICE_POST.w / 2 - slot * TILE, 30.5, 8.6, 2.6);
+    cutColumn(img, noticeSheet, slot);
+    tufts(
+      img,
+      [
+        [22, 29],
+        [25, 30],
+        [36, 30],
+        [39, 29],
+      ],
+      slot,
+    );
+  };
+
+const noticeBoard: Painter = noticeHalf(0);
+const noticeBoardR: Painter = noticeHalf(1);
+
+/*
+ * "CYERA SPEED!" -- A WOODEN SIGN by the waterfall, on two stakes.
+ *
+ * Timber, not paper, because it is a sign and not a notice: nothing scores the player for reading
+ * it, and the pair guard below keeps paper for the things the game does score. Two lines, CYERA over
+ * SPEED!, so it fits one tile; on one line it is 44 pixels and would need a second tile of solid
+ * ground in a clearing that is not wide.
+ *
+ * The board is laid in the timber's lower bands so the lettering -- painted, in the cottage plaster's
+ * top cream -- stands a hundred and more luma above it. A groove between the two planks runs between
+ * the lines, never through a letter. Two stakes rather than one post, so it does not read as the
+ * notice's silhouette at a glance, and each stake has its own pool and its own tufts.
+ */
+const SPEED_BOARD = { x: 2, y: 3, w: 28, h: 18 } as const;
+
+const SPEED_LINES = [
+  { text: 'CYERA', y: 6 },
+  { text: 'SPEED!', y: 12 },
+] as const;
+
+/** The two stakes, left edge and width. */
+const SPEED_STAKES = [6, 22] as const;
+const STAKE_W = 4;
+
+/** Painted cream on timber: the plaster's top stop, so the letters are the lightest thing on it. */
+const PAINT_INK = shade('wall', 3);
+
+const signSpeed: Painter = (img) => {
+  // The lawn the map has at (36,3), and the logo board's below: the variant under each cell, so the
+  // prop's own ground meets its neighbours in the same mottle.
+  groundUnder(img, 1);
+  for (const sx of SPEED_STAKES) cast(img, sx + STAKE_W / 2, 30.5, 5.4, 2.5);
+
+  stand(img, (s) => {
+    for (const sx of SPEED_STAKES)
+      postV(s, sx, SPEED_BOARD.y + 2, STAKE_W, TILE - SPEED_BOARD.y - 2);
+    const { x, y, w, h } = SPEED_BOARD;
+    face(s, x, y, w, h, 'wood', 0.04, 0.04 + SPAN * 0.5);
+    // The groove between the two planks, one row under CYERA and one above SPEED!.
+    sinkRun(s, x, SPEED_LINES[1].y - 1, w, 1, 46);
+    for (const line of SPEED_LINES) letterCentred(s, line.text, x, w, line.y, () => PAINT_INK);
+    // The board throws its line onto the stakes below it, which `ring()` cannot see.
+    for (const sx of SPEED_STAKES) {
+      sinkRun(s, sx, y + h, STAKE_W, 1, 48);
+      sinkRun(s, sx, y + h + 1, STAKE_W, 1, 22);
+    }
+  });
+
+  tufts(img, [
+    [3, 29],
+    [10, 30],
+    [19, 30],
+    [26, 29],
+  ]);
 };
+
+/*
+ * THE LOGO BOARD: A BLANK BOARD, AND THE LOGO IS NOT PAINTED ON IT.
+ *
+ * CLAUDE.md rule 5: the logo is used as supplied, never redrawn. A 734 x 176 vector mark traced into
+ * a fifty-pixel-wide tile is a redrawing by definition, so this painter draws the board and stops.
+ * The game lays `reference/brand/logos/cyera-logo-white.svg` -- byte for byte, as `public/brand`
+ * serves it -- over `LOGO_FACE` in the DOM (ui/WorldSigns.tsx), where it is drawn by the browser at
+ * the screen's own resolution and cannot be recoloured, stretched or redrawn by anything here.
+ *
+ * WHITE, because the board is dark: the logo README's own rule is black on light, white on dark,
+ * and the face is laid at the bottom of `trunk` (about luma 60) so the offwhite mark stands at a
+ * contrast ratio over ten to one. The face is flat -- two tones of the trunk ramp and no grain, no
+ * knot, no seam -- because the guard below holds it BLANK: any mark painted under the logo is a mark
+ * the logo has to fight.
+ *
+ * Two tiles wide: one tile cannot carry a 4.17:1 mark at a size that reads. A frame of lit timber
+ * round the dark face so it reads as a signboard and not as a hole, and two stakes.
+ */
+
+/**
+ * The blank face the logo is laid over, on the two-tile sheet: x and y from the LEFT tile's top-left,
+ * in art pixels. Published on the map's `sign-logo` object (forest-map.ts), which is how the game
+ * learns it -- one number, written once, here.
+ */
+export const LOGO_FACE = { x: 6, y: 5, w: 52, h: 14 } as const;
+
+/** The board the face is inset into: a two-pixel lit frame all round. */
+const LOGO_BOARD = {
+  x: LOGO_FACE.x - 2,
+  y: LOGO_FACE.y - 2,
+  w: LOGO_FACE.w + 4,
+  h: LOGO_FACE.h + 4,
+} as const;
+
+/** The two stakes, on the sheet: left edge each. */
+const LOGO_STAKES = [12, 48] as const;
+
+function paintLogoSheet(): Img {
+  return standSheet(2, (s) => {
+    for (const sx of LOGO_STAKES) postV(s, sx, LOGO_BOARD.y + 2, STAKE_W, TILE - LOGO_BOARD.y - 2);
+    const b = LOGO_BOARD;
+    face(s, b.x, b.y, b.w, b.h, 'wood', 0.3, 0.3 + SPAN * 0.7);
+    const f = LOGO_FACE;
+    /*
+     * The face: flat and dark, in two tones of `trunk` a few luma apart. Its top row and left column
+     * are the darker one -- the frame's own shadow falling into the recess from the top-left light --
+     * and the rest is one flat tone, so there is nothing under the logo for it to fight.
+     */
+    for (let j = 0; j < f.h; j++)
+      for (let i = 0; i < f.w; i++)
+        s.px(f.x + i, f.y + j, tone('trunk', i === 0 || j === 0 ? 0.0 : 0.18));
+    for (const sx of LOGO_STAKES) {
+      sinkRun(s, sx, b.y + b.h, STAKE_W, 1, 48);
+      sinkRun(s, sx, b.y + b.h + 1, STAKE_W, 1, 22);
+    }
+  });
+}
+
+let logoSheet: Img | undefined;
+
+const logoHalf =
+  (slot: 0 | 1): Painter =>
+  (img) => {
+    logoSheet ??= paintLogoSheet();
+    groundUnder(img, slot === 0 ? 2 : 0);
+    for (const sx of LOGO_STAKES) cast(img, sx + STAKE_W / 2 - slot * TILE, 30.5, 5.4, 2.5);
+    cutColumn(img, logoSheet, slot);
+    tufts(
+      img,
+      [
+        [8, 29],
+        [17, 30],
+        [44, 30],
+        [53, 29],
+      ],
+      slot,
+    );
+  };
 
 /*
  * THE NOTE PINNED TO GRANDMA'S DOOR.
@@ -1999,6 +2313,10 @@ export const PROP_TILES: Record<string, Painter> = {
   'notice-board': noticeBoard,
   'door-note': doorNote,
   mailbox,
+  'notice-board-r': noticeBoardR,
+  'sign-speed': signSpeed,
+  'sign-logo-l': logoHalf(0),
+  'sign-logo-r': logoHalf(1),
 };
 
 /* ------------------------------------------------- the guards, at import time */
@@ -2034,7 +2352,10 @@ export const PROP_TILES: Record<string, Painter> = {
 const PAPER_LUMA = 205;
 
 /** A post's own pixels: everything its painter changed about the lawn it was given to stand on. */
-function postSignature(name: 'signpost' | 'notice-board'): { drawn: number; pale: number } {
+function postSignature(name: 'signpost' | 'notice-board' | 'notice-board-r'): {
+  drawn: number;
+  pale: number;
+} {
   const img = new Img(TILE, TILE);
   PROP_TILES[name]!(img);
   const lawn = new Img(TILE, TILE);
@@ -2156,13 +2477,18 @@ const NOTICE_GUARD = {
     );
 
   const notice = postSignature('notice-board');
+  const noticeR = postSignature('notice-board-r');
   const sign = postSignature('signpost');
   const share = (s: { drawn: number; pale: number }): number =>
     s.drawn > 0 ? s.pale / s.drawn : 0;
-  const pair = `notice-board ${share(notice).toFixed(2)}, signpost ${share(sign).toFixed(2)}`;
-  if (share(notice) < NOTICE_GUARD.postPaleLo)
+  const pair =
+    `notice-board ${share(notice).toFixed(2)}, notice-board-r ${share(noticeR).toFixed(2)}, ` +
+    `signpost ${share(sign).toFixed(2)}`;
+  // Both halves since the notice became two tiles (2026-10-23): a page that is paper on one side of
+  // the seam and timber on the other is a notice half-drawn.
+  if (Math.min(share(notice), share(noticeR)) < NOTICE_GUARD.postPaleLo)
     throw new Error(
-      `The forest notice is not paper-faced (want at least ${NOTICE_GUARD.postPaleLo} of it over ${PAPER_LUMA} luma): ${pair}. It is the post the whole level's zero-click beat rests on; a player has to see at a glance that it is something to read.`,
+      `The forest notice is not paper-faced (want at least ${NOTICE_GUARD.postPaleLo} of each half over ${PAPER_LUMA} luma): ${pair}. It is the post the whole level's zero-click beat rests on; a player has to see at a glance that it is something to read.`,
     );
   if (share(sign) > NOTICE_GUARD.postPaleHi)
     throw new Error(
@@ -2239,6 +2565,10 @@ const GROUND_PROPS = [
   'lantern-post',
   'fountain',
   'mailbox',
+  'notice-board-r',
+  'sign-speed',
+  'sign-logo-l',
+  'sign-logo-r',
 ] as const;
 
 /** What the LAWN still visible in a finished prop tile reads. */
@@ -2332,5 +2662,98 @@ for (const name of GROUND_PROPS) {
   if (hoodTop - flagTop < 2)
     throw new Error(
       `Grandma's mailbox has its flag down (want its top at least two rows above the hood's crown): ${say}. "Mailbox with the flag up" is UI_FOUNDATIONS section 8's own wording.`,
+    );
+}
+
+/*
+ * ===========================================================================
+ * AND THE THREE CYERA SIGNS READ: THE LETTERS STAND OFF THEIR BOARD, AND THE LOGO'S BOARD IS BLANK.
+ * ===========================================================================
+ *
+ * Two ways the lettering can be drawn and still say nothing, and the guard is on both. A letter can
+ * sink into its ground -- ink the paper's own colour, cream on a board lit as pale as the paint, or a
+ * line set on the board's banked rim, where `bank()` takes the edge down 58 luma -- and a line can
+ * overrun the board it is on, so the end of RESEARCH is laid on the post or the lawn. So every glyph
+ * pixel is measured on the FINISHED sheet against the median of the ground pixels in its own line's
+ * box, and every line's box has to sit two pixels clear of its board's edge.
+ *
+ * The floor is 100 luma, and it is the distance that reads at a phone's zoom 1, where a letter is
+ * 3 x 5 CSS pixels. Measured by this guard on the sheets as drawn (2026-10-23): the notice's weakest
+ * letter stands 226 off its page on CYERA and 212 on RESEARCH, the heart line's weakest pixel 175
+ * (the heart's one Aubergine highlight; its Deep Purple body stands about 205 under the page), and
+ * the speed sign's paint 145 over its timber on both lines.
+ *
+ * And the logo's board has to stay blank and dark: blank because anything painted under a mark the
+ * DOM lays on top is a mark the logo has to fight, and dark because the mark is the white one. Its
+ * face spans at most 24 luma end to end and tops out under 90, so the offwhite logo (251) stands at
+ * least 160 above every pixel of it.
+ */
+{
+  const LETTER_FLOOR = 100;
+  const MARGIN = 2;
+
+  const median = (xs: number[]): number => {
+    const sorted = [...xs].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)] ?? 0;
+  };
+
+  const check = (
+    what: string,
+    sheet: Img,
+    board: { x: number; y: number; w: number; h: number },
+    lines: readonly { text: string; y: number }[],
+  ): void => {
+    for (const line of lines) {
+      const w = measure(line.text);
+      const x0 = board.x + Math.floor((board.w - w) / 2);
+      if (
+        x0 - board.x < MARGIN ||
+        board.x + board.w - (x0 + w) < MARGIN ||
+        line.y - board.y < MARGIN ||
+        board.y + board.h - (line.y + LETTER_H) < MARGIN
+      )
+        throw new Error(
+          `${what}: "${line.text}" is ${w}px at (${x0},${line.y}) on a ${board.w}x${board.h} board at (${board.x},${board.y}) -- under ${MARGIN}px from the board's edge, where the rim is banked dark or the line runs off the board. Widen the board or shorten the line.`,
+        );
+      const ink: number[] = [];
+      const ground: number[] = [];
+      let at = x0;
+      const glyphAt = new Set<number>();
+      for (const ch of line.text) {
+        const g = GLYPHS[ch]!;
+        for (let gy = 0; gy < LETTER_H; gy++)
+          for (let gx = 0; gx < g[gy]!.length; gx++)
+            if (g[gy]![gx] === '#') glyphAt.add((line.y + gy) * sheet.w + at + gx);
+        at += g[0]!.length + LETTER_GAP;
+      }
+      for (let y = line.y; y < line.y + LETTER_H; y++)
+        for (let x = x0; x < x0 + w; x++)
+          (glyphAt.has(y * sheet.w + x) ? ink : ground).push(lumaOf(sheet.get(x, y)));
+      const bg = median(ground);
+      const weakest = Math.min(...ink.map((l) => Math.abs(l - bg)));
+      if (weakest < LETTER_FLOOR)
+        throw new Error(
+          `${what}: a letter of "${line.text}" stands only ${weakest.toFixed(0)} luma off its ground (median ${bg.toFixed(0)}; want at least ${LETTER_FLOOR}). A letter the colour of its board is the same bug as no letter, and at a phone's zoom 1 it is three CSS pixels wide.`,
+        );
+    }
+  };
+
+  check('the forest notice', (noticeSheet ??= paintNoticeSheet()), NOTICE_PAGE, NOTICE_LINES);
+  const speed = new Img(TILE, TILE);
+  signSpeed(speed);
+  check('the Cyera Speed! sign', speed, SPEED_BOARD, SPEED_LINES);
+
+  const logo = (logoSheet ??= paintLogoSheet());
+  let lo = 255;
+  let hi = 0;
+  for (let j = 0; j < LOGO_FACE.h; j++)
+    for (let i = 0; i < LOGO_FACE.w; i++) {
+      const l = lumaOf(logo.get(LOGO_FACE.x + i, LOGO_FACE.y + j));
+      lo = Math.min(lo, l);
+      hi = Math.max(hi, l);
+    }
+  if (hi - lo > 24 || hi >= 90)
+    throw new Error(
+      `The logo board's face is not a blank dark panel (luma ${lo.toFixed(0)}..${hi.toFixed(0)}; want a span of at most 24 and nothing at or over 90). The white Cyera logo is laid over this face in the DOM: anything drawn here is drawn under the logo, and a pale face loses the white mark.`,
     );
 }

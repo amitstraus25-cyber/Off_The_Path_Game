@@ -324,9 +324,19 @@ describe('the map', () => {
    * cell until then), all 111 earlier names keep their gid, and the only map cells that changed are
    * `decor-below` (53,20), 22 (`flower-pink`) -> 112, and `collision` (53,20), 0 -> 1, plus the
    * appended `prop-mailbox` object (id 21). The sheet stays 384x320 because `ceil(112 / 12)` is 10.
+   *
+   * 116 since 2026-10-23, later: the three Cyera signs -- `notice-board-r`, `sign-speed`,
+   * `sign-logo-l`, `sign-logo-r` -- APPENDED at gids 113 to 116. Verified on the regeneration that
+   * committed them, cell by cell against the map and sheet before it: the only tileset cells that
+   * changed are gid 78 (`notice-board`, repainted as the notice's west half) and 113 to 116 (empty
+   * until then); all 112 earlier names keep their gid; and the only map cells that changed are
+   * `decor-below` (36,3) 0 -> 114, (44,19) sapling-bl -> 113, (45,19) sapling-br -> rock, (20,22)
+   * 0 -> 115, (21,22) 0 -> 116, `decor-above` (44,18) and (45,18) sapling crown -> 0, and
+   * `collision` (36,3), (20,22), (21,22) 0 -> 1, plus the appended `sign-research`, `sign-speed` and
+   * `sign-logo` objects (ids 22 to 24). The sheet stays 384x320 because `ceil(116 / 12)` is 10.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(112);
+    expect(TILE_NAMES).toHaveLength(116);
   });
 });
 
