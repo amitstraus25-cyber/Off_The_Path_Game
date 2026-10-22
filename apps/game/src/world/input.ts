@@ -12,7 +12,8 @@ export interface InputState {
   carry: number | null;
 }
 
-const MOVE_KEYS: Record<string, { x: number; y: number }> = {
+/** The walking keys, by `KeyboardEvent.code`. Read by the deck too, so its stick can follow them. */
+export const MOVE_KEYS: Readonly<Record<string, { x: number; y: number }>> = {
   ArrowLeft: { x: -1, y: 0 },
   KeyA: { x: -1, y: 0 },
   ArrowRight: { x: 1, y: 0 },

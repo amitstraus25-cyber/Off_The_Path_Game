@@ -120,7 +120,7 @@ test('the frame and the wordmark stay put through a whole encounter', async ({ p
    * And the thing hoisting the frame nearly broke on the way past.
    *
    * Preact matches unkeyed siblings by position, and when the vnode at a position changes type it
-   * reuses the DOM node of a NEARBY old child of the new type. Leaving Inspect turns a `SkillCard`
+   * reuses the DOM node of a NEARBY old child of the new type. Leaving an offer turns a `Dialogue`
    * component into the explore layer's plain `<div>`, and the nearest `<div>` to reuse was the
    * announce block -- so the live regions were quietly handed to the toast layer and rebuilt,
    * which is precisely what UX_REVIEW finding 14 says must never happen to them: a region
@@ -130,8 +130,8 @@ test('the frame and the wordmark stay put through a whole encounter', async ({ p
   await tag(page, ANNOUNCE, 'announce');
 
   for (const [label, action, phase] of [
-    ['02 Question', { type: 'MEET', c: 'owl' }, 'talk'],
-    ['03 Inspect', { type: 'INSPECT', s: SKILL_OF['owl']! }, 'card'],
+    // One panel since 2026-10-22: meeting the Owl opens her card by itself.
+    ['02 Offer', { type: 'MEET', c: 'owl' }, 'card'],
   ] as const) {
     await step(page, action, phase);
     const now = await furniture(page);
@@ -233,8 +233,7 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
   const undimmed = await maxLuma(page, LIT);
   expect(undimmed, 'the header title is near white with nothing over it').toBeGreaterThan(200);
 
-  await step(page, { type: 'MEET', c: 'rabbit' }, 'talk');
-  await step(page, { type: 'INSPECT', s: SKILL_OF['rabbit']! }, 'card');
+  await step(page, { type: 'MEET', c: 'rabbit' }, 'card');
 
   const card = page.locator('.otp-card');
   await expect(card).toBeVisible();

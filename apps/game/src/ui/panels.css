@@ -882,87 +882,6 @@
   color: var(--cyera-ash);
 }
 
-/*
- * Below a Clay hairline: the inspect action at the left, questions left at the right.
- *
- * This was a four-child `nowrap` flex row, and the only child carrying `white-space: nowrap` was
- * the passive counter -- so the two ACTIONS absorbed the whole of the squeeze. In a 258px column
- * at 375 "Show me the skill ->" came out over three lines and "Take it as offered" over three,
- * each a stack of underlined fragments with an orphan word on its own underlined row; at 320 the
- * primary action ran to four lines. It wrapped at 320, 360, 375, 390, 393, 414, 430 AND 641: the
- * row never actually fitted anywhere, because a one-line row was being asked to hold a sentence
- * ("You will not see the card.") alongside three other things.
- *
- * It reads as broken text, and it is the control that opens the skill card -- the whole mechanic
- * the asset exists to demonstrate.
- *
- * So the wrapping is designed instead of emergent. A two-column grid: the primary action and the
- * counter share the first row, exactly as the deck draws them; the quiet action takes a row of its
- * own; and the hint sits under it as a caption. Nothing shares a line with a sentence any more, so
- * nothing has to shrink to fit, and the design's one device for keeping the unsafe path quiet --
- * relative visual weight -- survives.
- */
-.otp-dialogue__foot {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: calc(12px * var(--otp-ui));
-  row-gap: calc(6px * var(--otp-ui));
-  margin-top: calc(10px * var(--otp-ui));
-  padding-top: calc(9px * var(--otp-ui));
-  border-top: 1px solid var(--cyera-clay);
-}
-
-.otp-dialogue__show {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: start;
-  text-align: left;
-  border: 0;
-  background: none;
-  padding: 4px 0;
-  /* The project's own touch minimum, which 17px of type does not reach on its own. The card's
-     back link has carried this for the same reason. */
-  min-height: var(--otp-touch-min);
-  font: 500 max(13px, calc(17px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
-  color: var(--cyera-deep-purple);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.otp-dialogue__left {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: end;
-  font-size: max(11px, calc(14px * var(--otp-ui)));
-  color: var(--cyera-ash);
-  white-space: nowrap;
-}
-
-/*
- * Below ~420px even two columns are too many: the counter alone is 72px of a 199px row, which
- * leaves the primary action short of the 125px its own label needs. So the footer becomes one
- * column and the counter goes last, which is also the reading order the review asked for --
- * primary action, the quiet way past it, its caption, then the count.
- */
-@media (max-width: 420px) {
-  .otp-dialogue__foot {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* Full width, so the whole row is the target, with the label still at the left edge. */
-  .otp-dialogue__show {
-    justify-self: stretch;
-  }
-
-  .otp-dialogue__left {
-    grid-column: 1;
-    grid-row: auto;
-    justify-self: start;
-  }
-}
-
 /* ---------------------------------------------------------------- skill card */
 
 .otp-card {
@@ -985,46 +904,40 @@
 }
 
 /*
- * The way off the card that is not a verdict. Deliberately NOT a fourth pill: it sits above the
- * card body as subordinate chrome so it can never be read as a way of answering the question.
- * Ash on Shell is 6.9:1 (UI_FOUNDATIONS section 6); no Lime anywhere on Inspect (section 2).
+ * THE OFFER IS ONE PANEL (the client, 2026-10-22: the card opens by itself). Who is speaking and
+ * what they say, a Clay hairline, then the card, then the answers -- all on the one Shell card, so
+ * there is no second panel to go back from and nothing above the card to press first.
  */
-.otp-card__nav {
-  display: flex;
-  margin-bottom: calc(4px * var(--otp-ui));
+.otp-offer__voice {
+  padding-bottom: calc(10px * var(--otp-ui));
+  margin-bottom: calc(12px * var(--otp-ui));
+  border-bottom: 1px solid var(--cyera-clay);
 }
 
-.otp-card__back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  /* 44px minimum touch target, which the type size alone does not reach. */
-  min-height: 44px;
-  padding: 0 calc(10px * var(--otp-ui)) 0 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: 500 max(12px, calc(13px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
-  color: var(--cyera-ash);
+.otp-offer .otp-dialogue__line {
+  font-size: calc(18px * var(--otp-ui));
+  line-height: 1.2;
+  color: var(--cyera-black);
 }
 
-.otp-card__back:hover,
-.otp-card__back:focus-visible {
-  color: var(--cyera-deep-purple);
-  text-decoration: underline;
-}
-
-.otp-card__back-glyph {
-  display: grid;
-  place-items: center;
-}
-
+/*
+ * THE CARD, AS A GRID OF THREE AREAS (SkillCard.tsx). Wide: the picture down the left and the name,
+ * the promise and the two rows beside it, as the deck draws the card. Narrow or short: the picture
+ * beside the name only, and the rows full width under both, so a phone reads the lines at the
+ * panel's width instead of in a 200px column beside a picture.
+ */
 .otp-card__top {
-  display: flex;
-  gap: calc(16px * var(--otp-ui));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon head'
+    'icon rows';
+  align-items: start;
+  column-gap: calc(16px * var(--otp-ui));
 }
 
 .otp-card__icon {
+  grid-area: icon;
   width: calc(142px * var(--otp-ui));
   height: calc(168px * var(--otp-ui));
   flex: none;
@@ -1042,20 +955,85 @@
   image-rendering: pixelated;
 }
 
-.otp-card__main {
-  flex: 1;
+.otp-card__head {
+  grid-area: head;
   min-width: 0;
 }
 
-/* Provenance: who handed this over. 10 caps / +14% tracking / Medium, Ash. */
-.otp-card__eyebrow {
-  margin: 0 0 2px;
-  font-size: max(10px, calc(10px * var(--otp-ui)));
-  line-height: 1.2;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-weight: 500;
-  color: var(--cyera-ash);
+.otp-card__rows {
+  grid-area: rows;
+  min-width: 0;
+}
+
+/* The promise: one line in the skill's own words, the same in both variants. */
+.otp-card__promise {
+  margin: 0 0 calc(10px * var(--otp-ui));
+  font-size: max(12px, calc(15px * var(--otp-ui)));
+  line-height: 1.3;
+  color: var(--cyera-black);
+}
+
+@media (max-width: 520px), (max-height: 580px) {
+  .otp-card__top {
+    grid-template-areas:
+      'icon head'
+      'rows rows';
+    align-items: center;
+  }
+
+  /* The well hugs the picture: its own 64px at --otp-px plus a little Natural round it. */
+  .otp-card__icon {
+    width: calc(64px * var(--otp-px) + 16px);
+    height: calc(64px * var(--otp-px) + 16px);
+    margin-bottom: calc(10px * var(--otp-ui));
+  }
+}
+
+/*
+ * THE ANSWERS STAY IN VIEW. They are the last thing in the panel's scrollport
+ * (`.otp-layer--modal > .otp-panel > .otp-panel__body`), held to its bottom edge, so on a window
+ * too short for the whole card -- a landscape phone above all -- the card scrolls under them inside
+ * the panel and Take it and Leave it are never below the fold. The page itself never scrolls.
+ * Shell behind them, so a line scrolling under reads as passing beneath, and a Clay hairline above.
+ */
+.otp-offer__answers {
+  position: sticky;
+  bottom: 0;
+  margin-top: calc(4px * var(--otp-ui));
+  padding-top: calc(10px * var(--otp-ui));
+  background: var(--cyera-shell);
+  border-top: 1px solid var(--cyera-clay);
+}
+
+/*
+ * Walk on beside the two answers wherever there is room for it, so a landscape phone spends one
+ * row on them rather than two; under them, at the start of the line, where the answers stack.
+ */
+.otp-offer__answers {
+  display: flex;
+  align-items: center;
+  gap: calc(14px * var(--otp-ui));
+}
+
+.otp-offer__answers .otp-verdicts {
+  flex: 1;
+  margin-top: 0;
+}
+
+.otp-offer__answers .otp-link {
+  margin-top: 0;
+}
+
+@media (max-width: 420px) {
+  .otp-offer__answers {
+    flex-direction: column;
+    align-items: stretch;
+    gap: calc(4px * var(--otp-ui));
+  }
+
+  .otp-offer__answers .otp-link {
+    align-self: flex-start;
+  }
 }
 
 /* Card title: 25 / 105% / -2% / Medium. */
@@ -1310,40 +1288,29 @@
 }
 
 /*
- * The way past the card. It is the same `allow` the Inspect screen offers, with less reading
- * attached, so UI_FOUNDATIONS section 2's reasoning applies to it: the unsafe answer must never
- * be the brightest thing on the screen. Ash, 14px, underlined, no arrow, no fill and no border,
- * so it reads as a skip link rather than as the thing to press. No new radius.
+ * A TEXT LINK THAT IS A BUTTON: "Walk on", the way past an offer without answering it. Ash, 14px,
+ * underlined, no fill and no border, so it reads as a way past and never as a third answer. It
+ * carries the touch floor all the same, because it is the only way out of an offer but Esc.
  */
-.otp-dialogue__trust {
-  /* Its own row in the footer grid, so a three-word label never has to wrap. */
-  grid-column: 1 / -1;
-  justify-self: start;
-  background: none;
-  border: none;
-  /* It is the only way out of a conversation without answering, so it carries the touch floor
-     .otp-dialogue__show does; 14px of type alone measured 43 x 14 at 375. */
-  padding: 4px 0;
+.otp-link {
+  display: inline-flex;
+  align-items: center;
   min-height: var(--otp-touch-min);
   min-width: var(--otp-touch-min);
+  margin-top: calc(4px * var(--otp-ui));
+  padding: 0 calc(6px * var(--otp-ui));
+  background: none;
+  border: none;
+  border-radius: var(--otp-r-inset);
   color: var(--cyera-ash);
   font: 400 max(12px, calc(14px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
   text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
-.otp-dialogue__trust:hover {
+.otp-link:hover {
   color: var(--cyera-black);
-}
-
-/* The whole of the warning the game gives, and it is a statement of fact, not advice. Shown on
-   the first encounter only; after that it stays for screen readers.
-   A caption under the action it describes, on its own footer row: it is a sentence, and a sentence
-   inline in a one-line row is what forced both actions to wrap. */
-.otp-dialogue__hint {
-  grid-column: 1 / -1;
-  color: var(--cyera-ash);
-  font-size: max(12px, calc(13px * var(--otp-ui)));
 }
 
 /* Said once, flatly, on the Results row for a card nobody opened. */
@@ -1375,6 +1342,8 @@
   background: none;
   border: none;
   padding: 0 calc(10px * var(--otp-ui));
+  /* So its focus ring is a rounded shape rather than a box round the words (see the focus rules). */
+  border-radius: var(--otp-r-inset);
   color: var(--cyera-haze);
   /* A button does not inherit the page's family; without this the "on"/"off" label set in Arial. */
   font-family: var(--cyera-font-sans);
@@ -1435,6 +1404,40 @@
 .otp-panel__header :focus-visible {
   outline-color: var(--cyera-lilac);
   box-shadow: 0 0 0 6px var(--cyera-deep-purple);
+}
+
+/*
+ * THE SLIM RING, FOR A CONTROL THAT IS TEXT RATHER THAN A SHAPE (the client's screenshot,
+ * 2026-10-22). The ring above is drawn for pills and wells, and on those it follows the border at
+ * a gap. A text link has no border and no padding to keep it off the words, so the same 3px outline
+ * and 6px Lilac halo became a thick square box sitting on the letters.
+ *
+ * Here the halo goes and the outline stands off: 2px of Deep Purple, 3px clear of a box that is
+ * itself rounded (`--otp-r-inset` on the control), so it follows the control's shape instead of
+ * boxing it. 2px all the way round and 12.7:1 against Shell clears WCAG 2.4.7 and the 2.4.13
+ * area-and-contrast bar; the offset keeps it off the text and inside the panel's padding, so
+ * nothing covers it either (2.4.11). One ground only -- `.otp-link` lives on Shell -- which is why
+ * one colour is enough here and the two-tone pairing above is not needed.
+ *
+ * Every other focusable control was checked on every screen (2026-10-22): the CTAs, the buttons,
+ * the verdicts, the walk pills, the goals bar and the arrival's advance ring are pills or circles
+ * whose ring already follows their shape. The music switch keeps the two-tone ring, because its
+ * ring crosses from the Black header onto the world and needs both colours to read on both; it is
+ * given a radius (above) so the ring is a rounded shape, not a box.
+ */
+.otp-ui .otp-link:focus-visible {
+  outline: 2px solid var(--cyera-deep-purple);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+/* Take it and Leave it get the same slim ring (review of 2026-10-22). They live on Shell only, so
+   the two-tone halo bought nothing there and read as the thick double band the client asked to
+   lose; the pill's own border already gives the ring its shape. */
+.otp-ui .otp-verdict:focus-visible {
+  outline: 2px solid var(--cyera-deep-purple);
+  outline-offset: 3px;
+  box-shadow: none;
 }
 
 /*

@@ -136,18 +136,72 @@ test('the joystick walks with a mouse: a click steps, a hold walks until let go'
   expect((await probe(page)).position.x).toBeCloseTo(released, 0);
 });
 
-test('A talks with a mouse, and in an open offer it opens the card', async ({ page }) => {
+test('A talks with a mouse, and the offer it opens already shows the card', async ({ page }) => {
   await page.setViewportSize(REFERENCE_VIEWPORTS.desktop);
   await page.goto('/');
   await startGame(page);
   await walkTo(page, await talkingDistance(page, 'npc-rabbit'));
 
   await page.locator('.otp-a-button').click();
-  await page.waitForFunction(() => window.__otp!.store.getState().phase === 'talk');
-  await page.locator('.otp-a-button').click();
+  // One press: no second press of A between meeting the Rabbit and reading her card.
   await page.waitForFunction(() => window.__otp!.store.getState().phase === 'card');
-  // On the card A is idle: a verdict is the player's, never a button mashed through.
+  await expect(page.locator('[data-offer="rabbit"] [data-card-take] li').first()).toBeVisible();
+  // In the offer A is idle: a verdict is the player's, never a button mashed through.
   await expect(page.locator('.otp-a-button')).toBeDisabled();
+});
+
+/*
+ * THE STICK FOLLOWS THE KEYS (the client, 2026-10-22: "if I click right, then I want the joystick
+ * to move right"). Read off the knob's own transform, as the player sees it: which way it leans,
+ * that a diagonal leans both ways, and that it stands up again on release.
+ */
+test('the joystick leans the way the arrow keys and WASD walk, and stands up on release', async ({
+  page,
+}) => {
+  await page.setViewportSize(REFERENCE_VIEWPORTS.desktop);
+  await page.goto('/');
+  await startGame(page);
+  const knob = page.locator('.otp-stick-knob');
+  const lean = () =>
+    knob.evaluate((el) => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      return { x: m.m41, y: m.m42 };
+    });
+  await expect.poll(lean).toEqual({ x: 0, y: 0 });
+
+  for (const [key, sx, sy] of [
+    ['ArrowRight', 1, 0],
+    ['ArrowLeft', -1, 0],
+    ['KeyW', 0, -1],
+    ['KeyS', 0, 1],
+  ] as const) {
+    await page.keyboard.down(key);
+    const { x, y } = await lean();
+    expect(Math.sign(Math.round(x)), `${key} x`).toBe(sx);
+    expect(Math.sign(Math.round(y)), `${key} y`).toBe(sy);
+    await page.keyboard.up(key);
+    expect(await lean(), `${key} released`).toEqual({ x: 0, y: 0 });
+  }
+
+  // A diagonal leans both ways at once, and only as far as a straight press does.
+  await page.keyboard.down('ArrowRight');
+  const straight = await lean();
+  await page.keyboard.down('ArrowDown');
+  const diagonal = await lean();
+  expect(diagonal.x).toBeGreaterThan(0);
+  expect(diagonal.y).toBeGreaterThan(0);
+  expect(Math.hypot(diagonal.x, diagonal.y)).toBeCloseTo(straight.x, 0);
+  await page.keyboard.up('ArrowRight');
+  await page.keyboard.up('ArrowDown');
+  expect(await lean()).toEqual({ x: 0, y: 0 });
+
+  // Less motion asked for: it still points, a shorter way.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.keyboard.down('ArrowRight');
+  const calm = await lean();
+  await page.keyboard.up('ArrowRight');
+  expect(calm.x).toBeGreaterThan(0);
+  expect(calm.x).toBeLessThan(straight.x);
 });
 
 /** The elements painted Lime, by what they are. */

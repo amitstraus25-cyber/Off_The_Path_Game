@@ -250,7 +250,7 @@ place (first or second).
 | #   | Character      | Skill          | The bad card's giveaway line                                             |
 | --- | -------------- | -------------- | ------------------------------------------------------------------------ |
 | 1   | Rabbit         | Cottage Finder | Sends a copy of your note to a stranger. (1st, for "Reads Grandma's…")   |
-| 2   | Toadstool      | Way Teller     | Follows any note pinned to a tree. (2nd, for "Keeps to the path…")       |
+| 2   | Toadstool      | Way Teller     | Obeys any note pinned to a tree. (2nd, for "Keeps to the path…")         |
 | 3   | Owl            | Word Weaver    | Pins a copy up at every crossing. (2nd, for "Gets there before you do.") |
 | 4   | Magpie         | Short Cut      | Fetches tonight's tracks from a stranger's map. (1st, for "Draws…")      |
 | 5   | Snail          | Slow Post      | Lets a friend peek inside on the way. (2nd, for "Opens for Grandma's…")  |
@@ -269,15 +269,15 @@ Each bad reveal names the wolf; no card does.
 
 ### What each skill stands for (`realWorld`, for the reveal)
 
-| Skill          | Term                            | Note                                                                                                                                         |
-| -------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cottage Finder | Data exfiltration               | Your note is your data. A skill can do its job and still copy that data to someone you never chose.                                          |
-| Way Teller     | Indirect prompt injection       | An agent that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge.                                      |
-| Word Weaver    | Oversharing and public exposure | A copy at every crossing is data anyone passing can read. Reaching the right person does not undo the copies left behind.                    |
-| Short Cut      | Supply-chain risk               | The stranger's map is fetched fresh each night. A skill that loads instructions from elsewhere at run time can change after you approved it. |
-| Slow Post      | Third-party data sharing        | The friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way.                         |
-| Night Light    | Autonomy without human approval | Reading the signs helps you decide. Acting on them without asking you skips the human approval that important actions need.                  |
-| Latch Lifter   | Over-broad access               | A latch that lifts for anyone is access with no check on who is asking. Give a skill only the access its job needs.                          |
+| Skill          | Term                            | Note                                                                                                                           |
+| -------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Cottage Finder | Data exfiltration               | Your note is your data. A skill can do its job and still copy that data to someone you never chose.                            |
+| Way Teller     | Indirect prompt injection       | A skill that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge.                         |
+| Word Weaver    | Oversharing and public exposure | A copy pinned at a crossing is public data anyone can read. Delivering the real note does not take the copies down.            |
+| Short Cut      | Supply-chain risk               | A stranger can redraw their map any night. A skill that fetches its instructions from elsewhere can change after you said yes. |
+| Slow Post      | Third-party data sharing        | A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way.             |
+| Night Light    | Autonomy without human approval | Reading the signs to you helps you choose. Acting on them without asking skips your say on the steps that matter.              |
+| Latch Lifter   | Over-broad access               | A latch that lifts for anyone never checks who asks. A skill is an identity too: give it only the access its job needs.        |
 
 Checked against `docs/RESEARCH_ALIGNMENT.md`. Supported there: exfiltration (section 3, the
 trifecta's external-communication leg), indirect prompt injection (2.1 untrusted content, and Snyk's
@@ -330,7 +330,9 @@ from the client's sketch, "no card names the wolf", and the clock derived from t
   and whether a kept reassurance beside a giveaway (Slow Post's "sealed", Latch Lifter's "Locks it
   again behind you") reads as the lesson rather than as a contradiction.
   The Cat's "Grandma made it" now cuts both ways, which is the title's beat.
-- **Four icons do not exist:** `item-signpost`, `item-parcel`, `item-shortcut`, `item-latch`.
-  Nothing was drawn or substituted; the test keeps them on a ratchet list.
+- ~~**Four icons do not exist.**~~ **Painted 2026-10-22:** `item-signpost`, `item-parcel`,
+  `item-shortcut` and `item-latch` are in `apps/game/src/assets` (painters in
+  `tools/graybox/src/sprites/faces.ts`), so all seven skills have their own icon, on the card, in
+  the basket and on the reveal row. The ratchet list in `real-content.test.ts` is empty.
 - **Portraits** exist for three of seven; v2's schema has no `portrait` field.
 - **The reveal screen** is a UI call: the data covers every offer, taken or left.

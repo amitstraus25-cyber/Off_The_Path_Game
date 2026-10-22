@@ -103,9 +103,16 @@ describe('schema', () => {
     expect(() => loadContent(variant())).not.toThrow();
   });
 
+  // The card opens by itself (the client, 2026-10-22): a key for a step that no longer exists is
+  // refused, so it cannot come back as copy nothing renders.
+  it('has no key for opening the card, which opens by itself', () => {
+    const stale = variant();
+    (stale.ui.offer as Record<string, unknown>)['openCard'] = 'Fixture open';
+    expect(() => loadContent(stale)).toThrow(/ui\.offer/);
+  });
+
   it('holds every template to the holes its screen fills', () => {
     const cases: [string, (c: ReturnType<typeof variant>) => void, RegExp][] = [
-      ['offeredBy', (c) => void (c.ui.card.offeredBy = 'Fixture from someone'), /\{name\}/],
       ['outOf', (c) => void (c.ui.reveal.outOf = 'Fixture of a hundred'), /\{outOf\}/],
       ['caught', (c) => void (c.ui.reveal.caught = 'Fixture caught {caught}'), /\{bad\}/],
       ['caught', (c) => void (c.ui.reveal.caught = 'Fixture caught of {bad}'), /\{caught\}/],

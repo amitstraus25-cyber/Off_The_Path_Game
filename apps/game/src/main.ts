@@ -8,7 +8,7 @@ import { createStore } from './store';
 import { loadManifest } from './world/assets';
 import type { Manifest } from './world/assets';
 import { BootScene, ForestScene } from './world/scenes';
-import { gameRun, localSeed } from './world/run';
+import { cardOwed, gameRun, localSeed, walkOn } from './world/run';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
@@ -262,32 +262,19 @@ async function start(): Promise<void> {
 
   const walkable = (): boolean => loadFailure === null && store.getState().phase === 'forest';
   const input = createInput(window, {
-    onBack: () => {
-      const { phase } = store.getState();
-      if (phase === 'talk' || phase === 'card') store.dispatch({ type: 'BACK' });
-    },
+    // Esc on an open offer walks on, exactly as the panel's own Walk on does.
+    onBack: () => walkOn(store),
     isActive: walkable,
   });
-  const touch = createTouchControls(
-    input,
-    {
-      walkGroup: strings['touchWalkLabel'] ?? '',
-      up: strings['touchWalkUp'] ?? '',
-      down: strings['touchWalkDown'] ?? '',
-      left: strings['touchWalkLeft'] ?? '',
-      right: strings['touchWalkRight'] ?? '',
-      stop: strings['touchWalkStop'] ?? '',
-      interact: strings['touchInteract'] ?? '',
-    },
-    {
-      // A in an open offer opens its card: "A to talk or open a card" (the client).
-      onOpenCard: () => {
-        const { active } = store.getState();
-        const character = active ? v2.findCharacter(content, active) : undefined;
-        if (character) store.dispatch({ type: 'INSPECT', s: character.skillId });
-      },
-    },
-  );
+  const touch = createTouchControls(input, {
+    walkGroup: strings['touchWalkLabel'] ?? '',
+    up: strings['touchWalkUp'] ?? '',
+    down: strings['touchWalkDown'] ?? '',
+    left: strings['touchWalkLeft'] ?? '',
+    right: strings['touchWalkRight'] ?? '',
+    stop: strings['touchWalkStop'] ?? '',
+    interact: strings['touchInteract'] ?? '',
+  });
   uiRoot.append(touch.root);
   const panels = document.createElement('div');
   uiRoot.prepend(panels);
@@ -302,8 +289,7 @@ async function start(): Promise<void> {
   /** Everything outside the store that has to agree with what is on screen. */
   const syncWorldChrome = (): void => {
     stage.dataset['phase'] = store.getState().phase;
-    const { phase } = store.getState();
-    touch.setMode(walkable() ? 'play' : loadFailure === null && phase === 'talk' ? 'talk' : 'idle');
+    touch.setMode(walkable() ? 'play' : 'idle');
     // Reading a card should be the quiet moment, so the bed drops while a panel is up.
     music.duck(!walkable());
   };
@@ -411,6 +397,18 @@ async function start(): Promise<void> {
   let lastPhase = store.getState().phase;
   let lastVerdicts = 0;
   store.subscribe((state) => {
+    /*
+     * THE CARD OPENS BY ITSELF. A MEET has just put the run in `talk`: read its card now, and let
+     * the nested dispatch do this listener's work for the state it produces. `lastPhase` is moved
+     * first, so the nested call sees the step it is answering and this one is not repeated. Should
+     * the INSPECT ever be refused without moving the run, this call carries on as it would have.
+     */
+    const owed = cardOwed(lastPhase, state, content);
+    if (owed) {
+      lastPhase = state.phase;
+      store.dispatch({ type: 'INSPECT', s: owed });
+      if (store.getState() !== state) return;
+    }
     syncWorldChrome();
     const count = Object.keys(state.verdicts).length;
     if (count > lastVerdicts) {

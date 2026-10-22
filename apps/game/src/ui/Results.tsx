@@ -12,6 +12,7 @@ import { readBoard as readTheBoard } from '../net/leaderboard';
 import type { BoardRead, PostOutcome } from '../net/leaderboard';
 import { CyeraMark, Highlighted, Panel } from './components';
 import { fill, strings } from './copy';
+import { iconUrl, initials } from './Hud';
 
 const CheckGlyph = () => (
   <svg viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
@@ -35,6 +36,24 @@ function Badge({ glyph }: { glyph: 'check' | 'missed' }) {
   return (
     <span class="otp-recap__badge" data-glyph={glyph} aria-hidden="true">
       {glyph === 'check' ? <CheckGlyph /> : '!'}
+    </span>
+  );
+}
+
+/**
+ * The skill's own picture on its reveal row, so the row is the thing the player was handed and not
+ * only its name. 64 CSS px, the art's own size (PIXEL_STANDARD section 1: items are DOM, unscaled),
+ * so every painted pixel lands whole; the card shows the same picture at 2x. Named by the skill, as
+ * asked; a picture that is missing from the bundle wears the same labelled placeholder the card
+ * and the basket do (CLAUDE.md rule 5).
+ */
+function RevealIcon({ skill }: { skill: v2.Skill }) {
+  const url = iconUrl(skill.icon);
+  return url ? (
+    <img class="otp-reveal__icon" src={url} alt={skill.name} width={64} height={64} />
+  ) : (
+    <span class="otp-reveal__icon otp-icon-placeholder" aria-hidden="true">
+      {initials(skill.name)}
     </span>
   );
 }
@@ -519,11 +538,16 @@ export function Results({
                   >
                     <Badge glyph={row.good ? 'check' : 'missed'} />
                     <div class="otp-recap__body">
-                      <p class="otp-recap__heading">
-                        {row.name}{' '}
-                        <span class="otp-recap__status">{row.good ? r.good : r.bad}</span>
-                      </p>
-                      <p class="otp-reveal__chose">{chose(row.verdict)}</p>
+                      <div class="otp-reveal__who">
+                        <div class="otp-reveal__named">
+                          <p class="otp-recap__heading">
+                            {row.name}{' '}
+                            <span class="otp-recap__status">{row.good ? r.good : r.bad}</span>
+                          </p>
+                          <p class="otp-reveal__chose">{chose(row.verdict)}</p>
+                        </div>
+                        <RevealIcon skill={skill} />
+                      </div>
                       <dl class="otp-reveal__pairs">
                         <dt>{r.promised}</dt>
                         <dd>{row.promise}</dd>

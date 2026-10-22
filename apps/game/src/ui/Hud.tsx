@@ -157,8 +157,9 @@ export function initials(name: string): string {
  * The bundled URL of an icon, or null when there is none to show.
  *
  * `assetUrl` throws on a name that is not in the bundle, by design, so a missing file fails loudly
- * everywhere art is required. Here the art is allowed to be missing -- four of the seven icons do
- * not exist yet and nothing may be drawn in their place (CLAUDE.md rule 5) -- and a throw inside a
+ * everywhere art is required. Here the art is allowed to be missing -- until 2026-10-22 four of the
+ * seven icons did not exist, and a skill added to the content may name art not yet painted, which
+ * nothing may be drawn in place of (CLAUDE.md rule 5) -- and a throw inside a
  * render would blank the whole HUD, clock included. A name that does not resolve is therefore the
  * same case as no name: the labelled placeholder.
  */

@@ -289,11 +289,12 @@ describe('the rendered tree', () => {
   });
 
   it('falls back to the placeholder, and does not throw, for an icon that is not in the bundle', () => {
-    // item-signpost is one of the four whose art does not exist yet .
+    // A name no art will ever carry: the seven skills' own icons all exist now (2026-10-22), so
+    // the fallback is proved on an icon that is not in the bundle by construction.
     const draw = () =>
       Hud({
         remainingMs: 100_000,
-        basket: [item({ skillId: 'w', name: 'Way Teller', icon: 'item-signpost' })],
+        basket: [item({ skillId: 'w', name: 'Way Teller', icon: 'item-not-painted' })],
       });
     expect(draw).not.toThrow();
     const [well] = withClass(draw(), 'otp-hud-slot');

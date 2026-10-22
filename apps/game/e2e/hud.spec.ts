@@ -71,15 +71,24 @@ test.afterAll(() => {
   if (outDir) rmSync(outDir, { recursive: true, force: true });
 });
 
-/** Four of these have art (the icon exists in src/assets) and three do not (it is awaited). */
+/** The seven skills as the content draws them: every icon exists since 2026-10-22. */
 const FULL_BASKET: HudBasketItem[] = [
   { skillId: 'cottage-finder', name: 'Cottage Finder', icon: 'item-compass' },
-  { skillId: 'way-teller', name: 'Way Teller', icon: null },
+  { skillId: 'way-teller', name: 'Way Teller', icon: 'item-signpost' },
   { skillId: 'night-light', name: 'Night Light', icon: 'item-lantern' },
-  { skillId: 'slow-post', name: 'Slow Post', icon: null },
+  { skillId: 'slow-post', name: 'Slow Post', icon: 'item-parcel' },
   { skillId: 'word-weaver', name: 'Word Weaver', icon: 'item-translator' },
-  { skillId: 'short-cut', name: 'Short Cut', icon: null },
-  { skillId: 'latch-lifter', name: 'Latch Lifter', icon: 'item-key' },
+  { skillId: 'short-cut', name: 'Short Cut', icon: 'item-shortcut' },
+  { skillId: 'latch-lifter', name: 'Latch Lifter', icon: 'item-latch' },
+];
+
+/*
+ * The placeholder's two ways in, now that no real skill takes either: an icon named in the content
+ * that is not in the bundle (a name no art will ever carry), and no icon at all.
+ */
+const UNPAINTED: HudBasketItem[] = [
+  { skillId: 'fixture-unpainted', name: 'Fixture Unpainted', icon: 'item-not-painted' },
+  { skillId: 'fixture-iconless', name: 'Fixture Iconless', icon: null },
 ];
 
 interface Opened {
@@ -369,8 +378,8 @@ test.describe('the basket', () => {
         };
       }),
     );
-    // Four of the seven have art: compass, lantern, translator, key.
-    expect(icons).toHaveLength(4);
+    // All seven have art.
+    expect(icons).toHaveLength(7);
     for (const icon of icons) {
       expect(icon.loaded, 'the icon did not load').toBe(true);
       expect(icon.rendering).toBe('pixelated');
@@ -382,6 +391,14 @@ test.describe('the basket', () => {
       );
     }
 
+    expect(
+      await page.locator('.otp-hud2__placeholder').count(),
+      'a real icon wore a placeholder',
+    ).toBe(0);
+
+    // And a skill whose art is not in the bundle, or that names none, wears the labelled placeholder.
+    await set(page, { basket: [FULL_BASKET[0]!, ...UNPAINTED] });
+    await settled(page);
     const placeholders = await page.locator('.otp-hud2__placeholder').evaluateAll((els) =>
       els.map((el) => ({
         text: el.textContent,
@@ -391,7 +408,7 @@ test.describe('the basket', () => {
         name: el.closest('li')!.textContent,
       })),
     );
-    expect(placeholders.map((p) => p.text)).toEqual(['WT', 'SP', 'SC']);
+    expect(placeholders.map((p) => p.text)).toEqual(['FU', 'FI']);
     for (const p of placeholders) {
       expect(p.w).toBeGreaterThan(10);
       expect(p.h).toBeGreaterThan(10);
@@ -399,9 +416,8 @@ test.describe('the basket', () => {
     }
     // The name is on the well, in words, whatever the art is.
     expect(placeholders.map((p) => p.name)).toEqual([
-      expect.stringContaining('Way Teller'),
-      expect.stringContaining('Slow Post'),
-      expect.stringContaining('Short Cut'),
+      expect.stringContaining('Fixture Unpainted'),
+      expect.stringContaining('Fixture Iconless'),
     ]);
     await close();
   });
@@ -534,7 +550,7 @@ test.describe('the brand', () => {
     browser,
   }) => {
     const { page, close } = await open(browser, { width: 1280, height: 800, touch: false });
-    await set(page, { basket: FULL_BASKET, remainingMs: 100_000 });
+    await set(page, { basket: [FULL_BASKET[0]!, ...UNPAINTED], remainingMs: 100_000 });
     await settled(page);
     const ratios = await page.evaluate(() => {
       const parse = (css: string): [number, number, number, number] => {

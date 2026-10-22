@@ -21,7 +21,8 @@ them is derived or generated rather than typed out:
 | How big is the camera, and what is in frame?             | `cameraFor()` in `packages/core/src/camera.ts`, or `pnpm world --frame title`.                                                        |
 
 `manifest.json` currently declares one tileset, one map, Purple's atlas, eleven spritesheets (four NPCs,
-four bystanders, three effects) and eleven images (six portraits and five items). It carries
+four bystanders, three effects) and fifteen images: six portraits and nine items, among them all
+seven skills' icons (the last four, signpost, parcel, shortcut and latch, painted 2026-10-22). It carries
 `"placeholder": true`; that flag flipping to `false` is what "real art has landed" means.
 
 ## The rules, which are not in the manifest and do have to be written down

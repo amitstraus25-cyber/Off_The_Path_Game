@@ -187,19 +187,15 @@ const ui = z.strictObject({
   cabinet: z.strictObject({ marquee: text }),
   /** 01 Explore: the forest's frame title, which is also its hidden h1. */
   world: z.strictObject({ title: text }),
-  /** 02 Offer: the frame title, the way to the card, the two answers and the way out. */
-  offer: z.strictObject({ title: text, openCard: text, take: text, leave: text, walkOn: text }),
   /**
-   * 03 Card: the frame title, the provenance eyebrow (UI_FOUNDATIONS section 8, `OFFERED BY THE
-   * RABBIT`), the two row eyebrows and the way back to the conversation.
+   * 02 Offer: the frame title, the two answers and the way out. ONE PANEL since 2026-10-22 (the
+   * client: "I want the card to open automatically"): who is speaking, then the card itself, then
+   * the answers. There is no step between meeting someone and reading their card, so there is no
+   * key for one; the game logs the card as read the moment it is shown (apps/game/src/main.ts).
    */
-  card: z.strictObject({
-    title: text,
-    offeredBy: template('name'),
-    ifTake: text,
-    ifLeave: text,
-    back: text,
-  }),
+  offer: z.strictObject({ title: text, take: text, leave: text, walkOn: text }),
+  /** The card inside the offer: the two row eyebrows, what taking it does and what leaving costs. */
+  card: z.strictObject({ ifTake: text, ifLeave: text }),
   hud: z.strictObject({
     time: text,
     basket: text,

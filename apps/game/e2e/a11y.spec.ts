@@ -4,7 +4,7 @@ import { answerAllAndArrive, startGame, toTheReveal } from './helpers';
 
 /*
  * The v2 screens' accessibility contract, checked in a real browser: each screen has exactly one
- * h1; the offer and the card are modal dialogs that hold focus and back out one level per Esc;
+ * h1; the offer is a modal dialog with its card already open, it holds focus and Esc walks on;
  * nothing on the reveal says safe or unsafe by colour alone; and the live regions the world
  * speaks through are there before they speak (a region inserted with its text is announced by
  * no screen reader).
@@ -28,7 +28,7 @@ test('every screen has exactly one h1', async ({ page }) => {
   expect(await h1s(page), 'reveal').toBe(1);
 });
 
-test('the offer and the card are modal, hold focus, and Esc backs out one level at a time', async ({
+test('the offer is one modal panel with its card open, holds focus, and Esc walks on', async ({
   page,
 }) => {
   await page.goto('/');
@@ -37,22 +37,24 @@ test('the offer and the card are modal, hold focus, and Esc backs out one level 
 
   const offer = page.getByRole('dialog', { name: /Rabbit/ });
   await expect(offer).toHaveAttribute('aria-modal', 'true');
-  await expect(offer.locator('[data-action="inspect"]')).toBeFocused();
-  // Tab never leaves the panel: round the whole ring and focus is still inside.
+  // The card is open without being asked for, and focus is on it, not on an answer.
+  await expect(page.locator('#game')).toHaveAttribute('data-phase', 'card');
+  await expect(offer.locator('[data-card-take] li').first()).toBeVisible();
+  await expect(offer.locator('.otp-card')).toBeFocused();
+  // Tab walks the three controls in reading order, and never leaves the panel.
+  const order: string[] = [];
   for (let i = 0; i < 6; i++) {
     await page.keyboard.press('Tab');
     expect(await offer.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    order.push(
+      await page.evaluate(() => document.activeElement?.getAttribute('data-action') ?? ''),
+    );
   }
+  expect(order.slice(0, 3)).toEqual(['take', 'leave', 'walk-on']);
 
-  await offer.locator('[data-action="inspect"]').click();
-  const card = page.getByRole('dialog', { name: 'Cottage Finder' });
-  await expect(card).toHaveAttribute('aria-modal', 'true');
-  await expect(card.locator('.otp-card')).toBeFocused();
-
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#game')).toHaveAttribute('data-phase', 'talk');
   await page.keyboard.press('Escape');
   await expect(page.locator('#game')).toHaveAttribute('data-phase', 'forest');
+  await expect(offer).toBeHidden();
   // Walking away answered nothing: the Rabbit still offers.
   expect(await page.evaluate(() => window.__otp!.store.getState().verdicts)).toEqual({});
 });

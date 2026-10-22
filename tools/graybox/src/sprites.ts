@@ -133,7 +133,7 @@ const facesWithPrefix = (prefix: string): Record<string, FacePainter> =>
 /** The five dialogue portraits. */
 export const PORTRAIT_PAINTERS: Record<string, FacePainter> = facesWithPrefix('portrait-');
 
-/** The five basket items. */
+/** The nine item icons: one per v2 skill, plus the key and the letter, which no v2 skill wears. */
 export const ITEM_PAINTERS: Record<string, FacePainter> = facesWithPrefix('item-');
 
 // ---------------------------------------------------------------- effects

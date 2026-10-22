@@ -33,7 +33,8 @@ async function openDialogue(page: Page): Promise<void> {
   await page.goto('/');
   await startGame(page);
   await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
-  await expect(page.locator('.otp-dialogue')).toBeVisible();
+  // One panel since 2026-10-22: the greeting and the card it opens with, together.
+  await expect(page.locator('[data-offer] .otp-card')).toBeVisible();
   await expect(page.locator('.otp-dialogue__line')).toBeVisible();
 }
 
@@ -169,14 +170,9 @@ test('the inset ring is Haze and actually separates the panel', async ({ page })
   );
   expect(haze.toUpperCase()).toBe('#E8C6FF');
 
-  const dialogue = (await ring(page, '.otp-dialogue'))!;
-  expect(dialogue.shadow, 'the dialogue keeps its 2px inset ring').toContain('inset');
   // Whisper on Shell measured 1.075:1 — a ring nobody can see is not a separation device, and
-  // section 4 forbids replacing it with elevation.
-  expect(dialogue.ratio, 'dialogue ring against Shell').toBeGreaterThanOrEqual(1.3);
-
-  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'INSPECT', s: 'cottage-finder' }));
-  await expect(page.locator('.otp-card')).toBeVisible();
+  // section 4 forbids replacing it with elevation. The offer IS the card now, so the card's ring is
+  // the offer's; the dialogue box's own ring is the arrival's (below the card in this list).
   for (const sel of ['.otp-card', '.otp-basket']) {
     const found = await ring(page, sel);
     if (!found) continue;
@@ -225,8 +221,6 @@ test('no surface is painted in a colour outside the section 1 palette', async ({
 test('the section 3 type roles match the table at full scale', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 860 });
   await openDialogue(page);
-  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'INSPECT', s: 'cottage-finder' }));
-  await expect(page.locator('.otp-card')).toBeVisible();
 
   const scale = await page.evaluate(() =>
     parseFloat(getComputedStyle(document.querySelector('.otp-ui')!).getPropertyValue('--otp-ui')),
@@ -263,8 +257,6 @@ test('the section 3 type roles match the table at full scale', async ({ page }) 
   });
 
   // Dialogue: 18 / 120% / 0% / Regular. Measured on the line itself, which carried weight 500.
-  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'BACK' }));
-  await expect(page.locator('.otp-dialogue__line')).toBeVisible();
   expect(await typeRole(page, '.otp-dialogue__line')).toEqual({
     size: 18,
     leading: 1.2,
@@ -1165,7 +1157,9 @@ async function ringAtFocus(page: Page, selector: string): Promise<Indicator> {
   throw new Error(`Tab never reached ${selector}`);
 }
 
-test('the focus indicator stays two-tone on both grounds', async ({ page }) => {
+test('the focus indicator is two-tone on the dark header and slim on the answers', async ({
+  page,
+}) => {
   /*
    * 3px Deep Purple inside a 6px Lilac halo, swapped on the dark headers. Either colour alone
    * vanishes on one of the two grounds -- Deep Purple reads on Shell at 12.7:1 and disappears on
@@ -1188,14 +1182,15 @@ test('the focus indicator stays two-tone on both grounds', async ({ page }) => {
   expect(onBlack.shadow, 'halo on the dark header').toContain(purple);
   expect(onBlack.shadow, 'the halo is 6px').toContain('6px');
 
-  // On Shell: an answer pill inside the offer panel.
+  // On Shell: an answer pill inside the offer panel. Since 2026-10-22 the answers carry the slim
+  // ring the client asked for: Shell is light, so Deep Purple alone reads at 12.7:1 and the Lilac
+  // halo, which exists for the dark grounds, only thickened the ring into a double band.
   await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
   await expect(page.locator('.otp-verdict').first()).toBeVisible();
   const onShell = await ringAtFocus(page, '.otp-verdict');
   expect(onShell.outlineColour, 'outline on a Shell panel').toBe(purple);
-  expect(onShell.outlineWidth, 'outline width on a Shell panel').toBe('3px');
-  expect(onShell.shadow, 'halo on a Shell panel').toContain(lilac);
-  expect(onShell.shadow, 'the halo is 6px').toContain('6px');
+  expect(onShell.outlineWidth, 'outline width on a Shell panel').toBe('2px');
+  expect(onShell.shadow, 'no halo on a Shell panel').toBe('none');
 });
 
 /* -------------------------------------------------------------- measurements */
@@ -1235,10 +1230,9 @@ test.describe('measurements', () => {
     for (const width of PHONE_WIDTHS) {
       const page = sweepPage;
       await resize(page, width, 812);
-      const show = (await textBox(page, '.otp-dialogue__show'))!;
-      const trust = (await textBox(page, '.otp-dialogue__trust'))!;
+      const walkOn = (await textBox(page, '.otp-offer .otp-link'))!;
       const foot = await page.evaluate(() => {
-        const f = document.querySelector('.otp-dialogue__foot')!.getBoundingClientRect();
+        const f = document.querySelector('.otp-offer__answers')!.getBoundingClientRect();
         const p = document.querySelector('.otp-panel')!.getBoundingClientRect();
         const opts = Array.from(document.querySelectorAll<HTMLElement>('.otp-option')).map((e) =>
           e.getBoundingClientRect(),
@@ -1251,9 +1245,8 @@ test.describe('measurements', () => {
         };
       });
       console.log(
-        `${width}px  foot=${foot.footW}  show=${show.lines}ln ${show.fontSize}px ` +
-          `${show.width}x${show.height}  trust=${trust.lines}ln ${trust.fontSize}px ` +
-          `${trust.width}x${trust.height}  options=${foot.optH.join(',')} ` +
+        `${width}px  answers=${foot.footW}  walkOn=${walkOn.lines}ln ${walkOn.fontSize}px ` +
+          `${walkOn.width}x${walkOn.height}  options=${foot.optH.join(',')} ` +
           `gaps=${foot.optGap.join(',')}  panelOverhang=${foot.panelOver}`,
       );
     }
@@ -1262,11 +1255,6 @@ test.describe('measurements', () => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
     const page = await context.newPage();
     await openDialogue(page);
-    const dialogueRing = (await ring(page, '.otp-dialogue'))!;
-    console.log(
-      `ring .otp-dialogue: ${dialogueRing.colour} on ${dialogueRing.ground} = ` +
-        `${dialogueRing.ratio}:1`,
-    );
     for (const sel of ['.otp-panel__number', '.otp-panel__title', '.otp-dialogue__line']) {
       const role = await typeRole(page, sel);
       console.log(
@@ -1276,10 +1264,6 @@ test.describe('measurements', () => {
           : `${sel}: absent`,
       );
     }
-    await page.evaluate(() =>
-      window.__otp!.store.dispatch({ type: 'INSPECT', s: 'cottage-finder' }),
-    );
-    await expect(page.locator('.otp-card')).toBeVisible();
     for (const sel of ['.otp-card__title', '.otp-row__eyebrow']) {
       const role = await typeRole(page, sel);
       console.log(

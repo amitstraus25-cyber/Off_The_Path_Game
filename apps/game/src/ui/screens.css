@@ -1567,17 +1567,6 @@ html[data-cabinet='overlay'] .otp-touch {
   font-weight: 600;
 }
 
-/* The offer has no portrait, for all seven: the text takes the whole panel. */
-.otp-dialogue--bare .otp-dialogue__text {
-  padding-top: 0;
-}
-.otp-offer__promise {
-  margin-top: calc(10px * var(--otp-ui));
-}
-.otp-offer__promise .otp-row__eyebrow {
-  margin: 0 0 2px;
-}
-
 /* The card's take lines: a list that reads as the row's heading, one line each. */
 .otp-card__lines {
   list-style: none;
@@ -1608,6 +1597,31 @@ html[data-cabinet='overlay'] .otp-touch {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--cyera-deep-purple);
+}
+/*
+ * The row's name and the player's answer, with the skill's picture at the end of the line: 64px,
+ * the art's own size and never a fraction of it, so the pixels stay whole (PIXEL_STANDARD section
+ * 1). It sits beside the name rather than beside the badge, so the badge keeps its column and the
+ * pairs below take the row's full width.
+ */
+.otp-reveal__who {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.otp-reveal__named {
+  min-width: 0;
+}
+.otp-reveal__icon {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  margin-bottom: calc(4px * var(--otp-ui));
+  image-rendering: pixelated;
+}
+.otp-reveal__icon.otp-icon-placeholder {
+  font-size: 18px;
 }
 .otp-reveal__pairs {
   margin: 0;

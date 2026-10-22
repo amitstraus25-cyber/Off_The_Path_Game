@@ -293,16 +293,18 @@ describe('the cast stands on art that exists', () => {
   });
 
   /*
-   * Three skill icons exist as art. Four do not, and nothing is invented in their place (CLAUDE.md
-   * rule 5): they are named here so the gap is visible, and the list is a RATCHET -- once the art
-   * lands, the second assertion fails until the name is removed from this list.
+   * All seven skill icons exist as art since 2026-10-22, when the signpost, parcel, map and latch
+   * were painted in tools/graybox/src/sprites/faces.ts, so the list is empty. Before that, four did
+   * not, and nothing was invented in their place (CLAUDE.md rule 5): an icon awaiting art is named
+   * here so the gap is visible, and the list is a RATCHET -- once the art lands, the second
+   * assertion fails until the name is removed from this list.
    *
    * The first content reused icons that contradicted their rows, and the second put `item-letter`
    * on Word Weaver and `item-key` on Latch Lifter -- art that belonged to the retired rulebook's
    * starting basket, not to these skills. A reused icon that meant something else is worse than a
    * labelled gap, so both wait for art now.
    */
-  const AWAITING_ART = ['item-latch', 'item-parcel', 'item-shortcut', 'item-signpost'];
+  const AWAITING_ART: readonly string[] = [];
 
   it('no two skills share an icon, so every reveal row is told apart by its picture', () => {
     const icons = content.skills.map((s) => s.icon);

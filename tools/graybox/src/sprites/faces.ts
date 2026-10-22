@@ -1,5 +1,5 @@
 /*
- * The six portraits, the five items and the three effects, redrawn for the 32px standard.
+ * The six portraits, the nine items and the three effects, redrawn for the 32px standard.
  *
  * The portraits are the one place in this game with room for a face. Everything else is read at the
  * playing camera, where a character is an outline and two pixels of eye; these are shown in the DOM
@@ -52,7 +52,7 @@
  * shape on cream ground. It keeps `ink` 0; the argument is at the call site in
  * `paintInteractPromptFrame`.
  */
-import { Img, shade } from '../paint.ts';
+import { Img, keyline, shade } from '../paint.ts';
 import type { Painter, RGBA } from '../paint.ts';
 
 /** Portraits and items. The effects are smaller and say their own size at the top of each painter. */
@@ -988,6 +988,492 @@ const letter: Painter = (img) => {
   img.outline(shade('wall', 0)); // the paper's own dark
 };
 
+/*
+ * THE FOUR THAT WERE MISSING, painted 2026-10-22 for v2's seven-skill deal: the signpost, the
+ * parcel, the map and the latch. Until now their cards, the basket and the reveal showed a lettered
+ * placeholder ("WT", "SP", "SC", "LL"), and the ratchet in packages/core/test/v2/real-content.test.ts
+ * named them.
+ *
+ * They are drawn in the same hand as the five above, deliberately: chunky masses that fill the
+ * frame, flat faces at level 1, a lit top-left edge at level 2, the bottom and right at level 0,
+ * level 3 kept to edges and glints, and an outline in the object's own dark. Every colour is a
+ * `shade` call; `keyline` appears twice, for the two things that have no level 0 of their own to
+ * spare (the parcel's shaded face IS `path` 0, and the grass tuft is a second object).
+ *
+ * Seven icons share a card, so each new one takes a ramp the set was not already leaning on: the
+ * compass and key are `gold`, the horn `stone`, the lantern `wood` frame, the letter `wall`. The
+ * signpost stays `wood` because the forest's own signpost (s-props.ts) is `wood` and the card should
+ * show the thing you saw; its post drops to `trunk` so the boards separate from it. The parcel is
+ * kraft, which is `path`; the map is cream paper, `wall`, told from the letter by everything drawn
+ * on it; the door is `trunk` planks with `stone` iron, which is the only dark-ground icon and so the
+ * one where the silver reads.
+ *
+ * Three of them carry the fine print in the shape of the object, the translator's trick: a note
+ * pinned to the signpost's post (the bad Way Teller "follows any note pinned to a tree"), and a
+ * long way and a short way on the map (the quicker tracks). The icon is the SAME for the good and
+ * the bad card, so neither hint gives a deal away; they only reward looking, in the reveal.
+ */
+
+/** Fills each row from y0 to y1 between the two columns `span` returns for it, inclusive. */
+function rows(
+  img: Img,
+  y0: number,
+  y1: number,
+  span: (y: number) => readonly [number, number] | null,
+  c: RGBA,
+): void {
+  for (let y = y0; y <= y1; y++) {
+    const s = span(y);
+    if (s && s[1] >= s[0]) img.rect(s[0], y, s[1] - s[0] + 1, 1, c);
+  }
+}
+
+/**
+ * One arrow board for the signpost: a plank with a square end and a pointed end. Each row is lit or
+ * shaded by which way its pixels face -- the top edge and the upper slant of the point turn to the
+ * light, the bottom two rows and the lower slant turn away -- so the point reads as a bevel rather
+ * than a flat triangle.
+ */
+function arrowBoard(
+  img: Img,
+  x0: number,
+  x1: number,
+  top: number,
+  h: number,
+  tip: number,
+  pointRight: boolean,
+): void {
+  const half = (h - 1) / 2;
+  const mid = top + half;
+  for (let y = top; y < top + h; y++) {
+    const ext = Math.round(tip * (1 - Math.abs(y - mid) / half));
+    const l = pointRight ? x0 : x0 - ext;
+    const r = pointRight ? x1 + ext : x1;
+    const w = r - l + 1;
+    if (y === top) {
+      img.rect(l, y, w, 1, shade('wood', 2));
+      img.rect(l, y, 3, 1, shade('wood', 3));
+      continue;
+    }
+    if (y >= top + h - 2) {
+      img.rect(l, y, w, 1, shade('wood', 0));
+      continue;
+    }
+    img.rect(l, y, w, 1, shade('wood', 1));
+    // The square end: lit on the left board edge, shaded on the right.
+    if (pointRight) img.rect(l, y, 2, 1, shade('wood', 2));
+    else img.rect(r - 1, y, 2, 1, shade('wood', 0));
+    // The point's two slants.
+    const slant = y < mid ? shade('wood', 2) : shade('wood', 0);
+    if (pointRight) img.rect(r - 1, y, 2, 1, slant);
+    else img.rect(l, y, 2, 1, slant);
+  }
+}
+
+/**
+ * The Toadstool's Way Teller: the forest's own signpost, two arrow boards on a capped post, the
+ * upper one pointing on and the lower one back, exactly as s-props.ts paints it in the world. It
+ * "takes you the old way", and a signpost is the oldest way-teller there is.
+ *
+ * The small paper pinned to the post under the boards is the fine print. The bad card "follows
+ * any note pinned to a tree" -- the indirect prompt injection lesson -- and a signpost that has a
+ * stranger's note tacked to it is that lesson as an object. It is quiet: cream on dark, below the
+ * boards, a Deep Purple pin. You see it if you look.
+ */
+const signpost: Painter = (img) => {
+  // Post, lit down its left, then the cap.
+  img.rect(28, 6, 8, 54, shade('trunk', 1));
+  img.rect(28, 6, 2, 54, shade('trunk', 2));
+  img.rect(35, 6, 1, 54, shade('trunk', 0));
+  img.rect(26, 2, 12, 5, shade('trunk', 0));
+  img.rect(26, 2, 11, 4, shade('trunk', 1));
+  img.rect(26, 2, 11, 1, shade('trunk', 3));
+  img.rect(26, 3, 2, 3, shade('trunk', 2));
+  // Two runs of grain down the post, where the boards do not cover it.
+  img.rect(32, 43, 1, 5, shade('trunk', 0));
+  img.rect(31, 55, 1, 4, shade('trunk', 0));
+
+  // The upper board points on; the lower one points back the way you came.
+  arrowBoard(img, 7, 47, 9, 14, 9, true);
+  arrowBoard(img, 17, 56, 27, 13, 9, false);
+  // Each board drops a shadow onto the post under it.
+  img.rect(28, 23, 8, 1, shade('trunk', 0));
+  img.rect(28, 40, 8, 1, shade('trunk', 0));
+
+  // Grain and a knot in each board, sparingly: one level down, never a hard black dash.
+  for (const [gx, gy, gw] of [
+    [12, 14, 9],
+    [37, 18, 8],
+    [21, 31, 7],
+    [42, 35, 9],
+  ] as const)
+    img.rect(gx, gy, gw, 1, shade('wood', 0));
+  for (const [kx, ky] of [
+    [46, 14],
+    [14, 33],
+  ] as const) {
+    img.ellipse(kx, ky, 1.8, 1.3, shade('wood', 0));
+    img.px(kx - 1, ky - 1, shade('wood', 2));
+  }
+  // A nail where each board meets the post.
+  for (const [nx, ny] of [
+    [31, 15],
+    [31, 32],
+  ] as const) {
+    img.rect(nx, ny, 2, 2, shade('stone', 0));
+    img.px(nx, ny, shade('stone', 3));
+  }
+
+  // The pinned note: a scrap of paper, two lines of somebody's writing, and a pin.
+  img.rect(25, 44, 13, 10, shade('wall', 2));
+  img.rect(25, 44, 13, 1, shade('wall', 3));
+  img.rect(25, 44, 1, 10, shade('wall', 3));
+  img.rect(25, 53, 13, 1, shade('wall', 0));
+  img.rect(37, 45, 1, 9, shade('wall', 0));
+  img.rect(34, 52, 3, 1, shade('wall', 1)); // its lifted corner
+  img.rect(28, 48, 7, 1, shade('wall', 0));
+  img.rect(28, 50, 5, 1, shade('wall', 0));
+  img.rect(30, 44, 3, 2, shade('night', 2));
+  img.px(30, 44, shade('night', 3));
+
+  img.outline(shade('trunk', 0)); // the post's own dark
+
+  /*
+   * The foot of the post stands in a tuft of grass, painted on its own and ringed in its own dark
+   * before it is laid over: one `outline` call can only ring an image in one colour, and a brown
+   * ring round green blades is the wrong hue.
+   */
+  const tuft = new Img(img.w, img.h);
+  for (const [bx, tx, ty, lit] of [
+    [24, 20, 54, false],
+    [27, 25, 51, true],
+    [30, 31, 53, false],
+    [34, 36, 51, true],
+    [37, 41, 54, false],
+    [40, 44, 57, true],
+    [22, 18, 58, true],
+  ] as const) {
+    limb(tuft, bx, 61, tx, ty, 3.2, 1, shade('grass', 1));
+    if (lit) limb(tuft, bx - 0.6, 60, tx - 0.4, ty + 1, 1.2, 1, shade('grass', 2));
+  }
+  tuft.rect(21, 60, 23, 2, shade('grass', 0));
+  tuft.outline(keyline('grass'));
+  img.blit(tuft, 0, 0);
+};
+
+/**
+ * The Snail's Slow Post: a parcel in brown kraft, tied with cord in a cross, a bow on top and Deep
+ * Purple wax on the front where the cord is sealed. "I carry the heavy things, sealed." The box is
+ * the one three-quarter view in the set, because a parcel drawn flat is a rectangle and reads as a
+ * second letter: the lit top, the base front and the shaded side are what say "box".
+ *
+ * The wax takes the letter's two tokens (`night` 2 is #441363, `night` 3 Aubergine) and the
+ * letter's pressed-in lighting, so the two sealed things on the card agree.
+ */
+const parcel: Painter = (img) => {
+  const L = 7;
+  const R = 43;
+  const T = 30;
+  const B = 58;
+  const D = 12; // depth, receding up and to the right
+
+  // The three faces: shaded side, lit top, base front.
+  for (let k = 1; k <= D; k++) img.rect(R + k, T - k, 1, B - T + 1, shade('path', 0));
+  for (let k = 1; k <= D; k++) {
+    img.rect(L + k, T - k, R - L + 1, 1, shade('path', 2));
+    img.px(L + k, T - k, shade('path', 3)); // the lit left edge of the lid
+  }
+  img.rect(L + D, T - D, R - L + 1, 1, shade('path', 3)); // the far edge of the lid
+  img.rect(L, T, R - L + 1, B - T + 1, shade('path', 1));
+  img.rect(L, T, R - L + 1, 1, shade('path', 3)); // where the lid turns to the front
+  img.rect(L, T + 1, 2, B - T, shade('path', 2));
+  img.rect(L, B - 1, R - L + 1, 2, shade('path', 0));
+  // A fold of the wrapping on the front, and the paper's tucked seam on the side.
+  img.line(L + 3, B - 3, L + 9, B - 9, shade('path', 0));
+
+  // Cord: loop A runs front-to-back across the lid and straight down the front.
+  const cx = 24; // left column of the three-pixel cord on the front
+  for (let k = 1; k <= D; k++) {
+    img.rect(cx + k, T - k, 3, 1, shade('wood', 1));
+    img.px(cx + k, T - k, shade('wood', 2));
+  }
+  img.rect(cx, T, 3, B - T + 1, shade('wood', 1));
+  img.rect(cx, T, 1, B - T + 1, shade('wood', 2));
+  img.rect(cx + 2, T, 1, B - T + 1, shade('wood', 0));
+  // Loop B runs left-to-right across the middle of the lid and straight down the side.
+  const km = 6;
+  for (let k = km - 1; k <= km + 1; k++) {
+    const c = k === km + 1 ? shade('wood', 2) : k === km - 1 ? shade('wood', 0) : shade('wood', 1);
+    img.rect(L + k, T - k, R - L + 1, 1, c);
+    img.rect(R + k, T - k, 1, B - T + 1, k === km ? shade('wood', 1) : shade('wood', 0));
+  }
+
+  // The bow over the crossing: two loops, a knot, two tails.
+  const bx = cx + 1 + km;
+  const by = T - km;
+  /*
+   * Each loop is a filled cone leaning out from the knot with a small dark eye near its root. Drawn
+   * first as two rings, the bow read as a pair of spectacles: a bow loop is a flattened tube, and
+   * from above you see its body, not its hole.
+   */
+  for (const [lx, lean, eye] of [
+    [bx - 6.5, 0.7, -1],
+    [bx + 6.5, -0.7, 1],
+  ] as const) {
+    leanEllipse(img, lx, by - 5, 6.2, 4.2, lean, shade('wood', 0));
+    leanEllipse(img, lx - 0.7, by - 5.7, 5.2, 3.2, lean, shade('wood', 2));
+    leanEllipse(img, lx + 0.2, by - 4.8, 4.6, 2.8, lean, shade('wood', 1));
+    img.ellipse(lx - eye * 1.6, by - 4.6, 1.6, 1.1, shade('wood', 0));
+  }
+  limb(img, bx - 1, by + 1, bx - 6, by + 8, 2.8, 2, shade('wood', 1));
+  limb(img, bx + 1, by + 1, bx + 6, by + 7, 2.8, 2, shade('wood', 0));
+  img.ellipse(bx, by - 1, 3.2, 2.8, shade('wood', 0));
+  img.ellipse(bx - 0.6, by - 1.6, 2.4, 2, shade('wood', 1));
+  img.px(bx - 1, by - 3, shade('wood', 3));
+
+  // The wax, on the front, where the cord is sealed: pressed in, lit like the letter's.
+  const sx = cx + 1;
+  const sy = 44;
+  img.ellipse(sx, sy, 6.6, 6, shade('night', 0));
+  img.ellipse(sx - 0.8, sy - 0.8, 6, 5.4, shade('night', 3));
+  img.ellipse(sx + 0.6, sy + 0.6, 5.2, 4.6, shade('night', 2));
+  img.ellipse(sx - 5, sy + 3, 1.8, 1.4, shade('night', 2));
+  img.ellipse(sx + 5, sy + 3.6, 1.6, 1.4, shade('night', 2));
+  ring(img, sx, sy, 2.8, 2.6, 1, shade('night', 0));
+  img.px(sx + 1.6, sy + 1.6, shade('night', 3));
+
+  /*
+   * Kraft's own dark, one step under the ramp. `path` 0 is already the whole shaded side of the
+   * box, so an outline in it would melt the right-hand silhouette into the face beside it.
+   */
+  img.outline(keyline('path'));
+};
+
+/**
+ * The Magpie's Short Cut: a map, unrolled between its two rolls. "It gives you the quicker tracks."
+ * What makes it a map at 64px is the river and the trees, not the paper; what makes it THIS map is
+ * the two routes drawn on it, from the same start ring to the same cross. The long way is a faint
+ * dotted trail looping north over a bridge. The short cut is bold Deep Purple dashes straight
+ * across, river and all, with an arrowhead.
+ *
+ * That is the card's lesson drawn without a word: somebody inked a straight line over this map.
+ * Whose map it is -- its own, or a stranger's fetched fresh tonight -- is the one thing the picture
+ * cannot tell you, which is exactly the point the reveal makes.
+ */
+const shortcut: Painter = (img) => {
+  // The sheet between the rolls.
+  img.rect(11, 11, 42, 42, shade('wall', 2));
+  img.rect(11, 11, 42, 1, shade('wall', 3));
+  img.rect(11, 51, 42, 2, shade('wall', 0));
+  img.rect(11, 12, 42, 1, shade('wall', 1));
+  // A fold down the middle, as a map has: shaded on its right side, lit on its left.
+  img.rect(31, 12, 1, 39, shade('wall', 3));
+  img.rect(32, 12, 1, 39, shade('wall', 1));
+
+  // The river, winding north to south.
+  const river: readonly (readonly [number, number])[] = [
+    [41, 12],
+    [44, 20],
+    [38, 29],
+    [41, 38],
+    [37, 46],
+    [39, 51],
+  ];
+  for (let i = 1; i < river.length; i++) {
+    const [ax, ay] = river[i - 1]!;
+    const [bx, by] = river[i]!;
+    limb(img, ax, ay, bx, by, 6, 6, shade('water', 0));
+  }
+  for (let i = 1; i < river.length; i++) {
+    const [ax, ay] = river[i - 1]!;
+    const [bx, by] = river[i]!;
+    limb(img, ax - 0.6, ay, bx - 0.6, by, 4, 4, shade('water', 1));
+  }
+  for (const [wx, wy] of [
+    [42, 17],
+    [40, 33],
+    [38, 44],
+  ] as const)
+    img.rect(wx, wy, 2, 1, shade('water', 3));
+
+  // The bridge the long way crosses, a few planks over the water near the top.
+  img.rect(37, 15, 10, 5, shade('wood', 0));
+  img.rect(37, 15, 10, 1, shade('wood', 2));
+  img.rect(37, 16, 10, 2, shade('wood', 1));
+  for (let x = 39; x < 47; x += 3) img.rect(x, 16, 1, 2, shade('wood', 0));
+
+  // Trees, in the board's round-crown hand: dark round, lit up-left, a glint, a trunk.
+  for (const [tx, ty] of [
+    [17, 18],
+    [23, 15],
+    [22, 31],
+    [28, 26],
+    [26, 37],
+    [48, 30],
+  ] as const) {
+    img.rect(tx, ty + 2, 1, 3, shade('trunk', 1));
+    img.ellipse(tx, ty, 3.4, 3, shade('canopy', 0));
+    img.ellipse(tx - 0.6, ty - 0.6, 2.6, 2.2, shade('canopy', 1));
+    img.px(tx - 1, ty - 1.6, shade('canopy', 3));
+  }
+
+  // The long way: a faint dotted trail, north round the wood and over the bridge.
+  const longWay: readonly (readonly [number, number])[] = [
+    [17, 43],
+    [14, 33],
+    [15, 25],
+    [22, 21],
+    [31, 19],
+    [38, 17],
+    [46, 18],
+    [50, 25],
+    [51, 34],
+    [48, 40],
+  ];
+  let dot = 0;
+  for (let i = 1; i < longWay.length; i++) {
+    const [ax, ay] = longWay[i - 1]!;
+    const [bx, by] = longWay[i]!;
+    const n = Math.max(Math.abs(bx - ax), Math.abs(by - ay));
+    for (let s = 0; s < n; s++, dot++)
+      if (dot % 3 === 0)
+        img.px(ax + ((bx - ax) * s) / n, ay + ((by - ay) * s) / n, shade('wall', 0));
+  }
+
+  // The start ring, and the short cut: bold dashes, straight across, with an arrowhead.
+  ring(img, 17, 45, 3, 3, 1.4, shade('night', 2));
+  for (let x = 22; x <= 34; x += 5) {
+    img.rect(x, 44, 3, 2, shade('night', 2));
+    img.px(x, 44, shade('night', 3));
+  }
+  for (let i = 0; i < 4; i++) img.rect(37 + i, 41 + i, 1, 8 - i * 2, shade('night', 2));
+
+  // The cross: where she is going.
+  for (let i = 0; i < 6; i++) {
+    img.rect(43 + i, 42 + i, 2, 1, shade('night', 2));
+    img.rect(48 - i, 42 + i, 2, 1, shade('night', 2));
+  }
+
+  // The two rolls, round: lit down the left, shaded down the right, a wooden knob at each end.
+  for (const rx of [5, 52]) {
+    img.rect(rx, 9, 7, 46, shade('wall', 1));
+    img.rect(rx, 9, 2, 46, shade('wall', 3));
+    img.rect(rx + 5, 9, 2, 46, shade('wall', 0));
+    img.rect(rx + 2, 9, 1, 46, shade('wall', 2));
+    img.ellipse(rx + 3.5, 7, 3, 2.4, shade('wood', 0));
+    img.ellipse(rx + 3, 6.4, 2.2, 1.6, shade('wood', 2));
+    img.ellipse(rx + 3.5, 57, 3, 2.4, shade('wood', 0));
+    img.ellipse(rx + 3, 56.4, 2.2, 1.6, shade('wood', 1));
+  }
+
+  img.outline(shade('wall', 0)); // the paper's own dark, as the letter's
+};
+
+/**
+ * The Cat's Latch Lifter: Grandma's door, and on it the latch. An arched door of four planks with
+ * strap hinges down the hinge side and a thumb latch on the other -- the bar resting in its keeper
+ * and a ring pull under it -- because a latch on its own is a bent strip of iron at 64px, and the
+ * door is what says whose and what for. "I open Grandma's door."
+ *
+ * The planks are `trunk`, the darkest wood the palette has, and the iron is `stone`, so the latch
+ * is the brightest thing on the door and the first thing read. No keyhole: the key is somebody
+ * else's skill, and a latch that lifts for anyone has no lock to draw.
+ */
+const latch: Painter = (img) => {
+  const L = 11;
+  const R = 52;
+  const T = 3;
+  const B = 61;
+  const cx = (L + R) / 2;
+  const archR = (R - L + 1) / 2;
+  const archY = T + archR;
+  const span = (y: number): readonly [number, number] | null => {
+    if (y >= archY) return [L, R];
+    const dy = archY - y - 0.5;
+    if (dy >= archR) return null;
+    const h = Math.sqrt(archR * archR - dy * dy);
+    return [Math.round(cx - h + 0.5), Math.round(cx + h - 0.5)];
+  };
+  const within = (x: number, y: number): boolean => {
+    const s = span(y);
+    return s !== null && x >= s[0] && x <= s[1];
+  };
+
+  // The planks, then their seams, each seam lit on its far side.
+  rows(img, T, B, span, shade('trunk', 1));
+  for (let y = T; y <= B; y++) {
+    const s = span(y);
+    if (!s) continue;
+    img.rect(s[0], y, 2, 1, shade('trunk', 2));
+    img.rect(s[1] - 1, y, 2, 1, shade('trunk', 0));
+    for (const seam of [21, 31, 41]) {
+      if (within(seam, y)) img.px(seam, y, shade('trunk', 0));
+      if (within(seam + 1, y)) img.px(seam + 1, y, shade('trunk', 2));
+    }
+  }
+  // The arch's top course catches the light; the threshold falls into shade.
+  for (let y = T; y <= T + 2; y++) {
+    const s = span(y);
+    if (s) img.rect(s[0], y, s[1] - s[0] + 1, 1, shade('trunk', 3));
+  }
+  for (let y = T + 3; y <= T + 4; y++) {
+    const s = span(y);
+    if (s) img.rect(s[0] + 2, y, s[1] - s[0] - 3, 1, shade('trunk', 2));
+  }
+  img.rect(L, B - 1, R - L + 1, 2, shade('trunk', 0));
+  // Grain, a few runs down the planks.
+  for (const [gx, gy, gh] of [
+    [16, 22, 7],
+    [26, 13, 6],
+    [36, 50, 6],
+    [46, 22, 5],
+    [17, 52, 5],
+  ] as const)
+    img.rect(gx, gy, 1, gh, shade('trunk', 0));
+
+  // Two strap hinges down the hinge side, tapering to a point, nailed.
+  for (const hy of [20, 52]) {
+    for (let i = 0; i < 16; i++) {
+      const x = L + i;
+      const hh = i < 11 ? 4 : 4 - (i - 10) * 0.6;
+      const top = hy - hh / 2;
+      for (let y = Math.round(top); y < Math.round(top + hh); y++) {
+        if (!within(x, y)) continue;
+        const c =
+          y === Math.round(top)
+            ? shade('stone', 3)
+            : y === Math.round(top + hh) - 1
+              ? shade('stone', 0)
+              : shade('stone', 1);
+        img.px(x, y, c);
+      }
+    }
+    for (const nx of [L + 4, L + 10]) img.px(nx, hy, shade('stone', 0));
+  }
+
+  // The latch: a backplate, the bar, the keeper that cradles it, and a ring pull below.
+  img.rect(29, 28, 6, 12, shade('stone', 0));
+  img.rect(29, 28, 5, 11, shade('stone', 1));
+  img.rect(29, 28, 5, 1, shade('stone', 3));
+  img.rect(29, 29, 1, 10, shade('stone', 2));
+  img.px(31, 30, shade('stone', 0));
+  img.px(31, 36, shade('stone', 0));
+  img.rect(31, 32, 17, 4, shade('stone', 0));
+  img.rect(31, 32, 16, 3, shade('stone', 1));
+  img.rect(31, 32, 16, 1, shade('stone', 3));
+  img.rect(44, 36, 6, 3, shade('stone', 0));
+  img.rect(44, 36, 5, 2, shade('stone', 1));
+  img.rect(48, 30, 3, 9, shade('stone', 0));
+  img.rect(48, 30, 2, 8, shade('stone', 1));
+  img.rect(48, 30, 2, 1, shade('stone', 3));
+  img.rect(31, 40, 3, 3, shade('stone', 0));
+  ring(img, 32.5, 47, 5, 5, 2, shade('stone', 0));
+  ring(img, 31.9, 46.4, 4.4, 4.4, 1.2, shade('stone', 2));
+  img.px(29.5, 43.5, shade('stone', 3));
+
+  img.outline(shade('trunk', 0)); // the door's own dark
+};
+
 // ----------------------------------------------------------------------------- effects
 
 /*
@@ -1066,9 +1552,9 @@ export function paintInteractPromptFrame(img: Img, frame: 0 | 1): void {
    * The bubble is the one mark in this file that is read AGAINST THE WORLD, and that is why its
    * outline is the exception to the paragraph at the top of the file.
    *
-   * Everything else here -- the portraits, the five items -- sits on a `--cyera-black` DOM panel,
+   * Everything else here -- the portraits, the nine items -- sits on a `--cyera-black` DOM panel,
    * where `ink` 0 is invisible and a ring in the object's own dark is the only one that shows.
-   * That reasoning is right for those eleven frames and it was applied to this one by the same
+   * That reasoning is right for those fifteen frames and it was applied to this one by the same
    * sweep without being re-measured. This frame is drawn in the forest, over the lawn, and
    * `wall` 0 is luma 175 against lawn at 161..168: SEVEN luma. The one mark in the game that means
    * "this one will talk to you" was a cream shape on cream ground with no silhouette at all, and a
@@ -1158,6 +1644,10 @@ export const FACE_PAINTERS: Record<string, Painter> = {
   'item-lantern': lantern,
   'item-key': key,
   'item-letter': letter,
+  'item-signpost': signpost,
+  'item-parcel': parcel,
+  'item-shortcut': shortcut,
+  'item-latch': latch,
   'fx-dust': (img) => paintDustFrame(img, 0),
   'fx-interact-prompt': (img) => paintInteractPromptFrame(img, 0),
   'fx-pawprints': (img) => paintPawprintsFrame(img, 0),

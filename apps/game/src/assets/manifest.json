@@ -80,6 +80,10 @@
     "item-translator.png",
     "item-lantern.png",
     "item-key.png",
-    "item-letter.png"
+    "item-letter.png",
+    "item-signpost.png",
+    "item-parcel.png",
+    "item-shortcut.png",
+    "item-latch.png"
   ]
 }

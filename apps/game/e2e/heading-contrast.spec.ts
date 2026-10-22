@@ -288,16 +288,12 @@ for (const size of SIZES) {
       await expect(page.locator('.otp-world-frame')).toBeVisible();
       await expectReadable(page, at('forest'), []);
 
-      // 02 Offer.
+      // 02 Offer, its card open by itself: the panel's h2 and the card's own title (an h3 on a
+      // light surface) alongside.
       await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
       await expect(page.locator('[data-offer]')).toBeVisible();
-      await expectReadable(page, at('offer'), ['Offer']);
-
-      // 03 Card, with the card's own title (an h3 on a light surface) alongside.
-      await page.locator('[data-action="inspect"]').click();
       await expect(page.locator('.otp-card')).toBeFocused();
-      await expectReadable(page, at('card'), ['Card']);
-      await page.keyboard.press('Escape');
+      await expectReadable(page, at('offer'), ['Offer']);
       await page.keyboard.press('Escape');
       await expect(page.locator('[data-offer]')).toBeHidden();
 

@@ -89,7 +89,7 @@ test.describe('one tap of A is one press and nothing else', () => {
 
     const cdp = await context.newCDPSession(page);
     await tap(page, cdp, '.otp-a-button');
-    await page.waitForFunction(() => window.__otp!.store.getState().phase === 'talk');
+    await page.waitForFunction(() => window.__otp!.store.getState().phase === 'card');
     // A dozen frames: long enough that a click which was going to be synthesised has been.
     await page.waitForTimeout(250);
     expect(
@@ -133,12 +133,24 @@ test('the walk buttons answer the keys that activate them', async ({ page }) => 
       await button.focus();
       const before = (await probe(page)).position;
       await page.keyboard.press(key);
-      await page.waitForTimeout(600);
-      const after = (await probe(page)).position;
-      const moved = Math.hypot(after.x - before.x, after.y - before.y);
+      const moved = async (): Promise<number> => {
+        const after = (await probe(page)).position;
+        return Math.hypot(after.x - before.x, after.y - before.y);
+      };
       // Stop is last in the group, and the one control whose success looks like standing still.
-      if (i === count - 1) expect(moved, `"${name}" walked her off on ${key}`).toBeLessThan(AWAY);
-      else expect(moved, `"${name}" did nothing at all on ${key}`).toBeGreaterThan(AWAY);
+      if (i === count - 1) {
+        await page.waitForTimeout(600);
+        expect(await moved(), `"${name}" walked her off on ${key}`).toBeLessThan(AWAY);
+      } else {
+        /*
+         * Polled, not read once after a fixed 600ms: the walk is owed as DISTANCE and a starved
+         * runner pays it off slowly (measured 5.8px in 600ms under load, then 128px on the retry),
+         * and what this asks is whether the press walked at all.
+         */
+        await expect
+          .poll(moved, { message: `"${name}" did nothing at all on ${key}`, timeout: 5_000 })
+          .toBeGreaterThan(AWAY);
+      }
     }
   }
 });

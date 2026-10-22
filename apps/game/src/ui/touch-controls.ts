@@ -1,4 +1,5 @@
 import { TILE } from '../world/logic';
+import { MOVE_KEYS } from '../world/input';
 import type { Input } from '../world/input';
 
 /**
@@ -19,24 +20,21 @@ export interface TouchControls {
 }
 
 /**
- * THE DECK'S THREE MODES, one per kind of screen.
+ * THE DECK'S TWO MODES, one per kind of screen.
  *
  *   play  the forest: the stick walks, A talks to whoever is within reach. A is that screen's one
  *         call to action, so it is the one that wears Lime.
- *   talk  an offer is open: the stick is still, A opens the card -- "A to talk or open a card", the
- *         client's words for it. A keeps the Lime: the offer panel has none of its own.
- *   idle  everything else (title, how-to, the card, the cottage, the reveal, a problem screen):
- *         neither control answers, and A is Lilac, because on Title and Results the one Lime
- *         belongs to that screen's own call to action.
+ *   idle  everything else (title, how-to, an open offer, the cottage, the reveal, a problem
+ *         screen): neither control answers, and A is Lilac, because on Title and Results the one
+ *         Lime belongs to that screen's own call to action.
+ *
+ * There was a third, `talk`, in which A opened the card of the offer on screen. The card opens by
+ * itself now (the client, 2026-10-22), so an open offer is idle like every other panel: what is
+ * left to press there is an answer, and an answer is the player's, never a button mashed through.
  *
  * Written to `data-mode` on the deck, where screens.css reads it.
  */
-export type DeckMode = 'play' | 'talk' | 'idle';
-
-export interface TouchActions {
-  /** A, pressed while an offer is open: open its card. */
-  onOpenCard?(): void;
-}
+export type DeckMode = 'play' | 'idle';
 
 /**
  * Every word the pad says, from `content.strings` (CLAUDE.md rule 3).
@@ -65,6 +63,38 @@ export interface TouchLabels {
 }
 
 const STICK_RADIUS = 36;
+
+/**
+ * How far the knob leans when the player walks with the keys (the client, 2026-10-22: "if I click
+ * right, I want the joystick to move right"). Purely a picture of the input -- the keys walk Purple
+ * through world/input.ts whether or not the deck is drawn -- so it is a transform and nothing else.
+ *
+ * 24px keeps the 40px knob just inside the 96px well's 3px rim, where a drag may push it over the
+ * edge: a key is a direction, not a distance. A reader who asked for less motion still sees which
+ * way the stick points, at well under half the travel.
+ */
+export const KEY_TILT_PX = 24;
+export const KEY_TILT_REDUCED_PX = 8;
+
+/**
+ * Which way the held walking keys point, as the knob should show it: each axis summed and clamped
+ * the way world/input.ts reads them, then a diagonal brought back to the length of a straight
+ * press, so a diagonal leans as far as an arrow does rather than root-two further.
+ */
+export function keyTilt(held: Iterable<string>): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  for (const code of held) {
+    const v = MOVE_KEYS[code];
+    if (!v) continue;
+    x += v.x;
+    y += v.y;
+  }
+  x = Math.max(-1, Math.min(1, x));
+  y = Math.max(-1, Math.min(1, y));
+  const length = Math.hypot(x, y);
+  return length > 1 ? { x: x / length, y: y / length } : { x, y };
+}
 
 /**
  * The scene saying someone has come within reach. Declared in `world/forest-scene.ts`; the walk
@@ -140,11 +170,7 @@ export function activationKey(key: string): boolean {
   return key === ' ' || key === 'Enter';
 }
 
-export function createTouchControls(
-  input: Input,
-  labels: TouchLabels,
-  actions: TouchActions = {},
-): TouchControls {
+export function createTouchControls(input: Input, labels: TouchLabels): TouchControls {
   const root = document.createElement('div');
   root.className = 'otp-touch';
 
@@ -283,10 +309,44 @@ export function createTouchControls(
   };
   window.addEventListener(WITHIN_REACH, onWithinReach);
 
+  /*
+   * THE STICK FOLLOWS THE KEYS. The walking keys held right now, by code, watched on the window
+   * beside world/input.ts's own listener and never cancelled here: this only draws what that one
+   * acts on. A thumb on the stick outranks the keys, so the knob never shows two inputs at once.
+   */
+  const keys = new Set<string>();
+  const reducedMotion =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+  const showKeys = (): void => {
+    if (stickPointer !== null) return;
+    const { x, y } = mode === 'play' ? keyTilt(keys) : { x: 0, y: 0 };
+    const reach = reducedMotion?.matches ? KEY_TILT_REDUCED_PX : KEY_TILT_PX;
+    knob.style.transform = x === 0 && y === 0 ? '' : `translate(${x * reach}px, ${y * reach}px)`;
+    knob.dataset['keys'] = x === 0 && y === 0 ? '' : `${Math.sign(x)},${Math.sign(y)}`;
+  };
+  const onKeyDown = (e: KeyboardEvent): void => {
+    if (!MOVE_KEYS[e.code] || keys.has(e.code)) return;
+    keys.add(e.code);
+    showKeys();
+  };
+  const onKeyUp = (e: KeyboardEvent): void => {
+    if (keys.delete(e.code)) showKeys();
+  };
+  const onBlur = (): void => {
+    keys.clear();
+    showKeys();
+  };
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onBlur);
+
   const reset = (): void => {
     stickPointer = null;
     pointed = { x: 0, y: 0 };
     knob.style.transform = '';
+    knob.dataset['keys'] = '';
     stopWalking();
   };
   const moveKnob = (e: PointerEvent): void => {
@@ -320,6 +380,8 @@ export function createTouchControls(
     const click = e.type === 'pointerup' && e.timeStamp - pressedAt < CLICK_MS;
     const step = click ? stepFor(pointed.x, pointed.y) : null;
     reset();
+    // Keys still held when the thumb lets go: the knob goes back to showing them.
+    showKeys();
     // A click on an arrow walks a step that way: the mouse's way to walk, and a tap's.
     if (step) stepWalk(step.x, step.y);
   };
@@ -328,10 +390,9 @@ export function createTouchControls(
     press();
   };
 
-  /** A, whichever way it was pressed: talk in the forest, open the card in an offer, else nothing. */
+  /** A, whichever way it was pressed: talk in the forest, else nothing. */
   const press = (): void => {
     if (mode === 'play') input.pressInteract();
-    else if (mode === 'talk') actions.onOpenCard?.();
   };
 
   /**
@@ -436,11 +497,18 @@ export function createTouchControls(
       pad.hidden = next !== 'play';
       // Nothing to press on an idle screen, so nothing that claims to be pressable.
       button.disabled = next === 'idle';
-      if (next !== 'play') reset();
+      if (next !== 'play') {
+        // A key held into an offer is not still being walked on when the offer closes.
+        keys.clear();
+        reset();
+      }
     },
     destroy() {
       reset();
       window.removeEventListener(WITHIN_REACH, onWithinReach);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
       root.remove();
     },
   };

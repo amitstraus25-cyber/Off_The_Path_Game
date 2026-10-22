@@ -2,9 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { v2 } from '@otp/core';
 import type { PostOutcome } from '../net/leaderboard';
 import type { Store } from '../store';
-import { hudBasket, remainingMs } from '../world/run';
+import { hudBasket, remainingMs, walkOn } from '../world/run';
 import { Dialogue } from './Dialogue';
-import { SkillCard } from './SkillCard';
 import { HowTo, Title, hasKeyboard } from './Title';
 import { Cottage } from './Cottage';
 import { Results } from './Results';
@@ -261,30 +260,22 @@ export function App({
         return <Title ui={content.ui} onPlay={onStart} />;
       case 'howto':
         return <HowTo ui={content.ui} onGo={onGo} busy={starting} />;
+      /*
+       * One panel for both: the card is open whenever an offer is (Dialogue.tsx). `talk` is only
+       * ever on screen for the instant between MEET and the INSPECT main.ts sends after it.
+       */
       case 'talk':
+      case 'card':
         return character && skill ? (
           <Dialogue
             key={`offer-${character.id}`}
             words={content.ui.offer}
+            cardWords={content.ui.card}
             character={character}
             skill={skill}
-            onInspect={() => void store.dispatch({ type: 'INSPECT', s: skill.id })}
-            onVerdict={verdict(skill.id)}
-            onWalkOn={() => void store.dispatch({ type: 'BACK' })}
-          />
-        ) : null;
-      case 'card':
-        return character && skill ? (
-          <SkillCard
-            key={`card-${skill.id}`}
-            words={content.ui.card}
-            answers={content.ui.offer}
-            skill={skill}
-            // The variant THIS run dealt. Before the card opens the two are word for word the same.
             card={v2.variantOf(state.good, skill).card}
-            offeredBy={character.name}
             onVerdict={verdict(skill.id)}
-            onBack={() => void store.dispatch({ type: 'BACK' })}
+            onWalkOn={() => walkOn(store)}
           />
         ) : null;
       case 'cottage':

@@ -423,12 +423,12 @@ body::before {
 }
 
 /*
- * A IS THE CALL TO ACTION WHILE YOU PLAY, AND ONLY THEN. On the forest, and in an open offer where
- * it opens the card, A is the one thing to press, so it wears that screen's one Lime. Everywhere
- * else -- Title and Results above all, whose own call to action owns the Lime -- it stays Lilac and
- * is disabled (ui/touch-controls.ts `DeckMode`). The ring stays Haze either way.
+ * A IS THE CALL TO ACTION WHILE YOU PLAY, AND ONLY THEN. On the forest A is the one thing to press,
+ * so it wears that screen's one Lime. Everywhere else -- an open offer, whose card opens by itself,
+ * and Title and Results above all, whose own call to action owns the Lime -- it stays Lilac and is
+ * disabled (ui/touch-controls.ts `DeckMode`). The ring stays Haze either way.
  */
-.otp-touch:is([data-mode='play'], [data-mode='talk']) .otp-a-button {
+.otp-touch[data-mode='play'] .otp-a-button {
   background: var(--cyera-lime);
 }
 
@@ -436,8 +436,7 @@ body::before {
   cursor: default;
 }
 
-.otp-touch[data-mode='idle'] .otp-stick,
-.otp-touch[data-mode='talk'] .otp-stick {
+.otp-touch[data-mode='idle'] .otp-stick {
   cursor: default;
 }
 

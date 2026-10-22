@@ -63,7 +63,6 @@ for (const size of SCALE_SIZES) {
      * And again at the arrival, which carries the one portrait v2 shows (the offers are
      * portrait-less for all seven): Grandma, or the wolf in her bonnet, in a 10px frame.
      */
-    await page.locator('[data-card] [data-action="back"]').click();
     await page.locator('[data-offer] [data-action="walk-on"]').click();
     await answerAllAndArrive(page, 'leave');
     await expect(page.locator('.otp-portrait')).toBeVisible();

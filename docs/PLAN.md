@@ -43,7 +43,8 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     the marquee (40px) and the deck (120px) BEFORE `stageFit`, so integer zoom holds: 1280x800 keeps
     zoom 2 with the deck below; phones keep the deck in the docked strip and lose only the marquee;
     a phone held sideways, and the client's 1673x449, put the stick and A beside the screen. Lime
-    is A's only while you play (forest, and an open offer where A opens the card); on Title and
+    is A's only while you play (the forest; an open offer was included until the card began opening
+    by itself, see the morning round below); on Title and
     Results the CTA keeps it and A is Lilac and disabled. The page ground is dark again, by the
     client's decision; the near-black share it moves is not a drift.
     **Known gap, not mine to close:** `cameraFor()` in `packages/core/src/camera.ts` does not know
@@ -64,6 +65,32 @@ everything the 2026-10-21 sweep found that is not yet fixed.
   - **The walk-button flake**: a press carries four tiles as DISTANCE (`Input.walkFor`), not as a
     timer, so a slow phone or a starved runner walks it slower and never shorter; the e2e waits for
     the carry to finish. The same treatment for the walk-underway and stick-hold assertions.
+
+- **Client round 2026-10-22, morning: the interactions (built, not committed, not ticked).**
+  - **The card opens by itself.** An offer is ONE panel (`ui/Dialogue.tsx` with the card body from
+    `ui/SkillCard.tsx`): who is speaking and their greeting, the skill's picture, name, promise and
+    the dealt card's lines, then Take it / Leave it and Walk on. main.ts sends the INSPECT a MEET is
+    owed (`world/run.ts cardOwed`), so the reveal's `read` stays true; Walk on and Esc go straight
+    back to the forest (`walkOn`). On a short window the card scrolls inside its panel under the
+    answers, which are held at the scrollport's foot; the page never scrolls. `ui.offer.openCard`,
+    `ui.card.title`, `ui.card.back` and `ui.card.offeredBy` are gone from content and schema (the
+    speaker's name now says who offers it). The deck's `talk` mode went with the step it served: A is
+    idle and Lilac in an open offer, as on every other panel.
+  - **The joystick follows the keys**: the knob leans the way the arrows and WASD walk, diagonals at
+    a straight press's length, back to centre on release, a shorter lean under reduced motion.
+  - **The focus ring on text-link controls** (Walk on, the music switch) is a 2px outline 3px clear
+    of a rounded box, no halo; every other focusable control was checked and is a pill or a circle
+    whose ring already follows its shape.
+  - **Copy, all seven read in both variants**: greetings name the thing offered ("this compass",
+    "this signpost", "these words"...), promises are in one voice ("It ..."), Way Teller's giveaway
+    says "Obeys", Slow Post's bad reveal says the peeking friend was the wolf, and four real-world
+    notes are plainer (Way Teller says "a skill", not "an agent"; Night Light loses "human approval
+    that important actions need"). `docs/GAME_DESIGN_V2.md`'s two copy tables are brought up to date.
+  - **The art follow-ups**: each reveal row shows its skill's icon at the art's own 64px, pixelated,
+    named by the skill; `e2e/hud.spec.ts` gives the basket the seven real icons and proves the
+    placeholder on a fixture that names art no painter will draw (`item-not-painted`), as
+    `test/hud.test.ts` does; `docs/ASSETS.md` counts fifteen images and `GAME_DESIGN_V2.md` no
+    longer says four icons are missing.
 
 - **v2 Phase A is done** (`87c80ff`): the new rules are in `packages/core/src/v2`, beside v1, at
   100% coverage. **Phase B, the six or seven real skills, is next** and waits on your go.

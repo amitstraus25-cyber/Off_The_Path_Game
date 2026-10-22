@@ -16,49 +16,49 @@
       "name": "Rabbit",
       "spawn": "npc-rabbit",
       "skillId": "cottage-finder",
-      "greet": "I made the compass myself. Never once lost."
+      "greet": "Hello! I made this compass myself. Never once lost."
     },
     {
       "id": "toadstool",
       "name": "Toadstool",
       "spawn": "bystander-toadstool",
       "skillId": "way-teller",
-      "greet": "My aunt made it, long before the path."
+      "greet": "My aunt carved this signpost. It knows the old way."
     },
     {
       "id": "owl",
       "name": "Owl",
       "spawn": "npc-owl",
       "skillId": "word-weaver",
-      "greet": "My sister made it. She has the finest hand."
+      "greet": "Hoo! My sister wove these words. Finest hand in the wood."
     },
     {
       "id": "magpie",
       "name": "Magpie",
       "spawn": "bystander-magpie",
       "skillId": "short-cut",
-      "greet": "My cousin made it. Clever bird, my cousin."
+      "greet": "My cousin drew this map. Clever bird, my cousin."
     },
     {
       "id": "snail",
       "name": "Snail",
       "spawn": "bystander-snail",
       "skillId": "slow-post",
-      "greet": "I made it. Slow, but sure."
+      "greet": "Slow, but sure. I'll carry your parcel."
     },
     {
       "id": "lantern-keeper",
       "name": "Lantern Keeper",
       "spawn": "npc-lantern-keeper",
       "skillId": "night-light",
-      "greet": "I made the lamp for the pines."
+      "greet": "Evening! I made this lamp for the dark pines."
     },
     {
       "id": "cat",
       "name": "Cat",
       "spawn": "bystander-cat",
       "skillId": "latch-lifter",
-      "greet": "Grandma made it. The kettle's on."
+      "greet": "Grandma made this for you. The kettle's on."
     }
   ],
   "skills": [
@@ -90,10 +90,10 @@
       "id": "way-teller",
       "name": "Way Teller",
       "icon": "item-signpost",
-      "promise": "I take you to her door, the old way.",
+      "promise": "It takes you to her door, the old way.",
       "realWorld": {
         "term": "Indirect prompt injection",
-        "note": "An agent that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge."
+        "note": "A skill that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge."
       },
       "good": {
         "card": {
@@ -104,7 +104,7 @@
       },
       "bad": {
         "card": {
-          "take": ["Walks you the old way to her door.", "Follows any note pinned to a tree."],
+          "take": ["Walks you the old way to her door.", "Obeys any note pinned to a tree."],
           "leave": "You find your own way."
         },
         "reveal": "Walked you the old way. Obeyed the wolf's note too."
@@ -117,7 +117,7 @@
       "promise": "It sends word ahead, so Grandma expects you.",
       "realWorld": {
         "term": "Oversharing and public exposure",
-        "note": "A copy left at a crossing is data anyone passing can read. Reaching the right person does not undo the copies left behind."
+        "note": "A copy pinned at a crossing is public data anyone can read. Delivering the real note does not take the copies down."
       },
       "good": {
         "card": {
@@ -144,7 +144,7 @@
       "promise": "It gives you the quicker tracks, fresh each evening.",
       "realWorld": {
         "term": "Supply-chain risk",
-        "note": "A map fetched from a stranger can be redrawn any night. A skill that loads instructions at run time can change after you approved it."
+        "note": "A stranger can redraw their map any night. A skill that fetches its instructions from elsewhere can change after you said yes."
       },
       "good": {
         "card": {
@@ -165,7 +165,7 @@
       "id": "slow-post",
       "name": "Slow Post",
       "icon": "item-parcel",
-      "promise": "I carry the heavy things, sealed. You walk light.",
+      "promise": "It carries the heavy things, sealed. You walk light.",
       "realWorld": {
         "term": "Third-party data sharing",
         "note": "A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way."
@@ -182,7 +182,7 @@
           "take": ["Carries your parcel, sealed.", "Lets a friend peek inside on the way."],
           "leave": "You carry it yourself."
         },
-        "reveal": "It reached her. The wolf looked first."
+        "reveal": "It reached her. The peeking friend was the wolf."
       }
     },
     {
@@ -192,7 +192,7 @@
       "promise": "It shows you what the signs say.",
       "realWorld": {
         "term": "Autonomy without human approval",
-        "note": "Reading the signs helps you decide. Acting on them without asking you skips the human approval that important actions need."
+        "note": "Reading the signs to you helps you choose. Acting on them without asking skips your say on the steps that matter."
       },
       "good": {
         "card": {
@@ -213,7 +213,7 @@
       "id": "latch-lifter",
       "name": "Latch Lifter",
       "icon": "item-latch",
-      "promise": "I open Grandma's door. I feel where it sticks.",
+      "promise": "It opens Grandma's door, even where it sticks.",
       "realWorld": {
         "term": "Over-broad access",
         "note": "A latch that lifts for anyone never checks who asks. A skill is an identity too: give it only the access its job needs."
@@ -266,7 +266,7 @@
       "title": "How to play",
       "steps": [
         "Walk the path and meet each character.",
-        "Open each card and read what the skill does.",
+        "Read each card to see what the skill really does.",
         "Take the skill or leave it.",
         "You have 3:00 to reach Grandma's door."
       ],
@@ -280,17 +280,13 @@
     },
     "offer": {
       "title": "Offer",
-      "openCard": "Open the card",
       "take": "Take it",
       "leave": "Leave it",
       "walkOn": "Walk on"
     },
     "card": {
-      "title": "Card",
-      "offeredBy": "Offered by the {name}",
       "ifTake": "If you take it",
-      "ifLeave": "If you leave it",
-      "back": "Go back"
+      "ifLeave": "If you leave it"
     },
     "hud": {
       "time": "Time left",

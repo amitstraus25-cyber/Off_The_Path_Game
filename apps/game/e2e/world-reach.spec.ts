@@ -229,7 +229,7 @@ test('one activation of the A button talks to whoever is within reach', async ({
   await expect(touch.locator(NEAR)).toContainText('Rabbit');
 
   await activate(touch, 'Talk or interact');
-  await expect(touch.locator('.otp-dialogue')).toBeVisible();
+  await expect(touch.locator('[data-offer="rabbit"]')).toBeVisible();
   expect(await touch.evaluate(() => window.__otp!.store.getState().active)).toBe('rabbit');
 
   await touch.context().close();

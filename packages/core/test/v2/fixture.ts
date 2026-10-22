@@ -135,17 +135,13 @@ export const raw = {
     world: { title: 'Fixture world' },
     offer: {
       title: 'Fixture offer',
-      openCard: 'Fixture open',
       take: 'Fixture take',
       leave: 'Fixture leave',
       walkOn: 'Fixture walk on',
     },
     card: {
-      title: 'Fixture card',
-      offeredBy: 'Fixture from {name}',
       ifTake: 'Fixture if take',
       ifLeave: 'Fixture if leave',
-      back: 'Fixture back',
     },
     hud: {
       time: 'Fixture time',

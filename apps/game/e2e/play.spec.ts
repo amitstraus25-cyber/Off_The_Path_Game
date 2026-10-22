@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 const raw = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
 ) as {
+  skills: { id: string; icon: string }[];
   ui: {
     cabinet: { marquee: string };
     reveal: { caught: string; again: string; did: string; wouldHave: string };
@@ -92,8 +93,8 @@ async function walkIntoCottage(page: Page): Promise<void> {
 }
 
 /**
- * Meets the seven in walking order and answers each with `choose`. With `read`, every card is
- * opened first and its lines are returned; without, every answer is given from the conversation.
+ * Meets the seven in walking order and answers each with `choose`. Every offer opens with its card
+ * already showing (the client, 2026-10-22); with `read`, its lines are collected before answering.
  */
 async function walkTheCast(
   page: Page,
@@ -109,13 +110,11 @@ async function walkTheCast(
     await page.keyboard.press('e');
     const offer = page.locator(`[data-offer="${c.id}"]`);
     await expect(offer, `${c.id} opens their own offer`).toBeVisible();
-    let panel = offer;
-    if (read) {
-      await offer.locator('[data-action="inspect"]').click();
-      panel = page.locator(`[data-card="${c.skillId}"]`);
-      await expect(panel).toBeVisible();
-      shown[c.skillId] = await panel.locator('[data-card-take] li').allTextContents();
-    }
+    // The card is the offer's own body: no step between meeting someone and reading it.
+    const panel = offer;
+    await expect(panel, `${c.id} shows their card`).toHaveAttribute('data-card', c.skillId);
+    await expect(panel.locator('[data-card-take] li').first()).toBeVisible();
+    if (read) shown[c.skillId] = await panel.locator('[data-card-take] li').allTextContents();
     /*
      * An answer pressed within 300ms of its panel mounting, by a pointer that has not moved since,
      * is read as the second half of the double-click that opened it and ignored (components.tsx
@@ -200,7 +199,7 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
   await serveEmptyBoard(page);
   await begin(page);
   const { good } = await state(page);
-  // Read the odd ones, take the even ones: every kind of row turns up.
+  // Take the even ones, leave the odd ones: every kind of row turns up.
   let i = 0;
   await walkTheCast(page, () => (i++ % 2 === 0 ? 'take' : 'leave'), false);
   await walkIntoCottage(page);
@@ -224,6 +223,21 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
       isGood ? 'check' : 'missed',
     );
     await expect(row.locator('.otp-recap__status')).toHaveText(isGood ? 'Safe' : 'Unsafe');
+    // Its own picture, named by the skill, at the art's own size: every painted pixel whole.
+    const icon = row.locator('img.otp-reveal__icon');
+    await expect(icon).toHaveAttribute('alt', s.name);
+    const iconName = raw.skills.find((k) => k.id === s.id)!.icon;
+    await expect(icon).toHaveAttribute('src', new RegExp(`${iconName}[^/]*\\.png`));
+    const drawn = await icon.evaluate((img: HTMLImageElement) => ({
+      natural: img.naturalWidth,
+      shown: img.getBoundingClientRect().width,
+      rendering: getComputedStyle(img).imageRendering,
+    }));
+    expect(drawn.natural, `${s.id} icon loaded`).toBeGreaterThan(0);
+    expect(drawn.shown / drawn.natural, `${s.id} icon at a whole scale`).toBe(
+      Math.round(drawn.shown / drawn.natural),
+    );
+    expect(drawn.rendering).toBe('pixelated');
     await expect(row.locator('.otp-reveal__chose')).toHaveText(
       verdicts[s.id] === 'take' ? 'You took' : 'You left',
     );
@@ -261,7 +275,7 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
   await expect(again).toHaveClass(/\botp-button\b/);
 });
 
-test('the greedy run takes everything unread and lets the wolf in at 0', async ({ page }) => {
+test('the greedy run takes everything and lets the wolf in at 0', async ({ page }) => {
   test.slow();
   await serveStart(page, 34);
   await serveEmptyBoard(page);
@@ -346,12 +360,9 @@ test('keyboard only: begin, talk, read, answer, arrive, reveal, replay', async (
   for (const c of await cast(page)) {
     await standBeside(page, c.spawn);
     await page.keyboard.press('e');
-    const offer = page.locator(`[data-offer="${c.id}"]`);
-    await expect(offer.locator('[data-action="inspect"]'), 'focus starts on reading').toBeFocused();
-    await page.keyboard.press('Enter');
-    const card = page.locator(`[data-card="${c.skillId}"]`);
-    // Focus lands on the card itself, so nothing is pre-selected; then Go back, Take, Leave.
-    await expect(card.locator('.otp-card')).toBeFocused();
+    const card = page.locator(`[data-offer="${c.id}"][data-card="${c.skillId}"]`);
+    // The card is open and focus lands on it, so nothing is pre-selected; then Take, Leave, Walk on.
+    await expect(card.locator('.otp-card'), 'focus starts on reading').toBeFocused();
     const want = good.includes(c.skillId) ? 'take' : 'leave';
     const target = card.locator(`[data-action="${want}"]`);
     for (let n = 0; n < 6 && !(await target.evaluate((b) => b === document.activeElement)); n++)
@@ -457,13 +468,28 @@ for (const [width, height] of [
     const rabbit = (await cast(page))[0]!;
     await standBeside(page, rabbit.spawn);
     await page.keyboard.press('e');
+    // One panel, card open: both answers and the way past are on screen without scrolling the
+    // page, and the page itself never scrolls -- a card too tall scrolls inside its panel.
+    await onScreen('[data-offer] [data-action="take"]', 'offer');
     await onScreen('[data-offer] [data-action="leave"]', 'offer');
+    await onScreen('[data-offer] [data-action="walk-on"]', 'offer');
+    await onScreen('[data-offer] [data-card-take]', 'offer');
     await noSideways('offer');
-    await page.locator('[data-offer] [data-action="inspect"]').click();
-    await onScreen('[data-card] [data-action="leave"]', 'card');
-    await noSideways('card');
-    await page.locator('[data-card] [data-action="back"]').click();
-    // The only way out of a conversation without answering is a touch target, not a 14px link.
+    expect(
+      await page.evaluate(() => document.scrollingElement!.scrollHeight - innerHeight),
+      'the page does not scroll under an offer',
+    ).toBeLessThanOrEqual(0);
+    // The only way out of an offer without answering is a touch target, not a 14px link.
+    // Measured once the panel has slid into place: mid-slide its box sits on a fractional offset,
+    // and top and bottom rounded apart read 44 as 43.99997 (seen once in a full run).
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => (a as CSSAnimation).animationName === 'otp-panel-in')
+          .map((a) => a.finished),
+      ),
+    );
     const walkOn = (await page.locator('[data-offer] [data-action="walk-on"]').boundingBox())!;
     expect(
       walkOn.height,
