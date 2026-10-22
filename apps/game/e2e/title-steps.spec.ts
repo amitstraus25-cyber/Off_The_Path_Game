@@ -127,7 +127,10 @@ function look(page: Page): Promise<Seen> {
       );
     };
     const steps = [...document.querySelectorAll('.otp-howto > li')];
-    const label = document.querySelector('.otp-howto__title');
+    // The heading is measured only while it is painted: on the smallest rung it is visually hidden
+    // (still the screen's h1 for a screen reader), a 1px clipped box that is not on the card at all.
+    const heading = document.querySelector<HTMLElement>('.otp-howto__title');
+    const label = heading && heading.getBoundingClientRect().width > 1 ? heading : null;
     const hint = document.querySelector('.otp-hint');
     const measured = [...(label ? [label] : []), ...steps, ...(hint ? [hint] : [])];
     const covered = steps.flatMap((step) => {

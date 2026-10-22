@@ -1365,6 +1365,22 @@ h2.otp-section-label {
   font-size: 24px;
   margin-bottom: 4px;
 }
+/* On the smallest rung the heading goes visually -- it stays the screen's h1 for a screen reader
+   -- and the four steps keep their room. CI's Linux fonts set the steps a little wider than the
+   Mac, and at 667x375 that pushed the dusk line 14.5px off the card (2026-10-22). "Start walking"
+   under the steps still says what the card is. */
+.otp-title-panel[data-fit='4'] .otp-howto__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .otp-title-panel[data-fit='4'] .otp-howto__label {
   font-size: 11px;
   margin-block: 6px 4px;
