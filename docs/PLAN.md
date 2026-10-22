@@ -92,6 +92,31 @@ everything the 2026-10-21 sweep found that is not yet fixed.
     `test/hud.test.ts` does; `docs/ASSETS.md` counts fifteen images and `GAME_DESIGN_V2.md` no
     longer says four icons are missing.
 
+- **Client round 2026-10-22, afternoon: the screens (built, not committed, not ticked).**
+  - **Clear instructions.** The how-to is four short lines: each character offers a skill; three
+    are good, four are malicious; read the card and take only the good ones; reach Grandma in 3:00,
+    faster scores higher. The landing carries the same premise in one line (`chrome.landingPremise`,
+    a `.otp-body-text`, so it is the first thing the fit ladder lets yield on a short card).
+    `test/reveal.test.ts` reads the number words back against `deal.good` and the cast. The HUD is
+    unchanged: the basket already shows what was taken, and nothing on it says which were good.
+  - **The reveal, score first, then the cards.** The ending as the page's h1, the score out of 100
+    with core's parts (`run.choices`, `run.speed`, `run.timeMs` against `run.parMs`, none computed
+    in the UI), "You spotted N of 4 bad skills" (a bad card counts only if it was OPENED and left,
+    so the late run's "4 of 4" problem is gone by definition and the count is shown on every
+    ending), Walk it again beside it. Then seven tiles in walking order -- picture, name, Safe /
+    Unsafe as a glyph and a word, what you did -- each a real button with `aria-expanded` that
+    turns over (a 320ms rotate, none under reduced motion) to the marked giveaway line, promise
+    against what it did or would have done, and the real-world note. Then the question and the one
+    Lime, then the post form and the board. `e2e/results.spec.ts` is the browser half.
+  - **The name is typed** (reverses D4 on the client's word): a labelled text field pre-filled with
+    a minted suggestion, "Suggest a name", and the board's own rule (`v2.checkName`) checked before
+    posting, with one sentence per refusal reason tied to the field by `aria-describedby`.
+  - **Your run on the board at once.** The adapter now marks the reader's own row (`entry.yours`,
+    `withYourRow` in `net/leaderboard.ts`, from the rank the server counted) and places it from the
+    post's answer when the edge-cached board has not caught up; Results marks it through
+    `boardRowKey` and adds "Joining the board" in words while it is `pending`. A wolf run is told
+    up front that it does not go on the board (`chrome.wolfNotPosted`), since apps/api refuses it.
+
 - **v2 Phase A is done** (`87c80ff`): the new rules are in `packages/core/src/v2`, beside v1, at
   100% coverage. **Phase B, the six or seven real skills, is next** and waits on your go.
 - **The readiness blockers are fixed** (`51574fc`), with the question button and the privacy line.

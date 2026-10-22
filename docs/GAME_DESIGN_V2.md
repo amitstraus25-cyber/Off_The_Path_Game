@@ -213,18 +213,50 @@ draws the seed with `crypto.getRandomValues` and passes it to `createState(conte
 
 `score(state, content)` is an integer 0 to 100; `result(state, content)` adds the ending, the
 reveal (every offer in walking order, with its dealt variant's line and, for a bad one, the
-giveaway line) and the counts.
+giveaway line), the counts, and since 2026-10-22 the two parts of the total (`choices`, `speed`),
+the arrival time (`timeMs`) and the par it was measured against (`parMs`).
 
-| Run                        | Ending        | Total                          | Shipped weights  |
-| -------------------------- | ------------- | ------------------------------ | ---------------- |
-| any bad skill taken        | `wolf`        | 0                              | 0                |
-| no bad skill taken         | `grandma`     | `clean + good × (taken)`       | 10 + 30 per good |
-| out of time, or unfinished | `late` / none | 0 (the board reads the ending) |                  |
+**The client's decision, 2026-10-22: "a combination of time and correct answers". Correctness
+first, then speed.**
 
-**Why 30 and 10.** Three good at 30 plus a clean arrival at 10 is exactly 100, so the only 100 is
-careful. Leaving everything is safe but brings Grandma nothing: 10, the lowest clean score, so
-caution without reading is not rewarded. Each good skill left costs 30, so one, two and three right
-still rank. The wolf's 0 is a rule, not a weight, so every wolf run sits below every clean one.
+| Run                        | Ending        | Total                                                   |
+| -------------------------- | ------------- | ------------------------------------------------------- |
+| any bad skill taken        | `wolf`        | 0, however fast                                         |
+| no bad skill taken         | `grandma`     | `clean` + `good` × good taken + `speed` × f(t) × good/3 |
+| out of time, or unfinished | `late` / none | 0 (the board reads the ending)                          |
+
+Shipped weights: `clean` 10, `good` 20, `speed` 30, so 10 + 60 + 30 = 100. **f(t)** is 1 at or
+under par, falls in a straight line to 0 at 3:00, and is never negative; t is the run's own
+`arrived` stamp, which the server bounds from above by its clock and from below by the walk the log
+describes (apps/api). The bonus is rounded to a whole point with integer arithmetic until the one
+division, so browser and server cannot round apart (`speedBonus`, scoring.ts).
+
+**Par is 1:45 (`scoring.parMs` 105000), derived, not chosen.** It is the arrival time of a careful
+run that walks the shortest content-order tour of the shipped map once (108 four-connected tiles at
+`WALK_SPEED`, 28.8 s) and reads every greeting and every card at `v2.BRISK` -- 238 words a minute,
+the Brysbaert meta-analysis rate the clock check's 200 is slowed from, with no pause to decide --
+in the slowest of the 35 deals. Measured at 1:40.1 on draft 7; the content holds par at or above
+that and within ten seconds of it (`test/v2/real-content.test.ts`), so a copy edit that lengthens
+a card moves the test, not the players.
+
+| Run                          | Score |
+| ---------------------------- | ----- |
+| three good, at or under 1:45 | 100   |
+| three good, 2:00             | 94    |
+| three good, 2:30             | 82    |
+| three good, 2:59             | 70    |
+| two good, 1:00 (fast)        | 70    |
+| two good, 2:30               | 58    |
+| one good, 1:00               | 40    |
+| leave everything, 0:30       | 10    |
+| any bad skill, any time      | 0     |
+
+**Why this shape.** 100 needs all three good AND a fast run. The bonus is scaled by the good skills
+taken, so leaving everything earns 10 at any speed and speed can never be a substitute for reading.
+Two good and fast (70) never beats three good at any pace that arrives (70 at the buzzer, a tie the
+board breaks by the earlier post); the lint refuses weights where it could (`speed × (n-1) ≤ good ×
+n`). The wolf's 0 is a rule, not a weight, so every wolf run sits below every clean one -- and since
+2026-10-22 a wolf run is not posted to the board at all (apps/api; the reveal is where it teaches).
 
 ### The trap, measured by play (`sim.ts`)
 

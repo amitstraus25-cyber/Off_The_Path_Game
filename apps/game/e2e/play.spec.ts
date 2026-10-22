@@ -223,9 +223,11 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
       isGood ? 'check' : 'missed',
     );
     await expect(row.locator('.otp-recap__status')).toHaveText(isGood ? 'Safe' : 'Unsafe');
-    // Its own picture, named by the skill, at the art's own size: every painted pixel whole.
+    // Its own picture, at the art's own size: every painted pixel whole. Inside the tile's button
+    // the picture says nothing (`alt=""`) -- the name beside it names the button, once.
     const icon = row.locator('img.otp-reveal__icon');
-    await expect(icon).toHaveAttribute('alt', s.name);
+    await expect(icon).toHaveAttribute('alt', '');
+    await expect(row.locator('.otp-tile__face')).toHaveAccessibleName(new RegExp(`^${s.name}\\b`));
     const iconName = raw.skills.find((k) => k.id === s.id)!.icon;
     await expect(icon).toHaveAttribute('src', new RegExp(`${iconName}[^/]*\\.png`));
     const drawn = await icon.evaluate((img: HTMLImageElement) => ({
@@ -259,9 +261,27 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
     }
     await expect(row.locator('[data-real-world]')).toContainText(s.realWorld.term);
     await expect(row.locator('[data-real-world]')).toContainText(s.realWorld.note);
+
+    /*
+     * THE CARD TURNS OVER. Face up on arrival with its back hidden; a press shows the back and says
+     * so (`aria-expanded`), and a second press turns it face up again. The back is what the lines
+     * above read: ordinary text, in the reading order, once it is shown.
+     */
+    const face = row.locator('.otp-tile__face');
+    const back = row.locator('.otp-tile__back');
+    await expect(face).toHaveAttribute('aria-expanded', 'false');
+    await expect(back).toBeHidden();
+    await expect(face).toHaveAttribute('aria-controls', (await back.getAttribute('id'))!);
+    await face.click();
+    await expect(face).toHaveAttribute('aria-expanded', 'true');
+    await expect(back).toBeVisible();
+    await face.click();
+    await expect(face).toHaveAttribute('aria-expanded', 'false');
+    await expect(back).toBeHidden();
   }
 
-  // The replay hook: the bad skills left (unanswered counts as left), out of the bad skills dealt.
+  // The replay hook: the bad skills SPOTTED -- every card was opened on this walk, so that is the
+  // bad skills left -- out of the bad skills dealt.
   const dealtBad = people.filter((c) => !good.includes(c.skillId));
   const caught = dealtBad.filter((c) => verdicts[c.skillId] !== 'take').length;
   await expect(page.locator('.otp-replay__caught')).toHaveText(
@@ -299,8 +319,15 @@ test('the clock override ends a run late, and a late run is not posted', async (
   expect(run.phase).toBe('late');
   expect(run.log.at(-1)?.e).toBe('late');
   await expect(page.locator('[data-ending="late"]')).toContainText('After dark');
-  // No "kept 4 of 4" beside a 0 the clock gave: the count is not shown on a late run, the way back is.
-  await expect(page.locator('.otp-replay__caught')).toHaveCount(0);
+  /*
+   * The count counts only cards that were OPENED, so a run the clock ended before anyone was met is
+   * told it spotted none -- not "4 of 4" beside a 0, which read as praise for reading nothing. The
+   * score says why it is 0, in words.
+   */
+  await expect(page.locator('.otp-replay__caught')).toHaveText(
+    raw.ui.reveal.caught.replace('{caught}', '0').replace('{bad}', '4'),
+  );
+  await expect(page.locator('[data-zero="late"]')).toBeVisible();
   await expect(page.locator('.otp-replay [data-action="replay"]')).toBeVisible();
   await expect(page.locator('[data-post="unavailable"]')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Post', exact: true })).toHaveCount(0);

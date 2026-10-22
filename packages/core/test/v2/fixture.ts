@@ -6,11 +6,14 @@
  * (deal.ts ranks deals in `skills` order), which is the deal every suite uses unless it says.
  * `characters` is NOT in `skills` order: index by skill id, not by position.
  *
- * With `clean` 40 and `good` 60 the arithmetic every suite leans on is:
+ * With `clean` 40, `good` 40 and `speed` 20 (whole at or under a 60 s par, which every suite's
+ * one-second-a-step clock is far inside) the arithmetic every suite leans on is:
  *
- *   careful (take the good one only)   40 + 60   = 100   the ceiling, = outOf
- *   leave everything                   40              exactly the rote line (40% of 100)
- *   anything with a bad skill          0               the wolf ending
+ *   careful (take the good one only)   40 + 40 + 20   = 100   the ceiling, = outOf
+ *   leave everything                   40                   exactly the rote line (40% of 100)
+ *   anything with a bad skill          0                    the wolf ending
+ *
+ * A good skill taken is worth 60 at par and 40 at the buzzer; scoring.test.ts walks the clock.
  *
  * Every bad card SWAPS one line, the only shape the lint allows: the lantern's and the courier's
  * their second line, the locksmith's its only one. Those numbers are written here for the reader;
@@ -30,7 +33,7 @@ export const raw = {
   version: 'fixture-2',
   status: 'test fixture, not player copy',
   deal: { good: 1 },
-  scoring: { outOf: 100, good: 60, clean: 40 },
+  scoring: { outOf: 100, good: 40, clean: 40, speed: 20, parMs: 60_000 },
   characters: [
     {
       id: 'magpie',

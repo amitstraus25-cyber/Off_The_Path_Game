@@ -11,3 +11,5 @@ export * from './scoring.ts';
 export * from './runlog.ts';
 export * from './sim.ts';
 export * from './load.ts';
+export * from './floor.ts';
+export * from './board.ts';

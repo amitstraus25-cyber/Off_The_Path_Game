@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isMintedHandle } from '@otp/core';
+import { v2 } from '@otp/core';
 import type { StoreConfig } from './env.ts';
 
 /*
@@ -22,12 +22,18 @@ const TIMEOUT_MS = 4000;
 const MAX_ROWS_READ = 100;
 
 /**
- * The v2 launch. Rows written before it are v1 runs, scored out of 1,000, and would outrank every
- * v2 run (out of 100); the client chose on 2026-10-22 to clear them at launch. The board reads only
- * rows from this instant on, which clears them from every visitor's view without this service
- * holding a delete; removing the rows themselves is the human step in docs/DATABASE.md.
+ * THE FIRST ROW THE BOARD SHOWS: the moment the scoring rule took speed into account (2026-10-22,
+ * "a combination of time and correct answers").
+ *
+ * The board is one ranking, so every row on it must have been scored by the same rule. Rows written
+ * before this were scored without the speed bonus (three good skills was 100 at any pace), and left
+ * in view they would outrank every run that has to be fast to reach 100 -- for good, because ties
+ * rank earliest first. So the board reads only rows from this instant on. This replaced
+ * `V2_LAUNCH` (2026-10-21T23:45:00Z), which did the same for the v1 rows scored out of 1,000, and
+ * is later than it, so that cut still holds. It hides rows from every visitor's view without this
+ * service holding a delete; removing them is the human step in docs/DATABASE.md.
  */
-export const V2_LAUNCH = '2026-10-21T23:45:00Z';
+export const BOARD_SINCE = '2026-10-22T09:25:00Z';
 
 /**
  * The status PostgREST answers to an insert on a table.
@@ -55,14 +61,20 @@ export interface LeaderboardStore {
   add(row: LeaderboardRow): Promise<void>;
   /** Highest score first, then the earliest to get there. */
   top(limit: number): Promise<LeaderboardRow[]>;
+  /**
+   * How many rows the board holds at or above `score`: the rank of a row just written with that
+   * score, since ties rank earliest first and it is the latest. Throws if the count is unreadable.
+   */
+  rank(score: number): Promise<number>;
 }
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 /*
  * Rows come back over the network, so they are parsed before they are believed (CLAUDE.md: treat
- * anything from the network as untrusted). A row whose handle is not one the game mints is dropped
- * rather than rendered: the only way one could exist is if somebody wrote to the table by hand.
+ * anything from the network as untrusted). A row whose name the board would refuse is dropped
+ * rather than rendered: the only way one could exist is if somebody wrote to the table by hand, or
+ * a word was added to the blocklist after the row was written -- which is how a list grows.
  */
 const rowsSchema = z.array(z.object({ handle: z.string(), score: z.number() }));
 
@@ -94,9 +106,12 @@ const parse = (text: string): unknown => {
  *
  * `message` is not perfectly value-free either -- Postgres writes the offending text into a few of
  * them, `invalid input syntax for type integer: "..."` being the one to know about. It is kept
- * anyway: the only strings this service sends are a handle the game minted and an integer it
- * checked, so there is no player-composed text here to echo, and `MAX_REASON_CHARS` bounds
- * whatever does arrive. If that ever stops being true, log the code alone.
+ * anyway, and the reason changed on 2026-10-22: the handle is now a name a PLAYER typed, so it is
+ * player-composed text. What still keeps it out of `message` is that the handle is a `text`
+ * column, so no syntax error can quote it, and the only constraint on it (`char_length` 1 to 16)
+ * reports its name and not the value -- the value goes in DETAIL, which is never read. The name
+ * has also passed `v2.checkName` before it gets here. `MAX_REASON_CHARS` bounds whatever does
+ * arrive. If a constraint that quotes the handle is ever added, log the code alone.
  *
  * WHY THE TWO FIELDS ARE READ ONE AT A TIME, AND NOT AS ONE OBJECT SCHEMA.
  *
@@ -257,6 +272,24 @@ async function believeInsert(res: Response): Promise<void> {
     throw new Error(`insert answered ${CREATED} with a body, and return=minimal asks for none`);
 }
 
+/**
+ * The rows that are on the board at all, as PostgREST filters: scored under today's rule, and above
+ * zero. Shared by the read and the count so a rank can never be counted over a different board from
+ * the one it is shown on.
+ *
+ * WHY `score > 0`. A clean arrival scores at least `clean` (10), so the only zeros are wolf runs,
+ * and since 2026-10-22 the service does not post those (handlers.ts). What is left are the wolf
+ * rows written before that -- `warm-candle-17` with 0, alone on the board the client photographed,
+ * which read as a broken board rather than a sad run.
+ */
+const ON_BOARD = { created_at: `gte.${BOARD_SINCE}`, score: 'gt.0' } as const;
+
+/** The total out of a PostgREST `Content-Range` header: `0-9/42` or `*\/0`. Null if absent. */
+const totalOf = (range: string | null): number | null => {
+  const m = /\/(\d+)$/u.exec(range ?? '');
+  return m ? Number(m[1]) : null;
+};
+
 export function createStore(config: StoreConfig, fetchImpl: FetchLike): LeaderboardStore {
   const headers = {
     apikey: config.serviceRoleKey,
@@ -265,9 +298,9 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike): Leaderbo
 
   return {
     async add({ handle, score }) {
-      // Belt and braces over the schema at the edge: the last thing before the insert refuses to
-      // write a handle the game did not mint, so no route can ever reach the table without it.
-      if (!isMintedHandle(handle)) throw new Error('refusing to store an unminted handle');
+      // Belt and braces over the handler's own check: the last thing before the insert refuses to
+      // write a name the board would not show, in any form but the tidy one the board stores.
+      if (!v2.isBoardName(handle)) throw new Error('refusing to store a name the board refuses');
       if (!Number.isInteger(score) || score < 0)
         throw new Error('refusing to store a score that is not a whole number of points');
 
@@ -292,7 +325,7 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike): Leaderbo
       const window = Math.min(limit * 4, MAX_ROWS_READ);
       const query = new URLSearchParams({
         select: 'handle,score',
-        created_at: `gte.${V2_LAUNCH}`,
+        ...ON_BOARD,
         order: 'score.desc,created_at.asc',
         limit: String(window),
       });
@@ -310,8 +343,32 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike): Leaderbo
       const rows = rowsSchema.safeParse(parse(await res.text()));
       if (!rows.success) throw new Error('the board came back in a shape it has never had');
       return rows.data
-        .filter((r) => isMintedHandle(r.handle) && Number.isInteger(r.score))
+        .filter((r) => v2.isBoardName(r.handle) && Number.isInteger(r.score))
         .slice(0, limit);
+    },
+
+    /*
+     * A HEAD with `Prefer: count=exact`: PostgREST answers the count in `Content-Range` and sends no
+     * rows, so nothing about any other player leaves the table to answer it. The selected column is
+     * `score`, never `id` (the delete path in docs/DATABASE.md leans on the id never leaving).
+     *
+     * EXACT UNLESS TWO POSTS OF THE SAME SCORE RACE: one written between our insert and this count
+     * is counted too, and our rank reads one lower than it is. That is the under-claiming direction
+     * -- the game then marks no row rather than the wrong one -- and it needs two players to land
+     * the same score within milliseconds.
+     */
+    async rank(score) {
+      const query = new URLSearchParams({ select: 'score', ...ON_BOARD });
+      query.set('score', `gte.${Math.max(score, 1)}`);
+      const res = await fetchImpl(`${config.url}${PATH}?${query.toString()}`, {
+        method: 'HEAD',
+        headers: { ...headers, prefer: 'count=exact' },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`count refused with ${res.status}`);
+      const total = totalOf(res.headers.get('content-range'));
+      if (total === null || total < 1) throw new Error('the count came back without a total');
+      return total;
     },
   };
 }

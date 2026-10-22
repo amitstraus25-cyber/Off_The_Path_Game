@@ -1,6 +1,7 @@
 import { contentSchema, lintContent } from './content.ts';
 import type { Content, LintOptions } from './content.ts';
 import { trapChecks } from './sim.ts';
+import { TIME_LIMIT_MS } from './state.ts';
 
 /*
  * Kept apart from content.ts so the import graph has no cycle: the trap is measured by PLAYING the
@@ -35,6 +36,11 @@ export function parseContent(raw: unknown): Content {
 export function loadContent(raw: unknown, opts: LintOptions = {}): Content {
   const content = parseContent(raw);
   const issues = lintContent(content, opts);
+  // Here rather than in the lint: content.ts cannot import the clock (state.ts imports it).
+  if (content.scoring.parMs >= TIME_LIMIT_MS)
+    issues.push(
+      `scoring.parMs ${content.scoring.parMs} is not under the ${TIME_LIMIT_MS}ms limit, so no run earns a speed bonus`,
+    );
   if (issues.length > 0) throw new ContentError(issues);
   const trap = trapChecks(content);
   if (!trap.ok)

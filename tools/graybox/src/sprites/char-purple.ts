@@ -540,6 +540,10 @@ const FRINGE = [6, 6, 5, 4, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6];
 /*
  * THE MARK ON HER CAPE -- and it is a MOTIF, not the logo. Read this before changing it.
  *
+ * SUPERSEDED 2026-10-22: at the client's explicit request the motif is retired and the mark is now a
+ * pixel trace of the official symbol. The THIRTEENTH PASS below says how and why; what follows is
+ * kept as the record of why it took nine pixels and a lifted cape line to do it honestly.
+ *
  * `CLAUDE.md` rule 5 forbids redrawn logo variants, and commit ba44d80 reverted the one previous
  * attempt to put the real mark in the world with measurements that are not arguable: scaled into a
  * `pixelArt: true` scene the SVG point-samples into a deformed resample -- 61 of about 800 pixels
@@ -661,32 +665,103 @@ const MOTIF = 9;
  * accept two pixels of visual offset and one keyline contact, or remove it and the question with
  * it. Removing it is one line and would also hand the hem gathers their natural positions back.
  * What must NOT happen is a round spending the coupling above to move a mark nobody has approved.
+ *
+ * ---
+ *
+ * THIRTEENTH PASS, 2026-10-22: THE CLIENT ASKED FOR THE LOGO ITSELF, IN SO MANY WORDS -- "fix
+ * Purple's back and get it perfect to really look like Cyera's logo". That is the brand owner's
+ * side of the question the two passes above left open, answered the other way from the motif, so
+ * the motif is retired and the mark on her back is now a PIXEL TRACE OF THE OFFICIAL SYMBOL,
+ * `reference/brand/logos/cyera-symbol-black.svg`. Everything above is kept because it is why the
+ * trace is drawn the way it is, and because two of its warnings still bind.
+ *
+ * IT STILL WANTS BRAND SIGN-OFF, and more than before, not less. `CLAUDE.md` rule 5 forbids redrawn
+ * logo variants, and a nine-pixel rendering of the mark IS a redrawing, however faithful. The client
+ * asked for it explicitly; the brand team has not seen it. Until they say yes, call it what it is in
+ * every review and commit: a pixel rendering of the Cyera symbol awaiting brand approval.
+ *
+ * HOW IT WAS TRACED, so the next pass can check it rather than eyeball it. The SVG's two paths were
+ * flattened and sampled 16 x 16 per pixel onto a 9 x 9 grid over the symbol's own 280 x 281 box --
+ * coverage, not a point sample, which is what ba44d80 found deformed. Coverage per pixel:
+ *
+ *     r0   .00 .00 .75 .86 .12 .84 .68 .00 .00
+ *     r1   .00 .05 1.0 .95 .20 .98 .84 .00 .00     the symbol, read at this size: a RING of
+ *     r2   .73 1.0 .38 .09 .00 .11 .13 .88 .74     eight lobes, two a side, round a hollow
+ *     r3   .86 .96 .09 .00 .00 .00 .09 .96 .86     centre; OPEN at the top right; and a
+ *     r4   .33 .52 .00 .00 .00 .00 .00 .52 .32     detached DOT sitting in the opening.
+ *     r5   .86 .96 .09 .00 .00 .00 .09 .96 .86     Those three facts are the logo, and
+ *     r6   .74 1.0 .38 .09 .00 .09 .38 1.00 .73    nothing else about it survives nine
+ *     r7   .00 .05 1.0 .96 .52 .96 1.0 .05 .00     pixels.
+ *     r8   .00 .00 .75 .87 .34 .88 .74 .00 .00
+ *
+ * `MARK_ROWS` is that table THRESHOLDED AT 0.35, with no pixel edited by hand. The threshold is the
+ * one tracing decision, and the table shows why it sits where it does: the inked pixels nearest it
+ * are 0.38 and the blank ones 0.34, so there is a clean gap. At the usual 0.5 the three 0.38s drop
+ * out -- the ring's inner corners at top left (r2,c2), bottom left (r6,c2) and bottom right (r6,c6)
+ * -- and the ring's top-left joint becomes a DIAGONAL contact, the same as the dot's contact with the
+ * right-hand lobe. The ring and its opening then become the same picture and the C is lost. The
+ * fourth inner corner, (r2,c6) at 0.13, is where the SVG's ring genuinely does not close, and it
+ * stays open. `test/art-guards.test.ts` re-derives the table from the SVG and requires the shipped
+ * frame to be exactly this threshold of it, so the mark cannot drift from the artwork -- or be
+ * "improved" by hand -- without a test naming the pixel.
+ *
+ * WHY NINE, not the eight the band had room for. At eight the symbol's two top lobes centre at
+ * x 2.74 and 5.25 and each is 1.9 px wide: they meet, and the gap that separates the dot from the
+ * ring falls on a pixel boundary and vanishes. Nine is the smallest grid on which the gap is a
+ * column of its own (col 4, coverage 0.1 to 0.2). So the band was made nine rows instead of the mark
+ * eight: ON THE BACK VIEW ONLY the cape line rises one row (`BACK_CAPE_LIFT`), which the twelfth pass
+ * named as the other way to close "sits low" and declined because it would change all four facings.
+ * Confined to `up`, it changes none of the others -- their frames regenerate byte-identical -- and
+ * the line's one-row jump as she turns is inside the one-pixel bob she already makes.
+ *
+ * The cost, stated: the mark's lobes now touch the cape line above and the hem below. Both are
+ * keyline, both are about a hundred and sixty luma under the mark, and only the lobes touch -- the ring's
+ * flanks have cloth round them -- so nothing is overwritten and the guard checks that it is not.
+ *
+ * COLOUR: Lilac, `shade('cloak', 2)`, the exact brand token -- the official symbol ships in Lilac for
+ * dark grounds (`reference/brand/logos/README.md`), and her skirt is the darkest cloth on her. Mono,
+ * one value, no hub and no shading, because the logo has none.
+ *
+ * ORIENTATION: as printed. A badge on the outside of a cape reads the right way round from behind,
+ * so the dot is at the viewer's top right, as in the SVG. CENTRING: on `CX`, her spine, under the
+ * seam -- and the seam lands in the gap column. The two-pixel offset against the visible cloth that
+ * the twelfth pass measured is unchanged and is the basket's, not the mark's.
  */
-const MOTIF_ROWS = [
-  '.........',
+const MARK_ROWS = [
   '..XX.XX..',
-  '.XX...XX.',
-  '.X.....X.',
-  '.X..H..X.',
-  '.X.....X.',
-  '.XX...XX.',
   '..XX.XX..',
-  '.........',
+  'XXX....XX',
+  'XX.....XX',
+  '.X.....X.',
+  'XX.....XX',
+  'XXX...XXX',
+  '..XXXXX..',
+  '..XX.XX..',
 ] as const;
 
-function paintCapeMotif(img: Img, cx: number, top: number): void {
-  // Sits in the upper back, below the cape's own hem line and above the skirt's, where the cloth
-  // is widest and flattest. `top` is the first row of the box, so the ink runs `top + 1` to
-  // `top + MOTIF - 2` and the hem can never reach it.
-  const hubInk = tone('cloak', CLOAK_FOLD);
-  const armLit = tone('cloak', CLOAK_RIM);
+/** The mark's one colour: Lilac, the brand token, which the official symbol ships in on dark. */
+const MARK_INK = shade('cloak', 2);
+
+/**
+ * What `test/art-guards.test.ts` needs to find the mark on the rendered frame and hold it to the
+ * SVG: its colour and its grid. Not its pixels -- those are read off the frame, so the test checks
+ * what ships rather than what this file says it drew.
+ */
+export const CAPE_MARK = { ink: MARK_INK, size: MOTIF } as const;
+
+/** How far the back view's cape line sits above the other facings'. See the thirteenth pass. */
+const BACK_CAPE_LIFT = 1;
+
+/** The row the cape's hem line is drawn on, for a facing. The hem never moves; this is fixed too. */
+const capeLineRow = (facing: Facing): number =>
+  HEM - CAPE_EDGE - (facing === 'up' ? BACK_CAPE_LIFT : 0);
+
+function paintCapeMark(img: Img, cx: number, top: number): void {
+  // `top` is the first row under the cape line; the mark fills the band from there to the hem.
   const r = (MOTIF - 1) / 2;
-  MOTIF_ROWS.forEach((row, dy) => {
-    for (let dx = 0; dx < row.length; dx++) {
-      const cell = row[dx];
-      if (cell === 'X') img.px(cx - r + dx, top + dy, armLit);
-      else if (cell === 'H') img.px(cx - r + dx, top + dy, hubInk);
-    }
+  MARK_ROWS.forEach((row, dy) => {
+    for (let dx = 0; dx < row.length; dx++)
+      if (row[dx] === 'X') img.px(cx - r + dx, top + dy, MARK_INK);
   });
 }
 
@@ -1258,13 +1333,17 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, str
   // Drawn in the keyline value, not in a shade: the board's interior boundaries are as dark as its
   // outlines, and that is the whole device by which one layer of cloth sits in front of another. A
   // midtone here is a crease; the keyline is a cape.
-  const capeY = HEM - CAPE_EDGE;
+  // One row higher on the back view, to give the logo the nine rows it needs; see `BACK_CAPE_LIFT`.
+  // The widths are read off the profile at the row actually drawn, so on the other three facings
+  // this is exactly the `CAPE_EDGE` / `CAPE_EDGE - 1` it always was.
+  const capeY = capeLineRow(facing);
   if (capeY > shoulder) {
-    const capeHw = profile[CAPE_EDGE]!;
+    const capeHw = profile[HEM - capeY]!;
+    const underHw = profile[HEM - capeY - 1]!;
     img.rect(cx - capeHw + 1, capeY, capeHw * 2 - 2, 1, keyline('cloak'));
     // One row of lit cloth directly under it, so the skirt reads as catching the light the cape
     // just cut off. Without it the line floats on a flat field and reads as a belt.
-    clothRun(img, capeY + 1, cx - profile[CAPE_EDGE - 1]!, profile[CAPE_EDGE - 1]! * 2, 0);
+    clothRun(img, capeY + 1, cx - underHw, underHw * 2, 0);
   }
 
   // Where the arms hang. One crease a side is all the board gives them, and it is enough: without
@@ -1297,7 +1376,7 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, str
       img.px(cx, y, keyline('cloak'));
       img.px(cx - 1, y, tone('cloak', CLOAK_LIT));
     }
-    paintCapeMotif(img, cx, capeY + 1);
+    paintCapeMark(img, cx, capeY + 1);
   }
 
   // The hood's OVERHANG, cast down onto the shoulders.
@@ -1923,53 +2002,72 @@ function assertPurpleReads(): void {
  * disconnected fragments. Measured on what shipped: 4 components, 180-degree symmetry on 10 of its
  * 22 pixels, and eight rows of a nine-row design because the hem keyline overwrote the ninth.
  *
- * Symmetry is tested about the ink's OWN bounding box rather than about a centre this file names,
- * so a device that is symmetric but misplaced fails on the clearance check below instead of being
- * quietly excused here.
+ * REWRITTEN 2026-10-22 FOR THE LOGO, and the half-turn symmetry check is GONE ON PURPOSE. It was
+ * the property that stopped the motif reading as a tilted logo; the mark is now the logo, and the
+ * logo is not symmetric under a half turn -- its dot sits at one corner only -- so the old check
+ * would have demanded the very distortion this pass removes. What the frame must show instead:
+ *
+ *   1. Exactly the traced mark, pixel for pixel, and nothing else in its colour in the band. The
+ *      failure being guarded is still the old one -- something painted afterwards eating it -- and
+ *      an exact comparison names the pixel. Whether the TRACE is faithful to the SVG is a separate
+ *      question with a separate bound, and it lives in `test/art-guards.test.ts`, read off the SVG.
+ *   2. The three facts the symbol is at this size, read off the rendered pixels: two 4-connected
+ *      pieces, the small one in the top-right corner of the mark, and a hollow centre.
+ *   3. All nine rows between the cape line and the hem -- touching is allowed now, overlapping is
+ *      not, because whichever line is painted last would clip the lobes.
  */
 function assertCapeDevice(): void {
   const faults: string[] = [];
-  const arm = tone('cloak', CLOAK_RIM);
-  const capeY = HEM - CAPE_EDGE;
+  const capeY = capeLineRow('up');
+  const r = (MOTIF - 1) / 2;
+  const want = new Set<string>();
+  MARK_ROWS.forEach((row, dy) => {
+    for (let dx = 0; dx < row.length; dx++)
+      if (row[dx] === 'X') want.add(`${CX - r + dx},${capeY + 1 + dy}`);
+  });
+  if (capeY + MARK_ROWS.length >= HEM || MARK_ROWS.length !== MOTIF)
+    faults.push(
+      `the band between the back's cape line (row ${capeY}) and the hem (row ${HEM}) holds ` +
+        `${HEM - capeY - 1} rows and the mark is ${MARK_ROWS.length} -- the hem would clip its lobes`,
+    );
   for (const phase of [0, 1, 2, 3] as const) {
     const name = `up-${phase}`;
     const img = frameOf(name);
     const pts: [number, number][] = [];
-    const r = (MOTIF - 1) / 2;
     for (let y = capeY; y <= HEM; y++)
-      for (let x = CX - r; x <= CX + r; x++) {
+      for (let x = 0; x < PURPLE_FRAME_W; x++) {
         const c = img.get(x, y);
-        if (c[3] > 0 && c[0] === arm[0] && c[1] === arm[1] && c[2] === arm[2]) pts.push([x, y]);
+        if (c[3] > 0 && c[0] === MARK_INK[0] && c[1] === MARK_INK[1] && c[2] === MARK_INK[2])
+          pts.push([x, y]);
       }
-    if (pts.length === 0) {
-      faults.push(`${name}: the cape carries no device at all`);
-      continue;
-    }
-    const comps = componentsOf(pts);
-    if (comps !== 2)
+    const got = new Set(pts.map(([x, y]) => `${x},${y}`));
+    const missing = [...want].filter((k) => !got.has(k));
+    const extra = [...got].filter((k) => !want.has(k));
+    if (missing.length || extra.length)
       faults.push(
-        `${name}: the device is ${comps} piece(s) of ${pts.length} px -- it is meant to be two ` +
-          `arcs, and anything else is the jumble three earlier forms were rejected for`,
+        `${name}: the mark is not the traced mark -- ${missing.length} pixel(s) painted over ` +
+          `(${missing.join(' ')}) and ${extra.length} stray pixel(s) in its colour (${extra.join(' ')})`,
       );
+    if (!pts.length) continue;
+    const comps = componentsOf(pts);
     const xs = pts.map(([x]) => x);
     const ys = pts.map(([, y]) => y);
     const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
     const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
-    const key = new Set(pts.map(([x, y]) => `${x},${y}`));
-    const odd = pts.filter(([x, y]) => !key.has(`${x0 + x1 - x},${y0 + y1 - y}`));
-    if (odd.length)
+    const dot = pts.filter(([x, y]) => x > (x0 + x1) / 2 && y < y0 + 2);
+    const dotAlone =
+      componentsOf(dot) === 1 && componentsOf(pts.filter((p) => !dot.includes(p))) === 1;
+    if (comps !== 2 || !dotAlone)
       faults.push(
-        `${name}: ${odd.length} of ${pts.length} device pixels have no partner under a half turn ` +
-          `-- rotational symmetry is the property that stops this reading as a tilted logo`,
+        `${name}: the mark is ${comps} piece(s) -- the Cyera symbol at this size is a ring and a ` +
+          `detached dot at its top right, and anything else is not the symbol`,
       );
-    // Clearance: the device must not touch the cape line above it or the hem line below it.
-    if (y0 <= capeY || y1 >= HEM)
+    if (got.has(`${(x0 + x1) / 2},${(y0 + y1) / 2}`))
       faults.push(
-        `${name}: the device runs from row ${y0} to row ${y1}, into the cape line at ${capeY} or ` +
-          `the hem at ${HEM} -- one of them will overwrite it and leave a clipped mark`,
+        `${name}: the mark's centre is filled -- the symbol is a ring, hollow in the middle`,
       );
   }
-  if (faults.length) throw new Error(`Purple's cape device is broken:\n  ` + faults.join('\n  '));
+  if (faults.length) throw new Error(`Purple's cape mark is broken:\n  ` + faults.join('\n  '));
 }
 
 /**

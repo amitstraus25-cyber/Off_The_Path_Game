@@ -283,6 +283,18 @@ export const TILE_NAMES: readonly string[] = [
    */
   'gate-n',
   'gate-s',
+  /*
+   * The market counter's two ENDS, appended for the reason above, 2026-10-22.
+   *
+   * `stall-counter` runs edge to edge by design so four of it read as one unbroken counter, which
+   * means the run had no end: both outer tiles stopped dead at the tile edge, a sawn-off plank front
+   * with half a ware hanging off it. The client circled the left one. These two carry the same
+   * counter with its outer three columns given back to the lawn, a corner post and cap block, and
+   * goods re-spaced off the post -- the painter and its note are `stallCounterTile` in s-props.ts.
+   * Placed at columns 11 and 14 of the stall row in `forest-map.ts`.
+   */
+  'stall-counter-l',
+  'stall-counter-r',
 ];
 
 /*

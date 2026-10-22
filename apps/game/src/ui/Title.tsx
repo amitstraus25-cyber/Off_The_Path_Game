@@ -276,6 +276,14 @@ export function Title({ ui, onPlay }: TitleProps) {
         <Highlighted text={l.title} word={l.titleHighlight} />
       </h1>
       <p class="otp-title__sub">{l.subtitle}</p>
+      {/*
+        THE GAME IN ONE LINE (the client, 2026-10-22: "I want it to be clear"): three good, four
+        malicious, find the good three and get to Grandma fast. `.otp-body-text` on purpose -- it is
+        the paragraph the fit ladder lets yield first on a short card (screens.css, rung 2), and it
+        yields to the visually-hidden treatment, so a screen reader still hears it. The how-to that
+        follows says the same thing in four steps.
+      */}
+      <p class="otp-body-text otp-title__premise">{strings['landingPremise'] ?? ''}</p>
     </TitleCard>
   );
 }

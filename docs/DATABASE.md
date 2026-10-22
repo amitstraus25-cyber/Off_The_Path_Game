@@ -22,6 +22,26 @@ and no migration was written. Scores are now 0 to 100 (v1's were out of 1,000), 
 left in the table outranks every v2 run; **whether old rows are cleared is the client's data
 decision**, made by hand through Decision 3's delete path. No deploy deletes anything.
 
+**What changed on 2026-10-22 (the client round: free names, speed, the missing post).** No
+migration, and the table is still two columns.
+
+- **Names are typed now**, not minted: 3 to 16 characters, checked by `v2.checkName`
+  (`packages/core/src/v2/board.ts`) in the game for a friendly message and in `POST /api/score` as
+  the authority, then again in `store.ts` before the insert. The `char_length(handle) between 1 and
+16` check still fits: names are counted in code points, which is what `char_length` counts. **A
+  typed name can be a real person's name, so a row can now be personal data** — see Decision 3.
+- **The board reads rows from `BOARD_SINCE` (2026-10-22T09:25:00Z) on, and only scores above 0.**
+  The scoring rule took speed into account at that moment, so earlier rows (three good was 100 at
+  any pace) would outrank every run that now has to be fast. Wolf runs are no longer posted, so
+  the zeros are the old ones. Both are filters on the read; deleting the old rows is optional and
+  is the human's, through Decision 3's path.
+- **`POST /api/score` makes two more requests after the insert**: a `HEAD` with
+  `Prefer: count=exact` for the rank (`select=score`, so no row and no id comes back) and the top-10
+  read. Both are best-effort; the post succeeds without them.
+- **`GET /api/top` is cached for 10 s plus 20 s stale**, down from 60 s plus 300 s. That pairing is
+  why the client's post went missing: the read the game made straight after posting was the edge's
+  copy from before it. See "The cache headers" below.
+
 **Nothing in this repository has ever run against the live database.** There are no credentials in
 the checkout, by design. Every request shape is asserted in tests against a fake `fetch`. The first
 real deploy is the first real test of all of it, which is why the health checks below are worth
@@ -97,7 +117,9 @@ repository and the database agree and a fresh project can be brought up in one p
 against the live project changes nothing; its verification query prints the actual shape so you can
 see whether anything has drifted.
 
-**`handle` is 16 characters with exactly zero margin.** The longest handle the game can mint is
+**`handle` is 16 characters, and since 2026-10-22 that is a typed name's limit too**
+(`NAME_MAX_LENGTH` is `HANDLE_MAX_LENGTH`, counted in code points as `char_length` counts them;
+`test/v2/board.test.ts` holds sixteen astral-plane letters to it). The longest handle the game can SUGGEST is
 `alert-bellows-99` — five characters, seven characters, two hyphens, two digits. A six-letter first
 word or an eight-letter second word added to the lists in `packages/core/src/leaderboard.ts` would
 produce a handle the table refuses, which the player would meet as "Leaderboard unavailable right
@@ -420,6 +442,15 @@ where this one started.
 **The question:** someone will ask for a row to be removed. There is no authenticated route and the
 only secret the service may read is the Supabase key.
 
+**Changed 2026-10-22, and it changes the policy: names are typed now, so a row can carry a real
+person's name.** A row reading `Amit Straus` with a score is plausibly personal data, whatever the
+table does not hold, so a takedown request for one's own name is now a privacy request as well as a
+courtesy: honour it, delete every row carrying exactly that name (`delete_leaderboard_row` one id at
+a time), and do not ask the requester to prove which run was theirs -- nobody can. The privacy line
+on Results should tell players the board is public and suggest a nickname; that copy is the UI's
+and goes to Legal with the rest (`docs/COPY_REVIEW.md`). The paragraphs below were written for
+minted handles and still hold for those.
+
 **The finding that should shape the policy: a handle is not an identity, so a player cannot identify
 their own row and neither can we.** Handles are minted at random from two word lists and nobody
 records who got which, so many different players will hold `brave-lantern-42` over the board's life.
@@ -522,13 +553,28 @@ pure Index Scan. **It is optional** — without it Postgres answers with an Incr
 the existing index, which at a limit of 100 over ties of size one or two is free. Make the code
 change; run the index change when you feel like it.
 
-### The cache headers are right, with one caveat that is not fixable in code
+### The cache headers, and the post that went missing behind them
 
-`GET /api/top` returns `public, max-age=0, s-maxage=60, stale-while-revalidate=300`, and `fail()`
-sets `no-store`. That is the correct pairing for a list that changes rarely and is read often:
-browsers do not cache, the edge serves at most one origin hit per 60 seconds per region, an outage
-is invisible for five minutes because the last good page keeps serving, and a `503` is never pinned
-at the edge for a minute. Leave them alone.
+`GET /api/top` returns `public, max-age=0, s-maxage=10, stale-while-revalidate=20` (`TOP_CACHE` in
+`handlers.ts`), and `fail()` sets `no-store`. Browsers do not cache, the edge serves at most one
+origin hit per ten seconds per region, and no visitor ever sees a board more than 30 s old.
+
+**Until 2026-10-22 it was `s-maxage=60, stale-while-revalidate=300`, and that is the root cause of
+the client's "I posted and I don't see my score".** Results reads the board when it opens and again
+the moment the post answers. The first read filled (or found) the edge copy; the second, seconds
+later, was served that same copy from before the post -- and under stale-while-revalidate a copy up
+to six minutes old. The browser's `cache: 'no-store'` does not reach past the CDN. The post had
+written the row (it answered "Posted to the board as swift-apron-51"); the board simply had not
+been asked. None of the other suspects held: `swift` and `apron` are both on the word lists, the
+post was after `V2_LAUNCH`, a 0 was neither refused nor ordered out (`warm-candle-17` at 0 was the
+row on show), and two rows are far inside every limit window.
+
+The fix is two halves. `POST /api/score` is never cached, so it now answers with the row's rank
+(counted straight after the insert) and the top ten read from the table, and the game lays that
+over any board read that has not caught up (`withYourRow`, `apps/game/src/net/leaderboard.ts`),
+marking the row as the player's -- `confirmed` when a read holds it, `pending` when none has yet.
+And the cache is short enough that everyone else sees it within half a minute. The trade is a few
+more origin reads per minute per region, which a table this size does not notice.
 
 **The caveat: the edge cache key includes the entire query string.** `?limit=10` and `?limit=25` are
 separate entries, so legitimate traffic can already produce up to 26 distinct keys — and arbitrary

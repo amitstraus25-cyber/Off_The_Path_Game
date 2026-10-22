@@ -201,7 +201,9 @@ test('the game runs clean under the headers vercel.json ships', async ({ page })
      * in this bundle happens. The canary is excluded by its URL at the end instead.
      */
     await startGame(page);
-    await answerAllAndArrive(page, 'take');
+    // Every offer left: a clean arrival, the one kind of run the board takes (a wolf run is not
+    // posted, so its reveal has no Post button to press).
+    await answerAllAndArrive(page, 'leave');
     await toTheReveal(page);
 
     /*

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import rawV2 from '../../../content/game.v2.json';
 import { HANDLE_FIRST_WORDS, HANDLE_SECOND_WORDS, isMintedHandle, v2 } from '@otp/core';
 import { submitRunSchema } from '@otp/api/src/schema.ts';
-import { newHandle, readBoard, startRun, submit } from '../src/net/leaderboard';
+import { forgetLastPost, newHandle, readBoard, startRun, submit } from '../src/net/leaderboard';
 import { validateHandle } from '../src/ui/Results';
 
 /*
@@ -67,6 +67,8 @@ const okScore = (handle: string, score = 500): Response =>
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // A post is remembered for the board's next read (`withYourRow`); no test inherits another's.
+  forgetLastPost();
 });
 
 describe('minted handles', () => {
@@ -291,10 +293,24 @@ describe('submit', () => {
     expect(parsed.data!.log.seed).toBe(SEED);
   });
 
-  it('never sends a handle the game did not mint', async () => {
+  it('sends the name the player typed, in the tidy form the board stores', async () => {
+    const sent = intercept(() => okScore('Little Purple', 100));
+    await submit('  Little   Purple ', log, TOKEN);
+    expect(v2Body(sent[0]!)['handle']).toBe('Little Purple');
+  });
+
+  it('never sends a name the board refuses: it answers why, and posts nothing', async () => {
     const sent = intercept(() => okScore('quiet-thicket-11', 100));
-    await submit('wolfspotter', log, TOKEN);
-    expect(isMintedHandle(v2Body(sent[0]!)['handle'])).toBe(true);
+    await expect(submit('Al', log, TOKEN, STRINGS)).resolves.toEqual({
+      key: 'leaderboardRefused',
+      text: 'That name cannot go on the board. Try another.',
+      reason: 'name',
+      nameRefusal: 'short',
+    });
+    await expect(submit('<script>', log, TOKEN)).resolves.toMatchObject({
+      nameRefusal: 'characters',
+    });
+    expect(sent).toHaveLength(0);
   });
 
   it.each([
@@ -317,6 +333,7 @@ describe('submit', () => {
     await expect(submit('brave-lantern-42', log, TOKEN, STRINGS)).resolves.toEqual({
       key: 'handleAssigned',
       text: 'Up as quiet-thicket-11.',
+      posted: { handle: 'quiet-thicket-11', score: 100, rank: null },
     });
     vi.unstubAllGlobals();
     intercept(() => okScore('quiet-thicket-11', 100));
@@ -331,7 +348,7 @@ describe('submit', () => {
         throw new TypeError('Failed to fetch');
       },
       (): Response => new Response('not json at all', { status: 200 }),
-      (): Response => new Response(JSON.stringify({ handle: 'wolfspotter', score: 1 })),
+      (): Response => new Response(JSON.stringify({ handle: '<img src=x>', score: 1 })),
     ]) {
       intercept(reply);
       await expect(submit('brave-lantern-42', log, TOKEN)).resolves.toMatchObject({
@@ -357,7 +374,7 @@ describe('submit', () => {
     expect(chrome['handleAssigned']).toContain('{handle}');
 
     intercept(() => okScore('quiet-thicket-11', 100));
-    await expect(submit('brave-lantern-42', log, TOKEN, chrome)).resolves.toEqual({
+    await expect(submit('brave-lantern-42', log, TOKEN, chrome)).resolves.toMatchObject({
       key: 'handleAssigned',
       text: chrome['handleAssigned']!.replace('{handle}', 'quiet-thicket-11'),
     });

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import mapJson from '../../game/src/assets/map-forest.json';
 import { TILE, WALK_SPEED } from '../../game/src/world/logic.ts';
-import { MIN_RUN_MS } from '../src/handlers.ts';
+import { v2 } from '@otp/core';
+import { content } from './helpers.ts';
 
 /*
- * MIN_RUN_MS, MEASURED OFF THE SHIPPED MAP rather than remembered (PAUL_BRIEF trap 1).
- *
- * The bound is the straight line from Purple's spawn to the cottage door -- which no walk around
- * trees can beat -- less one tile at each end for Purple's body reaching the door before her
- * position does, at WALK_SPEED (diagonals are normalised, so nothing moves faster). The floor must
- * sit under it, or a direct honest run is refused; and close under it, or it guards nothing.
+ * THE FLOOR THE ROUTE CHARGES, held against the shipped map by a second instrument
+ * (PAUL_BRIEF trap 1). It used to be one number, `MIN_RUN_MS` (10 s), for every run; since
+ * 2026-10-22 it is `v2.walkFloor`, per run, whose own derivation lives in core's
+ * test/v2/floor.test.ts. This one shares no code with that: it measures the gap between the
+ * spawn's and the door's RECTANGLES, the way the old floor was measured, and asks that the floor
+ * for the walk straight to the door sit within one tile of it -- Purple's feet stand inside the
+ * spawn rectangle, so the true straight line is the rectangle gap plus at most a tile.
  */
 interface MapObject {
   name: string;
@@ -36,14 +38,15 @@ const gap = (a: MapObject, b: MapObject): number =>
   );
 
 describe('the shortest run the server accepts', () => {
-  const pixels = Math.max(0, gap(need('spawn-purple'), need('trigger-cottage')) - 2 * TILE);
-  const fastestMs = (pixels / WALK_SPEED) * 1000;
+  const rectMs = (gap(need('spawn-purple'), need('trigger-cottage')) / WALK_SPEED) * 1000;
+  const direct = v2.walkFloor(content, [{ e: 'arrived', at: 0 }]).floorMs;
 
-  it('is no longer than the fastest walk from the spawn to the door, so no honest run is refused', () => {
-    expect(MIN_RUN_MS, `fastest walk ${Math.round(fastestMs)}ms`).toBeLessThanOrEqual(fastestMs);
+  it('charges the walk straight to the door within a tile of the gap between the two rectangles', () => {
+    expect(direct, `rectangle gap ${Math.round(rectMs)}ms`).toBeGreaterThanOrEqual(rectMs);
+    expect(direct).toBeLessThanOrEqual(rectMs + (TILE / WALK_SPEED) * 1000);
   });
 
-  it('is within two seconds of that walk, so it costs a forger real waiting', () => {
-    expect(MIN_RUN_MS, `fastest walk ${Math.round(fastestMs)}ms`).toBeGreaterThan(fastestMs - 2000);
+  it('is more than the single ten-second floor it replaced', () => {
+    expect(direct).toBeGreaterThan(10_000);
   });
 });

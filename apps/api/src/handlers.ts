@@ -1,4 +1,4 @@
-import { topLimit, v2 } from '@otp/core';
+import { DEFAULT_TOP_LIMIT, topLimit, v2 } from '@otp/core';
 import { fail, json, note } from './http.ts';
 import type { RecentRuns, WriteBudget } from './limit.ts';
 import { submitRunSchema } from './schema.ts';
@@ -40,25 +40,23 @@ export interface Deps {
  *
  * THAT IS NOT "A FORGER GAINS NOTHING". Ties rank earliest first (README, migration 0005), so a
  * scripted 100 posted today outranks every honest 100 posted after it, for good. What a forger pays
- * per row is `MIN_RUN_MS` of real waiting, below, and one token; what bounds how many rows they
+ * per row is the walk its own log describes (`v2.walkFloor`, below) of real waiting, and one token; what bounds how many rows they
  * make is the per-instance budgets (src/limit.ts) and the Vercel firewall rate limit on /api/*,
  * which is the only cross-instance bound and a precondition for exposing the board (README).
  */
 export const POST_WINDOW_MS = 5 * 60_000;
 
-/**
- * THE SHORTEST RUN ANYONE CAN PLAY: no finished run is faster than walking from Purple's spawn
- * straight to the cottage door. Checked against BOTH clocks. `claimed` alone is the log's word and
- * costs nothing to write; `seen` is the server's, so a forger has to actually wait this long between
+/*
+ * THE SHORTEST RUN ANYONE CAN PLAY is now per run, not one number: `v2.walkFloor` reads the order
+ * the log met the characters in and charges the straight-line walk from the spawn to each of them
+ * and on to the door, at `WALK_SPEED` (core floor.ts, its numbers derived from the shipped map in
+ * core's test/v2/floor.test.ts). It replaced the single 10 s `MIN_RUN_MS`, which held only for the
+ * walk straight to the door and let a forged three-good log claim any time over ten seconds. With
+ * speed worth points, a log that claims to have met all seven and arrived must have walked all
+ * seven. Checked against BOTH clocks: every meeting and the arrival against the log's own stamps,
+ * and the whole walk against `seen`, so a forger has to actually wait that long between
  * /api/start and /api/score for every row.
- *
- * Derived from the shipped map in test/floor.test.ts, not from memory: the straight-line gap
- * between the spawn and the door, less a tile at each end for Purple's body, at `WALK_SPEED`, is
- * just over 11 s; this sits a little under that so no honest run, however direct, is refused. It is
- * one floor for every score -- a 100 must also meet the three holding good skills, which takes longer,
- * but that bound needs the map's distances on the server, and is recorded as not done (PLAN.md).
  */
-export const MIN_RUN_MS = 10_000;
 
 /** Server clocks across instances and rounding between the browser's clock and ours. */
 export const CLOCK_SKEW_MS = 2_000;
@@ -190,6 +188,16 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
 
   if (!deps.store || !deps.tokens) return fail(503, UNAVAILABLE);
 
+  /*
+   * THE NAME, and this is the authority on it (core board.ts): the game asks the same function
+   * for a friendly message, and nothing relies on that. 422 with `reason: 'name'`, before anything
+   * is spent, so the player can change the name and post the same run. The name stored is the
+   * tidied one this returns, never the raw string. Which rule refused it is not said: the game
+   * already told an honest player, and a prober should not be told which list a word is on.
+   */
+  const name = v2.checkName(parsed.data.handle);
+  if (!name.ok) return refuse('name', 'that name cannot go on the board');
+
   const ticket = deps.tokens.open(parsed.data.token);
   if (!ticket) {
     note('refused a token this service did not sign');
@@ -213,6 +221,15 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
   const run = v2.result(replay.state, deps.content);
   // A late run ended, but it did not finish: the board reads the ending (core scoring.ts).
   if (run.ending === 'late') return fail(400, 'a late run is not posted');
+  /*
+   * NOR A WOLF RUN, since 2026-10-22. It finished, and it scores 0 by rule; it used to be stored at
+   * 0. The board is a ranking of runs that kept the wolf out -- every one of them scores at least
+   * `clean` -- and a 0 adds nothing to it but noise: on a quiet board it is the whole board, which
+   * is exactly what the client photographed (`warm-candle-17`, 0, alone) and read as broken. The
+   * reveal is where a wolf run is taught; the game offers no Post for one, and this is the
+   * backstop. 422 with `reason: 'wolf'`, so the game can say why rather than "could not be posted".
+   */
+  if (run.ending === 'wolf') return refuse('wolf', 'a run that let the wolf in is not posted');
 
   /*
    * THE CLOCK, bounded from both sides by the one clock the player does not control.
@@ -225,7 +242,14 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
    *   - seen - claimed > POST_WINDOW_MS: too long off the clock. This is the bound on restamping a
    *     slow run, and it also makes the token short-lived: since claimed < 3:00, no token older
    *     than 3:00 plus the window can pass it. 410, because the run was real and its window shut.
-   *   - claimed or seen under MIN_RUN_MS: faster than the shortest walk on the map. Not a run.
+   *   - any meeting, or the arrival, stamped sooner than walking there allows, or `seen` under the
+   *     whole walk (`v2.walkFloor`): faster than the map. Not a run.
+   *
+   * THE SPEED BONUS IS READ OFF `claimed` (core `speedBonus`), so these bounds are what the bonus
+   * rests on: claimed is at most what the server saw, and at least the walk the log describes.
+   * What they cannot do is tell an honest 1:45 from a forger who waits 1:45 with a careful log for
+   * the seed the token handed them -- `deal()` is public. That was true of the 100 before speed
+   * counted, and it is the reason the edge rate limit is a precondition (README).
    */
   const claimed = replay.state.now;
   const seen = deps.now() - ticket.issuedAt;
@@ -234,8 +258,9 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
     return fail(400, 'that run could not be verified');
   }
   if (seen - claimed > POST_WINDOW_MS) return fail(410, 'posting has closed for that run');
-  if (claimed < MIN_RUN_MS || seen < MIN_RUN_MS) {
-    note('refused a run faster than the shortest walk to the cottage');
+  const floor = v2.walkFloor(deps.content, log.events);
+  if (floor.tooFast !== null || seen < floor.floorMs) {
+    note('refused a run faster than the shortest walk it describes');
     return fail(400, 'that run could not be verified');
   }
 
@@ -261,8 +286,9 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
     return fail(429, UNAVAILABLE, { 'retry-after': '60' });
   }
 
+  const row = { handle: name.name, score: run.total };
   try {
-    await deps.store.add({ handle: parsed.data.handle, score: run.total });
+    await deps.store.add(row);
   } catch (err) {
     // Not a row, so not spent: a player whose insert hit a blip can post again.
     deps.recent.release(ticket.id);
@@ -270,15 +296,61 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
     return fail(503, UNAVAILABLE);
   }
 
-  return json({ handle: parsed.data.handle, score: run.total });
+  /*
+   * WHERE IT LANDED, AND THE BOARD AS IT STANDS NOW -- read from the table, not the edge.
+   *
+   * This is the fix for the client's "I posted and I don't see my score". `GET /api/top` is cached
+   * at the edge, so the read the game made straight after posting was answered with the page from
+   * before the post (handleTop). The post itself is never cached, so it carries the fresh answer:
+   * the row's rank, counted right after the insert, and the top of the board read right after it.
+   * Both are best-effort. The row is in the table whatever happens here, so a failed count is
+   * `rank: null` and a failed read is no `entries` -- never a failed post.
+   */
+  const [rank, entries] = await Promise.all([
+    deps.store.rank(row.score).catch((err: unknown) => {
+      note(
+        `could not rank a stored score: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
+      return null;
+    }),
+    deps.store
+      .top(DEFAULT_TOP_LIMIT)
+      .then((rows) => rows.map((r, i) => ({ rank: i + 1, handle: r.handle, score: r.score })))
+      .catch((err: unknown) => {
+        note(
+          `could not read the board after a post: ${err instanceof Error ? err.message : 'unknown error'}`,
+        );
+        return undefined;
+      }),
+  ]);
+
+  return json({ ...row, rank, ...(entries ? { entries } : {}) });
 }
+
+/** A refusal the game words by `reason` rather than by status: 422, nothing spent. */
+const refuse = (reason: 'name' | 'wolf', error: string): Response => json({ error, reason }, 422);
+
+/**
+ * How long the edge may serve a board: fresh for 10 s, then served stale for up to 20 s more while
+ * it refetches. So the board anyone sees is at most 30 s old.
+ *
+ * IT WAS `s-maxage=60, stale-while-revalidate=300`, and that is half of the client's "I posted and
+ * I don't see my score" (2026-10-22). Results reads the board when it opens and again the moment
+ * the post answers, and both reads went to the same edge copy: the first one had just filled it
+ * (or found it fresh), so the second -- a few seconds later -- was served the page from BEFORE the
+ * post, and under stale-while-revalidate a page up to six minutes old. The browser's
+ * `cache: 'no-store'` does not reach past the CDN. The other half is fixed in `handleScore`, which
+ * now answers with the fresh board itself; this shortens how long anyone else waits to see it.
+ * At 30 s the database still sees at most a few reads a minute per edge region.
+ */
+export const TOP_CACHE = 'public, max-age=0, s-maxage=10, stale-while-revalidate=20';
 
 /**
  * GET /api/top -- the read-mostly list.
  *
- * Cached at the edge so a marketing page does not reach Postgres once per visitor. A score posted
- * in the last minute may not be on the cached copy yet; the trade is deliberate and is the reason
- * `POST /api/score` returns the score it stored rather than making the client re-read the board.
+ * Cached at the edge so a marketing page does not reach Postgres once per visitor (`TOP_CACHE`).
+ * A post is never cached and answers with its own rank and the fresh board, so the player who just
+ * posted never depends on this copy (`handleScore`).
  */
 export async function handleTop(request: Request, deps: Deps): Promise<Response> {
   if (request.method !== 'GET') return fail(405, 'method not allowed', { allow: 'GET' });
@@ -290,7 +362,7 @@ export async function handleTop(request: Request, deps: Deps): Promise<Response>
     return json(
       { entries: rows.map((row, i) => ({ rank: i + 1, handle: row.handle, score: row.score })) },
       200,
-      { 'cache-control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300' },
+      { 'cache-control': TOP_CACHE },
     );
   } catch (err) {
     note(`could not read the board: ${err instanceof Error ? err.message : 'unknown error'}`);

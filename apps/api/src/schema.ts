@@ -1,4 +1,4 @@
-import { handleSchema, v2 } from '@otp/core';
+import { v2 } from '@otp/core';
 import { z } from 'zod';
 
 /*
@@ -16,8 +16,13 @@ export const runTokenSchema = z
   .max(256)
   .regex(/^[\w-]+\.[\w-]+$/);
 
+/**
+ * The name as typed, bounded and nothing more. Whether it may go on the board is `v2.checkName`'s
+ * question, asked by the handler AFTER the shape is known good, so a refused name can be answered
+ * with its own status (422) and the player can fix it and post the same run again.
+ */
 export const submitRunSchema = z.strictObject({
-  handle: handleSchema,
+  handle: z.string().max(64),
   log: v2.runLogSchema,
   token: runTokenSchema,
 });

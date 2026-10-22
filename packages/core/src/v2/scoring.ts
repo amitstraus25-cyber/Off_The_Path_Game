@@ -1,6 +1,7 @@
 import { findSkill, giveaway } from './content.ts';
 import type { Content, SkillId, Verdict } from './content.ts';
 import { variantOf } from './deal.ts';
+import { TIME_LIMIT_MS } from './state.ts';
 import type { State } from './state.ts';
 
 /**
@@ -66,7 +67,7 @@ export function ending(state: State, content: Content): Ending | null {
 }
 
 export interface RunResult {
-  /** The score, as `score` gives it. */
+  /** The score, as `score` gives it: `choices` + `speed`. */
   total: number;
   outOf: number;
   ending: Ending | null;
@@ -76,31 +77,78 @@ export interface RunResult {
   good: number;
   /** How many bad skills are in the basket: each one let the wolf in. */
   served: number;
+  /** The part of the total the basket earned: `clean` + `good` per good skill. 0 unless clean. */
+  choices: number;
+  /** The part of the total the clock earned (`speedBonus`). 0 unless clean. */
+  speed: number;
+  /** Elapsed milliseconds at the cottage door, or null for a run that never reached it. */
+  timeMs: number | null;
+  /** The par the speed bonus was measured against, from the content. */
+  parMs: number;
+}
+
+/** The run's elapsed time at the cottage door, read from its own log. Null if it never arrived. */
+export const arrivalMs = (state: State): number | null =>
+  state.log.find((e) => e.e === 'arrived')?.at ?? null;
+
+/**
+ * THE SPEED BONUS: `speed` x speedFactor x good/dealt-good, rounded to a whole point.
+ *
+ * speedFactor is 1 at or under `parMs`, falls in a straight line to 0 at the time limit, and is
+ * never negative. The bonus is scaled by the share of the good skills taken, so speed is a
+ * multiplier on being right rather than a second way to score: leaving everything earns no bonus
+ * however fast, and the lint (content.ts) holds the weights so that a fast basket one good skill
+ * short can never outscore a full basket at any pace that arrives.
+ *
+ * Integer arithmetic until the one division, so the browser and the server -- the same function on
+ * two machines -- round the same way. Pure: the time is the log's own `arrived` stamp, never a
+ * clock read here.
+ */
+export function speedBonus(content: Content, good: number, timeMs: number): number {
+  const { speed, parMs } = content.scoring;
+  const span = TIME_LIMIT_MS - parMs;
+  const left = Math.min(span, Math.max(0, TIME_LIMIT_MS - timeMs));
+  return Math.round((speed * good * left) / (content.deal.good * span));
 }
 
 /**
  * EVERYTHING THE END OF A RUN SAYS, in one call: the score, the ending and the reveal.
  *
- * THE SCORE, out of 100 with the shipped weights (GAME_DESIGN_V2 section 9):
+ * THE SCORE, out of 100 with the shipped weights (GAME_DESIGN_V2 section 9), CORRECTNESS FIRST:
  *
- *   - arrived clean (nothing bad taken):   `clean` + `good` for each good skill taken
- *   - the wolf got in (any bad skill):     0
+ *   - arrived clean (nothing bad taken):   `clean` + `good` per good skill + `speedBonus`
+ *   - the wolf got in (any bad skill):     0, however fast
  *   - late, or not arrived yet:            0, and the ending says which
  *
- * So the only 100 in a deal is its three good taken and its four bad left; leaving everything is a
- * clean arrival with nothing in hand, `clean` alone; and every wolf run sits below every clean
- * one. The weights are content (golden rule 3); the zero for the wolf is a rule. A late run scores
- * 0 rather than nothing so that the score is always an integer, but it is not a run for the board:
- * the board reads `ending`, and only `grandma` and `wolf` are runs that finished.
+ * With the shipped 10 / 20 / 30: three good at or under par is 100, three good just inside the
+ * clock is 70, two good at par is 70 too (a tie, which the board breaks by the earlier post), and
+ * leaving everything is 10 at any speed. Every wolf run sits below every clean one. The weights and
+ * the par are content (golden rule 3); the zero for the wolf and the limit are rules. A late run
+ * scores 0 rather than nothing so that the score is always an integer, but it is not a run for the
+ * board: the board reads `ending`, and only `grandma` is a run the board takes (apps/api).
  */
 export function result(state: State, content: Content): RunResult {
   const entries = reveal(state, content);
   const end = ending(state, content);
   const taken = entries.filter((r) => r.verdict === 'take');
   const good = taken.filter((r) => r.good).length;
-  const { clean, good: each, outOf } = content.scoring;
-  const total = end === 'grandma' ? clean + each * good : 0;
-  return { total, outOf, ending: end, entries, good, served: taken.length - good };
+  const { clean, good: each, outOf, parMs } = content.scoring;
+  const timeMs = arrivalMs(state);
+  const clear = end === 'grandma';
+  const choices = clear ? clean + each * good : 0;
+  const speed = clear ? speedBonus(content, good, timeMs!) : 0;
+  return {
+    total: choices + speed,
+    outOf,
+    ending: end,
+    entries,
+    good,
+    served: taken.length - good,
+    choices,
+    speed,
+    timeMs,
+    parMs,
+  };
 }
 
 /** The score: an integer from 0 to `content.scoring.outOf` (100). See `result` for the rule. */

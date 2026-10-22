@@ -109,9 +109,11 @@ describe('the routes as Vercel invokes them', () => {
     const res = await scoreRoute(post('/api/score', { handle: HANDLE, log, token }));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ handle: HANDLE, score: 100 });
+    // The fake table answers every call 201 with no body, so the count and the read after the
+    // insert both fail: the post still answers, with no rank and no board (handlers.ts).
+    await expect(res.json()).resolves.toEqual({ handle: HANDLE, score: 100, rank: null });
     // The row went to the table this environment names, with the key in headers and not in the URL.
-    expect(calls).toHaveLength(1);
+    expect(calls.filter((c) => c.init.method === 'POST')).toHaveLength(1);
     expect(calls[0]!.url).toBe('https://project-ref.supabase.co/rest/v1/leaderboard');
     expect(calls[0]!.url).not.toContain(CONFIGURED.SUPABASE_SERVICE_ROLE_KEY);
     expect((calls[0]!.init.headers as Record<string, string>)['apikey']).toBe(

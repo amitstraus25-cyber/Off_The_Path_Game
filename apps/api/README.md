@@ -28,11 +28,11 @@ posture, the migrations in `supabase/migrations/`, how to rotate a key without d
 happens when the free tier pauses, how to tell whether the board is actually working and what to do
 when it is not. This file is the service; that one is the database.
 
-| Route             | What it does                                                                                                                                                                                    |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/start` | Draws a seed and answers `{ seed, token }`: the seed sealed with the issue time in an HMAC-signed token. Stores nothing.                                                                        |
-| `POST /api/score` | Takes `{ handle, log, token }`. Checks the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100), stores it. Answers `{ handle, score }`. |
-| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie. Cached at the edge for 60 s.                                                                 |
+| Route             | What it does                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/start` | Draws a seed and answers `{ seed, token }`: the seed sealed with the issue time in an HMAC-signed token. Stores nothing.                                                                                                                                                                                                                                                                          |
+| `POST /api/score` | Takes `{ handle, log, token }`. Checks the name, the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100, time counted), stores it. Answers `{ handle, score, rank, entries? }`: the stored (tidied) name, the score, the rank counted right after the insert (null if the count failed) and the top 10 read from the table, not the edge. |
+| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie, rows from `BOARD_SINCE` on and above 0. Cached at the edge for 10 s plus 20 s stale (`TOP_CACHE`), so never more than 30 s old.                                                                                                                                                                |
 
 ## The run token (Phase E)
 
@@ -52,13 +52,20 @@ run to finish in time. So the run starts on the server.
   runs, whose players see "Posting has closed" or "could not be posted".
 - **`POST /api/score`** then requires, in order: a token this service signed (else 400); the log's
   seed equal to the token's (else 400); a legal v2 replay that ended (else 400); an ending of
-  `grandma` or `wolf` — **a late run is not posted** (400); a claimed duration no longer than the
+  `grandma` — **a late run is not posted** (400) and, since 2026-10-22, **neither is a wolf run**
+  (422 `reason: 'wolf'`); a claimed duration no longer than the
   time since the token was issued, plus 2 s of clock skew (else 400); and no more than **five
   minutes** off the game clock between issue and post — the title, the how-to and the reveal
   (else **410**, "posting has closed for that run"). Since a run's clock stops before 3:00, no token
-  older than 8:00 can post. Finally, **neither the claimed run time nor the time since the token
-  was issued may be under `MIN_RUN_MS`** (10 s, the straight walk from Purple's spawn to the door,
-  derived from the map in `test/floor.test.ts`), else 400.
+  older than 8:00 can post. Finally, **every meeting and the arrival must be stamped no sooner than
+  the straight-line walk the log describes allows, and the time since the token was issued must
+  cover the whole walk** (`v2.walkFloor`, core `floor.ts`, its numbers derived from the map in core's
+  `test/v2/floor.test.ts`; about 12 s straight to the door, 15 s for the full tour), else 400. It
+  replaced the single 10 s `MIN_RUN_MS`.
+- **The name** is checked first, before anything is spent: `v2.checkName` (core `board.ts`) —
+  3 to 16 letters in any language, digits, spaces, hyphens and apostrophes; no contact details; a
+  short blocklist. A refused name is **422 `reason: 'name'`**, the token is not spent, and the same
+  run can be posted again under another name. The tidied form is what is stored.
 - **One token is one row**, per instance (409 on reuse, with this log or any other). Durable
   single use would need a column — see `docs/DATABASE.md`, Decision 1. No schema change was made.
 
@@ -68,7 +75,7 @@ run, and a forger has no reason to restamp: the token hands them the seed, `deal
 the careful log for that seed scores 100. **The token does not stop a bot, and a bot's rows are not
 harmless:** ties rank earliest first (migration 0005), so scripted 100s posted early outrank every
 honest 100 posted after them, permanently. The token makes every row cost one start, at least
-`MIN_RUN_MS` of real waiting, and one post inside eight minutes; makes the seed the server's; and
+the walk its own log describes of real waiting, and one post inside eight minutes; makes the seed the server's; and
 makes one token one row. The edge rate limit below is what bounds volume, which is why it is a
 precondition for exposing the board, not a nice-to-have.
 
@@ -240,13 +247,14 @@ of the board are wired, and both are waiting on the same thing: a function at `/
 | A seed of the caller's choosing                | Refused. The log's seed must be the one sealed in a token this service signed.                                                                                                                                                                                                                                                                                                           |
 | A log claiming more time than really passed    | Refused: the claimed duration may not exceed the time since the token was issued (plus 2 s).                                                                                                                                                                                                                                                                                             |
 | A slow run restamped, or a stale token         | Refused with 410 once more than five minutes have passed off the game clock since the token was issued.                                                                                                                                                                                                                                                                                  |
-| A run faster than anyone could walk it         | Refused: the claimed run time and the time since the token was issued must both reach `MIN_RUN_MS` (10 s), so every forged row costs real waiting.                                                                                                                                                                                                                                       |
+| A run faster than anyone could walk it         | Refused: every meeting and the arrival must be stamped no sooner than the straight-line walk to it (`v2.walkFloor`), and the time since the token was issued must cover the whole walk, so every forged row costs real waiting. With speed now scored, a forged 100 still needs only par (1:45) of waiting; `deal()` is public.                                                          |
 | A thousand events                              | Refused before replay: `MAX_LOG_EVENTS` is 256 against an honest run of about twenty.                                                                                                                                                                                                                                                                                                    |
 | A megabyte of JSON                             | Refused at 32 KB **as it arrives**. `content-length` is a cheap first check; the gate is a metered read, so a body that declares no length or is made of four-byte characters is cut off at the same 32 KB. The Node adapter (`src/node-adapter.ts`) applies the same cap before the handler is called, so the instance never buffers more than 32 KB of it; the answer is the same 413. |
 | The same token, posted again                   | `409 {"error":"that run is already on the board"}` with nothing written, whatever log or handle comes with it. One token is one row, including two posts of it in flight at once: the id is reserved before the insert and released if no row results. Per instance — see below.                                                                                                         |
 | A loop writing rows as fast as it can          | Thirty writes a minute per instance, then `429` with `retry-after`. The budget is spent only on a row that is about to exist, so nonsense cannot exhaust it. Per instance — see below.                                                                                                                                                                                                   |
-| A handle that is not one of ours               | Refused by `handleSchema`, and refused again by the store immediately before the insert. Only a word pair from `packages/core`'s lists plus a two-digit number parses.                                                                                                                                                                                                                   |
-| A handle designed to break a page              | Cannot exist. The grammar is `[a-z]+-[a-z]+-[1-9][0-9]`, the game renders through Preact text nodes, and `GET /api/top` drops any row whose handle is not one the game could mint.                                                                                                                                                                                                       |
+| A name the board refuses                       | 422 `reason: 'name'` by `v2.checkName`, and refused again by the store immediately before the insert (it stores only the tidy form). Names are typed since 2026-10-22; the suggested `brave-lantern-42` handles all pass.                                                                                                                                                                |
+| A name designed to break a page                | `<`, `>`, `&`, quotes other than the apostrophe, `@`, `.`, `/`, `:` and every control or format character are not allowed characters, the game renders through Preact text nodes, and `GET /api/top` drops any row whose name `checkName` would now refuse.                                                                                                                              |
+| A wolf run                                     | 422 `reason: 'wolf'`, nothing written. It finished at 0; the board ranks runs that kept the wolf out, and a quiet board of zeros read as a broken one.                                                                                                                                                                                                                                   |
 | A body that is not JSON, or does not say it is | 400 and 415. A JSON-only endpoint cannot be reached by a plain cross-origin form post.                                                                                                                                                                                                                                                                                                   |
 | Probing for the shape of an acceptable log     | Gets `{"error":"that submission is not valid"}`. No zod issue, no field name, no database status: the detail goes to the server log, not to the caller.                                                                                                                                                                                                                                  |
 
@@ -289,7 +297,9 @@ not set` is a variable (set it, then **redeploy** -- variables are read once per
      ran, whatever the status said.
 5. **Play a run on the preview, press Post once, then `GET /api/top` again.** "Posted to the board
    as ..." means a row was written and the number on it was computed by the server from the replayed
-   log. `handleTop` sets `s-maxage=60`, so wait a minute before concluding. If step 5 said posted
+   log, and the board under it shows the row marked as yours at once (the post answers with the
+   fresh board). `handleTop` sets `s-maxage=10` plus 20 s stale, so a plain `GET /api/top` may
+   lag by up to 30 s; wait that long before concluding. If step 5 said posted
    and the row never appears, the write path works and the read path does not: the one failure a
    fake `fetch` could not have caught. Press Post a second time for `409` and "That run is already
    on the board." -- which also proves the first write landed.
@@ -342,16 +352,16 @@ write-what-you-like list that happens to contain honest scores. `src/limit.ts` c
    right now" to honest players on it. That failure is quiet, reversible and leaves results and the
    call to action untouched, which is the better of the two outcomes available without step 1 — the
    alternative is the same flood landing as rows on a public page.
-3. **Removing a word from the handle lists hides existing rows.** `GET /api/top` drops any handle the
-   game could not mint, so a word taken out of `packages/core/src/leaderboard.ts` retires every row
-   already posted under it. The store over-fetches four pages so the filter falls through to real
+3. **Adding a word to the blocklist hides existing rows.** `GET /api/top` drops any name
+   `v2.checkName` would now refuse, so a word added to `packages/core/src/v2/board.ts` retires every
+   row already posted under it -- which is how a rude name that got through is taken off the board
+   without a delete. The store over-fetches four pages so the filter falls through to real
    rows rather than serving a short page, but the rows themselves are gone from the board.
 4. **The clock is half the player's.** Since Phase E a run cannot claim more time than the server
-   saw, nor sit more than five minutes off the game clock, nor be faster than `MIN_RUN_MS` on
-   either clock. That floor is one number for every score -- the straight walk to the door -- so a
-   scripted 100 still costs only ten seconds of waiting per token, though an honest 100 must also
-   meet the three holding good skills on the way. A per-score floor needs the map's distances on the server and
-   is not done. Requiring a card to be opened per take is out of scope: reading is optional by
+   saw, nor sit more than five minutes off the game clock, nor walk faster than the straight-line
+   floor of the route its own log describes. Since speed counts, a scripted 100 costs par (1:45) of
+   waiting per token: `deal()` is public, so a careful log for the token's seed, stamped at par,
+   is indistinguishable from a brisk honest player. Requiring a card to be opened per take is out of scope: reading is optional by
    design (GAME_DESIGN_V2), so it would refuse an honest lucky guess.
 5. **Content drift.** Scores are recomputed against whatever `content/game.v2.json` the deployment
    carries. Change the scoring weights and old rows are no longer comparable to new ones, with

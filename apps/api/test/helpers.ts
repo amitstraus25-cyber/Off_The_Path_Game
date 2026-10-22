@@ -9,12 +9,18 @@ import raw from '../../../content/game.v2.json';
 
 export const content: v2.Content = v2.loadContent(raw);
 
-/** A second a step: walking to each character, then talking. Seven characters, about 22 seconds. */
-const PACE = { walkMs: 1000, talkMs: 1000 };
+/**
+ * Five seconds a walk and a second a talk and a card: a careful run arrives at 54 s, inside par
+ * (1:45), so it scores 100. Five seconds because the walk floor charges the longest straight leg
+ * of the content-order tour at a little over four (core floor.ts); one second a walk, as this
+ * used to be, is now a log faster than the map and is refused.
+ */
+export const PACE: v2.Pace = { walkMs: 5000, talkMs: 1000 };
+const QUICK_READ = { msPerWord: 0, buttonWords: 0, decideMs: 1000 };
 
 /** core's own simulator, played at `seed`: careful takes the good and leaves the bad. */
-export const runOf = (strategy: string, seed: number, pace = PACE): v2.State =>
-  v2.play(content, strategy, { seed, pace }).state;
+export const runOf = (strategy: string, seed: number, pace: v2.Pace = PACE): v2.State =>
+  v2.play(content, strategy, { seed, pace, reading: QUICK_READ }).state;
 
 /** The careful run for a seed: grandma, 100. */
 export const carefulLog = (seed: number): v2.RunLog => v2.toRunLog(runOf('careful', seed));

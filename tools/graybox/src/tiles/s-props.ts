@@ -726,7 +726,15 @@ function paintAwningSheet(): Img {
   }
 
   // The front rail the canvas is tacked to, and the soft line it throws on the cloth under it.
-  beamH(s, x0, row(3), width, 4);
+  /*
+   * The rail OVERHANGS THE LEFT POST by `RAIL_STUB`, 2026-10-22. It used to stop flush at the post,
+   * so the frame had a cantilever on the right (the sign bar) and a bare corner on the left, which
+   * is half of why the client read the left end as unfinished. A rail that runs past the post it
+   * sits on is how the frame is built; it is the same beam, lengthened, so its lit run and the
+   * turning far end at the right are untouched -- `beamH` only darkens its last six pixels.
+   */
+  const RAIL_STUB = 4;
+  beamH(s, x0 - RAIL_STUB, row(3), width + RAIL_STUB, 4);
   for (let x = x0; x < x1; x++) {
     const c = canvasTone(x - AWN_M, 0, CLOTH_ROWS);
     s.px(x, row(6), [
@@ -763,7 +771,10 @@ function paintAwningSheet(): Img {
    * The barrel, standing at the stall's left end and lapping over the foot of the post, which is
    * where the board stands its own: in front of the frame, not tucked behind it.
    */
-  barrel(s, AWN_M, row(14), 13, 16);
+  // One column in from the sheet's margin and one narrower than it was, 2026-10-22: at the margin
+  // its left keyline fell outside the tile cut and the barrel shipped with no left edge -- the
+  // "unfinished" the client circled. Twelve wide keeps the one-pixel keyline between it and the post.
+  barrel(s, AWN_M + 1, row(14), 12, 16);
 
   /*
    * The hanging sign, and it is the most important thing added to this file.
@@ -870,149 +881,252 @@ const stallAwning =
  * keyline and runs unbroken across the stall, as it should; only its top, its bottom, its legs and
  * the baskets standing proud of it are ringed.
  */
-const stallCounter: Painter = (img) => {
-  groundUnder(img, 1);
+/*
+ * THE COUNTER'S TWO ENDS, 2026-10-22. The client's screenshot of the stall: barrel on the left, sign
+ * on the right, and "the left side looks unfinished". Rendered at zoom 16 it was three things, and
+ * one of them was on both ends:
+ *
+ *   - the COUNTER stopped dead at the tile edge on both sides, a sawn-off plank front with half a
+ *     ware and a sliver of crate hanging off it, because the one painter laid four times runs edge
+ *     to edge by design and nothing marked where the run ends. The sign draws the eye past the right
+ *     end; on the left there is nothing to, so that is where it was seen.
+ *   - the BARREL lost its left outline: it stood at the awning sheet's margin, so `ring` laid that
+ *     keyline in the margin the tile cut never keeps. A barrel with no left edge reads as sliced.
+ *   - the AWNING's frame had a cantilever on the right (the sign bar) and stopped flush at the left
+ *     post, leaving that corner bare lawn.
+ *
+ * The ends are two new tiles rather than a change to this one, because the middle two are still
+ * the same painter and must stay seamless against each other. Each end pulls the body in three
+ * columns so `ring` can see the end and outline it, stands a corner post with the same cap block
+ * every free-standing post in this file carries, drops the leg and the half-ware that only make
+ * sense against a neighbour, and stops its contact pool a pixel past the post rather than at the
+ * tile edge. Both ends get it, because a counter finished at one end only is a new asymmetry, not
+ * a finish. The goods on each end are re-spaced so nothing stands behind the post.
+ */
+type CounterEnd = 'l' | 'r' | null;
 
-  /*
-   * The ground behind the counter is under the awning, so it is in DEEP shade. This also ties the
-   * two tiles together: the awning's posts stop ten pixels above the counter top, and a band of
-   * full sunlight in that gap made the awning look like it floated over a separate table.
-   *
-   * It is a good deal deeper than it was. Cropped at 1:1, the board's stall interior is almost
-   * black between the hem and the goods -- it is the darkest thing in that frame -- where ours was
-   * a lightly tinted lawn you could still read the grass tufts through.
-   */
-  for (let y = 0; y < 11; y++) {
-    const a = Math.round(170 - clamp01(y / 10) * 120);
-    img.rect(0, y, TILE, 1, [SHADE[0], SHADE[1], SHADE[2], a]);
-  }
-  /*
-   * Where the counter MEETS the grass, which is the sixth of task P13's six floating props and the
-   * only one that is not a `cast()` call. A band rather than an ellipse so it meets its neighbour:
-   * four of these tiles abut, and four ellipses make a scalloped shadow under a counter that runs
-   * unbroken across all four.
-   *
-   * It is `CONTACT_FALL`, one row a step, landing opaque on the row the legs and the front's own
-   * keyline stand on. It ran 60, 78, 100, 128, 160 and stopped at row 30, which took the deepest
-   * pixel only to luma 74 -- half the fall the fence and the bush make -- and left the tile's last
-   * row as open lawn directly under the one surface in the stall that touches the ground.
-   *
-   * AND THEN BACK OUT AGAIN BELOW THE FOOT, which is the one thing a band has to do that an ellipse
-   * gets for free. Run straight down to the tile's edge the pool ends on a full-width opaque row, and
-   * because four of these tiles abut that is a dead-straight 128-pixel bar with a 95-luma step under
-   * it in the market frame -- the fence run's own defect, in a shadow. Easing back out over the last
-   * two rows puts the deepest pixel at the point of contact and lets the pool fade away from the
-   * object, which is the direction a shadow falls.
-   */
-  const FOOT = TILE - 3;
-  CONTACT_FALL.forEach((a, i) =>
-    img.rect(0, FOOT - CONTACT_FALL.length + 1 + i, TILE, 1, [
-      CONTACT[0],
-      CONTACT[1],
-      CONTACT[2],
-      a,
-    ]),
-  );
-  for (let i = 1; i < TILE - FOOT; i++)
-    img.rect(0, FOOT + i, TILE, 1, [
-      CONTACT[0],
-      CONTACT[1],
-      CONTACT[2],
-      CONTACT_FALL[CONTACT_FALL.length - 1 - i]!,
-    ]);
+/** Columns an end tile gives back to the lawn beyond its corner post. */
+const COUNTER_END_INSET = 3;
+const COUNTER_POST_W = 4;
 
-  stand(img, (s) => {
-    // Legs, then the board that laps over them.
-    for (const lx of [4, 23]) postV(s, lx, 25, 5, 4);
+const stallCounterTile =
+  (end: CounterEnd): Painter =>
+  (img) => {
+    // The columns the counter body occupies on this tile, and where its corner post stands.
+    const bodyX0 = end === 'l' ? COUNTER_END_INSET : 0;
+    const bodyX1 = end === 'r' ? TILE - COUNTER_END_INSET : TILE; // exclusive
+    const postX = end === 'l' ? bodyX0 : bodyX1 - COUNTER_POST_W;
+    groundUnder(img, 1);
 
     /*
-     * Front boards, running the length of the stall the way a counter front is built. Vertical
-     * panels came out as sixteen identical cupboard doors with a handle in one of them.
+     * The ground behind the counter is under the awning, so it is in DEEP shade. This also ties the
+     * two tiles together: the awning's posts stop ten pixels above the counter top, and a band of
+     * full sunlight in that gap made the awning look like it floated over a separate table.
      *
-     * Each board is its own small cylinder: lit along its top, falling to its bottom edge. That is
-     * three smooth four-pixel falls where there were three pairs of hard 37-luma lines.
+     * It is a good deal deeper than it was. Cropped at 1:1, the board's stall interior is almost
+     * black between the hem and the goods -- it is the darkest thing in that frame -- where ours was
+     * a lightly tinted lawn you could still read the grass tufts through.
      */
-    /*
-     * Darker than the top it carries, and darker again than the first attempt at this. On the board
-     * the counter front is the shaded face of the thing -- it is what the top is lit AGAINST -- and
-     * drawn in the same wood as the lit surface the whole counter read as one slab with lines
-     * scored across it.
-     *
-     * The depth is measured, not felt. Cropped at 1:1 the board's own stall region puts 28 per cent
-     * of itself under luma 81 and 20.8 per cent under 60; ours was at 20.3 and 14.7, which is about
-     * a quarter short on both. The counter front is the largest single surface in the stall, so it
-     * is where that quarter has to come from.
-     */
-    for (const by of [15, 19, 23]) {
-      beamH(s, 0, by, TILE, 4, 'wood', 0.02);
-      // The seam between planks, back as a real line. The previous pass dissolved these into
-      // ten-luma ripples to buy edge density down; the rebuilt profile wants it the other way, and
-      // a counter front is the one surface in the stall that is honestly made of boards.
-      s.rect(0, by + 3, TILE, 1, tone('wood', 0.0));
+    for (let y = 0; y < 11; y++) {
+      const a = Math.round(170 - clamp01(y / 10) * 120);
+      img.rect(0, y, TILE, 1, [SHADE[0], SHADE[1], SHADE[2], a]);
     }
-    // A knot low on the bottom board, where nothing reads it as a handle.
-    dome(s, 11, 24, 2.2, 1.4, 'wood', 0.08, 0.34);
-
-    // The top: a lit surface falling to a dark lip at its front edge. The lip is the one steep step
-    // in the tile and it belongs there -- it is the counter's own silhouette seen from above.
-    for (const [j, t] of [0.82, 0.96, 0.82, 0.6, 0.2].entries())
-      s.rect(0, 10 + j, TILE, 1, band('wood', t, 6));
-
     /*
-     * Goods, and this is the brief's "a bare counter with a few dots".
+     * Where the counter MEETS the grass, which is the sixth of task P13's six floating props and the
+     * only one that is not a `cast()` call. A band rather than an ellipse so it meets its neighbour:
+     * four of these tiles abut, and four ellipses make a scalloped shadow under a counter that runs
+     * unbroken across all four.
      *
-     * The board lays out a dense double row: crates and sacks of stock standing in the stall's
-     * shade at the back, and in front of them, catching the light, the compasses themselves --
-     * round dials with gold bezels, which is the skill Rabbit is offering. Ours was three gold
-     * domes a tile, which at the playing camera is a row of identical blobs and tells the player
-     * nothing about what is for sale.
+     * It is `CONTACT_FALL`, one row a step, landing opaque on the row the legs and the front's own
+     * keyline stand on. It ran 60, 78, 100, 128, 160 and stopped at row 30, which took the deepest
+     * pixel only to luma 74 -- half the fall the fence and the bush make -- and left the tile's last
+     * row as open lawn directly under the one surface in the stall that touches the ground.
      *
-     * Density here is also most of what the measurement wants. A crate is flat boards with hard
-     * seams and a dark frame; a dial is four concentric values inside a keyline. Between them they
-     * are the deepest darks and the sharpest steps in the stall, which is the two axes the region
-     * is furthest short on -- and they are six distinct materials where there were two.
-     *
-     * The beat is broken where it can be. This tile is laid FOUR TIMES in a row, so anything
-     * centred in it repeats every 32 pixels; the two items that straddle the seam are drawn once at
-     * each edge so their halves meet, and the back row's spacing deliberately does not line up with
-     * the front row's.
+     * AND THEN BACK OUT AGAIN BELOW THE FOOT, which is the one thing a band has to do that an ellipse
+     * gets for free. Run straight down to the tile's edge the pool ends on a full-width opaque row, and
+     * because four of these tiles abut that is a dead-straight 128-pixel bar with a 95-luma step under
+     * it in the market frame -- the fence run's own defect, in a shadow. Easing back out over the last
+     * two rows puts the deepest pixel at the point of contact and lets the pool fade away from the
+     * object, which is the direction a shadow falls.
      */
-    crate(s, 1, 2, 9, 8);
-    sack(s, 16.5, 6, 5, 3.8);
-    crate(s, 23, 3, 8, 7);
+    const FOOT = TILE - 3;
+    // On an end tile the pool stops one pixel past the corner post on the left, where the light
+    // comes from, and two on the right, where the shadow falls; never at the tile edge.
+    const poolX0 = end === 'l' ? bodyX0 - 1 : 0;
+    const poolX1 = end === 'r' ? bodyX1 + 2 : TILE;
+    CONTACT_FALL.forEach((a, i) =>
+      img.rect(poolX0, FOOT - CONTACT_FALL.length + 1 + i, poolX1 - poolX0, 1, [
+        CONTACT[0],
+        CONTACT[1],
+        CONTACT[2],
+        a,
+      ]),
+    );
+    for (let i = 1; i < TILE - FOOT; i++)
+      img.rect(poolX0, FOOT + i, poolX1 - poolX0, 1, [
+        CONTACT[0],
+        CONTACT[1],
+        CONTACT[2],
+        CONTACT_FALL[CONTACT_FALL.length - 1 - i]!,
+      ]);
 
-    ware(s, 5.5, 8.6, 3.8, 'gold');
-    ware(s, 14, 9, 3.2, 'path');
-    ware(s, 23, 8.5, 3.5, 'gold');
-    for (const cx of [-1.5, 30.5]) ware(s, cx, 9, 3.4, 'path');
+    stand(img, (s) => {
+      // Legs, then the board that laps over them.
+      // The corner post is the end leg, so an end tile keeps only its inner leg.
+      for (const lx of [4, 23])
+        if (!(end === 'l' && lx === 4) && !(end === 'r' && lx === 23)) postV(s, lx, 25, 5, 4);
 
-    // The interior keyline under everything standing on the top, which the ring cannot reach: the
-    // counter top is the one surface in the tile with nothing transparent beside it. It sits ON the
-    // top's first row -- a row higher and the goods hang in the stall's shade with a line under
-    // them, which is what floating looks like.
-    for (const [bx, bw] of [
-      [1, 9],
-      [12, 6],
-      [19, 7],
-      [23, 8],
-      [29, 3],
-      [0, 3],
-    ] as const)
-      s.rect(bx, 10, bw, 1, LINE.wood);
-  });
+      /*
+       * Front boards, running the length of the stall the way a counter front is built. Vertical
+       * panels came out as sixteen identical cupboard doors with a handle in one of them.
+       *
+       * Each board is its own small cylinder: lit along its top, falling to its bottom edge. That is
+       * three smooth four-pixel falls where there were three pairs of hard 37-luma lines.
+       */
+      /*
+       * Darker than the top it carries, and darker again than the first attempt at this. On the board
+       * the counter front is the shaded face of the thing -- it is what the top is lit AGAINST -- and
+       * drawn in the same wood as the lit surface the whole counter read as one slab with lines
+       * scored across it.
+       *
+       * The depth is measured, not felt. Cropped at 1:1 the board's own stall region puts 28 per cent
+       * of itself under luma 81 and 20.8 per cent under 60; ours was at 20.3 and 14.7, which is about
+       * a quarter short on both. The counter front is the largest single surface in the stall, so it
+       * is where that quarter has to come from.
+       */
+      for (const by of [15, 19, 23]) {
+        beamH(s, 0, by, TILE, 4, 'wood', 0.02);
+        // The seam between planks, back as a real line. The previous pass dissolved these into
+        // ten-luma ripples to buy edge density down; the rebuilt profile wants it the other way, and
+        // a counter front is the one surface in the stall that is honestly made of boards.
+        s.rect(0, by + 3, TILE, 1, tone('wood', 0.0));
+      }
+      // A knot low on the bottom board, where nothing reads it as a handle.
+      dome(s, 11, 24, 2.2, 1.4, 'wood', 0.08, 0.34);
 
-  // What the goods throw onto the counter top, in two soft steps rather than one flat ellipse.
-  for (const [cx, rx] of [
-    [6, 4],
-    [14.5, 3.4],
-    [22, 3.8],
-  ] as const)
-    for (const [k, a] of [
-      [1, 40],
-      [0.6, 52],
-    ] as const)
-      img.ellipse(cx, 11.4, rx * k, 1 * k, [SHADE[0], SHADE[1], SHADE[2], a]);
-};
+      // The top: a lit surface falling to a dark lip at its front edge. The lip is the one steep step
+      // in the tile and it belongs there -- it is the counter's own silhouette seen from above.
+      for (const [j, t] of [0.82, 0.96, 0.82, 0.6, 0.2].entries())
+        s.rect(0, 10 + j, TILE, 1, band('wood', t, 6));
+
+      /*
+       * Goods, and this is the brief's "a bare counter with a few dots".
+       *
+       * The board lays out a dense double row: crates and sacks of stock standing in the stall's
+       * shade at the back, and in front of them, catching the light, the compasses themselves --
+       * round dials with gold bezels, which is the skill Rabbit is offering. Ours was three gold
+       * domes a tile, which at the playing camera is a row of identical blobs and tells the player
+       * nothing about what is for sale.
+       *
+       * Density here is also most of what the measurement wants. A crate is flat boards with hard
+       * seams and a dark frame; a dial is four concentric values inside a keyline. Between them they
+       * are the deepest darks and the sharpest steps in the stall, which is the two axes the region
+       * is furthest short on -- and they are six distinct materials where there were two.
+       *
+       * The beat is broken where it can be. This tile is laid FOUR TIMES in a row, so anything
+       * centred in it repeats every 32 pixels; the two items that straddle the seam are drawn once at
+       * each edge so their halves meet, and the back row's spacing deliberately does not line up with
+       * the front row's.
+       */
+      // On an end tile the goods are re-spaced clear of the corner post, and the half-ware that only
+      // makes sense against a neighbour is dropped on that side.
+      if (end === 'l') {
+        crate(s, 9, 3, 8, 7);
+        sack(s, 18.5, 6, 4.4, 3.6);
+        crate(s, 23, 3, 8, 7);
+        ware(s, 11, 8.6, 3.6, 'gold');
+        ware(s, 23, 8.5, 3.5, 'gold');
+        ware(s, 30.5, 9, 3.4, 'path');
+      } else if (end === 'r') {
+        crate(s, 1, 2, 9, 8);
+        sack(s, 14.5, 6, 4.4, 3.6);
+        ware(s, 5.5, 8.6, 3.8, 'gold');
+        ware(s, 20.5, 8.8, 3.5, 'gold');
+        ware(s, -1.5, 9, 3.4, 'path');
+      } else {
+        crate(s, 1, 2, 9, 8);
+        sack(s, 16.5, 6, 5, 3.8);
+        crate(s, 23, 3, 8, 7);
+
+        ware(s, 5.5, 8.6, 3.8, 'gold');
+        ware(s, 14, 9, 3.2, 'path');
+        ware(s, 23, 8.5, 3.5, 'gold');
+        for (const cx of [-1.5, 30.5]) ware(s, cx, 9, 3.4, 'path');
+      }
+
+      // The interior keyline under everything standing on the top, which the ring cannot reach: the
+      // counter top is the one surface in the tile with nothing transparent beside it. It sits ON the
+      // top's first row -- a row higher and the goods hang in the stall's shade with a line under
+      // them, which is what floating looks like.
+      const under: readonly (readonly [number, number])[] =
+        end === 'l'
+          ? [
+              [8, 7],
+              [15, 8],
+              [19, 7],
+              [23, 8],
+              [29, 3],
+            ]
+          : end === 'r'
+            ? [
+                [1, 9],
+                [11, 7],
+                [17, 7],
+                [0, 3],
+              ]
+            : [
+                [1, 9],
+                [12, 6],
+                [19, 7],
+                [23, 8],
+                [29, 3],
+                [0, 3],
+              ];
+      for (const [bx, bw] of under) s.rect(bx, 10, bw, 1, LINE.wood);
+
+      if (end) {
+        // Give the columns beyond the end back to the lawn, so `ring` finds the end and outlines it.
+        // Written straight into the buffer: `px` composites, so painting alpha 0 would change nothing.
+        for (let y = 0; y < TILE; y++)
+          for (let x = 0; x < TILE; x++)
+            if (x < bodyX0 || x >= bodyX1)
+              s.data.fill(0, (y * TILE + x) * 4, (y * TILE + x) * 4 + 4);
+        // The corner post, rising a little above the counter top, with the cap block every
+        // free-standing post in this file wears -- one column wider than the post on each side.
+        postV(s, postX, 8, COUNTER_POST_W, TILE - 3 - 8);
+        capBlock(s, postX - 1, 6, COUNTER_POST_W + 2, 2);
+        // Its interior keyline against the counter it closes, which `ring` cannot reach.
+        s.rect(end === 'l' ? postX + COUNTER_POST_W : postX - 1, 8, 1, TILE - 3 - 8, LINE.wood);
+      }
+    });
+
+    // What the goods throw onto the counter top, in two soft steps rather than one flat ellipse.
+    const throws: readonly (readonly [number, number])[] =
+      end === 'l'
+        ? [
+            [11.5, 3.6],
+            [22, 3.8],
+          ]
+        : end === 'r'
+          ? [
+              [6, 4],
+              [14.5, 3.4],
+              [20.5, 3.2],
+            ]
+          : [
+              [6, 4],
+              [14.5, 3.4],
+              [22, 3.8],
+            ];
+    for (const [cx, rx] of throws)
+      for (const [k, a] of [
+        [1, 40],
+        [0.6, 52],
+      ] as const)
+        img.ellipse(cx, 11.4, rx * k, 1 * k, [SHADE[0], SHADE[1], SHADE[2], a]);
+  };
+
+const stallCounter = stallCounterTile(null);
 
 /**
  * One of the wares on the counter: a dark rim with a lit dome of goods sitting in it.
@@ -1773,6 +1887,8 @@ export const PROP_TILES: Record<string, Painter> = {
   'stall-awning-m': stallAwning(1),
   'stall-awning-r': stallAwning(2),
   'stall-counter': stallCounter,
+  'stall-counter-l': stallCounterTile('l'),
+  'stall-counter-r': stallCounterTile('r'),
   'lantern-post': lanternPost,
   fountain,
   well,
@@ -2011,6 +2127,8 @@ const CONTACT_LUMA = 64;
  */
 const GROUND_PROPS = [
   'stall-counter',
+  'stall-counter-l',
+  'stall-counter-r',
   'signpost',
   'notice-board',
   'well',

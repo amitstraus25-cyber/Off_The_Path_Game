@@ -296,7 +296,18 @@ export function App({
             run={run}
             onReplay={onReplay}
             onReadResearch={onReadResearch}
-            cannotPost={ending === 'late' ? (strings['postLate'] ?? '') : cannotPost}
+            /*
+             * A late run is not posted, and since 2026-10-22 neither is a wolf run (apps/api
+             * answers 422 `wolf`): both are said up front rather than offered a Post the board
+             * will refuse.
+             */
+            cannotPost={
+              ending === 'late'
+                ? (strings['postLate'] ?? '')
+                : ending === 'wolf'
+                  ? (strings['wolfNotPosted'] ?? '')
+                  : cannotPost
+            }
             onPost={onPost}
           />
         );

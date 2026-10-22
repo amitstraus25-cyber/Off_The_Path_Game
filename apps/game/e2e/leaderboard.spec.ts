@@ -458,16 +458,13 @@ interface Outcome {
   notice: (sent: { handle?: string }) => string;
 }
 
+/*
+ * A POST THE BOARD TAKES IS NOT IN THIS LIST ANY MORE (2026-10-22). Over an empty board it no longer
+ * leaves the board empty: the adapter lays the player's own row over the read the edge served from
+ * before the post (`withYourRow`), which is the fix for the client's missing post, and the test
+ * after this loop holds it. What is left here are the outcomes that put no row up.
+ */
 const OUTCOMES: Outcome[] = [
-  {
-    what: 'a post the board takes',
-    answer: (sent) => ({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ handle: sent.handle, score: 900 }),
-    }),
-    notice: (sent) => say('handleAssigned').replace('{handle}', sent.handle!),
-  },
   {
     what: 'a run already on the board',
     answer: () => ({
@@ -539,6 +536,144 @@ for (const outcome of OUTCOMES) {
 }
 
 /*
+ * THE CLIENT'S MISSING POST, 2026-10-22, AS A BROWSER SEES IT. "Posted to the board as
+ * swift-apron-51", and the board under it did not have it: the read that followed the post was the
+ * edge's cached page from before the post. This board route plays that edge exactly -- it answers
+ * the empty page it answered at mount, every time -- and the player must still see their own row,
+ * marked as theirs, the moment the post answers. With the board the post read back from the table
+ * it is `confirmed`; without one, it is placed where the server counted it and marked `pending`.
+ */
+for (const [label, extra, state] of [
+  ['with the board the post read back', true, 'confirmed'],
+  ['with only the rank the post counted', false, 'pending'],
+] as const)
+  test(`a post the board takes shows the player their own row at once, over a stale board, ${label}`, async ({
+    page,
+  }) => {
+    let sent: { handle?: string } = {};
+    await page.route('**/api/score', async (route: Route) => {
+      sent = JSON.parse(route.request().postData() ?? '{}') as typeof sent;
+      const row = { rank: 1, handle: sent.handle, score: 900 };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          handle: sent.handle,
+          score: 900,
+          rank: 1,
+          ...(extra ? { entries: [row] } : {}),
+        }),
+      });
+    });
+    const board: Board = { reply: EMPTY_BOARD, calls: 0 };
+    await serveBoard(page, board);
+
+    await reachResults(page);
+    await expect(note(page)).toHaveText(say('boardEmpty'));
+    await post(page);
+
+    await expect(page.getByRole('status')).toHaveText(
+      say('handleAssigned').replace('{handle}', sent.handle!),
+    );
+    await expect.poll(() => board.calls, { message: 'the post did not re-read the board' }).toBe(2);
+    await expect(note(page)).toHaveAttribute('data-board', 'rows');
+    await expect(page.locator('.otp-board__row')).toHaveCount(1);
+    const yours = page.locator('.otp-board__row--you');
+    await expect(yours).toHaveCount(1);
+    await expect(yours).toContainText(sent.handle!);
+    await expect(yours).toHaveAttribute('data-yours', state);
+    await expectNoLime(page);
+  });
+
+/*
+ * BELOW THE TOP TEN, the review's finding of 2026-10-22 and the client's complaint over again for
+ * most players. Twelve earlier runs of 100, a 99 posted as "Assaf": the status said "Posted to the
+ * board as Assaf." and the board showed ranks 1 to 10, none of them the player's, although the
+ * server had answered rank 13. Ties rank the earliest first and 100 needs par, so the top ten fills
+ * with 94 to 100 soon after launch and a typical run lands here. The player must see the top ten, a
+ * break, and their own row at 13, marked as theirs -- with the board the post read back, and over
+ * the edge's page alone when the post could not read one.
+ */
+for (const [label, extra] of [
+  ['with the board the post read back', true],
+  ['with only the rank the post counted', false],
+] as const)
+  test(`a run counted below the top ten is shown under it, at its own rank, ${label}`, async ({
+    page,
+  }) => {
+    const hundreds = TEN.map((row) => ({ ...row, score: 100 }));
+    await page.route('**/api/score', async (route: Route) => {
+      const sent = JSON.parse(route.request().postData() ?? '{}') as { handle?: string };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          handle: sent.handle,
+          score: 99,
+          rank: 13,
+          ...(extra ? { entries: hundreds } : {}),
+        }),
+      });
+    });
+    const board: Board = { reply: rowsReply(hundreds), calls: 0 };
+    await serveBoard(page, board);
+
+    await reachResults(page);
+    await expect(page.locator('.otp-board__row')).toHaveCount(10);
+    await expect(page.locator('.otp-board__gap')).toHaveCount(0);
+    await page.locator('#otp-handle-input').fill('Assaf');
+    await post(page);
+
+    await expect(page.getByRole('status')).toHaveText(
+      say('handleAssigned').replace('{handle}', 'Assaf'),
+    );
+    await expect.poll(() => board.calls, { message: 'the post did not re-read the board' }).toBe(2);
+    const items = page.locator('.otp-board__rows > li');
+    await expect(items).toHaveCount(12);
+    // Ranks 1 to 10, the break, then the player's own row.
+    await expect(items.nth(10)).toHaveClass(/otp-board__gap/);
+    await expect(items.nth(10)).toHaveAttribute('aria-hidden', 'true');
+    const yours = page.locator('.otp-board__row--you');
+    await expect(yours).toHaveCount(1);
+    await expect(items.nth(11)).toHaveClass(/otp-board__row--you/);
+    await expect(yours).toHaveAttribute('data-yours', 'confirmed');
+    await expect(yours.locator('.otp-board__rank')).toHaveText('13');
+    await expect(yours.locator('.otp-board__handle')).toHaveText('Assaf');
+    await expect(yours.locator('.otp-board__you')).toHaveText(say('boardYouLabel'));
+    await expect(yours.locator('.otp-visually-hidden')).toHaveText(
+      say('boardRowYou')
+        .replace('{rank}', '13')
+        .replace('{handle}', 'Assaf')
+        .replace('{score}', '99'),
+    );
+    // The ten above it are the board as it stands, none of them claimed.
+    await expect(page.locator('.otp-board__row:not(.otp-board__row--you)')).toHaveCount(10);
+    // The break sits inside the board's own width, as every row does.
+    const fits = await page
+      .locator('.otp-board__rows')
+      .evaluate((el) => el.scrollWidth <= el.clientWidth);
+    expect(fits, 'the board is wider than its panel').toBe(true);
+    await expectNoLime(page);
+  });
+
+test('a name the player types is the name that goes up, in its tidy form', async ({ page }) => {
+  let sent: { handle?: string } = {};
+  await page.route('**/api/score', async (route: Route) => {
+    sent = JSON.parse(route.request().postData() ?? '{}') as typeof sent;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ handle: sent.handle, score: 10, rank: 1 }),
+    });
+  });
+  await reachResults(page);
+  await page.locator('#otp-handle-input').fill('  Little   Purple ');
+  await post(page);
+  await expect(page.getByRole('status')).toContainText('Little Purple');
+  expect(sent.handle).toBe('Little Purple');
+});
+
+/*
  * THE THIRD NODE, IN A BROWSER, WITH THE PLAYER'S OWN RUN ON THE BOARD.
  *
  * The block above drives every post outcome against an EMPTY board, which is the launch case and
@@ -578,13 +713,23 @@ interface RowOutcome {
   marked: boolean;
 }
 
+/*
+ * `marked` CHANGED 2026-10-22, deliberately, and only towards claiming less. A row is the reader's
+ * now when the SERVER's count says so (`withYourRow`): the post answers with the rank it wrote, and
+ * the row at or below that rank with the page's name and score is the reader's. Matching by name
+ * alone was the open item in PAUL_BRIEF section 7, and with typed names two players called Amit is
+ * an ordinary afternoon. So a page that never learned its rank -- a 409 for a press it never saw
+ * answered, a reply it could not believe, a reply that never came -- marks no row. The row is
+ * still on screen with the player's name on it; it simply does not say "your run". Under-claiming
+ * is the safe direction, and the node was built to fail that way.
+ */
 const ROW_OUTCOMES: RowOutcome[] = [
   {
     what: 'a post the board takes',
     answer: (sent) => ({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ handle: sent.handle, score: 900 }),
+      body: JSON.stringify({ handle: sent.handle, score: 900, rank: 2 }),
     }),
     notice: (sent) => say('handleAssigned').replace('{handle}', sent.handle!),
     marked: true,
@@ -597,7 +742,7 @@ const ROW_OUTCOMES: RowOutcome[] = [
       body: JSON.stringify({ error: 'that run is already on the board' }),
     }),
     notice: () => say('leaderboardAlready'),
-    marked: true,
+    marked: false,
   },
   {
     what: 'a post the board refuses',
@@ -621,14 +766,14 @@ const ROW_OUTCOMES: RowOutcome[] = [
       body: JSON.stringify({ handle: 'brave-lantern-42' }),
     }),
     notice: () => say('leaderboardDown'),
-    marked: true,
+    marked: false,
   },
   {
     // The reply that never comes: the adapter's own timeout has to fire, so this one is slow.
     what: 'a reply that never comes',
     answer: null,
     notice: () => say('leaderboardDown'),
-    marked: true,
+    marked: false,
   },
 ];
 
@@ -775,14 +920,13 @@ test('a slow older board read cannot overwrite a fast newer one', async ({ page 
     release = resolve;
   });
 
+  // A post that puts no row up (409): this is about the order two board reads settle in, and a
+  // post the board takes would lay the player's own row over call 3 (`withYourRow`).
   await page.route('**/api/score', (route: Route) =>
     route.fulfill({
-      status: 200,
+      status: 409,
       contentType: 'application/json',
-      body: JSON.stringify({
-        handle: (JSON.parse(route.request().postData() ?? '{}') as { handle: string }).handle,
-        score: 900,
-      }),
+      body: JSON.stringify({ error: 'that run is already on the board' }),
     }),
   );
   await page.route('**/api/top*', async (route: Route) => {
@@ -974,7 +1118,8 @@ test('the retry asks the board again, and your own row is marked when it arrives
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ handle: mine, score: 900 }),
+      // The rank the server counted for it: that, and not the name, is what marks the row.
+      body: JSON.stringify({ handle: mine, score: 900, rank: 3 }),
     }),
   );
   await post(page);
@@ -1080,7 +1225,7 @@ for (const width of [375, 768, 1280] as const) {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ handle: mine, score: 1000 }),
+        body: JSON.stringify({ handle: mine, score: 1000, rank: 3 }),
       }),
     );
     await post(page);

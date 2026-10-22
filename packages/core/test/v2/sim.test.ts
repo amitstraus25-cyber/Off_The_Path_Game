@@ -6,6 +6,7 @@ import { loadContent, parseContent } from '../../src/v2/load.ts';
 import { checkRunLog, toRunLog } from '../../src/v2/runlog.ts';
 import { score } from '../../src/v2/scoring.ts';
 import {
+  BRISK,
   READING,
   ROTE_SHARE,
   STRATEGIES,
@@ -123,7 +124,7 @@ describe('the trap stays a trap: properties checked against any content', () => 
 
   it('the rote line fails ON ITS OWN when the weights make a blind basket pay', () => {
     const v = variant();
-    v.scoring = { outOf: 100, good: 50, clean: 50 };
+    v.scoring = { outOf: 100, good: 50, clean: 50, speed: 0, parMs: 60_000 };
     const c = parseContent(v);
     expect(failing(c)).toEqual([ROTE]);
     expect(() => loadContent(v)).toThrow(/trap: no card-blind strategy/);
@@ -150,6 +151,13 @@ describe('the clock is honest: a reader can make it, in every deal, at the pace 
     // The bad courier card swaps a four-word line for a five-word one.
     expect(cardWords(courier, false) - cardWords(courier, true)).toBe(1);
     expect(readMs(courier, false)).toBe(cardWords(courier, false) * READING.msPerWord + 3000);
+  });
+
+  it('reads at whatever pace it is handed: BRISK is the meta-analysis rate with no pause to decide', () => {
+    const courier = skill('courier');
+    expect(readMs(courier, true, BRISK)).toBe(cardWords(courier, true, BRISK) * (60_000 / 238));
+    const quick = play(content, 'careful', { pace: brisk, reading: BRISK });
+    expect(quick.elapsedMs).toBeLessThan(play(content, 'careful', { pace: brisk }).elapsedMs);
   });
 
   it('careful arrives in time at a brisk pace, says by how much, and names the tightest deal', () => {

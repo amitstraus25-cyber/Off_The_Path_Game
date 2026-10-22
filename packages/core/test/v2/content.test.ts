@@ -186,9 +186,9 @@ describe('the deal', () => {
     expect(variantOf(good, skill(c, 'lantern'))).toBe(skill(c, 'lantern').bad);
   });
 
-  it('the ceiling is a clean arrival with every dealt-good skill taken', () => {
+  it('the ceiling is a clean arrival with every dealt-good skill taken, at par', () => {
     const c = parsed();
-    expect(ceiling(c)).toBe(c.scoring.clean + c.scoring.good * c.deal.good);
+    expect(ceiling(c)).toBe(c.scoring.clean + c.scoring.good * c.deal.good + c.scoring.speed);
     expect(ceiling(c)).toBe(100);
   });
 });
@@ -348,6 +348,14 @@ describe('lint rules', () => {
       'a ceiling that is not the score the player is told it is out of',
       (c) => void (c.scoring.outOf = 120),
       /best possible run scores 100, but the score is shown out of 120/,
+    ],
+    [
+      'a speed bonus that lets a faster basket one good skill short outscore a full one',
+      (c) => {
+        c.deal.good = 2;
+        c.scoring.speed = 90;
+      },
+      /a speed bonus of 90 lets a fast run with 1 good skills outscore a slow run with all 2/,
     ],
     [
       'a banned vendor word',

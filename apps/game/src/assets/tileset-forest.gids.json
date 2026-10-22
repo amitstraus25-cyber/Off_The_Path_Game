@@ -79,5 +79,7 @@
   "notice-board": 78,
   "door-note": 79,
   "gate-n": 80,
-  "gate-s": 81
+  "gate-s": 81,
+  "stall-counter-l": 82,
+  "stall-counter-r": 83
 }

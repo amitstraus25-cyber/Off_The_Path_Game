@@ -60,15 +60,32 @@ export const STRATEGIES: Record<string, Strategy> = {
  */
 export const READING = { msPerWord: 60_000 / 200, buttonWords: 2, decideMs: 3_000 } as const;
 
-export const cardWords = (s: Skill, good: boolean): number => {
+/** A reading pace: what a word costs, the buttons' words, and the pause to decide. */
+export interface Reading {
+  msPerWord: number;
+  buttonWords: number;
+  decideMs: number;
+}
+
+/**
+ * THE BRISK READ, which is what PAR is measured at (scoring `parMs`, real-content.test.ts). The
+ * same card, every word of it, at the meta-analysis rate itself -- 238 words a minute for adults
+ * reading English non-fiction silently (Brysbaert 2019, the source `READING` slows down) -- and no
+ * pause to decide. It is the pace of a reader who reads every word once and does not dither: the
+ * bar for the whole speed bonus, not a pace anyone is held to. `READING` stays the clock check's,
+ * because "can a careful reader make it at all" must be asked of the slower reader.
+ */
+export const BRISK: Reading = { msPerWord: 60_000 / 238, buttonWords: 2, decideMs: 0 };
+
+export const cardWords = (s: Skill, good: boolean, reading: Reading = READING): number => {
   const card = s[good ? 'good' : 'bad'].card;
   return (
     [s.name, s.promise, ...card.take, card.leave].reduce((n, l) => n + countWords(l), 0) +
-    READING.buttonWords
+    reading.buttonWords
   );
 };
-export const readMs = (s: Skill, good: boolean): number =>
-  cardWords(s, good) * READING.msPerWord + READING.decideMs;
+export const readMs = (s: Skill, good: boolean, reading: Reading = READING): number =>
+  cardWords(s, good, reading) * reading.msPerWord + reading.decideMs;
 
 /**
  * How long the world takes, which the content does not know: walking to each character, and
@@ -86,6 +103,8 @@ export interface PlayOptions {
   pace?: Pace;
   /** The deal. Also seeds the random strategy. Default 0. */
   seed?: number;
+  /** How a card is read when the run is paced. Default `READING`. */
+  reading?: Reading;
 }
 
 export interface Played {
@@ -125,7 +144,7 @@ function playWith(content: Content, strategy: string, decide: Strategy, opts: Pl
     send({ type: 'MEET', c: ch.id, at: (at += walkMs) });
     if (inspect) {
       send({ type: 'INSPECT', s: skill.id, at: (at += talkMs) });
-      const reading = paced ? readMs(skill, good) : 0;
+      const reading = paced ? readMs(skill, good, opts.reading) : 0;
       send({ type: 'VERDICT', s: skill.id, v: verdict, at: (at += reading) });
     } else send({ type: 'VERDICT', s: skill.id, v: verdict, at: (at += talkMs) });
   }

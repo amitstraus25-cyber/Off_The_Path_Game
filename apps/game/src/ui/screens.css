@@ -343,12 +343,6 @@
 
 /* ---------------------------------------------------------------- results */
 
-.otp-hero {
-  display: flex;
-  gap: calc(18px * var(--otp-ui));
-  align-items: center;
-}
-
 /* The margin lives on the `h1.otp-hero__score` rule further down, which is more specific and is
    the one that applies: Results renders the score as an <h1> and nothing else wears this class. */
 .otp-hero__score {
@@ -448,38 +442,82 @@
 }
 
 /*
- * The minted handle: the one name on this screen, which the player reads and cannot type.
+ * THE NAME FIELD, A REAL INPUT AGAIN (the client, 2026-10-22: "I want people to put their own
+ * name"). For one round this was a minted name shown as a readout, and the rule then was that a
+ * readout wears a FILL, not a BOUNDARY, because a boundary is the universal "type here" signal and
+ * the screen offered nothing to type into. The same argument runs the other way now: this IS a
+ * field, so it wears the field's boundary -- a 2px Ash outline on the Shell body (6.9:1, well clear
+ * of the 3:1 a control's edge needs), a pill, and input padding -- and the label sits above it as an
+ * eyebrow, visible, because a placeholder is not a label.
  *
- * This was `.otp-field` until 2026-10-21, and it wore an input's costume on something that is not
- * an input -- a 2px Ash boundary, input padding and a pill radius, wrapped around a name the
- * player has no way to edit. A boundary is the universal "type here" signal, so the screen
- * advertised an action it does not offer. That is the same mistake `test/handle-field.test.ts`
- * guards in the markup, arriving through the stylesheet instead; the markup has been right since
- * decision D4 and the CSS kept the costume on for four rounds after.
- *
- * A readout is a FILL, not a BOUNDARY. Natural ground, no border, and letter-spacing so the name
- * reads as a minted token rather than a string somebody entered.
- *
- * Deliberately NOT Haze: on this screen Haze already means "missed" (.otp-recap__row--missed), and
- * a second meaning for the same tint would blunt the first one.
- *
- * The padding carries the two pixels the border used to occupy, so the pill keeps its outer size.
- *
- * The flex pair here was an inline style in Results.tsx. It sat in the one place brand rules cannot
- * reach and no reviewer reads; the owner who found it could not lift it, because this file had a
- * different owner that round and two owners never share a file.
+ * `.otp-handle` is the LABEL element wrapping the input, so a tap anywhere on the caption focuses
+ * the field. The flex pair keeps the caption and the pill together as one item of `.otp-post`.
  */
 .otp-handle {
   display: flex;
-  align-items: center;
-  flex: 1 1 200px;
-  background: var(--cyera-natural);
-  border-radius: var(--otp-r-pill);
-  padding: calc(13px * var(--otp-ui)) calc(16px * var(--otp-ui));
-  font: 500 calc(18px * var(--otp-ui)) / 1.2 var(--cyera-font-sans);
-  letter-spacing: 0.04em;
-  color: var(--cyera-black);
+  flex-direction: column;
+  gap: calc(4px * var(--otp-ui));
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.otp-handle__label {
+  font-size: max(11px, calc(12px * var(--otp-ui)));
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyera-ash);
+}
+
+.otp-handle__input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   min-height: var(--otp-touch-min);
+  border: 2px solid var(--cyera-ash);
+  border-radius: var(--otp-r-pill);
+  background: var(--cyera-shell);
+  color: var(--cyera-black);
+  padding: calc(11px * var(--otp-ui)) calc(18px * var(--otp-ui));
+  /* 16px at the least, so a phone does not zoom the page in when the field takes focus. */
+  font: 500 max(16px, calc(18px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
+  letter-spacing: 0.02em;
+}
+
+/* A name the board will not take: the boundary thickens to Deep Purple, and the sentence below says
+   why. Weight and words, never a red. */
+.otp-handle__input[aria-invalid='true'] {
+  border-color: var(--cyera-deep-purple);
+  border-width: 3px;
+}
+
+/* The buttons sit on the field's own line, under the caption, not beside the caption. */
+.otp-post > .otp-button {
+  align-self: flex-end;
+}
+
+.otp-handle__problem {
+  display: flex;
+  align-items: baseline;
+  gap: calc(8px * var(--otp-ui));
+  color: var(--cyera-deep-purple);
+  font-weight: 500;
+}
+
+/* The "!" disc the reveal's marked line wears, so a problem is a shape and a sentence. */
+.otp-handle__problem::before {
+  content: '!' / '';
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 50%;
+  background: var(--cyera-deep-purple);
+  color: var(--cyera-offwhite);
+  font-size: 0.9em;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .otp-fine {
@@ -733,8 +771,30 @@ h2.otp-section-label {
   color: var(--cyera-black);
 }
 
-/* 4+ is a numeral, not a disc: no background at all, which is why there is no
-   rule for data-rank='plain'. */
+/* 4+ is a numeral, not a disc: no background at all. The one rule for
+   data-rank='plain' lets the numeral grow past the disc's width, because the
+   reader's own row can now sit far below the top ten (rank 400, rank 1234). */
+.otp-board__rank[data-rank='plain'] {
+  width: auto;
+  min-width: max(22px, calc(26px * var(--otp-ui)));
+}
+
+/* The break between the top ten and the reader's own row counted below it
+   (Results.tsx, `withYourRow` case 0): a quiet vertical ellipsis in the rank
+   column, no ground, so 13 under 10 reads as "further down", not a misprint. */
+.otp-board__gap {
+  display: flex;
+  padding: 0 calc(16px * var(--otp-ui));
+  line-height: 1;
+}
+
+.otp-board__gap-mark {
+  min-width: max(22px, calc(26px * var(--otp-ui)));
+  text-align: center;
+  font-size: max(14px, calc(18px * var(--otp-ui)));
+  font-weight: 600;
+  color: var(--cyera-haze);
+}
 
 .otp-board__handle {
   flex: 1 1 auto;
@@ -786,6 +846,22 @@ h2.otp-section-label {
 .otp-board__row--you .otp-board__rank[data-rank='3'] {
   background: var(--cyera-black);
   color: var(--cyera-lilac);
+}
+
+/*
+ * "Joining the board", on the reader's own row when the adapter placed it from the post's answer
+ * because the cached board had not caught up (net/leaderboard.ts `withYourRow`, `yours: 'pending'`).
+ * Small and plain beside the score, in the row's own Black, so the row reads as the reader's run
+ * still settling rather than as a row the board sent.
+ */
+.otp-board__wait {
+  flex: none;
+  font-size: max(11px, calc(12px * var(--otp-ui)));
+  color: var(--cyera-haze);
+}
+
+.otp-board__row--you .otp-board__wait {
+  color: var(--cyera-black);
 }
 
 .otp-board__retry {
@@ -1598,21 +1674,6 @@ html[data-cabinet='overlay'] .otp-touch {
   text-transform: uppercase;
   color: var(--cyera-deep-purple);
 }
-/*
- * The row's name and the player's answer, with the skill's picture at the end of the line: 64px,
- * the art's own size and never a fraction of it, so the pixels stay whole (PIXEL_STANDARD section
- * 1). It sits beside the name rather than beside the badge, so the badge keeps its column and the
- * pairs below take the row's full width.
- */
-.otp-reveal__who {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-.otp-reveal__named {
-  min-width: 0;
-}
 .otp-reveal__icon {
   flex: none;
   width: 64px;
@@ -1690,6 +1751,71 @@ html[data-cabinet='overlay'] .otp-touch {
   line-height: 1;
 }
 
+/* ------------------------------------------- results, 2026-10-22: score first, then the cards */
+
+/*
+ * THE RESULT, at the top: the ending in one line, the score and what it is made of, the count of
+ * bad skills spotted and the way back in. It is the first thing on the screen and it is meant to
+ * read as a reward -- a big numeral, a short sum under it -- rather than as the head of a report.
+ */
+.otp-hero {
+  display: block;
+  margin-bottom: calc(22px * var(--otp-ui));
+}
+
+.otp-hero__ending {
+  margin: 0 0 calc(12px * var(--otp-ui));
+  font-size: calc(32px * var(--otp-ui));
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  color: var(--cyera-deep-purple);
+}
+
+.otp-hero .otp-section-label {
+  margin: 0 0 calc(2px * var(--otp-ui));
+}
+
+.otp-hero__score {
+  margin: 0 0 calc(12px * var(--otp-ui));
+}
+
+/* The sum: three short pairs on Natural chips, side by side where there is room. */
+.otp-hero__parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(8px * var(--otp-ui));
+  margin: 0;
+}
+
+.otp-hero__part {
+  display: flex;
+  align-items: baseline;
+  gap: calc(8px * var(--otp-ui));
+  padding: calc(6px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  border-radius: var(--otp-r-pill);
+  background: var(--cyera-natural);
+}
+
+.otp-hero__part dt {
+  font-size: max(12px, calc(14px * var(--otp-ui)));
+  color: var(--cyera-ash);
+}
+
+.otp-hero__part dd {
+  margin: 0;
+  font-size: max(14px, calc(18px * var(--otp-ui)));
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--cyera-deep-purple);
+}
+
+.otp-hero__part dd small {
+  font-size: max(12px, calc(13px * var(--otp-ui)));
+  font-weight: 400;
+  color: var(--cyera-ash);
+}
+
 /* The replay hook: the count, and the way back in beside it. */
 .otp-replay {
   display: flex;
@@ -1697,7 +1823,7 @@ html[data-cabinet='overlay'] .otp-touch {
   align-items: center;
   justify-content: space-between;
   gap: calc(10px * var(--otp-ui)) calc(16px * var(--otp-ui));
-  margin: calc(14px * var(--otp-ui)) 0 calc(6px * var(--otp-ui));
+  margin: calc(14px * var(--otp-ui)) 0 0;
   padding: calc(12px * var(--otp-ui)) calc(16px * var(--otp-ui));
   border-radius: var(--otp-r-panel);
   background: var(--cyera-natural);
@@ -1710,11 +1836,143 @@ html[data-cabinet='overlay'] .otp-touch {
   color: var(--cyera-deep-purple);
 }
 
-.otp-reveal__ending {
-  margin: calc(10px * var(--otp-ui)) 0 calc(4px * var(--otp-ui));
+/*
+ * THE SEVEN CARDS. A grid of small tiles in walking order, two or three across where there is
+ * room and one column on a phone. `align-items: start` so a tile that has been turned over grows
+ * on its own: its neighbours keep their size rather than stretching to match it.
+ */
+.otp-tiles__title {
+  margin-bottom: calc(2px * var(--otp-ui));
 }
-.otp-reveal__ending .otp-body-text {
-  margin: 0 0 calc(4px * var(--otp-ui));
+.otp-tiles__hint {
+  margin: 0 0 calc(10px * var(--otp-ui));
+}
+.otp-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: calc(10px * var(--otp-ui));
+  align-items: start;
+}
+
+/*
+ * One tile. Natural for a skill dealt safe; Haze with the Deep Purple left bar for one dealt unsafe
+ * -- UI_FOUNDATIONS section 5's two recap rows, so the reveal keeps the vocabulary the brand gave
+ * it. The status is also the badge's shape and the word beside it.
+ */
+.otp-tile {
+  border-radius: var(--otp-r-panel);
+  background: var(--cyera-natural);
+  transform-origin: 50% 50%;
+}
+.otp-tile--bad {
+  background: var(--cyera-haze);
+  border-left: 5px solid var(--cyera-deep-purple);
+}
+
+/* The face is the whole top of the tile, and it is the button. */
+.otp-tile__face {
+  display: flex;
+  align-items: center;
+  gap: calc(12px * var(--otp-ui));
+  width: 100%;
+  min-height: var(--otp-touch-min);
+  padding: calc(10px * var(--otp-ui)) calc(14px * var(--otp-ui)) calc(10px * var(--otp-ui))
+    calc(16px * var(--otp-ui));
+  border: 0;
+  border-radius: var(--otp-r-panel);
+  background: transparent;
+  color: var(--cyera-black);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.otp-ui .otp-tile__face:focus-visible {
+  outline: 2px solid var(--cyera-deep-purple);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+.otp-tile__face .otp-reveal__icon {
+  margin: 0;
+}
+.otp-tile__text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.otp-tile__name {
+  font-size: calc(19px * var(--otp-ui));
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--cyera-deep-purple);
+}
+.otp-tile__mark {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--otp-ui));
+}
+.otp-tile__mark .otp-recap__badge {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  margin: 0;
+}
+.otp-tile__mark .otp-recap__status {
+  margin: 0;
+  color: var(--cyera-black);
+}
+.otp-tile .otp-reveal__chose {
+  margin: 0;
+}
+
+/* "See why" / "Flip back": an underlined word at the end of the face, so the face says it turns. */
+.otp-tile__flip {
+  flex: none;
+  align-self: center;
+  font-size: max(12px, calc(14px * var(--otp-ui)));
+  font-weight: 500;
+  color: var(--cyera-deep-purple);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.otp-tile__back {
+  padding: 0 calc(16px * var(--otp-ui)) calc(14px * var(--otp-ui)) calc(18px * var(--otp-ui));
+}
+.otp-tile__back .otp-recap__hidden {
+  margin-top: 0;
+  margin-bottom: calc(8px * var(--otp-ui));
+}
+.otp-tile--bad .otp-tile__back .otp-recap__hidden {
+  background: var(--cyera-natural);
+}
+
+/*
+ * THE TURN. The tile rotates in from edge-on when it is turned over, so it reads as a card being
+ * flipped rather than a drawer sliding open. Played only on the way to the back (`data-open` going
+ * true), and not at all under reduced motion: there the back simply appears.
+ */
+.otp-tile[data-open='true'] {
+  animation: otp-tile-turn 320ms ease-out both;
+}
+@keyframes otp-tile-turn {
+  from {
+    transform: perspective(900px) rotateY(-88deg);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .otp-tile[data-open='true'] {
+    animation: none;
+  }
+}
+
+/* `h2.otp-section-label` zeroes the top margin for every heading of that role, so the air above
+   the post heading is put back at the same specificity plus one. */
+h2.otp-section-label.otp-post__title {
+  margin-top: calc(26px * var(--otp-ui));
 }
 
 @media (max-width: 480px) {

@@ -32,8 +32,10 @@ export interface Harness {
   deps: Deps;
   /** The server clock the deps read. Tests move it. */
   clock: Clock;
-  /** The row that was handed to the table, parsed back out of the request body. */
+  /** The row that was handed to the table, parsed back out of the first insert's body. */
   written(): { handle: string; score: number } | undefined;
+  /** Only the inserts: a post that writes also counts and reads straight after (handleScore). */
+  inserts(): Call[];
 }
 
 /** The server's clock, as a box a test can move. */
@@ -67,6 +69,38 @@ export interface Instance {
  */
 export const created = (): Response => new Response(null, { status: 201 });
 
+/** The inserts among some calls: the only calls that write. */
+export const insertsOf = (calls: readonly Call[]): Call[] =>
+  calls.filter((c) => c.init.method === 'POST');
+
+/**
+ * A table in memory that answers the three requests the store sends the way PostgREST does: an
+ * insert is `201` with no body, a HEAD with `Prefer: count=exact` is the count of the rows its
+ * `score=gte.N` filter matches in `Content-Range`, and a read is the rows, highest first and then
+ * oldest first. It reads the query the store built, so a filter the store forgot is a filter this
+ * forgets too -- the store's own tests assert the query text itself.
+ */
+export function table(rows: { handle: string; score: number }[] = []): (call: Call) => Response {
+  return ({ url, init }) => {
+    const q = new URL(url).searchParams;
+    if (init.method === 'POST') {
+      rows.push(...(JSON.parse(String(init.body)) as { handle: string; score: number }[]));
+      return created();
+    }
+    const min = Number((q.get('score') ?? 'gte.0').replace(/^gte?\./u, ''));
+    const strict = (q.get('score') ?? '').startsWith('gt.');
+    const on = rows.filter((r) => (strict ? r.score > min : r.score >= min));
+    if (init.method === 'HEAD')
+      return new Response(null, {
+        status: 200,
+        headers: { 'content-range': on.length === 0 ? '*/0' : `0-${on.length - 1}/${on.length}` },
+      });
+    // Stable sort: equal scores keep insertion order, which is created_at ascending.
+    const sorted = [...on].sort((a, b) => b.score - a.score);
+    return jsonResponse(sorted.slice(0, Number(q.get('limit') ?? sorted.length)));
+  };
+}
+
 /**
  * A reply whose body errors instead of arriving -- a connection torn after the headers.
  * `res.text()` rejects on it, which is the one case neither "empty" nor "a body" describes.
@@ -82,7 +116,7 @@ export const unreadable = (status: number): Response =>
   );
 
 export function harness(
-  reply: (call: Call) => Response = created,
+  reply: (call: Call) => Response = table(),
   instance: Instance = {},
 ): Harness {
   const calls: Call[] = [];
@@ -106,10 +140,11 @@ export function harness(
       now: () => clock.now,
     },
     written() {
-      const body = calls[0]?.init.body;
+      const body = insertsOf(calls)[0]?.init.body;
       if (typeof body !== 'string') return undefined;
       return (JSON.parse(body) as { handle: string; score: number }[])[0];
     },
+    inserts: () => insertsOf(calls),
   };
 }
 
@@ -137,10 +172,15 @@ export interface Ticketed {
  */
 export function ticketed(
   clock: Clock,
-  { strategy = 'careful', postAfterMs = 10_000, handle = 'brave-lantern-42' } = {},
+  {
+    strategy = 'careful',
+    postAfterMs = 10_000,
+    handle = 'brave-lantern-42',
+    pace = undefined as v2.Pace | undefined,
+  } = {},
 ): Ticketed {
   const { seed, token } = TOKENS.issue(clock.now);
-  const log = v2.toRunLog(runOf(strategy, seed));
+  const log = v2.toRunLog(runOf(strategy, seed, pace));
   clock.now += (log.events.at(-1)?.at ?? 0) + postAfterMs;
   return { handle, log, token };
 }

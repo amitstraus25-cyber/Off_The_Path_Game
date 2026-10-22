@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readStoreConfig } from '../src/env.ts';
-import { V2_LAUNCH } from '../src/store.ts';
+import { BOARD_SINCE } from '../src/store.ts';
 import { CONFIG, created, harness, jsonResponse, unreadable } from './fake.ts';
 
 /*
@@ -110,7 +110,10 @@ describe('the table adapter', () => {
 
   it('refuses to write a row the game could not have produced, before the network', async () => {
     const h = harness();
-    await expect(h.store.add({ handle: 'wolfspotter', score: 10 })).rejects.toThrow();
+    await expect(h.store.add({ handle: '<b>wolf</b>', score: 10 })).rejects.toThrow();
+    // Only the tidy form the board stores: the handler tidies, and this refuses anything it missed.
+    await expect(h.store.add({ handle: ' Amit', score: 10 })).rejects.toThrow();
+    await expect(h.store.add({ handle: 'sh1t', score: 10 })).rejects.toThrow();
     await expect(h.store.add({ handle: 'brave-lantern-42', score: -1 })).rejects.toThrow();
     await expect(h.store.add({ handle: 'brave-lantern-42', score: 1.5 })).rejects.toThrow();
     expect(h.calls).toHaveLength(0);
@@ -133,11 +136,19 @@ describe('the table adapter', () => {
     expect(h.calls[0]?.url).toContain('limit=28');
   });
 
-  it('reads only rows from the v2 launch on, so v1 runs out of 1,000 never outrank a v2 run', async () => {
+  it('reads only rows scored by the speed rule, so no older run outranks one that had to be fast', async () => {
     const h = harness(() => jsonResponse([]));
     await h.store.top(7);
     const asked = new URL(h.calls[0]!.url);
-    expect(asked.searchParams.get('created_at')).toBe(`gte.${V2_LAUNCH}`);
+    expect(asked.searchParams.get('created_at')).toBe(`gte.${BOARD_SINCE}`);
+    // Later than the v2 launch it replaced, so the v1 rows out of 1,000 stay out too.
+    expect(Date.parse(BOARD_SINCE)).toBeGreaterThan(Date.parse('2026-10-21T23:45:00Z'));
+  });
+
+  it('reads no zero: the wolf runs written before they stopped being posted stay off the board', async () => {
+    const h = harness(() => jsonResponse([]));
+    await h.store.top(7);
+    expect(new URL(h.calls[0]!.url).searchParams.get('score')).toBe('gt.0');
   });
 
   it('never asks the table for more than a bounded window', async () => {
@@ -153,7 +164,7 @@ describe('the table adapter', () => {
      * asking for a wider window means the real rows arrive and the junk is dropped from the middle.
      */
     const junk = Array.from({ length: 10 }, (_, i) => ({
-      handle: `hand-written-${i}`,
+      handle: `<hand written ${i}>`,
       score: 1e9,
     }));
     const real = Array.from({ length: 3 }, (_, i) => ({
@@ -480,5 +491,44 @@ describe('a refusal names the reason and nothing about the player', () => {
     expect(error.message).toContain('23514: violates check constraint');
     expect(error.message.length).toBeLessThan(400);
     expect(error.message.length).toBeLessThan(flood.length);
+  });
+
+  it('counts a rank with a HEAD over the same board the read shows, and no row comes back', async () => {
+    const h = harness(
+      () => new Response(null, { status: 200, headers: { 'content-range': '0-6/7' } }),
+    );
+    await expect(h.store.rank(70)).resolves.toBe(7);
+    const { url, init } = h.calls[0]!;
+    const asked = new URL(url);
+    expect(init.method).toBe('HEAD');
+    expect((init.headers as Record<string, string>)['prefer']).toBe('count=exact');
+    expect((init.headers as Record<string, string>)['apikey']).toBe(CONFIG.serviceRoleKey);
+    expect(url).not.toContain(CONFIG.serviceRoleKey);
+    expect(asked.searchParams.get('select')).toBe('score');
+    expect(asked.searchParams.get('score')).toBe('gte.70');
+    expect(asked.searchParams.get('created_at')).toBe(`gte.${BOARD_SINCE}`);
+  });
+
+  it('never counts zeros, even for a score of zero', async () => {
+    const h = harness(
+      () => new Response(null, { status: 200, headers: { 'content-range': '*/3' } }),
+    );
+    await expect(h.store.rank(0)).resolves.toBe(3);
+    expect(new URL(h.calls[0]!.url).searchParams.get('score')).toBe('gte.1');
+  });
+
+  it('throws rather than inventing a rank', async () => {
+    await expect(harness(() => new Response(null, { status: 403 })).store.rank(10)).rejects.toThrow(
+      'count refused with 403',
+    );
+    await expect(harness(() => new Response(null, { status: 200 })).store.rank(10)).rejects.toThrow(
+      'without a total',
+    );
+    // The row was just written, so a count of none is not a count of this board.
+    await expect(
+      harness(
+        () => new Response(null, { status: 200, headers: { 'content-range': '*/0' } }),
+      ).store.rank(10),
+    ).rejects.toThrow('without a total');
   });
 });

@@ -449,3 +449,68 @@ describe('the clock, at the pace of the real map', () => {
     expect(tour().tiles).toBeLessThanOrEqual(maxTourTiles);
   });
 });
+
+/*
+ * PAR, THE TIME THAT EARNS THE WHOLE SPEED BONUS (scoring.ts `speedBonus`), DERIVED, NOT CHOSEN.
+ *
+ * The client's rule is "a combination of time and correct answers", correctness first. Par is the
+ * arrival time of a careful run -- every card read, the three good taken -- by a player who walks
+ * the shortest content-order tour of the shipped map ONCE (no wandering: `tour()` above, so the
+ * same four-connected walk the clock check doubles) and reads every greeting and every card at
+ * `v2.BRISK`: the adult silent-reading rate itself, 238 words a minute, with no pause to decide.
+ * Taken in the SLOWEST deal, so a brisk reader can earn the whole bonus in every deal, not only in
+ * the deals whose bad cards happen to be short.
+ *
+ * `scoring.parMs` in the content must sit at or above that and within ten seconds of it: under it
+ * and no honest reader can reach 100; far over it and the bonus stops measuring anything. A copy
+ * edit that lengthens a card by a few words moves the derived par by about a quarter of a second a
+ * word, which is why this is a band and not an equality.
+ */
+describe('par is the brisk careful run on the shortest walk, in the slowest deal', () => {
+  const briskTalkMs = (): number =>
+    Math.max(...content.characters.map((c) => words(c.greet))) * v2.BRISK.msPerWord;
+
+  const derivedPar = (): { ms: number; why: string } => {
+    const { tiles } = tour();
+    const walkMs = Math.ceil(
+      (((tiles * TILE) / WALK_SPEED) * 1000) / (content.characters.length + 1),
+    );
+    const runs = seeds.map((seed) =>
+      v2.play(content, 'careful', {
+        seed,
+        pace: { walkMs, talkMs: briskTalkMs() },
+        reading: v2.BRISK,
+      }),
+    );
+    const slowest = runs.reduce((w, p) => (p.elapsedMs > w.elapsedMs ? p : w));
+    return {
+      ms: slowest.elapsedMs,
+      why: `tour ${tiles} tiles; slowest brisk careful run ${Math.round(slowest.elapsedMs)}ms in deal ${slowest.seed}; parMs ${content.scoring.parMs}`,
+    };
+  };
+
+  it('scoring.parMs is at or over the derived par, and within ten seconds of it', () => {
+    const { ms, why } = derivedPar();
+    expect(content.scoring.parMs, why).toBeGreaterThanOrEqual(ms);
+    expect(content.scoring.parMs, why).toBeLessThanOrEqual(ms + 10_000);
+  });
+
+  it('a brisk careful run at par scores the ceiling, and the same run at the slower READING pace does not', () => {
+    const { tiles } = tour();
+    const walkMs = Math.ceil(
+      (((tiles * TILE) / WALK_SPEED) * 1000) / (content.characters.length + 1),
+    );
+    for (const seed of seeds) {
+      const brisk = v2.play(content, 'careful', {
+        seed,
+        pace: { walkMs, talkMs: briskTalkMs() },
+        reading: v2.BRISK,
+      });
+      expect(brisk.total, `deal ${seed}`).toBe(content.scoring.outOf);
+      const slow = v2.play(content, 'careful', { seed, pace: paceFor(tiles) });
+      expect(slow.ending).toBe('grandma');
+      expect(slow.total, `deal ${seed}`).toBeLessThan(content.scoring.outOf);
+      expect(slow.total).toBeGreaterThanOrEqual(content.scoring.clean + content.scoring.good * 3);
+    }
+  });
+});

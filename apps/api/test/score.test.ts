@@ -1,9 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MAX_LOG_EVENTS, v2 } from '@otp/core';
-import { CLOCK_SKEW_MS, MIN_RUN_MS, POST_WINDOW_MS, handleScore } from '../src/handlers.ts';
+import { CLOCK_SKEW_MS, POST_WINDOW_MS, handleScore } from '../src/handlers.ts';
 import { createRecentRuns, createWriteBudget } from '../src/limit.ts';
 import { createRunTokens, signingKey } from '../src/token.ts';
-import { CONFIG, T0, TOKENS, harness, noStore, postChunked, postScore, ticketed } from './fake.ts';
+import {
+  CONFIG,
+  T0,
+  TOKENS,
+  harness,
+  insertsOf,
+  noStore,
+  postChunked,
+  postScore,
+  table,
+  ticketed,
+} from './fake.ts';
 import type { Call, Clock } from './fake.ts';
 import { createStore } from '../src/store.ts';
 import { claimedMs, content, runOf } from './helpers.ts';
@@ -35,9 +46,87 @@ describe('the score the board stores', () => {
     const res = await handleScore(postScore(run), h.deps);
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ handle: HANDLE, score: 100 });
+    await expect(res.json()).resolves.toEqual({
+      handle: HANDLE,
+      score: 100,
+      rank: 1,
+      entries: [{ rank: 1, handle: HANDLE, score: 100 }],
+    });
     // The row that reached the table carries that number and nothing else.
     expect(h.written()).toEqual({ handle: HANDLE, score: scoreOf(run.log) });
+  });
+
+  it('counts the clock: the same careful basket, walked slowly, earns less of the speed bonus', async () => {
+    const h = harness();
+    // Twenty seconds a walk: a careful run arrives at 2:54, six seconds from the buzzer.
+    const run = ticketed(h.clock, { pace: { walkMs: 20_000, talkMs: 1000 } });
+    const slow = scoreOf(run.log);
+
+    const res = await handleScore(postScore(run), h.deps);
+
+    expect(res.status).toBe(200);
+    expect(slow).toBeLessThan(100);
+    expect(slow).toBeGreaterThanOrEqual(70);
+    expect(h.written()).toEqual({ handle: HANDLE, score: slow });
+  });
+
+  it('stores a free name in its tidy form, and answers with that form', async () => {
+    const h = harness();
+    const res = await handleScore(
+      postScore(ticketed(h.clock, { handle: '  Little   Purple ' })),
+      h.deps,
+    );
+    expect(res.status).toBe(200);
+    expect(h.written()).toEqual({ handle: 'Little Purple', score: 100 });
+    await expect(res.json()).resolves.toMatchObject({ handle: 'Little Purple', rank: 1 });
+  });
+
+  it('answers where the row landed and the board as the table holds it now, never the edge copy', async () => {
+    // Two rows already there: one above this run, one below.
+    const rows = [
+      { handle: 'quick-otter-12', score: 100 },
+      { handle: 'calm-moss-40', score: 40 },
+    ];
+    const h = harness(table(rows));
+    const run = ticketed(h.clock, { strategy: 'leave-all', handle: 'Amit' });
+
+    const res = await handleScore(postScore(run), h.deps);
+
+    // Leave-all is a clean arrival with nothing in hand: 10, whatever the pace.
+    await expect(res.json()).resolves.toEqual({
+      handle: 'Amit',
+      score: 10,
+      rank: 3,
+      entries: [
+        { rank: 1, handle: 'quick-otter-12', score: 100 },
+        { rank: 2, handle: 'calm-moss-40', score: 40 },
+        { rank: 3, handle: 'Amit', score: 10 },
+      ],
+    });
+    // The count is a HEAD, so no other player's row comes back to answer it.
+    expect(h.calls.map((c) => c.init.method).sort()).toEqual(['GET', 'HEAD', 'POST']);
+  });
+
+  it('is still a stored row when the count and the read after it fail: no rank, no board, no error', async () => {
+    let n = 0;
+    const h = harness(() =>
+      n++ === 0 ? new Response(null, { status: 201 }) : new Response('', { status: 503 }),
+    );
+    const res = await handleScore(postScore(ticketed(h.clock)), h.deps);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ handle: HANDLE, score: 100, rank: null });
+    expect(h.inserts()).toHaveLength(1);
+  });
+
+  it('is still a stored row when the count and the read throw something that is not even an Error', async () => {
+    let n = 0;
+    const h = harness(() => {
+      if (n++ === 0) return new Response(null, { status: 201 });
+      throw 'a string';
+    });
+    const res = await handleScore(postScore(ticketed(h.clock)), h.deps);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ handle: HANDLE, score: 100, rank: null });
   });
 
   it('cannot be claimed: a body carrying a score is refused outright, and nothing is stored', async () => {
@@ -53,11 +142,15 @@ describe('the score the board stores', () => {
     expect(h.written()?.score).toBe(10);
   });
 
-  it('stores a wolf run at zero: it finished, and the board says what it did', async () => {
+  it('does not post a wolf run: it finished at 0, and the board ranks runs that kept the wolf out', async () => {
     const h = harness();
     const res = await handleScore(postScore(ticketed(h.clock, { strategy: 'greedy' })), h.deps);
-    expect(res.status).toBe(200);
-    expect(h.written()?.score).toBe(0);
+    expect(res.status).toBe(422);
+    await expect(res.json()).resolves.toEqual({
+      error: 'a run that let the wolf in is not posted',
+      reason: 'wolf',
+    });
+    expect(h.calls).toHaveLength(0);
   });
 
   it('does not post a late run at all', async () => {
@@ -100,13 +193,44 @@ describe('the score the board stores', () => {
     expect(h.calls).toHaveLength(0);
   });
 
-  it('is not stored under a handle the game did not mint', async () => {
-    for (const handle of ['wolfspotter', 'cyera-admin-42', '<script>alert(1)</script>', '']) {
+  it('is not stored under a name the board refuses, and says it was the name, not the run', async () => {
+    for (const handle of [
+      'cyera-admin-42',
+      '<script>alert(1)</script>',
+      '',
+      'Al',
+      'tel 555 1234',
+      'sh1t',
+    ]) {
       const h = harness();
       const res = await handleScore(postScore(ticketed(h.clock, { handle })), h.deps);
-      expect(res.status, handle).toBe(400);
+      expect(res.status, handle).toBe(422);
+      await expect(res.json()).resolves.toEqual({
+        error: 'that name cannot go on the board',
+        reason: 'name',
+      });
       expect(h.calls).toHaveLength(0);
     }
+  });
+
+  it('spends nothing on a refused name: the same run posts under a better one', async () => {
+    const instance = { recent: createRecentRuns(), clock: { now: T0 } };
+    const run = ticketed(instance.clock);
+    expect(
+      (await handleScore(postScore({ ...run, handle: 'sh1t' }), harness(undefined, instance).deps))
+        .status,
+    ).toBe(422);
+    expect(
+      (await handleScore(postScore({ ...run, handle: 'Ido' }), harness(undefined, instance).deps))
+        .status,
+    ).toBe(200);
+  });
+
+  it('refuses a name too long to be one before it is even read as a name', async () => {
+    const h = harness();
+    const res = await handleScore(postScore(ticketed(h.clock, { handle: 'a'.repeat(65) })), h.deps);
+    expect(res.status).toBe(400);
+    expect(h.calls).toHaveLength(0);
   });
 
   it('never scores a v1 log, a bare array of events, as a v2 run', async () => {
@@ -165,7 +289,7 @@ describe('the run token', () => {
     const first = harness(undefined, instance);
     const run = ticketed(instance.clock);
     // A different legal log for the same seed: the cheap way to try one token many times.
-    const greedy = { ...run, log: v2.toRunLog(runOf('greedy', run.log.seed)) };
+    const greedy = { ...run, log: v2.toRunLog(runOf('leave-all', run.log.seed)) };
 
     expect((await handleScore(postScore(run), first.deps)).status).toBe(200);
     const again = harness(undefined, instance);
@@ -178,7 +302,7 @@ describe('the run token', () => {
     expect(second.status).toBe(409);
     expect(third.status).toBe(409);
     await expect(second.json()).resolves.toEqual({ error: 'that run is already on the board' });
-    expect(first.calls).toHaveLength(1);
+    expect(first.inserts()).toHaveLength(1);
     expect(again.calls).toHaveLength(0);
   });
 
@@ -247,7 +371,7 @@ describe('the run token', () => {
     expect(table.calls).toHaveLength(1);
     table.open();
     expect((await first).status).toBe(200);
-    expect(table.calls).toHaveLength(1);
+    expect(insertsOf(table.calls)).toHaveLength(1);
   });
 
   it('releases the token when the insert it was waiting on fails, so the retry gets through', async () => {
@@ -307,20 +431,51 @@ describe('the clock the player does not control', () => {
     return handleScore(postScore({ ...run, log: { ...run.log, events } }), h.deps);
   }
 
+  /**
+   * A careful run restamped to walk EXACTLY the floor its own log describes, plus `plus` ms at every
+   * step: each meeting and the arrival at their floor, cards and verdicts at the step before. So
+   * the log claims `floorMs + plus`, the least an honest one could.
+   */
+  async function postAtFloor(plus: number, seen: (floorMs: number) => number): Promise<Response> {
+    const clock: Clock = { now: T0 };
+    const h = harness(undefined, { clock });
+    const run = ticketed(clock, { postAfterMs: 0 });
+    let at = 0;
+    const events = run.log.events.map((e, i) => {
+      if (e.e === 'met' || e.e === 'arrived')
+        at = Math.max(at, v2.walkFloor(content, run.log.events.slice(0, i + 1)).floorMs + plus);
+      return { ...e, at: Math.max(0, Math.ceil(at)) };
+    });
+    const { floorMs } = v2.walkFloor(content, run.log.events);
+    clock.now = T0 + seen(floorMs);
+    return handleScore(postScore({ ...run, log: { ...run.log, events } }), h.deps);
+  }
+
   it('refuses the scripted 100: a careful log for the seed, claiming 15 ms, posted at once', async () => {
     // The seed is the server's but deal() is public, so this log replays as legal and scores 100.
     // Without a floor it was a row, and ties rank earliest first.
     const res = await postTimed(15, 15);
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({ error: 'that run could not be verified' });
-    // A log that claims less than the shortest walk is refused however long the poster waited.
-    expect((await postTimed(MIN_RUN_MS - 1, 60_000)).status).toBe(400);
   });
 
-  it('refuses a run the server has not known for as long as the shortest walk, whatever the log says', async () => {
+  it('refuses a log that walks any leg faster than the map allows, however long the poster waited', async () => {
+    // Every meeting a few ms short of its floor: under the map, even with minutes on the clock.
+    expect((await postAtFloor(-5, () => 120_000)).status).toBe(400);
+    // At the floor, it is a run.
+    expect((await postAtFloor(1, () => 120_000)).status).toBe(200);
+  });
+
+  it('refuses a run the server has not known for as long as the walk it describes, whatever the log says', async () => {
     // Inside the skew allowance, so only the floor on `seen` catches it: the wait a forger must pay.
-    expect((await postTimed(MIN_RUN_MS, MIN_RUN_MS - 1)).status).toBe(400);
-    expect((await postTimed(MIN_RUN_MS, MIN_RUN_MS)).status).toBe(200);
+    expect((await postAtFloor(1000, (floor) => floor - 1)).status).toBe(400);
+    expect((await postAtFloor(1000, (floor) => floor + 1000)).status).toBe(200);
+  });
+
+  it('charges the walk the log describes, so a full tour must wait longer than the walk to the door', async () => {
+    const { floorMs: tour } = v2.walkFloor(content, ticketed({ now: T0 }).log.events);
+    const { floorMs: direct } = v2.walkFloor(content, [{ e: 'arrived', at: 0 }]);
+    expect(tour).toBeGreaterThan(direct + 2_000);
   });
 
   it('refuses a fast log restamped onto a token that has sat for ten minutes', async () => {
@@ -504,7 +659,7 @@ describe('a caller with a for-loop', () => {
     for (let i = 0; i < 3; i++) {
       const h = harness(undefined, instance);
       const res = await handleScore(postScore(ticketed(instance.clock)), h.deps);
-      seen.push({ status: res.status, wrote: h.calls.length });
+      seen.push({ status: res.status, wrote: h.inserts().length });
     }
 
     expect(seen).toEqual([

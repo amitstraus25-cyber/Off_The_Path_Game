@@ -158,6 +158,29 @@ export const CHROME_KEYS = [
   'worldTravellerNear',
   'worldBearings',
   'worldDistances',
+  /*
+   * The 2026-10-22 afternoon round's words (the client: "make it clear", "score first, then flip
+   * cards", "let people put their own name"). In the chrome rather than in `landing` or `reveal`
+   * on purpose: chrome keys are filled for the core fixtures from this list, so adding a screen's
+   * words here does not reach into a test file another owner is editing.
+   */
+  'landingPremise',
+  'revealChoices',
+  'revealSpeed',
+  'revealTime',
+  'revealPar',
+  'wolfNotPosted',
+  'boardJoining',
+  'revealZeroWolf',
+  'revealZeroLate',
+  'revealTilesHint',
+  'revealFlip',
+  'revealFlipBack',
+  'handleShort',
+  'handleLong',
+  'handleChars',
+  'handleContact',
+  'handleBlocked',
 ] as const;
 export type ChromeKey = (typeof CHROME_KEYS)[number];
 
@@ -228,9 +251,9 @@ const ui = z.strictObject({
     /** The score's denominator, filled from `scoring.outOf` so the two cannot disagree. */
     outOf: template('outOf'),
     /**
-     * The replay hook: how many of the run's bad skills stayed out of the basket, out of how many
-     * were dealt. Worded as what the basket holds, not as "caught": a run that walked past every
-     * card kept them out without reading one, and must not be told it caught anything.
+     * "You spotted N of 4 bad skills" (the client, 2026-10-22). The screen counts a bad skill as
+     * spotted only when its card was OPENED and it stayed out of the basket: a run that walked
+     * past a card without meeting its owner spotted nothing, and is not told it did.
      */
     caught: template('caught', 'bad'),
     /** The reveal's frame title, and a row's eyebrow when the player never answered. */
@@ -260,13 +283,19 @@ export const contentSchema = z.strictObject({
   /** How many skills each run deals good. The rest are dealt bad. */
   deal: z.strictObject({ good: z.number().int().min(1) }),
   /**
-   * A clean arrival scores `clean`, plus `good` for each good skill in the basket. A run that let
-   * the wolf in scores 0, by rule (scoring.ts). The lint holds `outOf` to the best run.
+   * A clean arrival scores `clean`, plus `good` for each good skill in the basket, plus a speed
+   * bonus of up to `speed` that is scaled by the share of the good skills taken and falls from full
+   * at `parMs` to nothing at the time limit. A run that let the wolf in scores 0, by rule
+   * (scoring.ts). The lint holds `outOf` to the best run, and holds `speed` small enough that a
+   * faster basket with one good skill fewer can never outscore a full one.
    */
   scoring: z.strictObject({
     outOf: z.number().int().min(1),
     good: z.number().int().min(1),
     clean: z.number().int().min(1),
+    speed: z.number().int().min(0),
+    /** Arriving at or under this many elapsed milliseconds earns the whole speed bonus. */
+    parMs: z.number().int().min(1),
   }),
   characters: z.array(character).min(1),
   skills: z.array(skill).min(1),
@@ -288,9 +317,12 @@ export const findCharacter = (content: Content, id: CharacterId): Character | un
 export const findCharacterForSkill = (content: Content, id: SkillId): Character | undefined =>
   content.characters.find((c) => c.skillId === id);
 
-/** The best score any run can reach: a clean arrival with every dealt-good skill in the basket. */
+/**
+ * The best score any run can reach: a clean arrival with every dealt-good skill in the basket, at
+ * or under par, so with the whole speed bonus.
+ */
 export const ceiling = (content: Content): number =>
-  content.scoring.clean + content.scoring.good * content.deal.good;
+  content.scoring.clean + content.scoring.good * content.deal.good + content.scoring.speed;
 
 export const countWords = (line: string): number => line.split(/\s+/).filter(Boolean).length;
 
@@ -419,6 +451,20 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
   if (best !== content.scoring.outOf)
     add(
       `the best possible run scores ${best}, but the score is shown out of ${content.scoring.outOf}`,
+    );
+
+  /*
+   * CORRECTNESS FIRST, THEN SPEED. The fastest basket one good skill short earns
+   * (n-1) x good + speed x (n-1)/n; the slowest full basket that still arrives earns n x good and
+   * no bonus. The first must never exceed the second, which is speed x (n-1) <= good x n. At the
+   * shipped weights (20 a skill, 30 for speed, three good) the two meet exactly at 70, and a tie
+   * ranks the earlier post first; it is never a win for the faster, emptier basket.
+   */
+  const { good: each, speed } = content.scoring;
+  const g = content.deal.good;
+  if (speed * (g - 1) > each * g)
+    add(
+      `a speed bonus of ${speed} lets a fast run with ${g - 1} good skills outscore a slow run with all ${g}`,
     );
 
   if (opts.launch && (n !== LAUNCH_CAST.skills || content.deal.good !== LAUNCH_CAST.good))

@@ -3718,8 +3718,14 @@ export function generateForestMap(): GeneratedMap {
     ['stall-awning-l', 'stall-awning-m', 'stall-awning-m', 'stall-awning-r'] as const
   ).entries())
     set(above, 11 + i, 16, gid(kind));
+  // The outer two are the counter's finished ends (2026-10-22); the middle two stay the seamless run.
   for (let i = 0; i < 4; i++) {
-    set(below, 11 + i, 17, gid('stall-counter'));
+    set(
+      below,
+      11 + i,
+      17,
+      gid(i === 0 ? 'stall-counter-l' : i === 3 ? 'stall-counter-r' : 'stall-counter'),
+    );
     solid(11 + i, 17);
   }
   landmarks['stall'] = { x: 11 * TILE, y: 17 * TILE };
@@ -7364,6 +7370,8 @@ export function generateForestMap(): GeneratedMap {
     'roof-peak',
     'chimney',
     'stall-counter',
+    'stall-counter-l',
+    'stall-counter-r',
     'well',
     'fountain',
     'signpost',

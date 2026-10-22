@@ -1,17 +1,22 @@
-import {
-  DEFAULT_TOP_LIMIT,
-  isMintedHandle,
-  mintHandle,
-  submitResponseSchema,
-  topLimit,
-  topResponseSchema,
-  v2,
-} from '@otp/core';
+import { DEFAULT_TOP_LIMIT, mintHandle, topLimit, v2 } from '@otp/core';
 
 export interface LeaderboardEntry {
   rank: number;
   handle: string;
   score: number;
+  /**
+   * Set on exactly one row at most: the run THIS PAGE posted since its run started, and only when
+   * it is that row and not merely one carrying the same name (see `withYourRow`).
+   *
+   *   - `confirmed`: a read of the table holds it at the rank the server counted -- or the server
+   *                  counted it BELOW the visible page, in which case it is the last entry, after
+   *                  a gap in the ranks, at that counted rank (`withYourRow` case 0).
+   *   - `pending`:   no read has shown it yet -- the edge copy predates the post -- so it is placed
+   *                  where the server said it landed, honestly marked as not yet confirmed.
+   *
+   * Absent on every other row, and on every row before this page has posted anything.
+   */
+  yours?: 'confirmed' | 'pending';
 }
 
 /**
@@ -53,6 +58,21 @@ export type NoticeKey =
   | 'leaderboardClosed';
 
 /**
+ * Why a post was refused when the answer is not "the run could not be verified": the NAME (the
+ * board's rules, core board.ts -- `nameRefusal` says which), or a WOLF run, which the board does
+ * not take since 2026-10-22. Both travel under `leaderboardRefused`, because both make exactly the
+ * claim that key declares (the run did not go up); only the sentence differs.
+ */
+export type RefusalReason = 'name' | 'wolf';
+
+/** Where a posted run landed: what the server stored and the rank it counted, or null. */
+export interface PostedRun {
+  handle: string;
+  score: number;
+  rank: number | null;
+}
+
+/**
  * What a post answered: the sentence to show, AND which of the four it is.
  *
  * THE KEY IS WHY THIS IS NOT A STRING ANY MORE, and it is worth saying what it bought. The screen
@@ -71,6 +91,12 @@ export interface PostOutcome {
   key: NoticeKey;
   /** The sentence, with `{handle}` already substituted where the line has one. */
   text: string;
+  /** Only on `leaderboardRefused`, when the refusal was the name or a wolf run (above). */
+  reason?: RefusalReason;
+  /** Only with `reason: 'name'` when the game itself refused it: which rule. */
+  nameRefusal?: v2.NameRefusal;
+  /** Only on `handleAssigned`: the stored name (tidied), the score and the rank. */
+  posted?: PostedRun;
 }
 
 /*
@@ -108,13 +134,20 @@ const START_TIMEOUT_MS = 2500;
 const unit = (): number => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
 
 /**
- * Mints a handle such as `brave-lantern-42`, from the wordlist in packages/core.
+ * A SUGGESTED name such as `brave-lantern-42`, from the wordlist in packages/core.
  *
- * Exported for the results screen to show and to reroll. Handles are generated, never typed: a
- * free-text field on a Cyera-branded public page is a moderation problem, and a player-supplied
- * string is one more thing that would have to be sanitised on the way to a database.
+ * Since 2026-10-22 players type their own name (the client: "I want people to put their own
+ * name"); this is the fun default the field starts with and the "suggest a name" button draws, and
+ * every name it can draw passes the board's own rules (core test/v2/board.test.ts walks all of
+ * them). What a player types is checked by `checkName` below and, with authority, by the server.
  */
 export const newHandle = (): string => mintHandle(unit);
+
+/**
+ * The board's name rules, the same function the server applies (core board.ts): the tidied name
+ * to post, or which rule refused it. For a friendly message before posting; the server decides.
+ */
+export const checkName = (raw: string): v2.NameCheck => v2.checkName(raw);
 
 /** What came back: a status, and the body already read. Never a Response with a body still open. */
 interface Reply {
@@ -159,7 +192,8 @@ async function ask(
      * An error status is not read at all: this client acts on the status alone, so there is no
      * body to wait for and nothing in it we would believe.
      */
-    const body = res.ok ? await readJson(res) : null;
+    // A 422 is read too: it is the one refusal whose body says which (`reason`, handlers.ts).
+    const body = res.ok || res.status === 422 ? await readJson(res) : null;
     return { ok: res.ok, status: res.status, body };
   } catch {
     // A network error, an abort, or a 200 whose body is not JSON. All of them mean "no reply".
@@ -182,11 +216,163 @@ async function ask(
 export async function readTop(limit: number): Promise<BoardRead> {
   const wanted = topLimit(limit);
   const reply = await ask(`${TOP_PATH}?limit=${wanted}`, { method: 'GET' });
+  return withYourRow(parseBoard(reply, wanted), lastPost, Date.now(), wanted);
+}
+
+/** A GET's reply as one of the three answers, before any row of ours is placed on it. */
+function parseBoard(reply: Reply | null, wanted: number): BoardRead {
   if (!reply?.ok) return { state: 'unavailable' };
-  const parsed = topResponseSchema.safeParse(reply.body);
+  const parsed = v2.boardResponseSchema.safeParse(reply.body);
   if (!parsed.success) return { state: 'unavailable' };
-  const entries = parsed.data.entries.slice(0, wanted);
-  return entries.length === 0 ? { state: 'empty' } : { state: 'rows', entries };
+  return asRead(parsed.data.entries.slice(0, wanted));
+}
+
+const asRead = (entries: LeaderboardEntry[]): BoardRead =>
+  entries.length === 0 ? { state: 'empty' } : { state: 'rows', entries };
+
+/*
+ * ------------------------------------------------------------------------------------------------
+ * THE CLIENT'S "I POSTED AND I DON'T SEE MY SCORE" (2026-10-22), and the half of the fix that lives
+ * on this side of the wire.
+ *
+ * Results reads the board when it opens and again the moment a post answers. Both reads are
+ * `GET /api/top`, which the edge caches (apps/api handlers.ts `TOP_CACHE`), and the browser's
+ * `cache: 'no-store'` does not reach past the CDN -- so the second read was answered with the copy
+ * the first had just filled, from before the post. The post said "Posted to the board as
+ * swift-apron-51" and the board below it said otherwise. Both were telling the truth about what
+ * they had seen; neither was what the player needed.
+ *
+ * So a post now answers with the board itself, read from the table straight after the insert, and
+ * with the rank the server counted. This module keeps that answer for the length of the edge cache
+ * and lays it over any read that has not caught up yet. `startRun()` forgets it: a row from the
+ * previous run on this page is not "your run" on the next run's Results.
+ * ------------------------------------------------------------------------------------------------
+ */
+
+/** How long an edge copy of the board can lag a post: `TOP_CACHE`'s fresh plus stale, 10 + 20 s. */
+export const BOARD_LAG_MS = 30_000;
+
+/** The last post this page made in this run: what the server stored, and the board it read after. */
+export interface LastPost extends PostedRun {
+  /** The board read from the table right after the insert; absent when that read failed. */
+  entries?: LeaderboardEntry[];
+  /** `Date.now()` when the post answered. */
+  at: number;
+}
+
+let lastPost: LastPost | null = null;
+
+/** Forgets the last post, as a new run does (`startRun`). Exported for the tests. */
+export const forgetLastPost = (): void => {
+  lastPost = null;
+};
+
+const mark = (rows: LeaderboardEntry[], rank: number, yours: 'confirmed'): LeaderboardEntry[] =>
+  rows.map((r) => (r.rank === rank ? { ...r, yours } : r));
+
+/** Our row in a list: first at or below the counted rank carrying our name and score exactly. */
+const findOurs = (rows: LeaderboardEntry[], post: PostedRun): LeaderboardEntry | undefined =>
+  post.rank === null
+    ? undefined
+    : rows.find((r) => r.rank >= post.rank! && r.handle === post.handle && r.score === post.score);
+
+/**
+ * PLACES THE PLAYER'S OWN ROW ON A BOARD READ, honestly. Pure, and exported for the tests.
+ *
+ * WHICH ROW IS OURS, AND WHY IT CAN BE TOLD. The server counted the rank right after writing the
+ * row. A row can only move DOWN after that -- a later better run goes above it, a later equal one
+ * goes below it, ties ranking earliest first -- so ours is the first row at or below the counted
+ * rank that carries our name and score. Any other row with the same name and score is either
+ * above that rank, so older, or below it, so newer: somebody else's either way. This is what closes
+ * the collision PAUL_BRIEF section 7 left open ("a row carrying the name this page posted" was all
+ * the screen could match before), and with free names a collision is no longer one in three
+ * hundred: two Amits is an ordinary afternoon.
+ *
+ *   1. The read holds it                    -> marked `confirmed`, at wherever it now stands.
+ *   2. Older than the edge can lag          -> the read is the truth: returned unmarked if our row
+ *                                              is not on this page (or its rank was never counted).
+ *   3. Inside the lag, the post read a board -> that board, which is newer than any read missing
+ *                                              our row, with our row `confirmed` on it.
+ *   4. Inside the lag, no board came back   -> the read, with our row placed `pending` at the
+ *                                              counted rank (or after every score at or above ours
+ *                                              when the count failed), and the rows under it
+ *                                              moved down one. Never placed past `limit`, and
+ *                                              never beside a row that may already be it (no
+ *                                              counted rank, same name and score on the page).
+ *
+ *   0. Counted BELOW the page               -> the page (the post's own board inside the lag, else
+ *                                              the read), then our row appended LAST at the counted
+ *                                              rank, `confirmed`. The rank jump is the gap Results
+ *                                              draws. This is the client's complaint over again
+ *                                              for most players: ties rank the earliest first and
+ *                                              100 needs par, so the top ten fills with 94 to 100
+ *                                              soon after launch and a typical 80 lands at rank 13
+ *                                              or 400 -- "Posted to the board" over a board with no
+ *                                              row of theirs on it. Not bounded by the lag: no read
+ *                                              of the top ten can ever confirm or refute a row
+ *                                              below it, and the counted rank is the server's own
+ *                                              statement of where the run landed when it landed.
+ *
+ * An unavailable read stays unavailable unless case 3 applies: a board we could not read is not a
+ * board to draw one optimistic row on (nor, in case 0, one row with a gap above it).
+ */
+export function withYourRow(
+  read: BoardRead,
+  post: LastPost | null,
+  now: number,
+  limit: number = DEFAULT_TOP_LIMIT,
+): BoardRead {
+  if (!post) return read;
+  const rows = read.state === 'rows' ? read.entries : [];
+  const ours = findOurs(rows, post);
+  if (ours) return { state: 'rows', entries: mark(rows, ours.rank, 'confirmed') };
+  const inLag = now - post.at < BOARD_LAG_MS;
+
+  if (post.rank !== null && post.rank > limit) {
+    const page = inLag && post.entries ? post.entries : read.state === 'unavailable' ? null : rows;
+    if (page === null) return read;
+    const mine: LeaderboardEntry = {
+      rank: post.rank,
+      handle: post.handle,
+      score: post.score,
+      yours: 'confirmed',
+    };
+    return { state: 'rows', entries: [...page.slice(0, limit), mine] };
+  }
+
+  if (!inLag) return read;
+
+  if (post.entries) {
+    const fresh = post.entries.slice(0, limit);
+    // With no counted rank, ours is the newest of its score in a board read just after it.
+    const at =
+      post.rank ??
+      [...fresh].reverse().find((r) => r.handle === post.handle && r.score === post.score)?.rank ??
+      null;
+    const found = at === null ? undefined : fresh.find((r) => r.rank === at);
+    return asRead(
+      found && found.handle === post.handle && found.score === post.score
+        ? mark(fresh, at!, 'confirmed')
+        : fresh,
+    );
+  }
+
+  if (read.state === 'unavailable') return read;
+  // With no counted rank, a row already carrying our name and score may well be ours: placing a
+  // second would show two. Under-claim instead -- the read is left as it is.
+  if (post.rank === null && rows.some((r) => r.handle === post.handle && r.score === post.score))
+    return read;
+  const at = post.rank ?? rows.filter((r) => r.score >= post.score).length + 1;
+  if (at > limit) return read;
+  const mine: LeaderboardEntry = {
+    rank: at,
+    handle: post.handle,
+    score: post.score,
+    yours: 'pending',
+  };
+  const before = rows.filter((r) => r.rank < at);
+  const after = rows.filter((r) => r.rank >= at).map((r) => ({ ...r, rank: r.rank + 1 }));
+  return { state: 'rows', entries: [...before, mine, ...after].slice(0, limit) };
 }
 
 /*
@@ -232,6 +418,8 @@ const isRunStart = (body: unknown): body is RunStart => {
 
 /** Asks the server to start a run. Null for anything but a seed and a token we can believe. */
 export async function startRun(): Promise<RunStart | null> {
+  // A new run: the last run's row is not this run's, so nothing is marked "yours" until it posts.
+  forgetLastPost();
   const reply = await ask(
     START_PATH,
     {
@@ -257,11 +445,35 @@ const BACKSTOPS: Record<NoticeKey, string> = {
 };
 
 /**
- * Posts a finished v2 run. Always answers an outcome: never throws, never hangs.
+ * The sentences for the two refusals that travel under `leaderboardRefused` with a reason. Read
+ * from the chrome by these keys when the content carries them (`handleBlocked` is the UI's own
+ * sentence for a name; `wolfNotPosted` is not a chrome key today), else these.
+ */
+const REASON_KEYS: Record<RefusalReason, string> = { name: 'handleBlocked', wolf: 'wolfNotPosted' };
+const REASON_BACKSTOPS: Record<RefusalReason, string> = {
+  name: 'That name cannot go on the board. Try another.',
+  wolf: 'Only runs that keep the wolf out go on the board.',
+};
+
+/** The server's 422 body, read only for its `reason`. */
+const reasonOf = (body: unknown): RefusalReason | null => {
+  const reason = (body as { reason?: unknown } | null)?.reason;
+  return reason === 'name' || reason === 'wolf' ? reason : null;
+};
+
+/**
+ * Posts a finished v2 run under the name the player typed. Always answers an outcome: never throws,
+ * never hangs.
  *
- * The statuses: 400 is a run the server refused, 409 a token already
- * on the board (the second press of Post), 410 a run whose posting window shut; everything else --
- * 404 undeployed, 503 unconfigured, 429 shedding, 500, a timeout -- is no board right now.
+ * The NAME is checked here first, by the board's own rules (`checkName`), and a refused one is
+ * answered without posting -- `leaderboardRefused` with `reason: 'name'` and which rule in
+ * `nameRefusal`, so the screen can say what to change and the run can still be posted. A name that
+ * passes is posted in its tidied form. The server checks it again and is the authority.
+ *
+ * The statuses: 400 is a run the server refused, 409 a token already on the board (the second press
+ * of Post), 410 a run whose posting window shut, 422 a refusal with a reason (`name` or `wolf`);
+ * everything else -- 404 undeployed, 503 unconfigured, 429 shedding, 500, a timeout -- is no board
+ * right now.
  *
  * `strings` is the content file's `ui.chrome`, read by key; a key it does not carry falls back to
  * the sentence above, so a deleted key can never render as `undefined` on the payoff screen.
@@ -276,23 +488,36 @@ export async function submit(
     key,
     text: strings[key]?.trim() || BACKSTOPS[key],
   });
-  // The boundary's promise: no string a player composed is ever posted.
-  const minted = isMintedHandle(handle) ? handle : newHandle();
+  const refused = (reason: RefusalReason): PostOutcome => ({
+    key: 'leaderboardRefused',
+    text: strings[REASON_KEYS[reason]]?.trim() || REASON_BACKSTOPS[reason],
+    reason,
+  });
+  const name = checkName(handle);
+  if (!name.ok) return { ...refused('name'), nameRefusal: name.reason };
+
   const reply = await ask(SCORE_PATH, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ handle: minted, log, token }),
+    body: JSON.stringify({ handle: name.name, log, token }),
   });
   if (!reply) return say('leaderboardDown');
   if (!reply.ok) {
     if (reply.status === 409) return say('leaderboardAlready');
     if (reply.status === 410) return say('leaderboardClosed');
+    if (reply.status === 422) {
+      const reason = reasonOf(reply.body);
+      return reason ? refused(reason) : say('leaderboardRefused');
+    }
     return say(reply.status === 400 ? 'leaderboardRefused' : 'leaderboardDown');
   }
-  const parsed = submitResponseSchema.safeParse(reply.body);
+  const parsed = v2.postResponseSchema.safeParse(reply.body);
   if (!parsed.success) return say('leaderboardDown');
-  const posted = say('handleAssigned');
-  return { ...posted, text: posted.text.replace('{handle}', parsed.data.handle) };
+  const { handle: stored, score, rank = null, entries } = parsed.data;
+  const posted: PostedRun = { handle: stored, score, rank };
+  lastPost = { ...posted, at: Date.now(), ...(entries ? { entries } : {}) };
+  const assigned = say('handleAssigned');
+  return { ...assigned, text: assigned.text.replace('{handle}', stored), posted };
 }
 
 /** Reads the board: the same three answers as `readTop`, scores now 0 to 100. */

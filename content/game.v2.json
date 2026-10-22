@@ -7,8 +7,10 @@
   },
   "scoring": {
     "outOf": 100,
-    "good": 30,
-    "clean": 10
+    "good": 20,
+    "clean": 10,
+    "speed": 30,
+    "parMs": 105000
   },
   "characters": [
     {
@@ -265,10 +267,10 @@
     "howTo": {
       "title": "How to play",
       "steps": [
-        "Walk the path and meet each character.",
-        "Read each card to see what the skill really does.",
-        "Take the skill or leave it.",
-        "You have 3:00 to reach Grandma's door."
+        "Each character offers a skill.",
+        "Three are good. Four are malicious.",
+        "Read each card. Take the good ones.",
+        "Reach Grandma in 3:00. Faster scores more."
       ],
       "go": "Start walking"
     },
@@ -310,7 +312,7 @@
       "realWorld": "In the real world",
       "score": "Your score",
       "outOf": "out of {outOf}",
-      "caught": "You kept {caught} of {bad} bad skills out of your basket.",
+      "caught": "You spotted {caught} of {bad} bad skills.",
       "frameTitle": "Reveal",
       "unanswered": "You walked past",
       "question": "Who wrote the instructions your agent follows?",
@@ -348,9 +350,9 @@
       "postHeading": "Post your score",
       "postUnavailable": "Posting is unavailable for this run.",
       "postLate": "A run that ends after dark is not posted.",
-      "handleLabel": "Your name on the board",
-      "handleReroll": "Try another name",
-      "handleHint": "The board hands out its own names: two words and a number.",
+      "handleLabel": "Your name",
+      "handleReroll": "Suggest a name",
+      "handleHint": "Everyone can see it on the board, so keep it friendly.",
       "privacyLine": "We store your handle and score only. No account, no email, no cookies.",
       "leaderboardTitle": "Wolf Spotters",
       "leaderboardTitleHighlight": "Spotters",
@@ -371,7 +373,24 @@
       "worldTravellerNear": "within reach: you can talk now.",
       "worldBearings": "north of you|north-east of you|east of you|south-east of you|south of you|south-west of you|west of you|north-west of you",
       "worldDistances": "a few steps away|a short walk away|a long way off",
-      "leaderboardClosed": "Posting has closed for that run."
+      "leaderboardClosed": "Posting has closed for that run.",
+      "landingPremise": "Three good skills, four malicious ones. Find the good three and race to Grandma.",
+      "revealChoices": "Correct choices",
+      "revealSpeed": "Speed bonus",
+      "revealTime": "Your time",
+      "revealPar": "par {par}",
+      "wolfNotPosted": "A run that lets the wolf in does not go on the board. Walk it again and keep it out.",
+      "boardJoining": "Joining the board",
+      "revealZeroWolf": "A malicious skill let the wolf in, so this run scores 0.",
+      "revealZeroLate": "The clock ran out before you reached Grandma, so this run scores 0.",
+      "revealTilesHint": "Tap a card to flip it and see why.",
+      "revealFlip": "See why",
+      "revealFlipBack": "Flip back",
+      "handleShort": "Your name needs at least 3 characters.",
+      "handleLong": "Keep your name to 16 characters or fewer.",
+      "handleChars": "Use letters, numbers, spaces, hyphens or apostrophes, and start and end with a letter or number.",
+      "handleContact": "That looks like contact details. Please use just a name.",
+      "handleBlocked": "Please pick a different name."
     }
   }
 }

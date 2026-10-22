@@ -36,10 +36,14 @@
  * deleting the line because its names went unused disarms that owner's guard, and is the one way
  * this file can stop doing its job while staying green.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+import { Img } from '../src/paint.ts';
+import { svgCoverage } from '../src/svg-coverage.ts';
+
 import { CAST_FRAMES } from '../src/sprites/cast.ts';
-import { PURPLE_FRAMES } from '../src/sprites/char-purple.ts';
+import { CAPE_MARK, PURPLE_FRAMES } from '../src/sprites/char-purple.ts';
 import { NPC_PAINTERS } from '../src/sprites.ts';
 import { CROWNS, TREE_TILES } from '../src/tiles/w-trees.ts';
 import { UNDERGROWTH_TILES } from '../src/tiles/w-undergrowth.ts';
@@ -126,6 +130,56 @@ describe('Purple', () => {
       'up-2',
       'up-3',
     ]);
+  });
+
+  /*
+   * THE MARK ON HER BACK IS THE CYERA SYMBOL, TRACED -- held to the official SVG, not to the grid
+   * that draws it. This is the one bound in this file that no painter's guard owns, which is why it
+   * is here: `assertCapeDevice` checks that the frame shows the drawing intact, and only this checks
+   * that the drawing is the logo. The bound is read off `reference/brand/logos/cyera-symbol-black.svg`
+   * through `svgCoverage`, so redrawing the mark, resizing it, or flipping it fails here naming the
+   * pixel, and the only way to move the bound is to change the brand's own file.
+   *
+   * The rule is exact: ink precisely where the symbol covers at least `TRACE` of the pixel. That is
+   * the thirteenth pass's whole tracing decision in `char-purple.ts`, and there is no hand edit on top
+   * of it to allow for. Measured when written: 38 ink pixels; the inked pixels nearest the line are
+   * 0.38 and the blank ones 0.34, so the threshold sits in a clean gap rather than on a pixel.
+   */
+  it('carries a pixel trace of the official Cyera symbol on her back', () => {
+    const svg = readFileSync(
+      new URL('../../../reference/brand/logos/cyera-symbol-black.svg', import.meta.url),
+      'utf8',
+    );
+    const n = CAPE_MARK.size;
+    const cov = svgCoverage(svg, n);
+    const [ir, ig, ib] = CAPE_MARK.ink;
+    for (const name of ['up-0', 'up-1', 'up-2', 'up-3']) {
+      const img = new Img(32, 48);
+      PURPLE_FRAMES[name]!(img);
+      const pts: [number, number][] = [];
+      for (let y = 0; y < img.h; y++)
+        for (let x = 0; x < img.w; x++) {
+          const c = img.get(x, y);
+          if (c[3] > 0 && c[0] === ir && c[1] === ig && c[2] === ib) pts.push([x, y]);
+        }
+      expect(pts.length, `${name}: no mark in the mark's colour`).toBeGreaterThan(0);
+      const x0 = Math.min(...pts.map(([x]) => x));
+      const y0 = Math.min(...pts.map(([, y]) => y));
+      const ink = new Set(pts.map(([x, y]) => `${x - x0},${y - y0}`));
+      const TRACE = 0.35;
+      const dropped: string[] = [];
+      const added: string[] = [];
+      for (let r = 0; r < n; r++)
+        for (let c = 0; c < n; c++) {
+          const v = cov[r]![c]!;
+          if (v >= TRACE && !ink.has(`${c},${r}`)) dropped.push(`(r${r},c${c}) ${v.toFixed(2)}`);
+          if (v < TRACE && ink.has(`${c},${r}`)) added.push(`(r${r},c${c}) ${v.toFixed(2)}`);
+        }
+      const outside = [...ink].filter((k) => k.split(',').some((v) => Number(v) >= n));
+      expect(dropped, `${name}: the trace drops pixels the symbol covers`).toEqual([]);
+      expect(added, `${name}: the trace inks pixels the symbol barely touches`).toEqual([]);
+      expect(outside, `${name}: the mark is bigger than its ${n}px grid`).toEqual([]);
+    }
   });
 });
 
@@ -228,8 +282,14 @@ describe('the map', () => {
    * This number is not a second opinion; it is the mirror of `TILE_NAMES.length`, and it moves when
    * and only when that list does. The thing it is really watching is an INSERT, which leaves the
    * length looking plausible while repainting the whole map.
+   *
+   * 83 since 2026-10-22: `stall-counter-l` and `stall-counter-r`, the market counter's finished
+   * ends, APPENDED at gids 82 and 83. Verified on the regeneration that committed them: the only
+   * cells of `map-forest.json` that changed are the two the map owner re-pointed on purpose,
+   * `decor-below` (11,17) and (14,17), 48 -> 82 and 48 -> 83; all 81 earlier names keep their gid in
+   * `tileset-forest.gids.json`; and the sheet stays 384x224, because `ceil(83 / 12)` is still 7.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(81);
+    expect(TILE_NAMES).toHaveLength(83);
   });
 });

@@ -31,8 +31,22 @@ describe('GET /api/top', () => {
   it('is cached at the edge so a marketing page does not wake Postgres per visitor', async () => {
     const res = await handleTop(get(), harness(() => jsonResponse(board)).deps);
     expect(res.headers.get('cache-control')).toBe(
-      'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
+      'public, max-age=0, s-maxage=10, stale-while-revalidate=20',
     );
+  });
+
+  it('is never more than thirty seconds old, fresh and stale together', async () => {
+    /*
+     * The bound that matters to a visitor is the SUM: s-maxage is how long a copy is fresh, and
+     * stale-while-revalidate how much longer it is served while it refetches. It was 60 + 300, so a
+     * board up to six minutes old -- which is how the client's own post went missing (handlers.ts
+     * `TOP_CACHE`). Parsed from the header rather than restated, so a retune is held to the bound.
+     */
+    const res = await handleTop(get(), harness(() => jsonResponse(board)).deps);
+    const header = res.headers.get('cache-control') ?? '';
+    const n = (k: string) => Number(new RegExp(`${k}=(\\d+)`).exec(header)?.[1]);
+    expect(n('s-maxage') + n('stale-while-revalidate')).toBeLessThanOrEqual(30);
+    expect(n('s-maxage')).toBeGreaterThan(0);
   });
 
   it('clamps what it will serve, whatever the query string asks for', async () => {
