@@ -4316,6 +4316,25 @@ export function generateForestMap(): GeneratedMap {
    */
   landmarks['cottage'] = { x: cx * TILE, y: roofTop * TILE };
   /*
+   * GRANDMA'S MAILBOX, flag up (UI_FOUNDATIONS section 8, the 04 Arrive scene; approved by the
+   * client 2026-10-23). Where the lane meets the road, one column east of the facade's last
+   * column, on the first walk row below the doorstep: (53,20) on this map.
+   *
+   * EAST OF THE LANE, NOT WEST WHERE THE BOARD STANDS IT, and the reasons are all audits in this
+   * file. The board's spot is the lawn between the fence and the doorstep. Every tile of
+   * `notice-cottage-door` -- columns cx and cx + 1 under the doorstep -- must stay walkable (audit 5),
+   * so it cannot stand there; and the column west of that is the only way into the strip of garden
+   * between the fence and the west wall, so a solid post there seals the strip into a pocket. East
+   * of the lane's mouth is open lawn with nothing that depends on it, it is inside the payoff frame
+   * at every viewport the arrival is framed for (guard 7k holds it whole there, through its object),
+   * and it stands half a tile clear of the wolf's prints, which run up the lane's east edge (the
+   * prints' 32px sprites are centred on the lane's east boundary, so they end where this cell's
+   * western neighbour is half spent).
+   *
+   * Laid in the second pass, after every planting pass, so nothing grows on it afterwards.
+   */
+  landmarks['mailbox'] = { x: (cx + FACADE_W) * TILE, y: (doorstep + 2) * TILE };
+  /*
    * ===========================================================================
    * THE PAYOFF FRAME, derived the way the game derives it rather than guessed at.
    * ===========================================================================
@@ -5819,6 +5838,9 @@ export function generateForestMap(): GeneratedMap {
         width: TILE,
         height: TILE,
       })),
+    // Grandma's mailbox. APPENDED, like the forks, so every object above keeps its id. A `prop-*`,
+    // so audit 5 holds it solid and guard 7k holds it whole in every composed frame it is in.
+    { name: 'prop-mailbox', ...landmarks['mailbox']!, width: TILE, height: TILE },
   ].map((o, i) => ({ id: i + 1, rotation: 0, visible: true, ...o }));
 
   // The gate tiles must stay walkable even after the fence loop.
@@ -7843,6 +7865,18 @@ export function generateForestMap(): GeneratedMap {
       weeded++;
     }
 
+  /*
+   * 5. GRANDMA'S MAILBOX, laid last so no planting pass can put a bush on it, and solid because it
+   * is a post: a thing in the way, on MUST_STOP_HER below. See its landmark for why it stands here.
+   */
+  {
+    const mx = Math.floor(landmarks['mailbox']!.x / TILE);
+    const my = Math.floor(landmarks['mailbox']!.y / TILE);
+    set(below, mx, my, gid('mailbox'));
+    set(above, mx, my, 0);
+    solid(mx, my);
+  }
+
   console.log(
     `  second pass: ${castTiles.size} of the cast made solid, the facade's gable row closed, ` +
       `${behindTheRail} tile(s) sealed behind the enclosure's north rail, ` +
@@ -8034,6 +8068,8 @@ export function generateForestMap(): GeneratedMap {
     // both are new this round, which is exactly the shape of hole this list exists to close.
     'door-note',
     'notice-board',
+    // Grandma's mailbox, 2026-10-23: a post, so a thing in the way.
+    'mailbox',
     'roof-l',
     'roof-m',
     'roof-r',

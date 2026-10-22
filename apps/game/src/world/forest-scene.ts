@@ -160,6 +160,16 @@ const PURPLE_HEIGHT = 48;
 /** The open door sits over the closed one in `decor-below` (depth 1) and under every figure. */
 const DOOR_DEPTH = 1.5;
 
+/** The wolf in the lit window sits over its window exactly as the open door sits over its door. */
+const WINDOW_DEPTH = DOOR_DEPTH;
+
+/**
+ * How long the shape takes to come up in the lit window once Purple is on the step: slow, because
+ * the Arrive panel's own rule is "no shake and no gore: a slow fade and a held beat" (ui/Cottage.tsx),
+ * and a shape that is simply THERE reads as part of the building. Instant under reduced motion.
+ */
+const WINDOW_FADE_MS = 900;
+
 /**
  * The pool of shade a figure stands in.
  *
@@ -641,6 +651,8 @@ export class ForestScene extends Phaser.Scene {
   private flight: Flight | null = null;
   /** Grandma's door standing open (`early-welcome`), laid over the closed one; null if unbuilt. */
   private openedDoor: Phaser.GameObjects.Image | null = null;
+  /** The wolf in Grandma's chair, over the lit window; shown on the wolf's arrival only. */
+  private windowWolf: Phaser.GameObjects.Image | null = null;
   /** The decor layer the door is painted in, kept so the open door can be built from its tile. */
   private decorBelow: Phaser.Tilemaps.TilemapLayer | null = null;
   /** The share of the canvas a docked panel covers, from `PANEL_COVER`; 0 with none open. */
@@ -729,6 +741,7 @@ export class ForestScene extends Phaser.Scene {
     this.createPaws();
     this.createPerkProps();
     this.openedDoor = this.createOpenDoor(tiles);
+    this.windowWolf = this.createWindowWolf();
     // Objects named `notice-<id>` hand their id straight to the content's notices.
     this.notices = this.map.objects.filter((o) => o.name.startsWith('notice-'));
 
@@ -879,6 +892,8 @@ export class ForestScene extends Phaser.Scene {
     // new run has not earned, in the one place the game puts a fact on the ground.
     this.arrived = false;
     for (const paw of this.paws) paw.setVisible(false);
+    // And the shape in the window is the last run's too.
+    this.showWindowWolf(false);
     // Snap, not ease: a replay should not pan across the forest from wherever the last run ended.
     // A placement, so the top edge is snapped to a whole tile row, exactly as in `create`: the
     // second run's opening shot is the same shot as the first's and must not keep the band.
@@ -996,6 +1011,65 @@ export class ForestScene extends Phaser.Scene {
   /** Whether Grandma's door is drawn open this frame: for the specs. */
   get doorOpen(): boolean {
     return this.openedDoor?.visible ?? false;
+  }
+
+  /**
+   * THE WOLF IN THE LIT WINDOW, laid over the window hidden at boot (UI_FOUNDATIONS section 8: "wolf
+   * silhouette in the lit window"; the client, 2026-10-23).
+   *
+   * `fx-window-wolf` is the pixels the wolf adds to `wall-window-lit` and nothing else, drawn by the
+   * cottage's own window painter into a whole 32px cell (tools/graybox/src/tiles/s-cottage.ts,
+   * `WINDOW_WOLF`), so it is laid at the lit window's tile origin with no offset of its own. That
+   * cell is FOUND, not named: the one `decor-below` tile that is `wall-window-lit`. If the map has
+   * none, or the art did not load, there is no shape in the window -- which is the clean ending's
+   * picture, wrong by omission and never by invention.
+   *
+   * It is not a tile because a tile is the same thirty-two pixels on every ending: a wolf painted
+   * into the window would sit there through the whole walk and on Grandma's ending too. Hidden, it
+   * cannot give the ending away from across the garden.
+   */
+  private createWindowWolf(): Phaser.GameObjects.Image | null {
+    const lit = (gids as Record<string, number>)['wall-window-lit'];
+    if (lit === undefined || !this.decorBelow || !this.textures.exists('fx-window-wolf'))
+      return null;
+    const cell = this.decorBelow.findTile((t) => t.index === lit);
+    if (!cell) return null;
+    return this.add
+      .image(cell.pixelX, cell.pixelY, 'fx-window-wolf', 0)
+      .setOrigin(0, 0)
+      .setDepth(WINDOW_DEPTH)
+      .setAlpha(0)
+      .setVisible(false);
+  }
+
+  /**
+   * Puts the wolf in the window, or takes him out. Coming in he fades up over `WINDOW_FADE_MS`;
+   * under reduced motion he is simply there. Going out is always instant: it only ever happens on a
+   * replay, off screen of anything worth easing.
+   */
+  private showWindowWolf(on: boolean): void {
+    const shape = this.windowWolf;
+    if (!shape) return;
+    this.tweens.killTweensOf(shape);
+    shape.setVisible(on).setAlpha(on && this.reducedMotion ? 1 : 0);
+    if (on && !this.reducedMotion)
+      this.tweens.add({ targets: shape, alpha: 1, duration: WINDOW_FADE_MS, ease: 'Sine.easeOut' });
+  }
+
+  /**
+   * How much of the wolf is in the window this frame, 0 to 1, for the specs: 0 whenever he is not
+   * shown, and with the overlay's own world rectangle so a spec can check he is in the camera's view.
+   */
+  get windowWolfShown(): { alpha: number; x: number; y: number; width: number; height: number } {
+    const shape = this.windowWolf;
+    if (!shape) return { alpha: 0, x: 0, y: 0, width: 0, height: 0 };
+    return {
+      alpha: shape.visible ? shape.alpha : 0,
+      x: shape.x,
+      y: shape.y,
+      width: shape.displayWidth,
+      height: shape.displayHeight,
+    };
   }
 
   /**
@@ -1615,6 +1689,8 @@ export class ForestScene extends Phaser.Scene {
      */
     const earned = this.run.pawsEarned();
     for (const paw of this.paws) paw.setVisible(earned);
+    // And the thing that left them is sitting up in Grandma's chair. Content's call, like the trail.
+    this.showWindowWolf(this.run.wolfInside());
 
     /*
      * A placement, and deliberately NOT a snapped one: `syncCamera` refuses to snap the top edge

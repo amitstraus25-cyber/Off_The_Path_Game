@@ -25,6 +25,7 @@ import {
   paintPaperBirdFrame,
   paintPawprintsFrame,
 } from './sprites/faces.ts';
+import { WINDOW_WOLF } from './tiles/s-cottage.ts';
 
 /** One character frame. Purple, the cast and the bystanders are all drawn on the same footprint. */
 export const PURPLE_W = PURPLE_FRAME_W;
@@ -285,6 +286,14 @@ export const FX_SHEETS: Record<
   'prop-forksign': { size: 32, frames: 2, paint: (img, f) => paintForkSignFrame(img, f as 0 | 1) },
   // The lantern's glow, for an additive blend: one frame of 64x64.
   'fx-lantern-glow': { size: 64, frames: 1, paint: (img) => paintLanternGlowFrame(img) },
+  /*
+   * The wolf in Grandma's lit window: one frame of 32x32, the size of the window's own cell, and
+   * transparent everywhere but the pixels he adds to it. Painted by the cottage's own window
+   * painter (`WINDOW_WOLF` in tiles/s-cottage.ts) so it cannot drift from the glass it sits in.
+   * An overlay rather than a tile because a tile is the same on every ending; the scene shows it on
+   * the wolf's ending only, at the door.
+   */
+  'fx-window-wolf': { size: 32, frames: 1, paint: (img) => WINDOW_WOLF(img) },
 };
 
 /** One effect sheet, its frames left to right. */

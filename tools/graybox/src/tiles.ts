@@ -356,6 +356,17 @@ export const TILE_NAMES: readonly string[] = [
   'bank-stones-cove-ne',
   'bank-stones-cove-sw',
   'bank-stones-cove-se',
+  /*
+   * Grandma's mailbox, flag up, appended 2026-10-23 on the client's word: UI_FOUNDATIONS section 8
+   * puts it in the Arrive scene and nothing had drawn it. A free-standing prop on a post, painted
+   * in `tiles/s-props.ts` beside the signpost; laid once, by the end of the door lane, in
+   * `forest-map.ts`, with a `prop-mailbox` object so the composition guards hold it whole in the
+   * payoff frame.
+   *
+   * 111 + 1 = 112 names still fits the sheet's 10 rows (120 cells), so it stays 384 x 320. Every
+   * existing gid keeps its value and its cell: this is gid 112.
+   */
+  'mailbox',
 ];
 
 /*

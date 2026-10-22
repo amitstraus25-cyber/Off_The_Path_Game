@@ -12,6 +12,10 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@otp/game", "exec", "vite", "--port", "5199", "--strictPort"],
       "port": 5199
+    },
+    {
+      "name": "production",
+      "url": "https://off-the-path-game.vercel.app"
     }
   ]
 }

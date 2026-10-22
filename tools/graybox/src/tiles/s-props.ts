@@ -81,7 +81,7 @@
 import { GROUND_TILES } from './w-ground.ts';
 import { COTTAGE_TILES } from './s-cottage.ts';
 import { CONTACT } from './s-outdoor.ts';
-import { clamp01, Img, keyline, lumaOf, shade, TILE, tone } from '../paint.ts';
+import { clamp01, Img, keyline, lumaOf, rust, shade, TILE, tone } from '../paint.ts';
 import type { Painter, Ramp, RGBA } from '../paint.ts';
 
 /* ------------------------------------------------------------------ the keyline */
@@ -1568,7 +1568,7 @@ function arrowBoard(
  * subtract the right ground and be left with the post. A guard that assumed the variant would be
  * measuring grass as if it were timber the first time a painter changed its mind.
  */
-const POST_GROUND = { signpost: 2, 'notice-board': 1 } as const;
+const POST_GROUND = { signpost: 2, 'notice-board': 1, mailbox: 0 } as const;
 
 const signpost: Painter = (img) => {
   groundUnder(img, POST_GROUND.signpost);
@@ -1649,6 +1649,109 @@ const signpost: Painter = (img) => {
     [11, 30],
     [19, 29],
     [22, 30],
+  ] as const)
+    for (const [dx, up] of [
+      [0, 1],
+      [1, 2],
+      [2, 1],
+    ] as const)
+      for (let j = 0; j < up; j++) img.px(bx + dx, by - j, shade('grass', j === up - 1 ? 1 : 0));
+};
+
+/* ------------------------------------------------------------------- the mailbox */
+
+/*
+ * GRANDMA'S MAILBOX, WITH ITS FLAG UP. UI_FOUNDATIONS section 8 lists it in the 04 Arrive scene --
+ * "wolf silhouette in the lit window, paw prints on the path, smoking chimney, mailbox with the
+ * flag up" -- and it was the one of the four nobody had drawn. The client approved it on 2026-10-23.
+ *
+ * Cropped from the board at `1945 1400 80 160 4`: a tan timber box on a timber post, a red painted
+ * hood rolled over the top of it with the dark of the opening under its lip, and a yellow flag
+ * standing above the hood. At 3.75 board pixels to one of ours the box is about 13 wide and the
+ * whole thing, flag to foot, about 40 tall. Ours is 14 wide and 29 tall, because a tile is 32 and the
+ * post has to reach the ground (see the signpost's note on a post that stops in mid air). The board
+ * stands it as tall as the girl's shoulder; ours stands at her chest, which is the same read.
+ *
+ *   box     `wood`, lit on its top-left like every block here, with the door's plate SUNK into its
+ *           face and a letter slot across it in the wood keyline. The plate is what says box rather
+ *           than crate.
+ *   hood    painted metal, so `rust` -- the toadstool caps' red, derived from `wood` in `paint.ts` --
+ *           and not brand colour: PIXEL_STANDARD section 2 keeps Purple's hues off the props. It is
+ *           an arch, banded round its own curve as the barrels are, with the opening's dark under
+ *           its lip.
+ *   flag    `gold`, raised on a thin dark arm at the hood's east shoulder and pointing east. UP is the
+ *           whole message, so the flag stands clear above the hood's crown and nothing else on the
+ *           tile is that colour.
+ *
+ * It is a THING IN THE WAY, so it is solid on the map (forest-map.ts lists it in MUST_STOP_HER) and
+ * it is one of the props that has to touch the ground (`GROUND_PROPS` below).
+ */
+
+/** Painted metal, in the toadstool's red: `rust` cut into the same five steps as every surface. */
+const paint = (t: number): RGBA => rust(Math.round(clamp01(t) * (BANDS - 1)) / (BANDS - 1));
+
+const mailbox: Painter = (img) => {
+  groundUnder(img, POST_GROUND.mailbox);
+  cast(img, 16, 30.5, 6.4, 2.3);
+
+  stand(img, (s) => {
+    // The post, to the tile's last row.
+    postV(s, 14, 21, 4, 11);
+
+    // The box: a block lit on its top left, the plate sunk into its face, the slot across the plate.
+    face(s, 9, 13, 14, 9, 'wood', 0.22, 0.22 + SPAN);
+    sinkRun(s, 11, 15, 10, 5, 34);
+    sinkRun(s, 11, 19, 10, 1, 24); // the plate's own underside
+    s.rect(13, 16, 6, 1, LINE.wood); // the letter slot
+    // The box throws its line onto the post below it, which `ring()` cannot see: opaque on opaque.
+    sinkRun(s, 14, 22, 4, 1, 48);
+    sinkRun(s, 14, 23, 4, 1, 22);
+
+    /*
+     * The hood: an arch over the box, eight rows from crown to lip, banded round its own curve from
+     * the top left. The lip overhangs the box by a pixel each side, as the board's does.
+     */
+    const HOOD_TOP = 6;
+    const HOOD_LIP = 13;
+    const hcx = 15.5;
+    for (let y = HOOD_TOP; y <= HOOD_LIP; y++) {
+      const k = (HOOD_LIP + 0.5 - y) / (HOOD_LIP + 1 - HOOD_TOP);
+      const half = 7.6 * Math.sqrt(Math.max(0, 1 - k * k));
+      for (let x = Math.ceil(hcx - half); x <= Math.floor(hcx + half); x++) {
+        const across = (x - (hcx - half)) / Math.max(1, 2 * half); // 0 at the lit west edge
+        const down = (y - HOOD_TOP) / (HOOD_LIP - HOOD_TOP);
+        s.px(x, y, paint(roundT(clamp01(0.62 * across + 0.38 * down), 0.18, 0.18 + SPAN)));
+      }
+    }
+    // The opening's dark under the lip, an arch inside the arch: what makes it a mailbox's mouth
+    // and not a red roof on a crate.
+    for (const [x0, x1, y] of [
+      [12, 19, 12],
+      [11, 20, 13],
+    ] as const)
+      s.rect(x0, y, x1 - x0 + 1, 1, LINE.wood);
+    s.rect(13, 11, 6, 1, keyline('wood', 70)); // the crown of the opening, a step less deep
+
+    /*
+     * THE FLAG, UP. A one-pixel arm in the metal keyline from the box's east side to above the hood,
+     * and a plate on top of it pointing east -- clear of the hood by two rows, so the shape against
+     * the lawn is unmistakably raised. Lit from the top left like everything else.
+     */
+    s.rect(23, 2, 1, 13, LINE.metal);
+    // Six by three, not four square: a square plate on a thin arm, rounded by the ring, came back
+    // as a lollipop. A flag is wider than it is tall.
+    face(s, 24, 2, 6, 3, 'gold', 0.3, 0.3 + SPAN * 0.9);
+  });
+
+  /*
+   * The same tuft ring the signpost wears at its foot, so the post grows out of the lawn rather than
+   * standing on it. See the note on the signpost.
+   */
+  for (const [bx, by] of [
+    [9, 29],
+    [12, 30],
+    [18, 30],
+    [21, 29],
   ] as const)
     for (const [dx, up] of [
       [0, 1],
@@ -1895,6 +1998,7 @@ export const PROP_TILES: Record<string, Painter> = {
   signpost,
   'notice-board': noticeBoard,
   'door-note': doorNote,
+  mailbox,
 };
 
 /* ------------------------------------------------- the guards, at import time */
@@ -2134,6 +2238,7 @@ const GROUND_PROPS = [
   'well',
   'lantern-post',
   'fountain',
+  'mailbox',
 ] as const;
 
 /** What the LAWN still visible in a finished prop tile reads. */
@@ -2183,5 +2288,49 @@ for (const name of GROUND_PROPS) {
   if (g.top < CONTACT_GUARD.topLo)
     throw new Error(
       `"${name}" has shade up the tile rather than under its foot (want nothing in the contact band above row ${CONTACT_GUARD.topLo}): ${say}. Darkening the whole tile passes the floor and still leaves the prop floating, because what seats an object is the step between its foot and the ground beside it.`,
+    );
+}
+
+/*
+ * ===========================================================================
+ * AND GRANDMA'S MAILBOX HAS ITS FLAG UP.
+ * ===========================================================================
+ *
+ * "Mailbox with the flag up" is UI_FOUNDATIONS section 8's own wording and the flag is the whole
+ * message, so the guard is on the flag rather than on the box. Two-sided in the way the note's
+ * guard is: a flag can be drawn and still say nothing, by being too small to see at the camera or
+ * by being lowered into the hood's own outline. So the flag has an area floor, and its top must
+ * stand at least two rows clear of the hood's crown.
+ *
+ * Told apart by hue, not by value, because the flag is banded down to luma 96 on its shaded side.
+ * `gold` runs green over blue by 70 to 118 and red over green by under 60; `rust` runs red over
+ * green by more than 100; every step of `wood` -- box, post, cap -- keeps green within 58 of blue;
+ * the lawn is green-led. So a pixel with red over green over blue, green more than 64 over blue and
+ * red under 60 over green is the flag and nothing else.
+ *
+ * Measured on the tile as drawn: 18px of flag, its top on row 2, the hood's crown on row 6.
+ */
+{
+  const img = new Img(TILE, TILE);
+  PROP_TILES['mailbox']!(img);
+  let flag = 0;
+  let flagTop = TILE;
+  let hoodTop = TILE;
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const [r, g, b] = img.get(x, y);
+      if (r > g && r - g < 60 && g > b + 64) {
+        flag++;
+        flagTop = Math.min(flagTop, y);
+      } else if (r > g + 50 && r > b + 60) hoodTop = Math.min(hoodTop, y);
+    }
+  const say = `${flag}px of flag, its top on row ${flagTop}, the hood's crown on row ${hoodTop}`;
+  if (flag < 12)
+    throw new Error(
+      `Grandma's mailbox has no flag worth the name (want at least 12px of it): ${say}. The flag is what the Arrive scene asks for; a mailbox without one is just a box.`,
+    );
+  if (hoodTop - flagTop < 2)
+    throw new Error(
+      `Grandma's mailbox has its flag down (want its top at least two rows above the hood's crown): ${say}. "Mailbox with the flag up" is UI_FOUNDATIONS section 8's own wording.`,
     );
 }

@@ -1783,7 +1783,7 @@ const TRANSOM = 11; // rows 11..12
  * the part of that picture a tile is allowed to carry, and the Arrive panel's "The lamp is lit" --
  * protected copy, written over two dark windows until now -- is the part it has to carry.
  */
-function windowTile(lit: boolean): Painter {
+function windowTile(lit: boolean, wolf = false): Painter {
   return (img) => {
     plaster(img);
 
@@ -1846,6 +1846,10 @@ function windowTile(lit: boolean): Painter {
     img.rect(MULLION, GLASS_T, 1, GLASS_B - GLASS_T + 1, tone('wood', 0.52)); // lit down its left
     img.rect(GLASS_L, TRANSOM, GLASS_R - GLASS_L + 1, 2, tone('wood', 0.3)); // the transom
     img.rect(GLASS_L, TRANSOM, GLASS_R - GLASS_L + 1, 1, tone('wood', 0.46)); // lit along its top
+
+    // Who is sitting up in Grandma's chair. Only ever on the overlay, never on a laid tile: see
+    // `WINDOW_WOLF` below for why, and for how he is drawn.
+    if (wolf) sitter(img);
 
     /*
      * The sill, standing proud of the frame and lit along its top -- and STONE, not timber.
@@ -1967,6 +1971,133 @@ function windowTile(lit: boolean): Painter {
     sillPlate(img);
   };
 }
+
+/* ---------------------------------------------------- who is in the lit window */
+
+/*
+ * THE WOLF IS BACK IN THE WINDOW, AND THIS TIME HE CANNOT BE THERE ON THE WRONG ENDING.
+ *
+ * Read the note above `windowTile` first: he came out of `wall-window` because a TILE is the same
+ * thirty-two pixels on every ending, so a wolf painted into one sat in Grandma's window on the runs
+ * where the thing in the cottage is Grandma. That argument is still right, and nothing here weakens
+ * it -- `wall-window-lit` is laid exactly as before and is byte-for-byte the tile it was.
+ *
+ * What is new is that he is no longer a tile. `fx-window-wolf` is an OVERLAY: the pixels the wolf
+ * adds to the lit window and nothing else, transparent everywhere he is not. The scene lays it over
+ * the lit window's own cell, read off the map, ONLY on the wolf ending and only once Purple is at
+ * the door (forest-scene.ts, `stageArrival`). During the walk it does not exist on screen, so it
+ * cannot give the ending away from across the garden; on the clean ending the window is the lamp
+ * and an empty room, which is what the tile has always shown. There is no Grandma shape to put in
+ * it -- she exists only as a portrait -- and inventing one is not this file's call.
+ *
+ * HOW HE IS DRAWN, measured off the board's own lit window (`2440 1240 260 230 3`, the wolf at
+ * `2468 1298 120 98 9`): a flat dark shape against amber, two tall pointed ears with a notch of
+ * light between them, and one warm mark. Ours adds the two things the client asked for in words --
+ * a muzzle and the slope of a shoulder in Grandma's chair -- because at 18 x 17 pixels of glass a
+ * front-on head is a cat as easily as a wolf, and the long muzzle in profile is the feature no other
+ * animal in this world has. He faces WEST, towards the door and the girl on its step.
+ *
+ *   ears      two, nearly upright, single-pixel points, the near one taller. The notch between them
+ *             runs down to the skull and is the board's tell; the guard below holds it open.
+ *   muzzle    driven four and a half pixels out of the skull over clear amber. Cut it by three and
+ *             he is a dog -- the same arithmetic `paintWolf` records for the full figure.
+ *   shoulder  the front of him falls from under the jaw to the bottom-left corner of the glass in
+ *             one slope, with the ruff breaking it twice. That slope is the "sitting up" read.
+ *   hackles   three single pixels standing off the nape, so the back of him is fur and not a coat.
+ *   chair     a wing-back behind him, east of his back, in the deepest step of `wood`. Lighter than
+ *             he is by about sixty luma, so the eye reads a chair with something IN it, not one
+ *             shape. It is the only piece of Grandma's in the picture and it is the point of it.
+ *   eye       one, two pixels of `gold` level 2 -- the lamp catching it. The single amber mark the
+ *             board puts in its silhouette, and the only unsettling thing about him. No teeth, no
+ *             open jaw: a family forest, and a shape that is wrong is scarier than one that snarls.
+ *
+ * IN FRONT OF THE BARS, as the board draws him. Physically he is behind the glass and the mullion
+ * and transom would cross him; at this size they cross his head dead centre (the mullion is column
+ * 15, the transom row 11, and his skull is centred on both), which cuts one wolf into four dark
+ * fragments that read as nothing. The board's painter made the same call and so does this one: the
+ * bars show wherever he does not, which is three panes' worth, and the window is still a window.
+ *
+ * FLAT `ink`, which PIXEL_STANDARD section 4 reserves for him so that he reads as a silhouette. The
+ * same ink as his frame 2, which is the full-figure "shape in the window" no scene ever stood up --
+ * it is 30 pixels long and the glass is 18, so it was never going to fit, and this is the head and
+ * shoulders it would have shown.
+ */
+
+/*
+ * The sitter, pixel for pixel, over the glass: column 0 is `GLASS_L`, row 0 is `GLASS_T`.
+ *
+ * HAND-PLACED, NOT RASTERISED. A first pass built him out of an ellipse and four polygons and he
+ * came back a jackal -- ears that tapered to one pixel and a muzzle that thinned to a beak, because
+ * a polygon at this size decides its own edge pixels by where their centres fall. The board's
+ * animals are placed a pixel at a time, and so is this one.
+ *
+ * Laid out AROUND THE BARS rather than over them. The mullion is columns 8 and 9 and the transom
+ * rows 7 and 8, so the notch between his ears is column 8 -- where the mullion shows through, a
+ * brown bar between two black ears rather than the two merging -- and the gap between the back of
+ * his head and the chair is column 13, where the transom shows. The bars still read as one cross.
+ *
+ *   W  him, flat `ink` level 0       E  the eye, `gold` level 2: the lamp catching it
+ *   C  the chair, `wood` level 0     c  its crest, a step lighter where the lamp behind it catches
+ *   .  the glass, untouched
+ */
+const SITTER = [
+  '..................',
+  '......W...W.......',
+  '.....WW..WW.....cc',
+  '.....WWW.WWW...cCC',
+  '....WWWWWWWW..cCCC',
+  '...WWWWWWWWW..CCCC',
+  '.WWWEEWWWWWWW.CCCC',
+  'WWWWWWWWWWWWW.CCCC',
+  '.WWWWWWWWWWWWWCCCC',
+  '...WWWWWWWWWWWCCCC',
+  '.....WWWWWWWWWCCCC',
+  '......WWWWWWWWWCCC',
+  '.....WWWWWWWWWWCCC',
+  '.....WWWWWWWWWWWCC',
+  '....WWWWWWWWWWWWCC',
+  '....WWWWWWWWWWWWWC',
+  '...WWWWWWWWWWWWWWC',
+] as const;
+
+/** What the sitter puts on one pixel of the tile, or null where the glass shows. */
+function sitterAt(x: number, y: number): 'W' | 'E' | 'C' | 'c' | null {
+  const mark = SITTER[y - GLASS_T]?.[x - GLASS_L];
+  return mark === 'W' || mark === 'E' || mark === 'C' || mark === 'c' ? mark : null;
+}
+
+/** Paints the sitter over the glass of a window already drawn, clipped to its opening. */
+function sitter(img: Img): void {
+  for (let y = GLASS_T; y <= GLASS_B; y++)
+    for (let x = GLASS_L; x <= GLASS_R; x++) {
+      const what = sitterAt(x, y);
+      if (what === 'W') img.px(x, y, tone('ink', 0));
+      else if (what === 'E') img.px(x, y, tone('gold', 2 / 3));
+      else if (what === 'C') img.px(x, y, tone('wood', 0));
+      else if (what === 'c') img.px(x, y, tone('wood', 0.3));
+    }
+}
+
+/**
+ * `fx-window-wolf`: the pixels the wolf ADDS to `wall-window-lit`, transparent everywhere else.
+ *
+ * Derived by painting the lit window twice, with and without him, and keeping what differs -- so
+ * the overlay is the tile's own pixels wherever it is opaque and the two can never drift apart. It
+ * is a whole 32 x 32 cell on purpose: the scene lays it at the lit window's tile origin, read off
+ * the map, and needs no offset into the tile that only this file knows.
+ */
+export const WINDOW_WOLF: Painter = (img) => {
+  const plain = new Img(TILE, TILE);
+  windowTile(true)(plain);
+  const sat = new Img(TILE, TILE);
+  windowTile(true, true)(sat);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const a = plain.get(x, y);
+      const b = sat.get(x, y);
+      if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2] || a[3] !== b[3]) img.px(x, y, b);
+    }
+};
 
 /* --------------------------------------------------------------------- door */
 
@@ -2669,5 +2800,87 @@ const PLUME_GUARD = {
   if (skew > 1)
     throw new Error(
       `The door's knobs are not symmetric about the astragal at x ${middle} (out by ${skew.toFixed(1)}px): ${say}.`,
+    );
+}
+
+/*
+ * THE WOLF IN THE WINDOW, THREE WAYS IT CAN GO WRONG WITHOUT A SOUND.
+ *
+ *   1. He leaks into the TILE. `wall-window-lit` is laid on every ending and seen all walk; if his
+ *      ink ever reaches it, the ending is given away from across the garden and Grandma's ending
+ *      has a wolf in it -- the exact defect the note above `windowTile` took him out of the tile to
+ *      fix. So the laid tile carries not one pixel of the wolf's ink.
+ *   2. He leaks out of the GLASS. The overlay is laid over the whole cell, so a stray mark would be
+ *      painted on the frame, the sill or the flower box on one ending only, which is a building that
+ *      changes shape. Every opaque overlay pixel sits inside the opening.
+ *   3. He stops READING. Two-sided, because both failures are a window that says nothing: a speck
+ *      (under a quarter of the glass) is not "something in there", and a blackout (over three
+ *      fifths) is a window with the lamp off. Then the two features that make him a wolf and not a
+ *      cat or a man in a chair: two ears with lamplight between them on his top row, and a muzzle
+ *      that runs at least three columns past his eye.
+ *
+ * Measured on the overlay as drawn: 154 of the 306 glass pixels (0.50) are his, with 45 of chair
+ * and 2 of eye (201 in all, every one inside the opening); his top row is two single-pixel tips
+ * four columns apart; the muzzle runs four columns past the eye. Each check was proved by breaking
+ * it -- the sitter painted into the laid tile (154px leaked), the ears filled in (1 run), the muzzle
+ * cut to the eye (1 column), a pixel on the sill (1 outside), him cut to his ears (0.09) and the
+ * glass blacked out (0.85) -- and the file restored and checked back with `cmp`.
+ */
+{
+  const INK = tone('ink', 0);
+  const isInk = (c: RGBA): boolean => c[0] === INK[0] && c[1] === INK[1] && c[2] === INK[2];
+  const lit = new Img(TILE, TILE);
+  windowTile(true)(lit);
+  let leaked = 0;
+  for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) if (isInk(lit.get(x, y))) leaked++;
+  if (leaked > 0)
+    throw new Error(
+      `wall-window-lit carries ${leaked}px of the wolf's ink. That tile is laid on every ending and seen the whole walk; the wolf belongs to the fx-window-wolf overlay, which the scene shows on his ending only.`,
+    );
+
+  const over = new Img(TILE, TILE);
+  WINDOW_WOLF(over);
+  let outside = 0;
+  let him = 0;
+  let eyeX = TILE;
+  let nose = TILE;
+  let crown = TILE;
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const c = over.get(x, y);
+      if (c[3] === 0) continue;
+      if (x < GLASS_L || x > GLASS_R || y < GLASS_T || y > GLASS_B) outside++;
+      if (isInk(c)) {
+        him++;
+        nose = Math.min(nose, x);
+        crown = Math.min(crown, y);
+      } else if (c[0] > c[2] + 60 && lumaOf(c) > 150) eyeX = Math.min(eyeX, x);
+    }
+  const glass = (GLASS_R - GLASS_L + 1) * (GLASS_B - GLASS_T + 1);
+  // The top row he reaches, as runs of ink: the ears are two of them with light between.
+  const runs: number[] = [];
+  for (let x = GLASS_L, inRun = false; x <= GLASS_R; x++) {
+    const ink = isInk(over.get(x, crown));
+    if (ink && !inRun) runs.push(x);
+    inRun = ink;
+  }
+  const say =
+    `${him} of ${glass} glass pixels (${(him / glass).toFixed(2)}), ${outside} outside the opening, ` +
+    `${runs.length} ink run(s) on his top row, nose at x ${nose}, eye at x ${eyeX}`;
+  if (outside > 0)
+    throw new Error(
+      `fx-window-wolf paints outside the window's glass: ${say}. It is laid over the whole cell, so anything outside the opening redraws the building on one ending only.`,
+    );
+  if (him / glass < 0.25 || him / glass > 0.6)
+    throw new Error(
+      `The wolf in the window is out of band (want 0.25..0.6 of the glass): ${say}. Under it he is a speck nobody notices; over it the window stops reading as lit.`,
+    );
+  if (runs.length !== 2)
+    throw new Error(
+      `The wolf in the window has lost his ears (want two tips with light between them on his top row): ${say}. Two pointed ears are what the board's silhouette is read by; one lump is a bear or a hat.`,
+    );
+  if (eyeX - nose < 3)
+    throw new Error(
+      `The wolf in the window has lost his muzzle (want it at least 3 columns past his eye): ${say}. Shorten the muzzle and he is a dog, or Grandma.`,
     );
 }

@@ -317,9 +317,16 @@ describe('the map', () => {
    * `bank-stones-cove-se`) APPENDED at gids 100 to 111, laid only in `decor-below` on the border
    * band by the dredge pass in `forest-map.ts`. The sheet grows to 384x320 because
    * `ceil(111 / 12)` is 10; all 99 earlier names keep their gid.
+   *
+   * 112 since 2026-10-23: Grandma's `mailbox`, flag up, APPENDED at gid 112 and laid once, at
+   * `decor-below` (53,20) beside the door lane. Verified on the regeneration that committed it, cell
+   * by cell against a scratch `--out` run: the only tileset cell that changed is gid 112 (an empty
+   * cell until then), all 111 earlier names keep their gid, and the only map cells that changed are
+   * `decor-below` (53,20), 22 (`flower-pink`) -> 112, and `collision` (53,20), 0 -> 1, plus the
+   * appended `prop-mailbox` object (id 21). The sheet stays 384x320 because `ceil(112 / 12)` is 10.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(111);
+    expect(TILE_NAMES).toHaveLength(112);
   });
 });
 

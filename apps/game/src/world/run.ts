@@ -23,6 +23,12 @@ export interface WorldRun {
   /** The wolf's prints show on the doorstep for this arrival. */
   pawsEarned(): boolean;
   /**
+   * The wolf is in Grandma's chair for this arrival, his shape in the lit window. The wolf's ending
+   * and nothing else: never during the walk (the scene only asks at the door), never on Grandma's
+   * ending, never on the late one, which does not reach the door at all.
+   */
+  wolfInside(): boolean;
+  /**
    * Who a map spawn is: a member of the cast who offers a skill, a bystander who only says a line,
    * or nobody (left off the map). `id` is what interacting emits.
    */
@@ -59,6 +65,9 @@ export function gameRun(store: Store): WorldRun {
     // Something came up this path ahead of you exactly when the run reached the wolf's ending:
     // a skill dealt bad THIS run was taken. Read from core, never from the skill's own data.
     pawsEarned: () => v2.ending(store.getState(), content) === 'wolf',
+    // The same fact as the trail, asked separately so the two can be told apart if content ever
+    // splits them: who is inside is the ending's, and core says which ending this is.
+    wolfInside: () => v2.ending(store.getState(), content) === 'wolf',
     // The cast is read from content, not from the spawn's prefix: the map's bystanders offer here.
     castOf: (spawnName) => {
       const c = content.characters.find((x) => x.spawn === spawnName);
