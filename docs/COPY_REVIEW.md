@@ -41,9 +41,29 @@ skills). The full text is in `docs/GAME_DESIGN_V2.md` section 10; the file is th
 | Night Light  | promise; giveaway "Goes wherever the signs say, without asking you."; bad reveal     | "Waits for you to choose the way." / "Lights your way after dark."; good reveal; note      |
 | Long Evening | promise; both cards; bad reveal "You had more time. The wolf had her key."           | leave "The sun sets on time."; good reveal; note "A skill is an identity too, …"           |
 
-Two questions for the read, not settled here. Night Light's note ends "Keep a person in the loop":
-is "person" right, or does research prefer "human"? And Long Evening's note says "a non-human
-identity" outright, which is the client's framing and research's to confirm.
+One question for the read, not settled here: Long Evening's note says "a non-human identity"
+outright, which is the client's framing and research's to confirm. (The other, "person" or
+"human" in Night Light's note, was settled by the content review below: "human".)
+
+### 0a. Changed by the content review (2026-10-22, late)
+
+Six strings in `content/game.v2.json`, all **DRAFT** until the human read. The content version
+was **not** bumped (`2.0.0-draft.8`): it is load-bearing, since a run log played under one version
+is refused by a server on another (`runlog.ts`, `content-mismatch`), and no rule changed.
+
+| Path                                 | Was                                                                                                                 | Now                                                                                                                                  | Why                                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `ui.chrome.doorWelcome`              | Grandma is at the door already.                                                                                     | No need to knock. Word went ahead of you.                                                                                            | Blocking. Said when either copy of Word Weaver was taken, so it must not claim a safe arrival.                                       |
+| `skills[word-weaver].good.reveal`    | Sent word ahead. She was at the door.                                                                               | Sent word ahead. She was expecting you.                                                                                              | Blocking. Pairs with the bad reveal "She expected you. So did the wolf."                                                             |
+| `ui.chrome.landingPremise`           | Three good skills, four malicious ones. Take only the good three and race to Grandma.                               | Little Purple is your AI agent. Three skills on the path are good, four are malicious. Take only the good three and race to Grandma. | Names what the game stands for. Must fit the title card at 568x320, 667x375 and 844x390 (`e2e/title-steps.spec.ts`, `play.spec.ts`). |
+| `skills[night-light].realWorld.note` | A helper that acts on every sign without asking skips your say on the steps that matter. Keep a person in the loop. | A helper that acts on every sign without asking leaves you out. Keep a human in the loop for steps that matter.                      | Plainer; "human in the loop" is the term of art. 22 words in 2 sentences (the lint allows 25 in 2).                                  |
+| `ui.chrome.perkMinimap`              | The map is yours.                                                                                                   | A map of the wood.                                                                                                                   | A perk toast is shown for the bad copy too. "Yours" vouched for a map the bad copy sends to a stranger.                              |
+| `ui.chrome.perkWingRide`             | Hold tight. Off to your next friend!                                                                                | A ride to your next friend.                                                                                                          | Same rule: the game's own neutral voice, saying what the skill does, not cheering a ride the bad copy routes by the wolf's map.      |
+
+The other perk toasts were read against the same rule and left alone, because each says only what
+the skill does in either copy: `perkForkSigns`, `perkEarlyWelcome`, `perkWingRideNobody`,
+`perkWalkFaster`, `perkLantern`, `perkRewind`. `docs/GAME_DESIGN_V2.md` section 10 still quotes
+the old Word Weaver reveal and Night Light note; the file is the source of truth.
 
 **All of these live in `content/game.json` and are changed there only.** Copy that lives in `.tsx`
 instead is a bug, and `docs/UX_REVIEW.md` finding 13 records roughly 35 of them.

@@ -33,5 +33,11 @@
     "typescript-eslint": "8.70.1",
     "vitest": "4.1.11",
     "@vitest/coverage-v8": "4.1.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "rollup": "4.64.2",
+      "postcss": "8.5.29"
+    }
   }
 }

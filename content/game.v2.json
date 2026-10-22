@@ -136,7 +136,7 @@
           "take": ["Sends word ahead to Grandma.", "Folds it shut, for her eyes only."],
           "leave": "You knock and wait."
         },
-        "reveal": "Sent word ahead. She was at the door."
+        "reveal": "Sent word ahead. She was expecting you."
       },
       "bad": {
         "card": {
@@ -210,7 +210,7 @@
       "effect": { "kind": "lantern" },
       "realWorld": {
         "term": "Autonomy without human approval",
-        "note": "A helper that acts on every sign without asking skips your say on the steps that matter. Keep a person in the loop."
+        "note": "A helper that acts on every sign without asking leaves you out. Keep a human in the loop for steps that matter."
       },
       "good": {
         "card": {
@@ -395,7 +395,7 @@
       "worldBearings": "north of you|north-east of you|east of you|south-east of you|south of you|south-west of you|west of you|north-west of you",
       "worldDistances": "a few steps away|a short walk away|a long way off",
       "leaderboardClosed": "Posting has closed for that run.",
-      "landingPremise": "Three good skills, four malicious ones. Take only the good three and race to Grandma.",
+      "landingPremise": "Little Purple is your AI agent. Three skills on the path are good, four are malicious. Take only the good three and race to Grandma.",
       "revealChoices": "Correct choices",
       "revealSpeed": "Speed bonus",
       "revealTime": "Your time",
@@ -422,16 +422,16 @@
       "revealCaught": "Caught it",
       "revealMissed": "Missed it",
       "revealWatchFor": "What to watch for",
-      "perkMinimap": "The map is yours.",
+      "perkMinimap": "A map of the wood.",
       "perkForkSigns": "Signs at each fork now show who lives that way.",
       "perkEarlyWelcome": "Word is flying ahead to Grandma.",
-      "perkWingRide": "Hold tight. Off to your next friend!",
+      "perkWingRide": "A ride to your next friend.",
       "perkWingRideNobody": "You've met everyone, so there's nobody to fly to.",
       "perkWalkFaster": "Your load is lighter. You walk faster.",
       "perkLantern": "Your lantern is lit for the dusk.",
       "perkRewind": "The dark holds back. {seconds} seconds more.",
       "doorKnock": "You knock and wait.",
-      "doorWelcome": "Grandma is at the door already."
+      "doorWelcome": "No need to knock. Word went ahead of you."
     },
     "contact": {
       "consentVersion": "research-contact-v1",

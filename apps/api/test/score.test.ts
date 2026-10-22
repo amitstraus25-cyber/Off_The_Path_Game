@@ -215,6 +215,38 @@ describe('the score the board stores', () => {
     }
   });
 
+  it('refuses the names the security review posted under the old gate: the brand, lookalikes, abuse', async () => {
+    // Each of these was stored by the gate before 2026-10-22's review (core test/v2/board.test.ts
+    // proves it against that gate); here the server, which is the authority, is shown refusing them.
+    for (const handle of [
+      'Cyera',
+      'Cyera CEO',
+      'Cyera Support',
+      'Аdmin', // a Cyrillic А
+      'Ｃｙｅｒａ',
+      'Chink',
+      'Kill yourself',
+      'Motherfcker',
+      'me at gmаil', // a Cyrillic а
+    ]) {
+      const h = harness();
+      const res = await handleScore(postScore(ticketed(h.clock, { handle })), h.deps);
+      expect(res.status, handle).toBe(422);
+      await expect(res.json()).resolves.toEqual({
+        error: 'that name cannot go on the board',
+        reason: 'name',
+      });
+      expect(h.calls).toHaveLength(0);
+    }
+  });
+
+  it('stores a name in another script as it was typed, not as the check read it', async () => {
+    const h = harness();
+    const res = await handleScore(postScore(ticketed(h.clock, { handle: 'Олег' })), h.deps);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ handle: 'Олег' });
+  });
+
   it('spends nothing on a refused name: the same run posts under a better one', async () => {
     const instance = { recent: createRecentRuns(), clock: { now: T0 } };
     const run = ticketed(instance.clock);

@@ -13,3 +13,26 @@ allowBuilds:
 
 onlyBuiltDependencies:
   - esbuild
+
+# CLAUDE.md: never take a package version published in the last 14 days. minimumReleaseAge is in
+# minutes (20160 = 14 days) and makes pnpm refuse to resolve anything younger, so the rule is
+# enforced by the tool rather than remembered. It does not touch `pnpm install --frozen-lockfile`
+# (the lockfile is already resolved), which is what Vercel and CI run.
+minimumReleaseAge: 20160
+
+# Pinned because the newest versions Vite 7.3.7's ranges (rollup ^4.43.0, postcss ^8.5.6) allow
+# were younger than 14 days on 2026-10-22: rollup 4.64.6 (and its @rollup/rollup-* binaries,
+# which follow rollup's version exactly) was published 2026-10-13, postcss 8.5.30 on 2026-10-12.
+# These are the newest releases at least 14 days old on that date (rollup 4.64.3 was ten minutes
+# short). Delete each override once the version the range resolves to has aged past 14 days, and
+# only then; a newer pin is a decision, not a drift.
+#
+# The same two pins are mirrored in package.json under "pnpm.overrides". pnpm 10 and 11 read this
+# file; pnpm 9 reads only package.json, and with the override missing there it fails
+# `pnpm install --frozen-lockfile` with ERR_PNPM_LOCKFILE_CONFIG_MISMATCH, which on Vercel (it picks
+# the pnpm major from the lockfile) would fail every deploy. pnpm 11 prints a harmless warning that it
+# ignores the package.json copy. Frozen installs were run on pnpm 9.15.9, 10.34.7 and 11.9.0. Change
+# the pins in both places or in neither.
+overrides:
+  rollup: 4.64.2
+  postcss: 8.5.29
