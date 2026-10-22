@@ -49,7 +49,8 @@ describe('the title hint describes the machine the player is actually on', () =>
   it('names the keys that walk and talk, on a keyboard', () => {
     const hint = titleHint(strings, true);
     expect(hint).toMatch(/arrow/i);
-    expect(hint).toMatch(/\bspace\b/i);
+    // E, the key UI_FOUNDATIONS section 8 names (Paul's round, 2026-10-22); Space and Enter work too.
+    expect(hint).toMatch(/\bE to talk\b/);
   });
 
   it('names the joystick and the A button, and no key, on a pad', () => {

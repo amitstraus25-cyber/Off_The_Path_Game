@@ -202,7 +202,9 @@ export function Hud({
         <span class="otp-hud-basket__label otp-hud2__label" aria-hidden="true">
           {labels.time}
         </span>
-        <span class="otp-hud2__clock">{formatClock(faceMs)}</span>
+        <span class="otp-hud2__clock" data-face={formatClock(faceMs)}>
+          {formatClock(faceMs)}
+        </span>
       </div>
       <p
         class="otp-visually-hidden"

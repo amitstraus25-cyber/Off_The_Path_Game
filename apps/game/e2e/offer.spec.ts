@@ -233,6 +233,12 @@ test('Walk on takes a slim ring that follows its shape and stands off its words'
       style: s.outlineStyle,
       width: parseFloat(s.outlineWidth),
       offset: parseFloat(s.outlineOffset),
+      /*
+       * How far the ring's inner edge stands from the words: its offset plus the control's own
+       * padding. Since Paul's round (2026-10-22) the ring sits ON the pill-shaped box (offset 0)
+       * and the 6px of padding is what keeps it off the letters, so the gap is the measure.
+       */
+      clear: parseFloat(s.outlineOffset) + parseFloat(s.paddingLeft),
       halo: s.boxShadow,
       radius: parseFloat(s.borderTopLeftRadius),
     };
@@ -240,7 +246,8 @@ test('Walk on takes a slim ring that follows its shape and stands off its words'
   expect(ring.style).toBe('solid');
   expect(ring.width, 'visible: at least 2px all round').toBeGreaterThanOrEqual(2);
   expect(ring.width, 'slim: thinner than the pill ring').toBeLessThan(3);
-  expect(ring.offset, 'off the words').toBeGreaterThan(0);
+  expect(ring.offset, 'never inside the box').toBeGreaterThanOrEqual(0);
+  expect(ring.clear, 'off the words').toBeGreaterThan(0);
   expect(ring.halo, 'no halo box').toBe('none');
   expect(ring.radius, 'a shape to follow, not a square').toBeGreaterThan(0);
 });

@@ -3,7 +3,7 @@ import { v2 } from '@otp/core';
 import raw from '../../../content/game.v2.json';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { formatElapsed, spottedOf } from '../src/ui/Results';
+import { formatElapsed, keptOutOf, spottedOf } from '../src/ui/Results';
 
 /*
  * The 2026-10-22 afternoon round: the clear instructions, the score-first reveal and the player's
@@ -127,6 +127,35 @@ describe('the score, as the reveal reads it from core', () => {
     // The careful run reads every card and leaves every bad one.
     const run = v2.result(careful.state, content);
     expect(spottedOf(run.entries)).toBe(run.entries.filter((e) => !e.good).length);
+  });
+
+  it('counts a bad skill as kept out whenever it stayed out of the basket, read or not', () => {
+    const entry = (over: Partial<v2.RevealEntry>): v2.RevealEntry => ({
+      skillId: 'x',
+      name: 'X',
+      promise: 'p',
+      good: false,
+      verdict: 'leave',
+      read: true,
+      line: 'l',
+      giveaway: 'g',
+      ...over,
+    });
+    // Walked past without meeting its owner: never in the basket, so kept out.
+    expect(keptOutOf([entry({ read: false, verdict: null })])).toBe(1);
+    // Taken: in the basket, so not kept out.
+    expect(keptOutOf([entry({ verdict: 'take' })])).toBe(0);
+    // A good one never counts, whatever was done with it.
+    expect(keptOutOf([entry({ good: true, giveaway: null, verdict: null })])).toBe(0);
+    // Every card walked past: all four bad ones were kept out -- and none were spotted.
+    const walkedPast = [0, 1, 2, 3].map((i) =>
+      entry({ skillId: `b${i}`, read: false, verdict: null }),
+    );
+    expect(keptOutOf(walkedPast)).toBe(4);
+    expect(spottedOf(walkedPast)).toBe(0);
+    // The careful run keeps every bad one out too.
+    const run = v2.result(careful.state, content);
+    expect(keptOutOf(run.entries)).toBe(run.entries.filter((e) => !e.good).length);
   });
 });
 

@@ -91,7 +91,9 @@ html[data-hud='strip'] .otp-ui .otp-layer.otp-layer--toast {
   display: flex;
   align-items: center;
   gap: calc(10px * var(--otp-ui));
-  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  /* Opaque Black in every cabinet (Paul's item 20): at 82% the forest showed through the pill
+     over busy ground, and the strip cabinet already drew it solid. */
+  background: var(--cyera-black);
   border-radius: var(--otp-r-pill);
   padding: calc(6px * var(--otp-ui)) calc(16px * var(--otp-ui));
   color: var(--cyera-offwhite);
@@ -111,10 +113,26 @@ html[data-hud='strip'] .otp-ui .otp-layer.otp-layer--toast {
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0;
-  /* Four characters, centred: "3:00" is the widest face, and a bold "0:29" must not push the
-     pill wider than it was. */
-  min-width: 4ch;
+  /*
+   * THE FACE'S OWN WIDTH, AT ITS HEAVIER WEIGHT (Paul's item 21). `min-width: 4ch` centred left
+   * most of a ch of air inside the pill, so the face sat off-centre, and the bold urgent weight
+   * still widened the pill at 0:29. Measured instead of guessed: `ch` here is not the face's advance
+   * (Haffer's tabular figures and its colon are not four zeros), so no ch count is right at every
+   * size. The face is laid in a one-column grid over an invisible copy of itself at the urgent
+   * weight (`::after`, below), so the column is the urgent face's width at both weights; the calm
+   * face is centred in it with a fraction of a pixel either side, and the pill never moves.
+   */
+  display: inline-grid;
+  min-width: 0;
   text-align: center;
+}
+
+.otp-hud2 .otp-hud2__clock::after {
+  content: attr(data-face);
+  font-weight: 600;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 /*
@@ -127,7 +145,7 @@ html[data-hud='strip'] .otp-ui .otp-layer.otp-layer--toast {
 }
 
 .otp-hud2 .otp-hud2__timer[data-urgent='true'] .otp-hud2__clock {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /*
@@ -393,6 +411,11 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   bottom: 2px;
   transform: translateX(-50%);
   display: flex;
+  /* Wraps rather than running off the world on a phone (Paul's item 18). */
+  flex-wrap: wrap;
+  justify-content: center;
+  width: max-content;
+  max-width: calc(var(--otp-canvas-w, 100vw) - 28px);
   gap: 4px;
   margin: 0;
   padding: 0;
@@ -405,7 +428,8 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   gap: 4px;
   padding: 2px 8px 2px 2px;
   border-radius: var(--otp-r-pill);
-  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  /* Opaque: at 82% over the sand the chip read muddy (Paul's item 18). */
+  background: var(--cyera-black);
   color: var(--cyera-offwhite);
   /* 13px: a step up from 11 with the rest of the world's chrome, at every scale (the chip stands
      on a 32x48 face drawn one CSS pixel per art pixel, so it does not scale with --otp-ui). */
@@ -435,6 +459,20 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   border-left: 7px solid var(--cyera-haze);
+}
+
+/*
+ * On a phone the face and the arrow are the sign: the name goes, so three chips fit the world's
+ * width beside the hint and the minimap (Paul's item 18). The world summary still names everyone.
+ */
+@media (max-width: 640px), (max-height: 500px) {
+  .otp-forksign__name {
+    display: none;
+  }
+
+  .otp-forksign__chip {
+    padding: 2px 6px 2px 2px;
+  }
 }
 
 .otp-forksign__chip[data-heading='left'] .otp-forksign__arrow {

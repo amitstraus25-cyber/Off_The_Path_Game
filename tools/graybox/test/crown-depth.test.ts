@@ -95,3 +95,42 @@ describe.each([
     expect(bad.length, bad.join('  ')).toBeLessThanOrEqual(BACK_OVER_FRONT);
   });
 });
+
+/*
+ * NO GHOST OF A STRUCK TREE (Paul's round, 2026-10-22). A crown's middle quarter, `elder-mc`, is
+ * opaque to its edges, so wherever it is drawn with no crown on its right or below it, the tile
+ * grid cuts the canopy in a hard square -- which is what the river sweep left behind when it struck
+ * a tree after the overlap pass had drawn its shared cells: the survivor's corner came out a middle
+ * quarter, at (27,5), (57,6) and (12,32). Read off the map, mirror bit and all: a mirrored `mc` is
+ * still a middle quarter, and its outward edge is still the drawn right.
+ *
+ * Proved by breaking it: with `strike` back to leaving shared cells alone, this lists the three
+ * cells above (and the generator's blind-cell count goes back from 98 to 101).
+ */
+function bareMiddles(map: MapFile): string[] {
+  const above = map.layers.find((l) => l.name === 'decor-above')!.data!;
+  const name = (raw: number): string => TILE_NAMES[((raw >>> 0) & BASE_GID) - 1] ?? '';
+  const crown = (x: number, y: number): boolean => {
+    if (x < 0 || x >= MAP_W || y < 0) return false;
+    const n = name(above[y * MAP_W + x] ?? 0);
+    return /^(elder|canopy|sapling)-/.test(n) && !/trunk/.test(n);
+  };
+  const bad: string[] = [];
+  above.forEach((raw, i) => {
+    if (name(raw) !== 'elder-mc') return;
+    const x = i % MAP_W;
+    const y = Math.floor(i / MAP_W);
+    if (!crown(x + 1, y) || !crown(x, y + 1)) bad.push(`(${x},${y})`);
+  });
+  return bad;
+}
+
+describe.each([
+  ['the generated map', generated],
+  ['the committed map-forest.json', committed],
+])('%s', (_which, map) => {
+  it('draws no elder-mc with bare ground to its right or below it', () => {
+    const bad = bareMiddles(map);
+    expect(bad, bad.join('  ')).toEqual([]);
+  });
+});

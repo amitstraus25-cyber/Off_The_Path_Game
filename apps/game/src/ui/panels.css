@@ -180,6 +180,19 @@
 @media (orientation: portrait) {
   .otp-layer--modal {
     align-content: safe end;
+    /*
+     * ON THE CANVAS'S EDGES (Paul's item 9): the panel's sides land on the world's, so no frame
+     * corner or forest sliver shows beside a docked card. The dim still covers the whole screen box;
+     * only the panel's column moves. The 748px cap is for a wide window, never a portrait dock.
+     */
+    padding-left: max(0px, var(--otp-canvas-x, 0px));
+    /* The right inset is the canvas's own, which is not always the left one: a 368px canvas in a
+       375px window sits 4px in on the left and 3 on the right. */
+    padding-right: max(0px, calc(100% - var(--otp-canvas-x, 0px) - var(--otp-canvas-w, 100%)));
+  }
+
+  .otp-layer--modal > .otp-panel {
+    width: 100%;
   }
 
   /*
@@ -436,6 +449,8 @@
 
 .otp-world-frame__header {
   height: var(--otp-world-header);
+  /* The right inset is the numeral's left one (Paul's item 22), so the header is framed evenly. */
+  padding-right: calc(10px * var(--otp-ui));
   background: var(--cyera-black);
   border-radius: calc(var(--otp-r-panel) - var(--otp-panel-border))
     calc(var(--otp-r-panel) - var(--otp-panel-border)) 0 0;
@@ -458,7 +473,7 @@
 @media (max-width: 640px) {
   .otp-world-frame__header {
     gap: calc(9px * var(--otp-ui));
-    padding-right: calc(9px * var(--otp-ui));
+    padding-right: calc(10px * var(--otp-ui));
   }
 
   /*
@@ -518,7 +533,8 @@
   top: calc(var(--otp-world-header) + 14px * var(--otp-ui));
   margin: 0;
   max-width: calc(100% - 28px * var(--otp-ui));
-  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  /* 92% (Paul's item 20): nearer the HUD's opaque pills, and still a hint of the world under it. */
+  background: color-mix(in srgb, var(--cyera-black) 92%, transparent);
   border-radius: var(--otp-r-pill);
   padding: calc(7px * var(--otp-ui)) calc(16px * var(--otp-ui));
   /* 15px at full scale and never under 12 (the client, 2026-10-22: "make the text bigger" -- the
@@ -527,6 +543,18 @@
   line-height: 1.3;
   color: var(--cyera-haze);
   pointer-events: none;
+}
+
+/* Gone after the walk's first six seconds (ui/App.tsx): onboarding, not furniture. */
+.otp-world-hint[data-faded='true'] {
+  opacity: 0;
+  transition: opacity var(--otp-motion-slow) ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-world-hint[data-faded='true'] {
+    transition: none;
+  }
 }
 
 /* Touch devices get the joystick and the A button instead of a keyboard line. */
@@ -557,10 +585,12 @@
   bottom: var(--otp-hud-basket-bottom);
   /* Declared, not inferred: see --otp-hud-basket-h. This is the height the box already had. */
   min-height: var(--otp-hud-basket-h);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: calc(10px * var(--otp-ui));
-  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  /* Opaque Black, the clock's ground (Paul's item 20). */
+  background: var(--cyera-black);
   border-radius: var(--otp-r-pill);
   padding: calc(6px * var(--otp-ui)) calc(8px * var(--otp-ui)) calc(6px * var(--otp-ui))
     calc(16px * var(--otp-ui));
@@ -575,14 +605,16 @@
 
 .otp-hud-basket__slots {
   display: flex;
-  gap: calc(5px * var(--otp-ui));
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .otp-hud-slot {
-  width: calc(34px * var(--otp-ui));
+  /* Square wells (Paul's item 20): 34 x 28 read as ovals round a square icon. */
+  box-sizing: border-box;
+  width: calc(28px * var(--otp-ui));
   height: calc(28px * var(--otp-ui));
   border-radius: var(--otp-r-inset);
   background: color-mix(in srgb, var(--cyera-shell) 14%, transparent);
@@ -595,7 +627,33 @@
 .otp-hud-slot--empty {
   background: transparent;
   box-shadow: none;
-  border: 1px dashed color-mix(in srgb, var(--cyera-haze) 40%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--cyera-haze) 60%, transparent);
+}
+
+/*
+ * A BIGGER BASKET ON A BIG WINDOW (Paul's item 20): a 48px pill, 40px wells and the icon at 32px,
+ * exactly half its 64px source, so it stays pixel-crisp. The pill's height token moves with it, so
+ * the clock and everything placed clear of the basket move too.
+ */
+@media (min-width: 1000px) and (min-height: 600px) {
+  .otp-ui {
+    --otp-hud-basket-h: 48px;
+  }
+
+  .otp-hud-basket {
+    padding-block: 4px;
+  }
+
+  .otp-hud-slot {
+    width: 40px;
+    height: 40px;
+  }
+
+  .otp-hud-slot img,
+  .otp-hud2 .otp-hud-slot img {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 .otp-hud-slot img {
@@ -702,7 +760,8 @@
 .otp-dialogue__text {
   flex: 1;
   min-width: 0;
-  font-size: calc(18px * var(--otp-ui));
+  /* A 15px floor (Paul's item 11): at 0.7 the line was 12.6px, one size with the rows under it. */
+  font-size: max(15px, calc(18px * var(--otp-ui)));
   line-height: 1.2;
   color: var(--cyera-black);
   padding-top: 6px;
@@ -722,6 +781,7 @@
 /* Regular, not Medium: the table sets the spoken line at the body weight and lets the panel
    around it do the emphasising. */
 .otp-dialogue__line {
+  text-wrap: pretty;
   /*
    * Zero, with the spacing moved to `.otp-dialogue__linebox` below. The paragraph is one item in a
    * one-cell grid now, and a margin on one item of that cell and not on the others would make the
@@ -921,9 +981,14 @@
 }
 
 .otp-offer .otp-dialogue__line {
-  font-size: calc(18px * var(--otp-ui));
+  font-size: max(15px, calc(18px * var(--otp-ui)));
   line-height: 1.2;
   color: var(--cyera-black);
+  /*
+   * Two lines reserved for every greeting (Paul's item 9): the seven greetings wrap to one line or
+   * two, and the panel -- docked by its bottom edge in portrait -- jumped 7.6px between cards.
+   */
+  min-height: 2.4em;
 }
 
 /*
@@ -945,7 +1010,14 @@
 .otp-card__icon {
   grid-area: icon;
   width: calc(142px * var(--otp-ui));
-  height: calc(168px * var(--otp-ui));
+  /*
+   * As tall as the column beside it (Paul's item 25, option A): a fixed 168px well lined up with
+   * nothing -- not the rows' foot, not the title's top. Stretched down the two grid rows it spans,
+   * its foot is the last row's foot; the floor keeps the picture and a margin round it.
+   */
+  height: auto;
+  align-self: stretch;
+  min-height: calc(64px * var(--otp-px) + 16px);
   flex: none;
   background: var(--cyera-natural);
   border: 2px solid var(--cyera-clay);
@@ -974,7 +1046,9 @@
 /* The promise: one line in the skill's own words, the same in both variants. */
 .otp-card__promise {
   margin: 0 0 calc(10px * var(--otp-ui));
-  font-size: max(12px, calc(15px * var(--otp-ui)));
+  /* 14, half a step over the rows' 13.5, so the phone still shows promise > row (Paul's item 11). */
+  font-size: max(14px, calc(15px * var(--otp-ui)));
+  text-wrap: pretty;
   line-height: 1.3;
   color: var(--cyera-black);
 }
@@ -984,15 +1058,26 @@
     grid-template-areas:
       'icon head'
       'rows rows';
-    align-items: center;
+    /* Start, not centre (Paul's item 25): centred, the title rode up and down by about 8px with
+       the length of the promise under it, card to card. */
+    align-items: start;
+  }
+
+  .otp-card__head {
+    margin-top: calc(6px * var(--otp-ui));
   }
 
   /* The well hugs the picture: its own 64px at --otp-px plus a little Natural round it. */
   .otp-card__icon {
     width: calc(64px * var(--otp-px) + 16px);
     height: calc(64px * var(--otp-px) + 16px);
+    align-self: start;
     margin-bottom: calc(10px * var(--otp-ui));
   }
+}
+
+.otp-card__rows .otp-row:last-child {
+  margin-bottom: 0;
 }
 
 /*
@@ -1028,6 +1113,8 @@
 
 .otp-offer__answers .otp-link {
   margin-top: 0;
+  /* Beside the pills, its words end on the content edge the rows end on (Paul's item 24). */
+  margin-right: calc(-6px * var(--otp-ui));
 }
 
 @media (max-width: 420px) {
@@ -1037,8 +1124,10 @@
     gap: calc(4px * var(--otp-ui));
   }
 
+  /* Centred under the stacked pills (Paul's item 24): hung at the start it read as orphaned. */
   .otp-offer__answers .otp-link {
-    align-self: flex-start;
+    align-self: center;
+    margin-right: 0;
   }
 }
 
@@ -1058,6 +1147,67 @@
  * reviewed device still reaches them (e2e/offer.spec.ts measures that nothing scrolls at 844x390).
  */
 @media (orientation: landscape) and (max-height: 580px) {
+  /*
+   * DOCKED ON THE WORLD, NOT CENTRED IN THE SCREEN (Paul's item 9). Centred, the offer's top rode
+   * up over the frame's header and its chip at 844x390. Its foot now sits on the canvas's foot and
+   * its sides on the canvas's sides, so it reads as a panel inside the frame.
+   */
+  .otp-layer--modal {
+    align-content: safe end;
+    padding-inline: max(0px, calc(var(--otp-canvas-x, 0px) - var(--otp-cab-side, 0px)));
+    /* 8px: the panel's own slide-in (`otp-panel-in`, 8px) must not overflow the layer while it
+       plays, or the layer reports a scroll for the 180ms it lasts (e2e/offer.spec.ts). */
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  /*
+   * Its foot on the canvas's foot only where the card fits above it: a phone wide enough for the
+   * two-column card's columns to hold its lines (844x390, 812x375). Narrower, the card is taller
+   * than the canvas and needs the whole screen box down to its foot, or it scrolls.
+   */
+  @media (min-width: 780px) and (min-height: 360px) {
+    .otp-layer--modal {
+      padding-bottom: max(
+        0px,
+        calc(
+          100dvh - var(--otp-cab-bottom, 0px) - var(--otp-canvas-y, 0px) - var(--otp-canvas-h, 0px)
+        )
+      );
+    }
+  }
+
+  .otp-layer--modal > .otp-panel {
+    width: 100%;
+  }
+
+  /*
+   * A NARROW LANDSCAPE PHONE KEEPS SMALLER FLOORS. Paul's floors (15 / 14 / 13.5 above) were set
+   * for 375x812 and 844x390, and they hold there; on a phone narrower than about 700px held
+   * sideways the card's columns are 160px wide and at those sizes every take line wrapped to three
+   * or four lines -- the offer scrolled by 13 to 66px at 640x360, where it had fitted. Half a step
+   * smaller here keeps the steps (13.5 > 12.5 > 12 > 10) and the card on one screen.
+   */
+  @media (max-width: 700px) {
+    .otp-offer .otp-dialogue__line {
+      font-size: max(13.5px, calc(18px * var(--otp-ui)));
+    }
+
+    .otp-card__promise {
+      font-size: max(12.5px, calc(15px * var(--otp-ui)));
+    }
+
+    /* And the ordinary wrap: `pretty` can spend a line to save an orphan, which a 160px column
+       cannot afford (the tallest card scrolled 6px at 640x360 with it). */
+    .otp-offer .otp-row__heading {
+      font-size: max(12px, calc(14.5px * var(--otp-ui)));
+      text-wrap: wrap;
+    }
+
+    .otp-offer .otp-row {
+      padding-inline: calc(12px * var(--otp-ui));
+    }
+  }
+
   .otp-offer {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
@@ -1085,7 +1235,8 @@
   }
 
   .otp-offer .otp-card__head {
-    align-self: center;
+    align-self: start;
+    margin-top: calc(6px * var(--otp-ui));
   }
 
   .otp-offer .otp-card__promise {
@@ -1114,6 +1265,7 @@
 
 /* Card title: 25 / 105% / -2% / Medium. */
 .otp-card__title {
+  text-wrap: balance;
   font-size: calc(25px * var(--otp-ui));
   line-height: 1.05;
   font-weight: 500;
@@ -1131,7 +1283,7 @@
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  padding: calc(9px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  padding: calc(9px * var(--otp-ui)) max(12px, calc(12px * var(--otp-ui)));
   border-radius: var(--otp-r-panel);
   margin-bottom: 8px;
   background: var(--cyera-natural);
@@ -1159,6 +1311,12 @@
 /* Row eyebrow: 10 caps / +14% tracking / Medium (UI_FOUNDATIONS section 3). */
 .otp-row__eyebrow {
   margin: 0 0 2px;
+  /*
+   * 10, the table's own size, at every scale. Paul's round of 2026-10-22 asked for an 11px floor
+   * here and on the speaker eyebrow; UI_FOUNDATIONS section 3 is binding and sets the role at 10 at
+   * full scale (e2e/css-contract.spec.ts), and a floor above it would set the phone LARGER than
+   * the desktop. The phone's steps still read -- line 15 > promise 14 > row 13.5 > eyebrow 10.
+   */
   font-size: max(10px, calc(10px * var(--otp-ui)));
   line-height: 1.2;
   letter-spacing: 0.14em;
@@ -1169,7 +1327,8 @@
 
 .otp-row__heading {
   margin: 0;
-  font-size: max(12px, calc(14.5px * var(--otp-ui)));
+  font-size: max(13.5px, calc(14.5px * var(--otp-ui)));
+  text-wrap: pretty;
   font-weight: 400;
   line-height: 1.3;
   color: var(--cyera-black);
@@ -1377,7 +1536,8 @@
   padding: 0 calc(6px * var(--otp-ui));
   background: none;
   border: none;
-  border-radius: var(--otp-r-inset);
+  /* A pill, so the slim focus ring on it is a rounded shape round the word (Paul's item 24). */
+  border-radius: var(--otp-r-pill);
   color: var(--cyera-ash);
   font: 400 max(12px, calc(14px * var(--otp-ui))) / 1.2 var(--cyera-font-sans);
   text-decoration: underline;
@@ -1417,9 +1577,14 @@
   min-height: var(--otp-touch-min);
   background: none;
   border: none;
-  padding: 0 calc(10px * var(--otp-ui));
-  /* So its focus ring is a rounded shape rather than a box round the words (see the focus rules). */
-  border-radius: var(--otp-r-inset);
+  /*
+   * A PILL THAT READS AS A BUTTON (Paul's item 22): bare text in the header did not say "press me".
+   * A 1px Haze line inside its edge, drawn as an inset shadow so the reserved header height and the
+   * 44px target are untouched; the focus ring follows the same pill.
+   */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cyera-haze) 40%, transparent);
+  padding: 0 calc(12px * var(--otp-ui));
+  border-radius: var(--otp-r-pill);
   color: var(--cyera-haze);
   /* A button does not inherit the page's family; without this the "on"/"off" label set in Arial. */
   font-family: var(--cyera-font-sans);
@@ -1454,8 +1619,9 @@
   line-height: 1;
 }
 .otp-music__state {
-  /* The word is a label on a glyph, not body copy; it reads at a step down and stays on the line. */
-  font-size: calc(13px * var(--otp-ui));
+  /* The word is a label on a glyph, not body copy; it reads at a step down and stays on the line.
+     The caption floor under it (Paul's item 22): at 0.7 it was 9.1px. */
+  font-size: max(11px, calc(13px * var(--otp-ui)));
   letter-spacing: 0.02em;
 }
 
@@ -1502,6 +1668,21 @@
  * given a radius (above) so the ring is a rounded shape, not a box.
  */
 .otp-ui .otp-link:focus-visible {
+  outline: 2px solid var(--cyera-deep-purple);
+  /* On the link's own pill-shaped box (Paul's item 24), so the ring hugs the word and stays inside
+     the panel's content edge rather than boxing a small word 3px out. */
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+/*
+ * THE SAME SLIM RING ON THE TITLE'S CTA AND THE DOOR'S ANSWERS (Paul's round, 2026-10-22). Both sit
+ * on Shell only -- the title card and the door panel's body -- so the two-tone halo bought nothing
+ * there and read as a heavy double band round the autofocused "Keep looking" and round the Lime
+ * pill. The Results band's CTA keeps the two-tone ring, because it sits on Deep Purple.
+ */
+.otp-ui .otp-title-panel .otp-cta:focus-visible,
+.otp-ui .otp-door__answers .otp-button:focus-visible {
   outline: 2px solid var(--cyera-deep-purple);
   outline-offset: 3px;
   box-shadow: none;
@@ -2230,13 +2411,15 @@ html[data-cabinet='overlay'] .otp-ui {
   justify-content: center;
   flex-wrap: wrap;
   text-align: center;
-  gap: calc(10px * var(--otp-ui));
+  gap: calc(6px * var(--otp-ui));
   font-size: max(11px, calc(13px * var(--otp-ui)));
   color: var(--cyera-ash);
 }
 .otp-foot .otp-mark {
   margin-left: 0;
-  height: calc(14px * var(--otp-ui));
+  /* Never under 12px (Paul's item 29): at 0.7 the logo was 9.8px tall. Height only, per the logo
+     README, so its aspect ratio is the file's. */
+  height: max(12px, calc(14px * var(--otp-ui)));
 }
 
 /* ---------------------------------------------------------------- the door asks first */
@@ -2254,7 +2437,7 @@ html[data-cabinet='overlay'] .otp-ui {
 }
 
 .otp-door .otp-dialogue__line {
-  font-size: calc(18px * var(--otp-ui));
+  font-size: max(15px, calc(18px * var(--otp-ui)));
   line-height: 1.2;
   color: var(--cyera-black);
 }
@@ -2274,6 +2457,7 @@ html[data-cabinet='overlay'] .otp-ui {
 }
 
 .otp-door__who li {
+  text-wrap: pretty;
   padding: calc(4px * var(--otp-ui)) calc(12px * var(--otp-ui));
   border-radius: var(--otp-r-pill);
   background: var(--cyera-natural);
@@ -2285,7 +2469,9 @@ html[data-cabinet='overlay'] .otp-ui {
 .otp-door__answers {
   display: flex;
   flex-wrap: wrap;
-  gap: calc(10px * var(--otp-ui));
+  /* 12, not 10 x --otp-ui: the slim ring stands 5px out, and at 0.7 the old 7px gap left it 2px
+     from the neighbouring pill (Paul's item 8). */
+  gap: 12px;
   margin-top: calc(4px * var(--otp-ui));
   padding-top: calc(12px * var(--otp-ui));
   border-top: 1px solid var(--cyera-clay);

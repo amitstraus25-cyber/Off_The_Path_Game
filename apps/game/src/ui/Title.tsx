@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { v2 } from '@otp/core';
-import { Highlighted, WorldFrame } from './components';
+import { Highlighted, NotationChip, WorldFrame } from './components';
 import { strings } from './copy';
 
 export interface TitleProps {
@@ -199,14 +199,20 @@ function useTitleFit(panel: { current: HTMLDivElement | null }): void {
 function TitleCard({
   children,
   frameTitle,
+  hideFrameTitle = false,
   action,
   onAction,
   busy = false,
   focus = false,
 }: {
   children: ComponentChildren;
-  /** The frame's title (`ui.landing.frameTitle`): the landing and the how-to share the frame. */
+  /** The frame's title: the landing's `ui.landing.frameTitle`, the how-to's own `ui.howTo.title`. */
   frameTitle: string;
+  /**
+   * Drawn but not read, because the card's own h1 says the same words (the how-to: "How to play"
+   * in the header and as the card's heading would be heard twice).
+   */
+  hideFrameTitle?: boolean;
   action: string;
   onAction(): void;
   busy?: boolean;
@@ -223,7 +229,17 @@ function TitleCard({
 
   return (
     <>
-      <WorldFrame number="00" title={frameTitle} />
+      {/*
+        THE HEADER'S RIGHT SIDE (Paul's round, 2026-10-22; UI_FOUNDATIONS section 5): a notation
+        chip, as every other screen's header has. It was a lone numeral on a phone and an empty bar
+        with a scaffold "TITLE" over the how-to.
+      */}
+      <WorldFrame
+        number="00"
+        title={frameTitle}
+        labelHidden={hideFrameTitle}
+        aside={<NotationChip label={strings['landingChip'] ?? ''} />}
+      />
       <div class="otp-title-dock">
         <div class="otp-title-panel" ref={panel}>
           {/*
@@ -246,7 +262,8 @@ function TitleCard({
                 if (!busy) onAction();
               }}
             >
-              {action}
+              {/* "Starting..." while the server is asked for the run (Paul's item 30a). */}
+              {busy ? (strings['howToGoing'] ?? action) : action}
               <span class="otp-cta__disc" aria-hidden="true">
                 →
               </span>
@@ -277,6 +294,13 @@ export function Title({ ui, onPlay }: TitleProps) {
       </h1>
       <p class="otp-title__sub">{l.subtitle}</p>
       {/*
+        THE LINE THAT TIES THE GAME TO THE RESEARCH, on every card (Paul's round, 2026-10-22): on a
+        landscape phone the fit ladder hid the whole premise, and with it the only sentence that
+        says Purple is your AI agent. So that sentence is its own paragraph and NOT `.otp-body-text`,
+        which no rung of the ladder hides.
+      */}
+      <p class="otp-title__agent">{strings['landingAgent'] ?? ''}</p>
+      {/*
         THE GAME IN ONE LINE (the client, 2026-10-22: "I want it to be clear"): three good, four
         malicious, find the good three and get to Grandma fast. `.otp-body-text` on purpose -- it is
         the paragraph the fit ladder lets yield first on a short card (screens.css, rung 2), and it
@@ -296,7 +320,8 @@ export function Title({ ui, onPlay }: TitleProps) {
 export function HowTo({ ui, onGo, busy }: HowToProps) {
   return (
     <TitleCard
-      frameTitle={ui.landing.frameTitle}
+      frameTitle={ui.howTo.title}
+      hideFrameTitle
       action={ui.howTo.go}
       onAction={onGo}
       busy={busy}

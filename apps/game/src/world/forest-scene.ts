@@ -20,7 +20,10 @@ import {
   WALK_SPEED,
   cameraFollow,
   cameraTopLeft,
+  coveredView,
+  ease,
   facingFrom,
+  frameAboveCover,
   movementVector,
   moveWithCollision,
   nearest,
@@ -93,7 +96,7 @@ const IDLE = {
  * THE HOP when Purple arrives to talk: the `-hop` strip's crouch, then the whole figure a pixel up
  * with its eyes shut happy, then back to the idle. Once per meeting, and never under reduced motion.
  */
-const HOP = { crouchMs: 110, upMs: 200 } as const;
+const HOP = { crouchMs: 90, upMs: 160, lift: 4 } as const;
 
 /** How near Purple has to come before a character turns to face her. */
 const FACE_RADIUS = TILE * 3;
@@ -105,15 +108,18 @@ const FACE_RADIUS = TILE * 3;
  * glow, the paper bird and the flight; every panel is DOM and is never dimmed.
  */
 const DUSK_DEPTH = 20_000;
-/** The lantern's warm circle, an additive blend over the wash (the art is drawn for ADD). */
-const GLOW_DEPTH = 20_001;
+/*
+ * The lantern's warm circle is no longer a depth of its own: it is drawn ON THE GROUND, one step
+ * under Purple's own depth (`drawPerks`), so the additive light falls on the grass round her and
+ * never on her cloak (Paul's round, 2026-10-22: over her, it turned the Lilac cloak salmon-pink).
+ */
 /** Above the canopy and the wash: a flight is in the open sky. */
 const SKY_DEPTH = 20_002;
 /**
  * The glow's opacity: a faint warm ring the moment the lantern is lit, filling in as the dusk
  * deepens, so the take is visible before 2:00 and the light matters most when it is darkest.
  */
-const GLOW = { least: 0.3, most: 0.7, scale: 2, lift: TILE * (5 / 8) } as const;
+const GLOW = { least: 0.2, most: 0.4, scale: 2, lift: TILE * (5 / 8) } as const;
 
 /**
  * THE WING RIDE: the arc a carried Purple rides, and the quick fade that stands in for it under
@@ -138,7 +144,18 @@ const FLIGHT = {
  * anyone who took them. `reach` is how far along the bearing it gets before it is gone -- never
  * past the door itself.
  */
-const PAPER_BIRD = { ms: 2200, reach: TILE * 9, climb: TILE * 3, frameRate: 10 } as const;
+const PAPER_BIRD = {
+  ms: 2200,
+  reach: TILE * 9,
+  climb: TILE * 3,
+  frameRate: 10,
+  /** How far beside her and above her feet it takes off, and how long it takes to clear her head. */
+  side: 12,
+  riseMs: 500,
+} as const;
+
+/** Purple's figure, feet to the top of her hood: the 48px cell her sheet is drawn in. */
+const PURPLE_HEIGHT = 48;
 
 /** The open door sits over the closed one in `decor-below` (depth 1) and under every figure. */
 const DOOR_DEPTH = 1.5;
@@ -200,13 +217,21 @@ const CONTACT_ROWS = 4;
  *
  * Frame order is chronological backwards. Frame 2 is the faded print, so it is the one furthest
  * from the door -- the oldest step of a walk that ended at the step, where frame 0 is still sharp.
- * All three sit inside the two sand tiles of the lane, which is why the offsets are measured from
- * `trigger-cottage` rather than from the facade: the lane and the trigger are the same rectangle.
+ * The offsets are measured from `trigger-cottage` rather than from the facade: the lane and the
+ * trigger are the same rectangle.
+ *
+ * BESIDE HER, NOT UNDER HER (Paul's round, 2026-10-22). Purple now waits on the lane's second row,
+ * in the door's column (`stageArrival`), and the middle print -- then at one tile across, a row
+ * above her feet -- sat half under her cloak. The trail moved half a tile east, zig-zagging round
+ * a tile and three quarters, so every print stands clear of her figure on the sand beside the lane.
+ * And three quarters of a tile apart rather than a whole one, the oldest print level with her feet:
+ * a trail that ran a row below her made the bottom of the payoff shot a row deeper than the story,
+ * and with the Arrive panel docked over the world that row was paid for with the chimney.
  */
 const PAW_TRAIL: readonly { frame: 0 | 1 | 2; dx: number; dy: number }[] = [
-  { frame: 0, dx: TILE * 1.5, dy: TILE * 0.5 },
-  { frame: 1, dx: TILE, dy: TILE * 1.5 },
-  { frame: 2, dx: TILE * 1.5, dy: TILE * 2.5 },
+  { frame: 0, dx: TILE * 2, dy: TILE * 0.5 },
+  { frame: 1, dx: TILE * 1.5, dy: TILE * 1.25 },
+  { frame: 2, dx: TILE * 2, dy: TILE * 2 },
 ];
 
 /**
@@ -230,6 +255,24 @@ const LANE_ROWS = 3;
  * cannot put words of its own into a live region.
  */
 const WITHIN_REACH = 'otp:within-reach';
+
+/**
+ * THE UI SAYING HOW MUCH OF THE WORLD A DOCKED PANEL COVERS (Paul's round, 2026-10-22): the share
+ * of the canvas's height, from its bottom edge up, that the offer or the Arrive panel sits over.
+ * Dispatched by `ui/Cottage.tsx` and `ui/Dialogue.tsx` while they are open, and 0 as they close.
+ *
+ * The reverse of `WITHIN_REACH`, and a DOM event for the same reason: the DOM is the only thing that
+ * knows how tall a panel came out at this width in this font. Anything on the page can dispatch it,
+ * so the payload is one number and `coveredView` clamps it; the worst a forged one can do is move
+ * the camera, never put words anywhere.
+ */
+export const PANEL_COVER = 'otp:panel-cover';
+
+/** How long the camera takes to make room above an offer: --otp-motion-slow's 180ms, as a tau. */
+const COVER_TAU = 60;
+
+/** How far above a docked panel's top edge the payoff keeps Purple's feet and the prints. */
+const COVER_MARGIN = 4;
 
 /**
  * Anyone Purple can walk up to. `character` offers a skill and opens the real encounter;
@@ -600,6 +643,14 @@ export class ForestScene extends Phaser.Scene {
   private openedDoor: Phaser.GameObjects.Image | null = null;
   /** The decor layer the door is painted in, kept so the open door can be built from its tile. */
   private decorBelow: Phaser.Tilemaps.TilemapLayer | null = null;
+  /** The share of the canvas a docked panel covers, from `PANEL_COVER`; 0 with none open. */
+  private cover = 0;
+  /**
+   * How far the camera stands below its follow target to keep Purple above an open offer, in game
+   * pixels, eased toward the cover's half. Applied at the scroll, never fed back into the follow,
+   * so the deadzone cannot swallow it and Walk on eases it straight back to 0.
+   */
+  private coverLift = 0;
 
   constructor(run: WorldRun, bus: Bus, controls: Input, hasInput: () => boolean = () => true) {
     super('Forest');
@@ -683,6 +734,23 @@ export class ForestScene extends Phaser.Scene {
 
     // A replay resets the store, but Purple is a world object and has to be sent home as well.
     this.bus.on('restartRun', () => this.resetToSpawn());
+
+    const onCover = (event: Event): void => {
+      const detail: unknown = (event as CustomEvent<unknown>).detail;
+      const share =
+        typeof detail === 'object' && detail !== null && 'share' in detail
+          ? Number((detail as { share: unknown }).share)
+          : 0;
+      this.cover = Number.isFinite(share) ? Math.min(0.9, Math.max(0, share)) : 0;
+      // At the door the shot is a CUT (stageArrival), so a panel that measures itself after the
+      // cut re-cuts rather than panning the payoff into place: the camera is PLACED on the new
+      // target, and the next frame's follow, already standing on it, only draws it there.
+      if (this.arrived) this.camera = this.doorFocus();
+    };
+    window.addEventListener(PANEL_COVER, onCover);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
+      window.removeEventListener(PANEL_COVER, onCover),
+    );
 
     this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
     this.camera = this.focus();
@@ -858,7 +926,9 @@ export class ForestScene extends Phaser.Scene {
         .setVisible(false);
     });
     this.duskWash = this.add
-      .rectangle(0, 0, 1, 1, tokenColor('--cyera-black') ?? 0, 1)
+      // Deep Purple, as the note on DUSK_DEPTH always said (Paul's item 30h): Black at the same
+      // 0.45 cap read as a power cut rather than an evening. The cap is content's, unchanged.
+      .rectangle(0, 0, 1, 1, tokenColor('--cyera-deep-purple') ?? 0, 1)
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(DUSK_DEPTH)
@@ -868,7 +938,6 @@ export class ForestScene extends Phaser.Scene {
       .sprite(0, 0, 'fx-lantern-glow', 0)
       .setBlendMode(Phaser.BlendModes.ADD)
       .setScale(GLOW.scale)
-      .setDepth(GLOW_DEPTH)
       .setVisible(false);
   }
 
@@ -960,7 +1029,9 @@ export class ForestScene extends Phaser.Scene {
         const share = darkest > 0 ? Math.min(1, dusk / darkest) : 0;
         glow
           .setPosition(Math.round(this.position.x), Math.round(this.position.y - GLOW.lift))
-          // Never full: at full strength the additive light washes Purple out in her own circle.
+          // Under her and over the ground, so the light never lands on her (see GLOW above).
+          .setDepth(Math.round(this.position.y) - 1)
+          // Never full, and capped at 0.4: additive light on the lawn turns it yellow-green fast.
           .setAlpha(GLOW.least + (GLOW.most - GLOW.least) * share);
       }
     }
@@ -1039,22 +1110,40 @@ export class ForestScene extends Phaser.Scene {
         frameRate: PAPER_BIRD.frameRate,
         repeat: -1,
       });
+    /*
+     * FROM HER HAND, NOT ACROSS HER FACE (Paul's round, 2026-10-22). The bird was born a tile above
+     * her feet -- at her eyes -- and its first frames crossed her face. It takes off beside her, at
+     * her side's height and on the side she faces, rises clear of her head, and only then heads for
+     * the door.
+     */
+    const side = this.facing === 'left' ? -PAPER_BIRD.side : PAPER_BIRD.side;
     const bird = this.add
-      .sprite(Math.round(this.position.x), Math.round(this.position.y - TILE), 'fx-paperbird', 0)
+      .sprite(
+        Math.round(this.position.x + side),
+        Math.round(this.position.y - PAPER_BIRD.side),
+        'fx-paperbird',
+        0,
+      )
       .setScale(2)
       .setDepth(SKY_DEPTH)
       .play('fx-paperbird-flap');
-    const end = this.paperBirdEnd(bird.x, bird.y);
+    const clear = Math.round(this.position.y - PURPLE_HEIGHT - bird.displayHeight / 2);
+    const end = this.paperBirdEnd(bird.x, clear);
     bird.setFlipX(end.x < bird.x);
     this.paperBird = bird;
     this.paperBirdTo = end;
-    this.tweens.add({
+    this.tweens.chain({
       targets: bird,
-      x: end.x,
-      y: end.y,
-      alpha: 0,
-      duration: PAPER_BIRD.ms,
-      ease: 'Sine.easeIn',
+      tweens: [
+        { y: clear, duration: PAPER_BIRD.riseMs, ease: 'Sine.easeOut' },
+        {
+          x: end.x,
+          y: end.y,
+          alpha: 0,
+          duration: PAPER_BIRD.ms - PAPER_BIRD.riseMs,
+          ease: 'Sine.easeIn',
+        },
+      ],
       onComplete: () => {
         bird.destroy();
         if (this.paperBird === bird) this.paperBird = null;
@@ -1346,6 +1435,27 @@ export class ForestScene extends Phaser.Scene {
     npc.sprite.once(`animationcomplete-${this.hopKey(npc)}`, () => {
       npc.sprite.play(this.idleKey(npc));
     });
+    /*
+     * AND A REAL LIFT (Paul's item 30f): the strip's one-pixel rise read as a twitch. The whole
+     * figure leaves the ground by `HOP.lift` art pixels on the up frame and lands again. Its home
+     * row is remembered on the sprite, so a second hop before the first has landed cannot ratchet
+     * it upwards; its pool of shade stays on the ground, which is what makes it read as a hop.
+     */
+    const home = (npc.sprite.getData('homeY') as number | undefined) ?? npc.sprite.y;
+    npc.sprite.setData('homeY', home);
+    this.tweens.killTweensOf(npc.sprite);
+    npc.sprite.y = home;
+    this.tweens.add({
+      targets: npc.sprite,
+      y: home - HOP.lift,
+      delay: HOP.crouchMs,
+      duration: HOP.upMs / 2,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        npc.sprite.y = home;
+      },
+    });
   }
 
   /**
@@ -1485,8 +1595,11 @@ export class ForestScene extends Phaser.Scene {
     this.arrived = true;
 
     // On the doorstep, in the door's own column, facing the door. `trigger-cottage` IS the lane,
-    // so its first row is the step and its left edge is the door's left edge.
-    this.position = { x: this.cottage.x + TILE / 2, y: this.cottage.y + TILE };
+    // so its first row is the step and its left edge is the door's left edge. Her feet on the
+    // SECOND row of the lane, not the first (Paul's round, 2026-10-22): on the step her 48px figure
+    // stood in front of the door and hid the open one the Word Weaver earns, so she stands a tile
+    // back and the lit arch shows above her head.
+    this.position = { x: this.cottage.x + TILE / 2, y: this.cottage.y + TILE * 2 };
     this.stopWalking();
     this.facing = 'up';
     this.purple.stop();
@@ -1886,8 +1999,22 @@ export class ForestScene extends Phaser.Scene {
     } else if (moved) {
       this.snapLift = 0;
     }
+    /*
+     * ROOM ABOVE AN OPEN OFFER (Paul's item 17). With a panel docked over the bottom of the world
+     * on the walk, the camera stands half the covered height lower, so Purple's chest is in the
+     * middle of what the panel leaves rather than under its top edge. Eased over --otp-motion-slow
+     * and instant under reduced motion; at the door `doorFocus` composes for the panel itself.
+     */
+    const lift = this.arrived
+      ? 0
+      : coveredView(this.cover, this.scale.gameSize.height, view.height) / 2;
+    this.coverLift =
+      this.reducedMotion || cut ? lift : ease(this.coverLift, lift, COVER_TAU, deltaMs);
+    if (Math.abs(this.coverLift - lift) < 0.25) this.coverLift = lift;
     const { x, y } = cameraTopLeft(this.camera, view, world);
-    main.setScroll(x, y);
+    // The lift is added at the scroll and clamped to the world, as `cameraTopLeft` clamps.
+    const floor = Math.max(0, world.height - view.height);
+    main.setScroll(x, Math.min(floor, Math.max(0, y + Math.round(this.coverLift))));
   }
 
   /**
@@ -1983,7 +2110,22 @@ export class ForestScene extends Phaser.Scene {
   private doorFocus(): Vec {
     const top = this.facade.y - TILE;
     const bottom = this.facade.y + this.facade.height + TILE * LANE_ROWS;
-    return { x: this.facade.x + this.facade.width / 2, y: (top + bottom) / 2 };
+    const x = this.facade.x + this.facade.width / 2;
+    /*
+     * AND ABOVE THE PANEL (Paul's round, 2026-10-22). The Arrive panel docks over the bottom of the
+     * world, and at 1280x800, 1024x768 and 844x390 it covered Purple, the door lane and the wolf's
+     * prints -- the payoff hidden under the words about it. So the span is framed in what the panel
+     * leaves (`frameAboveCover`): centred there when it fits, and when it does not, the lane kept
+     * clear of the panel and the chimney row given up instead. With no panel up -- the capture, a
+     * portrait phone whose panel docks under the canvas -- this is the span's own centre, as it was.
+     */
+    const world = { width: this.map.widthInPixels, height: this.map.heightInPixels };
+    const view = this.viewFor({ x, y: (top + bottom) / 2 }, world);
+    const covered = coveredView(this.cover, this.scale.gameSize.height, view.height);
+    // What must stay in shot when the whole span cannot: her feet and the lowest print.
+    const lowestPrint = Math.max(...PAW_TRAIL.map((p) => p.dy)) + TILE / 2;
+    const keep = this.cottage.y + Math.max(TILE * 2, lowestPrint);
+    return { x, y: frameAboveCover(top, bottom, view.height, covered, COVER_MARGIN, keep) };
   }
 
   /** Where Purple is standing right now: the minimap's marker, and the specs. */

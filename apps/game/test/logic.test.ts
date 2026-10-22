@@ -8,7 +8,9 @@ import {
   blocked,
   cameraFollow,
   cameraTopLeft,
+  coveredView,
   ease,
+  frameAboveCover,
   facingFrom,
   stageFit,
   isSolidTile,
@@ -257,5 +259,47 @@ describe('cameraFollow', () => {
     const target = { x: -400, y: 100 };
     const next = cameraFollow(centre, target, 16);
     expect(next.x).toBeLessThan(centre.x);
+  });
+});
+
+describe('framing above a docked panel', () => {
+  it('counts only the part of a panel that reaches past the letterbox', () => {
+    expect(coveredView(0, 300, 300)).toBe(0);
+    expect(coveredView(0.25, 400, 400)).toBe(100);
+    // A 300px view centred in a 400px canvas: 50px of band below it, so a 100px panel covers 50.
+    expect(coveredView(0.25, 400, 300)).toBe(50);
+    expect(coveredView(0.1, 400, 300)).toBe(0);
+  });
+
+  it('clamps a share no panel could have, and ignores one that is not a number', () => {
+    expect(coveredView(5, 400, 400)).toBe(360);
+    expect(coveredView(-1, 400, 400)).toBe(0);
+    expect(coveredView(Number.NaN, 400, 400)).toBe(0);
+  });
+
+  it('is the span centre when nothing is covered', () => {
+    expect(frameAboveCover(100, 300, 400, 0)).toBe(200);
+  });
+
+  it('centres the span in the room a panel leaves, when it fits', () => {
+    // View 400 tall, 100 covered: room 300; the 200px span sits 50 from the top of the view.
+    const centre = frameAboveCover(100, 300, 400, 100);
+    const top = centre - 200;
+    expect(100 - top).toBe(50);
+    expect(top + 300 - 300).toBe(50);
+  });
+
+  it('frames down to `keep` instead of the whole span when only that fits', () => {
+    // Room 300 for a 0..360 span: too tall, but 0..280 fits, and is centred in the room.
+    const centre = frameAboveCover(0, 360, 400, 100, 0, 280);
+    expect(centre - 200).toBe(-10);
+  });
+
+  it('keeps the bottom clear of the panel and lets the top give when the span does not fit', () => {
+    const centre = frameAboveCover(0, 300, 400, 200, 4);
+    const top = centre - 200;
+    // The span's bottom sits `margin` above the panel's top edge, at top + 200.
+    expect(300 + 4).toBe(top + 200);
+    expect(top).toBeGreaterThan(0);
   });
 });

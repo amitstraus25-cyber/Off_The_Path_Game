@@ -67,6 +67,9 @@ export interface AppProps {
 
 const nowhere = (): Vec | null => null;
 
+/** How long the controls hint stays over the world once the walk begins, in ms. */
+const HINT_MS = 6000;
+
 /** How long the HUD shows the clock winding back after a rewind, in ms. */
 const WIND_MS = 1200;
 
@@ -269,6 +272,18 @@ export function App({
     forestHome.current?.focus({ preventScroll: true });
   }, [inForest]);
 
+  /*
+   * THE CONTROLS HINT IS ONBOARDING (Paul's item 30g): it fades once the walk has been going for six
+   * seconds, so it never sits over the Way Teller's chips at the top of the world later in the run.
+   * Once per visit; it stays in the document (and in the world summary) for a screen reader.
+   */
+  const [hintGone, setHintGone] = useState(false);
+  useEffect(() => {
+    if (!inForest || hintGone) return;
+    const timer = setTimeout(() => setHintGone(true), HINT_MS);
+    return () => clearTimeout(timer);
+  }, [inForest, hintGone]);
+
   const reachName = withinReach ? (v2.findCharacter(content, withinReach)?.name ?? null) : null;
   const reachLine = reachName
     ? [reachName, strings['worldTravellerNear']].filter(Boolean).join(', ')
@@ -373,7 +388,9 @@ export function App({
             },
           }}
         >
-          <p class="otp-world-hint">{strings['controlsHint'] ?? ''}</p>
+          <p class="otp-world-hint" data-faded={hintGone ? 'true' : undefined}>
+            {strings['controlsHint'] ?? ''}
+          </p>
           {worldAsText()}
         </WorldFrame>
       )}
@@ -443,8 +460,8 @@ export function App({
               ending={ending}
               words={content.endings[ending]}
               /*
-                THE WORD WEAVER'S WELCOME: word went ahead, so Grandma is at the door already and
-                the knock was skipped. Said first, on any arrival that had the perk -- never on a
+                THE WORD WEAVER'S WELCOME: word went ahead (`chrome.doorWelcome`), so the knock
+                was skipped. Said first, on any arrival that had the perk -- never on a
                 late run, which never reached the door.
               */
               welcome={
@@ -452,6 +469,8 @@ export function App({
                   ? (strings['doorWelcome'] ?? '')
                   : ''
               }
+              met={state.met.length}
+              total={content.characters.length}
               onFinish={() => setRevealing(true)}
             />
           );

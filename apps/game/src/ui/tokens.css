@@ -360,6 +360,8 @@ body::before {
 
 .otp-stick,
 .otp-a-button {
+  /* Never a flex item that gives up its width: a round control squashed is an oval. */
+  flex: none;
   pointer-events: auto;
   touch-action: none;
   -webkit-user-select: none;
@@ -416,7 +418,8 @@ body::before {
   border-radius: 50%;
   background: var(--cyera-lilac);
   border: 4px solid var(--cyera-deep-purple);
-  box-shadow: 0 0 0 3px var(--cyera-haze);
+  /* Lilac, the stick's own ring colour (Paul's item 23): the pair read as two different devices. */
+  box-shadow: 0 0 0 3px var(--cyera-lilac);
   color: var(--cyera-black);
   font: 700 30px/1 var(--cyera-font-sans);
   cursor: pointer;
@@ -426,7 +429,7 @@ body::before {
  * A IS THE CALL TO ACTION WHILE YOU PLAY, AND ONLY THEN. On the forest A is the one thing to press,
  * so it wears that screen's one Lime. Everywhere else -- an open offer, whose card opens by itself,
  * and Title and Results above all, whose own call to action owns the Lime -- it stays Lilac and is
- * disabled (ui/touch-controls.ts `DeckMode`). The ring stays Haze either way.
+ * disabled (ui/touch-controls.ts `DeckMode`). The ring stays Lilac either way.
  */
 .otp-touch[data-mode='play'] .otp-a-button {
   background: var(--cyera-lime);
@@ -515,13 +518,26 @@ body::before {
 /*
  * The walk group, wherever it is: hidden until a keyboard reaches it, then a row of pills above the
  * bottom edge. `:focus-within` is the whole mechanism -- no script, and nothing to keep in step.
+ *
+ * FIXED, NOT STATIC (Paul's round, 2026-10-22). `position: static` put the row back into the deck's
+ * flex line the moment a keyboard reached it, so the first Tab on Explore squashed the stick and A
+ * into ovals and lifted the whole deck 74px over the HUD. Fixed takes the row out of the deck's
+ * layout entirely: the stick, A and the deck keep their boxes to the pixel. Every cabinet, so the
+ * `sides` copy of this rule in screens.css is gone; `below` and `portrait` lift it over their deck.
  */
 .otp-touch > [role='group']:focus-within {
-  position: static;
-  width: auto;
+  position: fixed;
+  left: 50%;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 16px);
   height: auto;
   margin: 0;
-  padding: calc(8px + env(safe-area-inset-bottom)) 8px;
+  padding: 8px;
+  box-sizing: border-box;
+  /* Over the stick and A it may overlap: they keep their boxes, and the row is what has focus. */
+  z-index: 1;
   overflow: visible;
   clip-path: none;
   display: flex;

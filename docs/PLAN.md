@@ -64,14 +64,23 @@ environment, not an assertion (PAUL_BRIEF trap 9), and the run above had its ser
 
 ### In progress
 
-**Other builders' uncommitted work (read off `git status` as this was finished, not described from
-the diffs, which this file's owner has not read):** edits to `apps/game/src/ui/cabinet.ts`,
-`hud.css`, `panels.css`, `stage.ts`, `apps/game/src/world/forest-scene.ts`, `logic.ts`,
-`tools/graybox/src/sprites/bystanders.ts` and `tiles/w-water.ts`; edits to
-`apps/game/test/cabinet.test.ts`, `e2e/hud.spec.ts` and `e2e/offer.spec.ts`; and two new files,
-`apps/game/e2e/talk-bubble.spec.ts` and `apps/game/test/talk-bubble.test.ts`. The tree was still
-moving while this was written, so the counts above are the counts at `e2f7e7f` and move when this
-lands. None of it is claimed anywhere in this file as done.
+**Paul's design round (2026-10-22, night), in the working tree and NOT committed.** Thirty fixes
+merged from five reviews; the record of each, done or partly done or skipped with the reason, is
+the round's handback. Landed in the tree: the Arrive panel is one grid at its final size from the
+first beat, docked on the canvas edges, with the camera framing the door, Purple (now a tile back
+from the step, so the opened door shows) and the prints above it (`frameAboveCover`,
+`ui/Cottage.tsx` publishes `otp:panel-cover`); the late ending reads "After dark", shows Purple and
+offers "See what happened"; the replay line counts the basket ("You kept N of 4 ... out of your
+basket"); the premise's agent line survives every fit rung; the walk row is fixed and no longer
+squashes the deck on the first Tab; header chips on Title, How to play, Arrive and Results; the slim
+focus ring on the title CTA and the door; type floors, wraps and tracking; the reveal tiles' names
+punctuated; one `<main>`; opaque HUD pills and square wells; the clock that holds its width at
+0:30; the music pill; the deck's centres; fork chips that fit a phone; the paper bird off her face;
+the lantern's light under her, in ember; a Deep Purple dusk; the card's well, title and line pitch;
+the post outcome's badge; and, in the art, the struck-tree ghosts in the canopy (with a guard and
+`OPEN_ENOUGH` 101 -> 98), the waterfall filling its channel unflipped, and an amber snail. Every new
+or changed string is in `docs/COPY_REVIEW.md` section 0b for the human read. `e2e/design-round.spec.ts`
+measures what a browser can.
 
 Everything the earlier version of this board listed as "built, not committed, not ticked" is in the
 log: the perks (`c86b11e`), the cabinet and replay hook (`f34ea67`, review round `6e1192f`), the
@@ -154,7 +163,7 @@ Point-in-time records, oldest first; a later bullet supersedes an earlier one wh
   door's question stays for everyone). Way Teller: a wooden board at each `fork-N` and DOM chips on
   it -- face, name and a CSS arrow per heading, naming the nearest unmet character down that way
   along the path (`world/forks.ts`), never the cottage. Word Weaver: a paper bird flies off (toward Grandma's door since `2b42743`),
-  and the arrival opens on "Grandma is at the door already." with the knock skipped. Wing Ride: a
+  and the arrival opens on "No need to knock. Word went ahead of you." (`chrome.doorWelcome`) with the knock skipped. Wing Ride: a
   2 s arc, carried by a copy of the giver, the camera following, then the next unmet friend's offer
   opens; under reduced motion a fade; with nobody left it does nothing and says so. Slow Post: the
   walk and its legs run at x1.15. Night Light: from 2:00 left the world layer dims for everyone

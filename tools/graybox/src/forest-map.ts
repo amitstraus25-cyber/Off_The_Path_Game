@@ -1002,12 +1002,32 @@ export function generateForestMap(): GeneratedMap {
               : null;
       if (bank !== null) set(ground, x, y, gid(bank));
     }
-  // A waterfall spilling in at the north end.
-  for (let y = 0; y < 4; y++)
-    for (let x = Math.round(riverCentre(y)) - 1; x <= Math.round(riverCentre(y)) + 1; x++) {
+  /*
+   * A waterfall spilling in at the north end, BANK TO BANK (Paul's round, 2026-10-22).
+   *
+   * It was three tiles wide round the river's centre on each of its four rows, and the centre walks
+   * three tiles west over those rows, so the fall was three rectangles of falling water floating on
+   * open river, each stepped off the one above it, each with hard left and right edges against
+   * still water -- and every cell mirrored at random by the mirror pass, so the streaks did not run
+   * on from one row to the next. "A pasted-block waterfall". The ask was one fixed column range for
+   * all four rows, and the river cannot give it: the channel on those rows is x 31-35, 30-33, 28-31
+   * and 29-31, which share one column. Moving the river to make room would re-plan its banks, the
+   * gorge's trees and the composition guards that stand on them. So the fall fills the channel
+   * instead: every river cell of the four rows falls, its edges are the banks rather than still
+   * water, and the step from row to row reads as the gorge bending, which is what a cascade does.
+   * No mirror bits (`SIDEWAYS` no longer lists it), so the streaks are one drawing all the way down,
+   * and a row of `water-2`'s broken water at its foot where it meets the river.
+   */
+  const FALL_ROWS = 4;
+  for (let y = 0; y < FALL_ROWS; y++)
+    for (let x = 0; x < MAP_W; x++) {
+      if (!isWater(x, y)) continue;
       set(ground, x, y, gid('waterfall'));
       solid(x, y);
     }
+  for (let x = 0; x < MAP_W; x++)
+    if (isWater(x, FALL_ROWS) && isWater(x, FALL_ROWS - 1))
+      set(ground, x, FALL_ROWS, gid('water-2'));
 
   /*
    * Where Purple stands when the game opens, and therefore where two of the three rectangles below
@@ -3836,7 +3856,30 @@ export function generateForestMap(): GeneratedMap {
       const tx = t.x + dx;
       const ty = t.y + dy;
       if (!isCanopy(tx, ty)) continue;
-      if (trees.some((other) => crownsOver(other, tx, ty))) continue;
+      const survivors = trees.filter((other) => crownsOver(other, tx, ty));
+      /*
+       * ...AND A CELL ONE SURVIVOR NOW COVERS ALONE GETS THAT SURVIVOR'S OWN QUARTER BACK (Paul's
+       * round, 2026-10-22). The river sweep strikes trees AFTER the pass that draws a shared cell
+       * as one quarter laid over another (`elder-tl-over-mc` and its kind, near the foot of the
+       * file), and leaving the cell alone left that composite standing for a tree that no longer
+       * exists: the struck tree's top-left corner printed inside the survivor's crown, and the
+       * survivor's own bottom-right corner was a square `elder-mc`, cut hard by the tile grid. That
+       * was the "hard-edged rectangle where two elders stack" at (27,5), (57,6) and (12,32).
+       * test/crown-depth.test.ts holds every `elder-mc` on the shipped map to a crown on both sides.
+       */
+      if (survivors.length === 1) {
+        const o = survivors[0]!;
+        const odx = tx - o.x;
+        const ody = ty - o.y;
+        set(
+          above,
+          tx,
+          ty,
+          o.flip ? gid(mirroredTile(o.k, odx, ody)) + FLIP_H : gid(o.k.tileAt(odx, ody)),
+        );
+        continue;
+      }
+      if (survivors.length > 0) continue;
       set(above, tx, ty, 0);
     }
   };
@@ -6658,7 +6701,8 @@ export function generateForestMap(): GeneratedMap {
     'flower-pink',
     'flower-red',
     'toadstool-ring',
-    'waterfall',
+    // `waterfall` WAS HERE and is not any more (Paul's round, 2026-10-22): mirrored at random, its
+    // streaks broke at every other cell and the fall read as pasted blocks. One drawing, unflipped.
     'fence-h',
     /*
      * `fence-post` IS NOT IN THIS SET AND MUST NOT BE PUT BACK.
@@ -8632,9 +8676,13 @@ export function generateForestMap(): GeneratedMap {
    * same 101 cells, the same two tiles (gids 60 and 63, which are these two), all of them genuinely
    * reachable, spread over rows 2 to 37. Two instruments that share no code agreeing on 101 is the
    * reason this is a tightening rather than a guess.
+   *
+   * 98 SINCE PAUL'S ROUND OF 2026-10-22. Restoring a struck tree's shared cells to the survivor's
+   * own quarter (`strike`) took three ghost `elder-mc`s off walkable ground: the map measures 98,
+   * and the ratchet follows it down the same day rather than carrying the slack.
    */
   {
-    const OPEN_ENOUGH = 101;
+    const OPEN_ENOUGH = 98;
     const seeThrough = new Map<string, boolean>();
     const hidesHer = (name: string): boolean => {
       const known = seeThrough.get(name);

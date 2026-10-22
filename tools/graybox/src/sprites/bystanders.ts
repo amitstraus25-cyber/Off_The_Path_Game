@@ -179,7 +179,7 @@ function base(img: Img, x0: number, x1: number, y: number, c: RGBA): void {
 export const BYSTANDER_PLAN = {
   'bystander-toadstool': { w: 22, h: 18, widest: 'the cap', breaks: 'the pointing twig' },
   'bystander-magpie': { w: 28, h: 22, widest: 'the tail', breaks: 'the horizontal wedge tail' },
-  'bystander-snail': { w: 27, h: 14, widest: 'the shell', breaks: 'two eye stalks' },
+  'bystander-snail': { w: 27, h: 15, widest: 'the shell', breaks: 'two eye stalks' },
   'bystander-cat': {
     w: 14,
     h: 30,
@@ -680,8 +680,12 @@ function paintMagpie(img: Img, pose: Pose): void {
 
 // ----------------------------------------------------------------------------- the snail
 
-/** His keyline: `stone` 0 is luma 96 and outlines nothing (section 13 item 16). This is luma 36. */
-const SNAIL_DARK: RGBA = keyline('stone', 60);
+/**
+ * His keyline: warm, from `wall` taken down to about luma 32 (Paul's round, 2026-10-22). It was
+ * `stone`'s cold grey, and with a grey shell inside a grey keyline the whole animal read as a stone
+ * on the path; a warm dark edge belongs to the amber shell it now goes round.
+ */
+const SNAIL_DARK: RGBA = keyline('wall', 140);
 
 /**
  * The groove the shell's coil is cut with: `stone` 0 taken two thirds of the way down to the
@@ -693,7 +697,7 @@ const SNAIL_DARK: RGBA = keyline('stone', 60);
  * as a groove in the shell and not as the shell's own outline, which is the mistake the design
  * board caught on the rabbit's eyes.
  */
-const SHELL_GROOVE: RGBA = mix(shade('stone', 0), SNAIL_DARK, 0.66);
+const SHELL_GROOVE: RGBA = mix(shade('wood', 0), SNAIL_DARK, 0.35);
 
 /**
  * Delivering a parcel. He set out on Tuesday. It is going very well.
@@ -785,68 +789,42 @@ function paintSnail(img: Img, pose: Pose): void {
    * horizontal bands with the turns reading as stripes. At 7.2 x 5.0 it is round enough that a ring
    * is a ring.
    */
-  img.ellipse(19.6, 39.8, 7.2, 5.0, SHELL_GROOVE);
-  img.ellipse(19.2, 39.4, 6.6, 4.4, shade('fur', 0)); // the shell's face
-  img.ellipse(16.4, 37.9, 2.8, 1.6, shade('fur', 1)); // the lit near shoulder, up-left
   /*
-   * `fur` 0 UNDER `fur` 1, not the other way up, because the brief says CLAY and Clay is #D4D2C8 at
-   * luma 209 -- between `fur` 0 at 194 and `fur` 1 at 231, and much nearer the first. Led by 1 the
-   * shell averaged near-white: blitted into the real world render beside the path it was the
-   * brightest object in the frame, out-shouting Purple, and on the sand it vanished altogether, which a
-   * flat-grass preview cannot show you. Led by 0 its mean lands on Clay, where it was always
-   * specified, and the dark foot under a mid-pale shell becomes a two-value read at the playing
-   * camera, which is the only thing that makes a 14 px animal findable at all.
+   * AMBER, WITH A TWO-RING COIL, AND TWO ROWS TALLER (Paul's round, 2026-10-22: "a snail that reads
+   * as a stone"). Everything above was right about the construction and the round shell; what read
+   * as a pebble was its VALUE AND HUE -- a pale grey-cream shell on a grey body inside a grey
+   * keyline is a stone by every cue the eye has. So the shell is `wood`'s warm tan with a lit
+   * `wood` 3 shoulder, and the coil is two rings cut in the dark amber groove, each a pixel wide and
+   * offset toward an apex up and to the right, with a `gold` band between them -- the nested-whorl
+   * construction recorded above, in a shell's own colours. A row taller (15, not 14): at 14 the coil
+   * had no room for a second ring, and 16 -- the size first asked for -- puts him in the magpie's
+   * height band (dh 6, BYSTANDER_PLAN), which the body-plan check refuses. The body stays grey, so
+   * the two masses still part by value.
    */
-  /*
-   * The whorls: ONE STEP OF SHADE BETWEEN THEM, not a plunge, and the apex offset up and to the
-   * RIGHT -- behind the aperture at the lower left, which is the way round a snail's shell sits when
-   * he is facing left. An earlier pass cut the innermost whorl in SHELL_GROOVE under a `cloak` 3
-   * ring and what rendered was not a shell, it was an EYE: a black pupil in a lilac iris, on the one
-   * sprite whose whole job is to be a spiral. The turns of a shell are the same material at
-   * different angles, so about fifty luma apart and no more.
-   *
-   * Clay with a Haze whorl, literally: the shell is `fur`, the palette's warm pale neutral and the
-   * closest it holds to Clay, and one of its turns is `cloak` 3, which IS Haze. It used to be an
-   * extra arc laid over a finished shell and rendered as three loose lilac pixels reading as damage.
-   */
-  img.ellipse(20.4, 39.1, 4.4, 3.0, shade('stone', 1));
-  img.ellipse(21.0, 38.8, 2.8, 1.9, shade('fur', 0)); // cuts the above into a ring, not a disc
-  img.ellipse(21.6, 38.6, 1.2, 0.9, shade('stone', 1)); // the turn inside that
-  arc(img, 20.4, 39.1, 3.7, 2.5, Math.PI * 1.08, Math.PI * 1.52, 1, shade('cloak', 3));
-  img.px(22, 38, shade('fur', 2)); // the apex, one lit pixel
+  img.ellipse(19.6, 39.3, 7.6, 5.5, SHELL_GROOVE);
+  img.ellipse(19.2, 38.9, 7.0, 4.9, shade('wood', 2)); // the shell's face
+  img.ellipse(16.0, 36.9, 3.0, 1.6, shade('wood', 3)); // the lit near shoulder, up-left
+  img.ellipse(20.2, 38.9, 4.7, 3.4, SHELL_GROOVE); // the outer ring of the coil
+  img.ellipse(20.4, 38.8, 3.7, 2.5, shade('gold', 1)); // the turn between the two rings
+  img.ellipse(20.9, 38.6, 2.5, 1.6, SHELL_GROOVE); // the inner ring
+  img.ellipse(21.1, 38.5, 1.4, 0.8, shade('wood', 3));
+  img.px(21, 38, shade('gold', 3)); // the apex, one lit pixel
 
   // Shell mouth, with a lip: the body goes IN here, which is what makes it a shell and not a ball.
-  img.ellipse(12.8, 41.8, 2.8, 2.0, shade('fur', 1));
+  img.ellipse(12.8, 41.8, 2.8, 2.0, shade('wood', 3));
   img.ellipse(12.8, 41.9, 2.0, 1.4, shade('stone', 0));
 
   /*
-   * The parcel -- "Parcel for Grandma. I set out on Tuesday." (`content/game.json`) -- strapped to
-   * the shell's REAR FLANK rather than across its crown, and down to five pixels by four.
-   *
-   * It used to sit on top at seven by five with two gold string bands wrapping the whole shell, and
-   * at a 14 px snail that is not a parcel, it is a gold cross over the one feature he has: the box
-   * and its strapping covered the top of the whorl and the spiral stopped reading. On the flank it
-   * still says "carrying something" and the spiral stays whole, which is the trade a small sprite
-   * always wants. One string band, running out from under the box down the flank: drawn as an arc
-   * that did NOT reach the box it read as a gold clamp bolted on, because a wrapped string has to
-   * be seen leaving the thing it is tied to.
+   * The parcel -- strapped to the shell's REAR FLANK, five pixels by four, as before. Brown paper
+   * now (`wall`), with a `wood` 0 strap: on an amber shell a `wood` box was the shell's own colour
+   * and vanished into it.
    */
-  // `arc` interpolates from a0 to a1 the short way round only if a1 > a0: given 1.88pi to 0.12pi it
-  // sweeps BACKWARD through 316 degrees and draws a gold hoop round the whole shell, which is what
-  // the first version of this did. 2.12pi is the same bearing, said so the sweep is 43 degrees.
   arc(img, 19.4, 40.0, 7.0, 4.1, Math.PI * 1.9, Math.PI * 2.1, 1.2, shade('wood', 0));
   img.rect(23, 37, 4, 4, shade('wood', 0));
-  img.rect(23, 37, 3, 3, shade('wood', 1));
-  img.rect(23, 37, 3, 1, shade('wood', 2));
+  img.rect(23, 37, 3, 3, shade('wall', 0));
+  img.rect(23, 37, 3, 1, shade('wall', 1));
   img.rect(24, 39, 2, 2, shade('wall', 3)); // the label
-  img.px(25, 37, shade('gold', 2)); // the knot, and the only gold on him now
-  /*
-   * The parcel used to carry a `gold` 0 band under a `gold` 1 band wrapping the shell and a `gold`
-   * 1 string up the box with a `gold` 3 knot -- eight or nine pixels of brass on a fourteen-row
-   * animal, sitting exactly where the coil is. At size it was the loudest thing on the sprite and
-   * the shell read as a tin. The strap is `wood` now, the way a strap is, and one pixel of gold is
-   * left at the knot.
-   */
+  img.px(25, 37, shade('gold', 2)); // the knot
 
   /*
    * --- eye stalks, up and clear of the shell, and thin: a thick stalk is a chimney ---

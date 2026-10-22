@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { v2 } from '@otp/core';
-import { WorldFrame } from './components';
-import { strings } from './copy';
+import { NotationChip, WorldFrame, usePanelCover } from './components';
+import { fill, strings } from './copy';
 import { assetUrl } from '../world/assets';
 
 export interface CottageProps {
@@ -9,18 +9,27 @@ export interface CottageProps {
   ending: v2.Ending;
   words: v2.Content['endings'][v2.Ending];
   /**
-   * A first beat said before the ending's own lines, or '': the Word Weaver's welcome, Grandma at
-   * the door already (App.tsx decides when).
+   * A first beat said before the ending's own lines, or '': the Word Weaver's welcome, word went
+   * ahead (`chrome.doorWelcome`; App.tsx decides when).
    */
   welcome?: string;
+  /** How many of the cast were met, and how many there are: the header chip's count. */
+  met?: number;
+  total?: number;
   onFinish(): void;
 }
 
-/** Who is in the chair. Only portraits that exist: Grandma, and the wolf in her bonnet. */
+/**
+ * Who the last beat shows. Only portraits that exist: Grandma, the wolf in her bonnet, and Purple.
+ *
+ * LATE IS PURPLE, NOT GRANDMA (Paul's round, 2026-10-22). The late ending is "Grandma had given up
+ * waiting" -- nobody opened a door -- and a smiling Grandma under that line contradicted it. Purple
+ * is who is there: still outside, after dark.
+ */
 const FACE: Record<v2.Ending, string> = {
   grandma: 'portrait-grandma',
   wolf: 'portrait-wolf-grandma',
-  late: 'portrait-grandma',
+  late: 'portrait-purple',
 };
 
 /**
@@ -61,11 +70,29 @@ const Caret = () => (
  * that speaks is born empty and then mutated, because a live region inserted with its text is
  * announced by no screen reader.
  */
-export function Cottage({ ending, words, welcome = '', onFinish }: CottageProps) {
+export function Cottage({ ending, words, welcome = '', met, total, onFinish }: CottageProps) {
   const beats = welcome ? [welcome, ...words.lines] : words.lines;
   const [shown, setShown] = useState(1);
   const done = shown >= beats.length;
-  const visible = beats.slice(0, shown);
+  /*
+   * THE LATE ENDING NEVER REACHED A DOOR (Paul's round, 2026-10-22): "Arrive" over it, and "Step
+   * inside" under it, said the opposite of its own lines. So on late the header takes the ending's
+   * own title ("After dark", already in content), and the way on is "See what happened".
+   */
+  const late = ending === 'late';
+  const header = late ? words.title : (strings['arriveTitle'] ?? '');
+  /*
+   * THE HEADER'S RIGHT SIDE (UI_FOUNDATIONS section 5, every header carries a chip): where you are,
+   * and how much of the cast you met on the way. On late the label is the walk's own goal, still
+   * unmet, rather than "At Grandma's door" -- which is where a late run never got.
+   */
+  const label = (late ? strings['worldGoal'] : strings['arriveChipLabel']) ?? '';
+  const chip =
+    met !== undefined && total !== undefined ? (
+      <NotationChip label={label} count={fill(strings['worldMetCount'] ?? '', { met, total })} />
+    ) : (
+      <NotationChip label={label} />
+    );
 
   /*
    * FOCUS GOES TO THE CONTROL THAT MOVES THE SCENE ON, not to the text (the 2026-10-22 review:
@@ -75,9 +102,13 @@ export function Cottage({ ending, words, welcome = '', onFinish }: CottageProps)
    * the whole ending. The hidden status region below still says each line as it lands, so what a
    * screen reader hears is unchanged.
    */
-  const next = useRef<HTMLButtonElement>(null);
+  const advance = useRef<HTMLButtonElement>(null);
+  const finish = useRef<HTMLButtonElement>(null);
+  // How much of the world this panel covers, so the forest frames the door above it.
+  const box = useRef<HTMLDivElement>(null);
+  usePanelCover(() => box.current);
   useEffect(() => {
-    next.current?.focus();
+    (done ? finish : advance).current?.focus();
   }, [shown]);
 
   const [said, setSaid] = useState('');
@@ -88,9 +119,13 @@ export function Cottage({ ending, words, welcome = '', onFinish }: CottageProps)
 
   return (
     <>
-      <WorldFrame number="04" title={strings['arriveTitle'] ?? ''} heading />
+      <WorldFrame number="04" title={header} heading aside={chip} />
       <div class="otp-layer otp-layer--arrive" data-arrive={ending}>
-        <div class={`otp-dialogue otp-arrive${done ? ' otp-arrive--done' : ''}`}>
+        <div
+          ref={box}
+          class={`otp-dialogue otp-arrive${done ? ' otp-arrive--done' : ''}`}
+          data-beat={shown}
+        >
           <div
             class="otp-portrait"
             style={{
@@ -103,37 +138,64 @@ export function Cottage({ ending, words, welcome = '', onFinish }: CottageProps)
             <p class="otp-visually-hidden" data-announce="arrive" role="status" aria-live="polite">
               {said}
             </p>
-            {done && <h2 class="otp-ending__title">{words.title}</h2>}
+            {/*
+              THE PANEL IS ITS FINAL HEIGHT FROM THE FIRST BEAT (Paul's round, 2026-10-22). It used
+              to grow a line per beat and grow again for the title, so the box re-laid itself out
+              under the reader at every press. Now every line is in the flow from the start, the ones
+              not yet said `visibility: hidden` -- which keeps their box and takes them out of the
+              accessibility tree, so what a screen reader hears is still the status region above,
+              one beat at a time -- and the speaker's eyebrow and the ending's title share one grid
+              cell, the title replacing "Purple" on the last beat.
+            */}
+            <div class="otp-arrive__head">
+              <p class="otp-dialogue__speaker" data-shown={done ? 'false' : 'true'}>
+                {strings['arriveSpeaker'] ?? ''}
+              </p>
+              <h2 class="otp-ending__title" data-shown={done ? 'true' : 'false'}>
+                {words.title}
+              </h2>
+            </div>
             <div>
-              {visible.map((line, i) => (
-                <p key={i} class="otp-arrive__line otp-arrive__line--reveal">
+              {beats.map((line, i) => (
+                <p
+                  key={i}
+                  class={`otp-arrive__line${i < shown ? ' otp-arrive__line--reveal' : ''}`}
+                  data-shown={i < shown ? 'true' : 'false'}
+                >
                   {line}
                 </p>
               ))}
             </div>
           </div>
 
-          {done ? (
+          {/*
+            BOTH CONTROLS, ONE CELL. The advance ring and the way on share the control cell, the one
+            not in use `visibility: hidden` -- which neither focuses nor clicks nor is read -- so the
+            cell is the size of the larger from the first beat and the panel never re-lays itself
+            out when the last line swaps one for the other.
+          */}
+          <div class="otp-arrive__control">
             <button
-              ref={next}
-              type="button"
-              class="otp-button otp-arrive__finish"
-              data-action="finish"
-              onClick={onFinish}
-            >
-              {strings['arriveAsk'] ?? ''}
-            </button>
-          ) : (
-            <button
-              ref={next}
+              ref={advance}
               type="button"
               class="otp-advance"
+              data-shown={done ? 'false' : 'true'}
               aria-label={strings['arriveNext'] ?? ''}
               onClick={() => setShown((n) => Math.min(beats.length, n + 1))}
             >
               <Caret />
             </button>
-          )}
+            <button
+              ref={finish}
+              type="button"
+              class="otp-button otp-arrive__finish"
+              data-shown={done ? 'true' : 'false'}
+              data-action="finish"
+              onClick={onFinish}
+            >
+              {(late ? strings['arriveAskLate'] : strings['arriveAsk']) ?? ''}
+            </button>
+          </div>
         </div>
       </div>
     </>

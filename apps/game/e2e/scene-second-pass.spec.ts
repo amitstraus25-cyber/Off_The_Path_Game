@@ -350,6 +350,10 @@ interface Framing {
   offY: number;
   room: Record<string, number>;
   share: number;
+  /** How far the Arrive panel reaches up over the canvas, in game pixels; 0 when it docks below. */
+  covered: number;
+  /** The gap from Purple's feet down to the Arrive panel's top edge, in CSS pixels. */
+  feetClear: number;
 }
 
 /** Plays three verdicts and knocks on the door, without the walk in between. */
@@ -417,7 +421,16 @@ test('the cottage is in the middle of the payoff frame at every width', async ({
       };
       const atX = (wx: number): number => rect.left + (cam.x + wx - cam.scrollX) * zoom;
       const atY = (wy: number): number => rect.top + (cam.y + wy - cam.scrollY) * zoom;
+      // The Arrive panel, docked over the world's bottom edge wherever the window is landscape.
+      const panel = document.querySelector('.otp-arrive')!.getBoundingClientRect();
+      const feet = (window.__otp!.scene as unknown as SceneProbe).purple;
       return {
+        // Of the camera's VIEW, which is letterboxed inside the canvas on a wide window: a panel
+        // that only reaches the band under the picture covers none of it.
+        covered:
+          Math.max(0, rect.top + (cam.y + cam.height) * zoom - Math.max(panel.top, rect.top)) /
+          zoom,
+        feetClear: panel.top - atY(feet.y),
         /** How far the building's centre is from the canvas's, in GAME pixels. */
         offX: (atX((box.left + box.right) / 2) - (rect.left + rect.width / 2)) / zoom,
         offY: (atY((box.top + box.bottom) / 2) - (rect.top + rect.height / 2)) / zoom,
@@ -460,13 +473,48 @@ test('the cottage is in the middle of the payoff frame at every width', async ({
       Math.abs(shot.offX),
       `the cottage is off the centre line at ${where}`,
     ).toBeLessThanOrEqual(1);
+    /*
+     * PURPLE STANDS CLEAR OF THE PANEL, at every width (Paul's round, 2026-10-22). Before it, the
+     * Arrive panel docked over the world hid her, the door lane and the wolf's prints at 1280x800 and
+     * 844x390: the payoff under the words about it. The camera now frames the building in what the
+     * panel leaves (`frameAboveCover`, world/logic.ts), so her feet are above its top edge.
+     */
+    expect(shot.feetClear, `Purple's feet are under the Arrive panel at ${where}`).toBeGreaterThan(
+      0,
+    );
+    // The sides of the building are in shot whatever the panel does.
     expect(
-      Math.abs(shot.offY),
-      `the cottage is off the centre line at ${where}`,
-    ).toBeLessThanOrEqual(1);
-    // And all of it is in shot: the chimney at the top, the doorstep and the prints at the bottom.
-    for (const [edge, room] of Object.entries(shot.room))
-      expect(room, `the building is cut off at the ${edge} at ${where}`).toBeGreaterThanOrEqual(0);
+      shot.room['left']!,
+      `the building is cut off at the left at ${where}`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      shot.room['right']!,
+      `the building is cut off at the right at ${where}`,
+    ).toBeGreaterThanOrEqual(0);
+    if (shot.covered === 0) {
+      // Nothing docked over the world (a portrait phone docks the panel under it): as composed.
+      expect(
+        Math.abs(shot.offY),
+        `the cottage is off the centre line at ${where}`,
+      ).toBeLessThanOrEqual(1);
+      for (const [edge, room] of Object.entries(shot.room))
+        expect(room, `the building is cut off at the ${edge} at ${where}`).toBeGreaterThanOrEqual(
+          0,
+        );
+    } else {
+      /*
+       * With a panel over the world the building sits in what it leaves: its centre is above the
+       * canvas's, and never by more than the panel covers. Where the whole span does not fit, the
+       * chimney row is what gives, never the doorstep (the feet bound above).
+       */
+      expect(shot.offY, `the cottage did not make room above the panel at ${where}`).toBeLessThan(
+        0,
+      );
+      expect(
+        shot.offY,
+        `the cottage was pushed further up than the panel asks at ${where}`,
+      ).toBeGreaterThanOrEqual(-shot.covered - 1);
+    }
   }
 });
 

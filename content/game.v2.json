@@ -265,7 +265,7 @@
       ]
     },
     "wolf": {
-      "title": "That's not Grandma",
+      "title": "That’s not Grandma",
       "lines": [
         "The chair by the fire is taken, and not by Grandma.",
         "Every skill you took kept its promise. Not every one stopped there."
@@ -273,7 +273,7 @@
     },
     "late": {
       "title": "After dark",
-      "lines": ["You found the door long after dark.", "Grandma had given up waiting."]
+      "lines": ["The light went before you found the door.", "Grandma had given up waiting."]
     }
   },
   "ui": {
@@ -281,7 +281,7 @@
       "frameTitle": "Title",
       "title": "Off the Path",
       "titleHighlight": "Path",
-      "subtitle": "That's not my grandma",
+      "subtitle": "That’s not my grandma",
       "start": "Begin the walk"
     },
     "howTo": {
@@ -333,9 +333,9 @@
       "realWorld": "In the real world",
       "score": "Your score",
       "outOf": "out of {outOf}",
-      "caught": "You spotted {caught} of {bad} bad skills.",
+      "caught": "You kept {caught} of {bad} bad skills out of your basket.",
       "frameTitle": "Reveal",
-      "unanswered": "You walked past",
+      "unanswered": "Passed by",
       "question": "Who wrote the instructions your agent follows?",
       "cta": "Read the research",
       "again": "Walk it again"
@@ -346,7 +346,7 @@
       "leaderboardAlready": "That run is already on the board.",
       "handleAssigned": "Posted to the board as {handle}.",
       "howToPlayWalkTouch": "Drag the joystick to walk. Tap A to talk.",
-      "controlsHint": "Arrows or WASD to walk, Space to talk, Esc to go back.",
+      "controlsHint": "Arrows or WASD to walk, E to talk, Esc to go back.",
       "controlsHintTouch": "Use the walk buttons to move, and Talk or interact when someone is within reach.",
       "touchWalkLabel": "Walk",
       "touchWalkUp": "Walk up",
@@ -366,6 +366,9 @@
       "crashReload": "Reload the game",
       "arriveTitle": "Arrive",
       "arriveAsk": "Step inside",
+      "arriveAskLate": "See what happened",
+      "arriveChipLabel": "At Grandma’s door",
+      "arriveSpeaker": "Purple",
       "arriveNext": "Go on",
       "researchFooter": "The Off the Path research, by",
       "postHeading": "Post your score",
@@ -395,7 +398,10 @@
       "worldBearings": "north of you|north-east of you|east of you|south-east of you|south of you|south-west of you|west of you|north-west of you",
       "worldDistances": "a few steps away|a short walk away|a long way off",
       "leaderboardClosed": "Posting has closed for that run.",
-      "landingPremise": "Little Purple is your AI agent. Three skills on the path are good, four are malicious. Take only the good three and race to Grandma.",
+      "landingAgent": "Little Purple is your AI agent.",
+      "landingPremise": "Three skills on the path are good, four are malicious. Take only the good three and race to Grandma.",
+      "landingChip": "Cyera research",
+      "howToGoing": "Starting…",
       "revealChoices": "Correct choices",
       "revealSpeed": "Speed bonus",
       "revealTime": "Your time",
@@ -404,7 +410,7 @@
       "boardJoining": "Joining the board",
       "revealZeroWolf": "A malicious skill let the wolf in, so this run scores 0.",
       "revealZeroLate": "The clock ran out before you reached Grandma, so this run scores 0.",
-      "revealTilesHint": "Tap a card to flip it and see why.",
+      "revealTilesHint": "Tap or click a card to flip it and see why.",
       "revealFlip": "See why",
       "revealFlipBack": "Flip back",
       "handleShort": "Your name needs at least 3 characters.",

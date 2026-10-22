@@ -52,7 +52,7 @@
  * shape on cream ground. It keeps `ink` 0; the argument is at the call site in
  * `paintInteractPromptFrame`.
  */
-import { clamp01, ember, Img, keyline, mix, rose, shade, tone } from '../paint.ts';
+import { clamp01, ember, Img, keyline, mix, pull, rose, shade } from '../paint.ts';
 import type { Painter, RGBA } from '../paint.ts';
 
 /** Portraits and items. The effects are smaller and say their own size at the top of each painter. */
@@ -2067,16 +2067,25 @@ export function paintForkSignFrame(img: Img, frame: 0 | 1): void {
  * is nudged a pixel in and out round the circle so the bands read as light and not as a target.
  */
 export function paintLanternGlowFrame(img: Img): void {
+  /*
+   * EMBER, NOT GOLD (Paul's round, 2026-10-22). The glow is drawn with an ADDITIVE blend, and
+   * additive gold on a green lawn is yellow-green: gold's light is mostly green channel, so the
+   * halo round Purple read as lime -- the one colour the brand keeps for the call to action. The
+   * board's own `ember` ramp (paint.ts) is gold with two thirds of its green taken out, so the same
+   * rings added to grass come out peach. Same nine rings, same falloff, same keylines, pulled the
+   * same way.
+   */
+  const warm = (c: RGBA): RGBA => pull(c, 0.32, 0.24);
   const rings: readonly RGBA[] = [
-    tone('gold', 0.92),
-    tone('gold', 0.72),
-    tone('gold', 0.52),
-    tone('gold', 0.3),
-    shade('gold', 0),
-    keyline('gold', 36),
-    keyline('gold', 62),
-    keyline('gold', 86),
-    keyline('gold', 104),
+    ember(0.92),
+    ember(0.72),
+    ember(0.52),
+    ember(0.3),
+    warm(shade('gold', 0)),
+    warm(keyline('gold', 36)),
+    warm(keyline('gold', 62)),
+    warm(keyline('gold', 86)),
+    warm(keyline('gold', 104)),
   ];
   const R = 31.5;
   for (let y = 0; y < 64; y++)

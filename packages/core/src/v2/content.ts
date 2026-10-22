@@ -71,7 +71,8 @@ const variant = z.strictObject({
  *
  *  - `minimap`        the minimap is drawn, from the take on; without it there is none.
  *  - `fork-signs`     at each fork, a sign: who lives down that branch (the nearest unmet one).
- *  - `early-welcome`  Grandma is at the door already: the knock beat (`world.knockMs`) is skipped.
+ *  - `early-welcome`  word went ahead (`chrome.doorWelcome`): the knock beat (`world.knockMs`)
+ *                     is skipped.
  *  - `wing-ride`      once, at the take, a flight to the next unmet character's talking spot
  *                     (`wingRideTarget`, perks.ts), lasting `flightMs`. Nobody unmet: nothing.
  *  - `walk-faster`    Purple walks `factor` times as fast for the rest of the run.
@@ -272,6 +273,21 @@ export const CHROME_KEYS = [
   'perkRewind',
   'doorKnock',
   'doorWelcome',
+  /*
+   * Paul's design round of 2026-10-22, every word of it for the human read in COPY_REVIEW.
+   * `landingAgent` is the premise's first sentence on a line of its own, so the fit ladder can
+   * never hide the one that ties the game to the research; `landingChip` is the notation chip on the
+   * Title, How-to and Results headers; `howToGoing` is the start button while the server answers.
+   * `arriveChipLabel` is the Arrive header's chip, `arriveSpeaker` the name over Purple's lines, and
+   * `arriveAskLate` the late ending's way on, which does not invite anyone inside a door they never
+   * found.
+   */
+  'landingAgent',
+  'landingChip',
+  'howToGoing',
+  'arriveAskLate',
+  'arriveChipLabel',
+  'arriveSpeaker',
 ] as const;
 export type ChromeKey = (typeof CHROME_KEYS)[number];
 
@@ -353,9 +369,10 @@ const ui = z.strictObject({
     /** The score's denominator, filled from `scoring.outOf` so the two cannot disagree. */
     outOf: template('outOf'),
     /**
-     * "You spotted N of 4 bad skills" (the client, 2026-10-22). The screen counts a bad skill as
-     * spotted only when its card was OPENED and it stayed out of the basket: a run that walked
-     * past a card without meeting its owner spotted nothing, and is not told it did.
+     * "You kept N of 4 bad skills out of your basket" (Paul's round, 2026-10-22, replacing "You
+     * spotted"). The screen counts every bad skill that stayed out of the basket, read or not --
+     * the thing the score and the ending turn on -- so a run that walked past all four to a 100 is
+     * not told it got 0. Each tile's Caught / Missed still counts only the cards that were read.
      */
     caught: template('caught', 'bad'),
     /** The reveal's frame title, and a row's eyebrow when the player never answered. */

@@ -78,7 +78,13 @@
 .otp-title__mark {
   font-size: calc(64px * var(--otp-ui));
   font-weight: 600;
-  letter-spacing: -2px;
+  /*
+   * -2% in em, the card title's tracking (UI_FOUNDATIONS section 3), with a little word space back
+   * (Paul's round, 2026-10-22). A fixed -2px at the phone's 34px fused "Off the" and "How to" into
+   * "Offthe" and "Howto"; the how-to's title and every rung's override inherit this.
+   */
+  letter-spacing: -0.02em;
+  word-spacing: 0.06em;
   line-height: 1;
   color: var(--cyera-deep-purple);
   margin: 0;
@@ -145,7 +151,8 @@
 .otp-howto {
   list-style: none;
   counter-reset: otp-howto;
-  margin: 0;
+  /* Room below the last step for the CTA's focus ring (Paul's item 8). */
+  margin: 0 0 calc(8px * var(--otp-ui));
   padding: 0;
   display: grid;
   gap: calc(7px * var(--otp-ui));
@@ -190,6 +197,21 @@
      damage rather than emphasis. Lifted from an inline style in Results.tsx, which was the one
      place the brand rules cannot reach. */
   text-decoration: none;
+}
+
+.otp-cta[aria-disabled='true'] {
+  cursor: progress;
+}
+
+/* A small nudge of the arrow on hover (Paul's item 30a): the pill says it goes somewhere. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .otp-cta__disc {
+    transition: transform 120ms ease-out;
+  }
+
+  .otp-cta:not([aria-disabled='true']):hover .otp-cta__disc {
+    transform: translateX(3px);
+  }
 }
 
 .otp-cta__disc {
@@ -247,32 +269,109 @@
  */
 .otp-layer--arrive {
   align-content: end;
+  /*
+   * ON THE CANVAS'S OWN EDGES (Paul's item 9): the layer spans the canvas box across, not the
+   * cabinet's screen, so the panel's sides land on the world's and no frame corner or forest
+   * sliver shows beside it. Clamped to the viewport the way the world frame is, because below
+   * 358px the canvas box is wider than the window.
+   */
+  left: max(0px, var(--otp-canvas-x, 0px));
+  right: auto;
+  width: min(var(--otp-canvas-w, 100%), 100%);
+  padding-inline: 0;
 }
 
 /*
- * The right padding is the advance ring's own column: its width, its right offset and a 12px gap.
- * It was `56px * --otp-ui`, which is 56 at 1 but 39 at the phone's 0.7 -- while the ring cannot
- * shrink below the 44px touch minimum, so at 360 and 375 it sat on the "s" of "waves" in the first
- * beat. The bound is derived from the ring's real size (the max below is its width), not scaled.
+ * THE ARRIVE PANEL IS ONE GRID, AND ITS FINAL SIZE FROM THE FIRST BEAT (Paul's round, 2026-10-22).
+ *
+ * It was a flex row that grew a line per beat and grew again when the title and "Step inside"
+ * arrived: 154px on the first beat and 207 to 245 on the last at 1280x800, so the done state hid
+ * Purple, the door and the wolf's prints, and the box re-laid itself out at every press. Now every
+ * line, the title and both controls are in the grid from the start (Cottage.tsx says how), the ones
+ * not yet in play `visibility: hidden`. Three columns wherever there is width for the pill beside
+ * the text -- the portrait, the text, the control -- and below that, in portrait, the control drops
+ * to its own row under both, which is reserved from the first beat too.
+ *
+ * The advance ring and the pill share the control cell, bottom right, as the deck draws the ring.
  */
 .otp-arrive {
-  align-items: center;
-  position: relative;
-  padding-right: calc(
-    max(var(--otp-touch-min), 34px * var(--otp-ui)) + 14px * var(--otp-ui) + 12px
-  );
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'face text control';
+  align-items: start;
+  column-gap: calc(18px * var(--otp-ui));
+  row-gap: calc(6px * var(--otp-ui));
+  padding: calc(12px * var(--otp-ui)) calc(16px * var(--otp-ui)) calc(14px * var(--otp-ui));
+  /* Paul's item 9: on the canvas's own edges, so no frame corner or forest sliver pokes out. */
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/*
+ * A 1252px slab at 1280 put the line at the far left and the control at the far right (Paul's
+ * item 27). On a wide landscape window the panel is a readable measure, centred under the door.
+ * 52rem rather than the 44 first asked for: at 44 every sentence wrapped beside the pill, the panel
+ * came out 200px tall and the camera had to give up the cottage's roof to keep the doorstep clear of
+ * it. Not below 1000px, where the canvas is narrower than the cap and item 9's edges win.
+ */
+@media (min-width: 1000px) and (orientation: landscape) {
+  .otp-arrive {
+    max-width: 52rem;
+    margin-inline: auto;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 599px) {
+  .otp-arrive {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'face text'
+      'control control';
+  }
+}
+
+.otp-arrive > .otp-portrait {
+  grid-area: face;
+  align-self: start;
+  margin-top: 2px;
 }
 
 .otp-arrive__text {
-  flex: 1;
+  grid-area: text;
   min-width: 0;
+}
+
+/* The eyebrow and the ending's title share one cell: "Purple" on every beat, the title on the last. */
+.otp-arrive__head {
+  display: grid;
+}
+
+.otp-arrive__head > * {
+  grid-area: 1 / 1;
+}
+
+.otp-arrive__head > .otp-dialogue__speaker {
+  align-self: end;
+}
+
+.otp-arrive [data-shown='false'] {
+  visibility: hidden;
+}
+
+.otp-arrive__control {
+  grid-area: control;
+  align-self: end;
+  display: grid;
+  justify-items: end;
+  align-items: end;
+}
+
+.otp-arrive__control > * {
+  grid-area: 1 / 1;
 }
 
 /* The advance control, bottom right of the box, as in the deck. */
 .otp-advance {
-  position: absolute;
-  right: calc(14px * var(--otp-ui));
-  bottom: calc(12px * var(--otp-ui));
   width: calc(34px * var(--otp-ui));
   height: calc(34px * var(--otp-ui));
   min-width: var(--otp-touch-min);
@@ -296,34 +395,29 @@
   background: var(--cyera-haze);
 }
 
-/*
- * The last beat. "Step inside" is a wide pill, not the 34px caret, and the endings' last lines run
- * long, so absolutely placed in the caret's corner it sat on top of the wolf's and the late
- * ending's final sentence at 375 and 768. It gets its own row instead, right-aligned under the
- * text, and the caret's reserved right padding is given back to the text.
- */
-.otp-arrive--done {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  row-gap: 0;
-  padding-right: calc(12px * var(--otp-ui));
-}
-
 .otp-arrive__finish {
-  grid-column: 1 / -1;
-  justify-self: end;
+  white-space: nowrap;
 }
 
+/*
+ * Dialogue role (UI_FOUNDATIONS section 3: 18 Regular, Black), with a 16px floor on a phone -- it
+ * was 21px at weight 600 in Deep Purple, set as if every line were a heading. Paul's item 11.
+ */
 .otp-arrive__line {
-  font-size: calc(21px * var(--otp-ui));
-  line-height: 1.35;
-  margin: 0 0 calc(10px * var(--otp-ui));
+  font-size: max(16px, calc(18px * var(--otp-ui)));
+  font-weight: 400;
+  color: var(--cyera-black);
+  line-height: 1.25;
+  margin: 0 0 4px;
+  text-wrap: pretty;
+}
+
+.otp-arrive__line:last-child {
+  margin-bottom: 0;
 }
 
 /* The wolf reveal: a slow fade and a held beat, never a shake (BRAND_AND_UI section 7). */
 .otp-arrive__line--reveal {
-  color: var(--cyera-deep-purple);
-  font-weight: 600;
   animation: otp-fade-in 900ms ease-out both;
 }
 
@@ -333,12 +427,16 @@
   }
 }
 
+/* Tracking in em, the card title's -2% (UI_FOUNDATIONS section 3); a fixed -1px crowded the
+   apostrophe in "That's not Grandma" at the phone's size. */
 .otp-ending__title {
   font-size: calc(34px * var(--otp-ui));
   font-weight: 600;
-  letter-spacing: -1px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   color: var(--cyera-deep-purple);
-  margin: 0 0 calc(10px * var(--otp-ui));
+  margin: 0 0 6px;
+  text-wrap: balance;
 }
 
 /* ---------------------------------------------------------------- results */
@@ -500,6 +598,44 @@
 }
 
 /*
+ * THE FIELD AND ITS PILLS ARE ONE HEIGHT (Paul's item 28): they differed by 1.2px, which on one line
+ * reads as a misalignment rather than as two sizes. Border boxes, one height, labels centred.
+ */
+.otp-handle__input,
+.otp-post > .otp-button {
+  box-sizing: border-box;
+  height: max(var(--otp-touch-min), calc(48px * var(--otp-ui)));
+}
+.otp-post > .otp-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-block: 0;
+}
+
+/*
+ * The name's problem is inside the form (Paul's item 29): on a wide window it takes the line under
+ * the whole row, and on a phone the line directly under the field, before the two pills.
+ */
+.otp-post > .otp-handle__problem {
+  flex: 1 1 100%;
+  order: 2;
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .otp-post > .otp-handle__problem {
+    order: 0;
+  }
+
+  /* With the work email asked for, the submit pill and the field take their own full lines, so
+     the form has one right edge (Paul's item 30i). */
+  .otp-post:has(.otp-contact) > .otp-handle,
+  .otp-post:has(.otp-contact) > .otp-button[type='submit'] {
+    flex: 1 1 100%;
+  }
+}
+
+/*
  * POST IS THE FORM'S PRIMARY, so it is never the smaller of its two pills (the 2026-10-22 review:
  * the filled "Post" was narrower than the outlined "Suggest a name" beside it). The floor is set
  * above what "Suggest a name" measures (191px at --otp-ui 1, 135px at the smallest scale, measured
@@ -609,7 +745,26 @@
   font-size: max(12px, calc(14px * var(--otp-ui)));
   color: var(--cyera-deep-purple);
   font-weight: 500;
-  margin: calc(7px * var(--otp-ui)) 0 0;
+  margin: 0;
+}
+
+/*
+ * THE POST'S OUTCOME, WITH A SHAPE (Paul's item 29): the name problem's treatment, a drawn check
+ * before a post the board took and the "!" before every other notice, so success and refusal no
+ * longer look alike. The badge is the reveal's own (`.otp-recap__badge`).
+ */
+.otp-outcome {
+  display: flex;
+  align-items: baseline;
+  gap: calc(8px * var(--otp-ui));
+  margin-top: calc(10px * var(--otp-ui));
+}
+.otp-outcome .otp-recap__badge {
+  flex: none;
+  align-self: center;
+}
+.otp-outcome:has(> .otp-error:empty) {
+  margin-top: 0;
 }
 
 /*
@@ -635,6 +790,7 @@
 }
 
 .otp-band__question {
+  text-wrap: balance;
   flex: 1 1 240px;
   color: var(--cyera-offwhite);
   font-size: calc(21px * var(--otp-ui));
@@ -718,9 +874,13 @@ h2.otp-section-label {
   margin: 0 0 calc(10px * var(--otp-ui));
 }
 
-/* The breakdown ran straight into the next section heading. */
+/*
+ * No margin under the breakdown (Paul's item 28). It was added when the breakdown ran straight into
+ * the next heading; the replay line has sat between them since, with its own margin, so a wolf run
+ * had the gap twice over a clean run's.
+ */
 .otp-hero__breakdown {
-  margin-bottom: calc(22px * var(--otp-ui));
+  margin-bottom: 0;
 }
 
 /* A Haze reveal inside an already-Haze missed row is invisible, so it takes the light ground
@@ -1080,6 +1240,38 @@ h2.otp-section-label {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-bottom-left-radius: calc(var(--otp-r-panel) - var(--otp-panel-border));
+  /* The same 8px slide every other panel opens with (Paul's item 30b); none under reduced motion. */
+  animation: otp-panel-in var(--otp-motion-slow) ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .otp-title-panel {
+    animation: none;
+  }
+}
+/*
+ * The premise's first sentence, on every rung (Paul's round, 2026-10-22): "Little Purple is your AI
+ * agent." Body-text size and its 12px floor, Black at Medium, so it reads as the line the rest of
+ * the card hangs on. Not `.otp-body-text`, which the fit ladder hides from rung 2.
+ */
+.otp-title-panel .otp-title__agent {
+  font-size: max(12px, calc(15px * var(--otp-ui)));
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--cyera-black);
+  margin-block: calc(8px * var(--otp-ui)) 0;
+  text-wrap: pretty;
+}
+/*
+ * DOCKED RIGHT BESIDE A SIDE DECK AND OVER A SMALL LANDSCAPE WINDOW (Paul's item 30e). On a phone
+ * held sideways the camera is pinned to the map's west edge, so Purple stands 160px from the
+ * canvas's left -- exactly where the column sat, covering all of her (the measurement in the note
+ * on `width` above). The east side of that frame is forest, so the column goes there and the rounded
+ * corner follows it.
+ */
+html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-panel {
+  margin-left: auto;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: calc(var(--otp-r-panel) - var(--otp-panel-border));
 }
 /* The four text colours below are the light-ground half of the flip above. They are the brand's
    own semantic roles (cyera-theme.css: heading Deep Purple, text Black, muted Ash) rather than a
@@ -1091,6 +1283,7 @@ h2.otp-section-label {
 }
 .otp-title-panel .otp-title__sub {
   font-size: calc(21px * var(--otp-ui));
+  text-wrap: balance;
   /* Ash, the muted-text role the comment above already names, not Aubergine. Aubergine is a
      foreground ACCENT (BRAND_AND_UI section 1 table), and spending it on the subtitle made the
      second line of the hero screen compete with the Deep Purple heading above it -- while the
@@ -1126,6 +1319,7 @@ h2.otp-section-label {
 .otp-title-panel .otp-body-text {
   font-size: max(14px, calc(18.5px * var(--otp-ui)));
   color: var(--cyera-ash);
+  text-wrap: pretty;
 }
 /*
  * The light-ground half of the how-to-play, on the same terms as the four colours above: Black is
@@ -1144,6 +1338,9 @@ h2.otp-section-label {
 .otp-title-panel .otp-howto > li::before {
   color: var(--cyera-deep-purple);
 }
+.otp-title-panel .otp-howto > li {
+  text-wrap: pretty;
+}
 /*
  * The two rules the client asked to be unmissable (content `howTo.stress`): a heavier weight of the
  * same Black, and nothing else -- no colour, no box, so the list stays four plain lines.
@@ -1155,6 +1352,7 @@ h2.otp-section-label {
 .otp-title-panel .otp-hint {
   color: var(--cyera-ash);
   font-size: max(12px, calc(15.5px * var(--otp-ui)));
+  text-wrap: balance;
 }
 /*
  * THE PROSE SCROLLS AND THE WAY IN DOES NOT. The copy's own scroll box, the wrapper the foot's
@@ -1200,7 +1398,9 @@ h2.otp-section-label {
   /* Reserved out of the card before the copy gets any, so it cannot be squeezed or scrolled off.
      This is the half of the fix the stylesheet owns; the wrapper above is the other half. */
   flex: none;
-  padding-top: calc(16px * var(--otp-ui));
+  /* 20 at rung 0, so the how-to's last step and the CTA are not crowded (Paul's item 30d); the
+     rungs below take it back down. */
+  padding-top: calc(20px * var(--otp-ui));
   /*
    * NOT STICKY, AND THE REASON IS WORTH KEEPING -- it is why the fix is a wrapper and not a pin.
    * Capping the card against the camera (the portrait block below) buys Purple her feet back by
@@ -1465,6 +1665,10 @@ h2.otp-section-label {
     flex-direction: column;
     justify-content: flex-end;
     padding: calc(10px * var(--otp-ui));
+    /* The card's sides on the canvas's sides (Paul's item 9), so it covers the frame's bottom
+       corners rather than leaving them poking out beside it. */
+    padding-left: max(0px, var(--otp-canvas-x, 4px));
+    padding-right: max(0px, calc(100vw - var(--otp-canvas-x, 4px) - var(--otp-canvas-w, 100vw)));
     padding-bottom: calc(10px * var(--otp-ui) + env(safe-area-inset-bottom));
   }
   .otp-title-panel {
@@ -1583,6 +1787,9 @@ h2.otp-section-label {
 /* The game's name beside it, in Haffer: upright, the panel-title tracking, never Season Mix. */
 .otp-marquee__name {
   font: 500 14px/1 var(--cyera-font-sans);
+  /* The logo's own 16px, so the hairline beside it is the logo's height (Paul's item 30c). */
+  height: 16px;
+  line-height: 16px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1591,7 +1798,8 @@ h2.otp-section-label {
 /* A hairline between the two, so the logo and the name read as a pair and not as one word. */
 .otp-marquee__logo + .otp-marquee__name {
   padding-left: 12px;
-  border-left: 1px solid var(--cyera-deep-purple);
+  /* Lilac: Deep Purple on the Black marquee was a hairline nobody could see (Paul's item 30c). */
+  border-left: 1px solid var(--cyera-lilac);
 }
 
 @keyframes otp-cab-breathe {
@@ -1652,17 +1860,37 @@ html[data-cabinet='sides'] .otp-touch {
   );
 }
 
-html[data-cabinet='sides'] .otp-a-button {
+/*
+ * A's centre as far in from its edge as the stick's is from its own: A is 24px narrower, so without
+ * this the two sat 12px off a common centre line (Paul's item 23). Every cabinet with a deck.
+ */
+html:is([data-cabinet='sides'], [data-cabinet='below'], [data-cabinet='portrait']) .otp-a-button {
   /* Centred in its column: the column less the button, halved, less the deck's own padding. */
   margin-right: calc((var(--otp-pad-stick) - var(--otp-pad-button)) / 2);
 }
 
-/* The keyboard's walk row, beside a side deck: at the bottom of the screen, not over its middle. */
+/*
+ * The keyboard's walk row (tokens.css) is fixed at the bottom of the screen, over the deck -- whose
+ * stick and A a keyboard player is not using -- and never over the HUD. Lifting it to stand above a
+ * bottom deck was tried and measured: in portrait the clock and the basket sit in exactly that strip,
+ * between the world and the deck, and the row landed on the basket at 375 and 768.
+ *
+ * Beside a side deck the bottom of the screen IS the world's bottom edge, where the clock and the
+ * basket are, so the row stands in the left deck column instead, one pill to a line.
+ */
 html[data-cabinet='sides'] .otp-touch > [role='group']:focus-within {
-  position: fixed;
-  left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
+  left: 8px;
+  top: calc(var(--otp-cab-top) + 8px);
+  bottom: auto;
+  transform: none;
+  width: calc(var(--otp-cab-side) - 16px);
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+html[data-cabinet='sides'] .otp-touch > [role='group']:focus-within > button {
+  padding-inline: 6px;
 }
 
 /*
@@ -1774,7 +2002,9 @@ html[data-cabinet='overlay'] .otp-touch {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: calc(4px * var(--otp-ui));
+  /* One paragraph's line pitch, not two paragraphs (Paul's item 26): the take row was 18px taller
+     than the leave row for the gap alone. */
+  gap: 0;
 }
 
 /* The reveal. */
@@ -1841,6 +2071,7 @@ html[data-cabinet='overlay'] .otp-touch {
 .otp-reveal__pairs dd {
   margin: 0;
   color: var(--cyera-black);
+  text-wrap: pretty;
 }
 @container otp-tile (min-width: 560px) {
   .otp-reveal__pairs {
@@ -1873,6 +2104,7 @@ html[data-cabinet='overlay'] .otp-touch {
   color: var(--cyera-ash);
 }
 .otp-reveal__mark {
+  text-wrap: pretty;
   display: inline-flex;
   align-items: baseline;
   gap: calc(8px * var(--otp-ui));
@@ -1990,7 +2222,10 @@ html[data-cabinet='overlay'] .otp-touch {
  * room and one column on a phone. `align-items: start` so a tile that has been turned over grows
  * on its own: its neighbours keep their size rather than stretching to match it.
  */
-.otp-tiles__title {
+.otp-tiles__title,
+h2.otp-section-label.otp-tiles__title {
+  /* The hint belongs to the grid's heading, not halfway between it and the grid (Paul's item 28):
+     `h2.otp-section-label`'s 10px was winning over this rule on specificity. */
   margin-bottom: calc(2px * var(--otp-ui));
 }
 .otp-tiles__hint {
@@ -2015,6 +2250,11 @@ html[data-cabinet='overlay'] .otp-touch {
   grid-template-columns: minmax(0, 1fr);
 }
 .otp-tile[data-open='true'] {
+  grid-column: 1 / -1;
+}
+
+/* Seven cards in two columns leave one alone: it takes the row, so the grid ends without a hole. */
+.otp-tile:last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }
 
@@ -2148,6 +2388,17 @@ html[data-cabinet='overlay'] .otp-touch {
 
 .otp-tile__back {
   padding: 0 calc(16px * var(--otp-ui)) calc(14px * var(--otp-ui)) calc(18px * var(--otp-ui));
+}
+
+/*
+ * A missed card's 5px bar is 3px wider than every card's 2px edge, and it pushed the picture and
+ * the name 3px right of the caught card beside it (Paul's item 28). The padding gives the 3px back.
+ */
+.otp-tile--missed .otp-tile__face {
+  padding-left: calc(16px * var(--otp-ui) - 3px);
+}
+.otp-tile--missed .otp-tile__back {
+  padding-left: calc(18px * var(--otp-ui) - 3px);
 }
 .otp-tile__back .otp-recap__hidden {
   margin-top: 0;

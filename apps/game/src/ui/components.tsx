@@ -268,6 +268,53 @@ export function NotationChip({ label, count }: NotationChipProps) {
   );
 }
 
+/** The event the forest listens on for how much of it a docked panel covers (forest-scene.ts). */
+const PANEL_COVER = 'otp:panel-cover';
+
+/**
+ * Tells the forest how much of the canvas a panel docked over its bottom edge covers, as a share of
+ * the canvas's height, for as long as the panel is open (Paul's round, 2026-10-22): the camera
+ * frames Purple, the door and the prints in what is left. Measured, not assumed, because only the
+ * browser knows how tall the panel came out at this width in this font; re-measured when the panel
+ * or the window changes size, and 0 when the panel goes.
+ *
+ * Only a DOCKED panel counts -- one whose bottom reaches the canvas's bottom. A panel floating in
+ * the middle of the world (a centred modal on a wide window) covers no edge the camera can frame
+ * around, and `when` lets a panel opt out entirely where it should not move the camera.
+ */
+export function usePanelCover(
+  panel: () => HTMLElement | null,
+  when: () => boolean = () => true,
+): void {
+  useEffect(() => {
+    const say = (share: number): void =>
+      void window.dispatchEvent(new CustomEvent(PANEL_COVER, { detail: { share } }));
+    const measure = (): void => {
+      const el = panel();
+      const canvas = document.querySelector('#game canvas');
+      if (!el || !canvas || !when()) return say(0);
+      const p = el.getBoundingClientRect();
+      const c = canvas.getBoundingClientRect();
+      if (c.height <= 0 || p.bottom < c.bottom - 2) return say(0);
+      say(Math.max(0, c.bottom - Math.max(p.top, c.top)) / c.height);
+    };
+    measure();
+    const el = panel();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    if (el) observer?.observe(el);
+    // A modal panel slides 8px into place (`otp-panel-in`), and a transform moves no box the
+    // observer watches: measured again when the slide ends, so the share is the settled one.
+    el?.addEventListener('animationend', measure);
+    addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      el?.removeEventListener('animationend', measure);
+      removeEventListener('resize', measure);
+      say(0);
+    };
+  }, []);
+}
+
 /*
  * `SoundToggle` lived here: a second, unused sound control drawn with the 🔊/🔇 emoji, which is a
  * colour font no brand owns and a typeface UI_FOUNDATIONS does not list. Nothing rendered it --

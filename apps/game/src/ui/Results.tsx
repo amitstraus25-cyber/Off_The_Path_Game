@@ -9,7 +9,7 @@ import { RESEARCH_URL } from '../embed/postMessage';
 import { newHandle } from '../net/leaderboard';
 import { readBoard as readTheBoard } from '../net/leaderboard';
 import type { BoardRead, ContactInput, PostOutcome } from '../net/leaderboard';
-import { CyeraMark, Highlighted, Panel } from './components';
+import { CyeraMark, Highlighted, NotationChip, Panel } from './components';
 import { fill, strings } from './copy';
 import { iconUrl, initials } from './Hud';
 
@@ -361,6 +361,16 @@ export const boardRowKey = (mine: boolean, attempted: boolean, noticeKey: string
 export const spottedOf = (entries: readonly v2.RevealEntry[]): number =>
   entries.filter((row) => !row.good && row.read && row.verdict !== 'take').length;
 
+/**
+ * How many of the run's bad skills stayed OUT OF THE BASKET, read or not: the replay line's count
+ * ("You kept N of 4 bad skills out of your basket"). Until 2026-10-22 that line counted
+ * `spottedOf`, so a run that walked past all four bad cards to a 100 was told it spotted 0 -- true
+ * about reading, and read by everyone as a verdict on the run. The basket is what the score and the
+ * ending turn on, so the line counts the basket; the tiles keep `spottedOf` for Caught / Missed.
+ */
+export const keptOutOf = (entries: readonly v2.RevealEntry[]): number =>
+  entries.filter((row) => !row.good && row.verdict !== 'take').length;
+
 /** Elapsed time as the clock face writes it, m:ss, whole seconds down. */
 export const formatElapsed = (ms: number): string => {
   const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -525,9 +535,11 @@ function RevealTile({
 }) {
   /*
    * THE PLAYER'S CALL, which is what the face leads with (a reward, not a report): a good skill was
-   * caught by taking it, a bad one by opening its card and keeping it out of the basket -- the same
-   * rule as "You spotted N of 4" above (`spottedOf`), so the count and the seven faces cannot
-   * disagree. Safe/Unsafe and what the player did stay on the face as the smaller line under it.
+   * caught by taking it, a bad one by opening its card and keeping it out of the basket
+   * (`spottedOf`). The replay line above counts something else ON PURPOSE: what stayed out of the
+   * basket (`keptOutOf`), read or not. The tiles count what you read; the line counts what you
+   * carried. The two can differ -- a bad card walked past is kept out and not caught -- and both are
+   * true. Safe/Unsafe and what the player did stay on the face as the smaller line under it.
    */
   const caught = row.good ? row.verdict === 'take' : row.read && row.verdict !== 'take';
   /*
@@ -563,9 +575,24 @@ function RevealTile({
       data-verdict={row.verdict ?? 'none'}
       data-open={open ? 'true' : 'false'}
     >
+      {/*
+        THE NAME, PUNCTUATED (Paul's round, 2026-10-22). Read from its spans the face's name ran its
+        words together -- "SafeYou took", "UnsafeYou walked past" -- because the " · " a sighted
+        reader sees is aria-hidden and nothing else stands between them. Hidden ", " spans were
+        tried first: Chromium sets them off with spaces of their own ("Unsafe , You left"). So the
+        name is the face's own words, in their order, with commas between: "Wood Map, Caught it,
+        Safe, You took, See why". Nothing on screen changes, and every word on the face is in it.
+      */}
       <button
         type="button"
         class="otp-tile__face"
+        aria-label={[
+          row.name,
+          s(caught ? 'revealCaught' : 'revealMissed'),
+          row.good ? words.good : words.bad,
+          chose,
+          s(open ? 'revealFlipBack' : 'revealFlip'),
+        ].join(', ')}
         aria-expanded={open ? 'true' : 'false'}
         aria-controls={back}
         onClick={() => {
@@ -805,13 +832,13 @@ export function Results({
   };
 
   const dealtBad = run.entries.filter((row) => !row.good).length;
-  const spotted = spottedOf(run.entries);
+  const kept = keptOutOf(run.entries);
   const clean = run.ending === 'grandma';
 
   return (
     <div class="otp-screen">
       <div class="otp-screen__inner">
-        <Panel number="05" title={r.frameTitle}>
+        <Panel number="05" title={r.frameTitle} aside={<NotationChip label={s('landingChip')} />}>
           <div class="otp-screen__body otp-result" ref={body} tabIndex={-1} data-autofocus>
             {/* ---------------------------------------------- 1. the result */}
             <div class="otp-hero" data-score={run.total}>
@@ -851,15 +878,13 @@ export function Results({
                 </p>
               )}
               {/*
-                THE REPLAY HOOK: how many of the wolf's skills the player spotted, and the way back
+                THE REPLAY HOOK: how many of the wolf's skills stayed out of the basket, and the way back
                 in beside it. The next deal is a new one (main.ts asks the server for a fresh seed),
                 so "again" is a different forest's worth of cards, not the same answers twice. Walk
                 it again is the SECONDARY style, a Deep Purple pill: the one Lime is the research.
               */}
-              <div class="otp-replay" data-caught={spotted} data-bad={dealtBad}>
-                <p class="otp-replay__caught">
-                  {fill(r.caught, { caught: spotted, bad: dealtBad })}
-                </p>
+              <div class="otp-replay" data-caught={kept} data-bad={dealtBad}>
+                <p class="otp-replay__caught">{fill(r.caught, { caught: kept, bad: dealtBad })}</p>
                 <button type="button" class="otp-button" data-action="replay" onClick={onReplay}>
                   {r.again}
                 </button>
@@ -940,6 +965,24 @@ export function Results({
                       }}
                     />
                   </label>
+                  {/*
+                    What is wrong with the name, in words, tied to the field by `aria-describedby`
+                    and with focus moved back to it, so a screen reader hears it on the way in. Not a
+                    live region: `.otp-error` below is the screen's one status, and a second one
+                    would make "which status?" a question for every assistive technology on the
+                    page. INSIDE the form, right after the field (Paul's item 29): on a phone it sat
+                    70px below the field, under both buttons; screens.css orders it there on a
+                    wide window, under the whole row.
+                  */}
+                  {problem !== null && (
+                    <p
+                      class="otp-fine otp-handle__problem"
+                      id="otp-handle-problem"
+                      data-problem={problem}
+                    >
+                      {s(problem)}
+                    </p>
+                  )}
                   <button
                     type="button"
                     class="otp-button otp-button--quiet"
@@ -1042,21 +1085,6 @@ export function Results({
                   </button>
                 </form>
                 {/*
-                  What is wrong with the name, in words, tied to the field by `aria-describedby`
-                  and with focus moved back to it, so a screen reader hears it on the way in. Not a
-                  live region: `.otp-error` below is the screen's one status, and a second one would
-                  make "which status?" a question for every assistive technology on the page.
-                */}
-                {problem !== null && (
-                  <p
-                    class="otp-fine otp-handle__problem"
-                    id="otp-handle-problem"
-                    data-problem={problem}
-                  >
-                    {s(problem)}
-                  </p>
-                )}
-                {/*
                   THE PRIVACY LINE IS TRUE IN BOTH MODES. Without the email it is chrome
                   `privacyLine` ("handle and score only ... no email"); while the email is asked
                   for that sentence would be false, so `ui.contact.privacy` replaces it: the name
@@ -1071,10 +1099,18 @@ export function Results({
                 </p>
               </>
             )}
-            {/* Mounted in every state, text swapped: a live region inserted with its text is silent. */}
-            <p class="otp-error" role="status" data-announce="post" data-notice={notice?.key}>
-              {notice?.text ?? ''}
-            </p>
+            {/*
+              Mounted in every state, text swapped: a live region inserted with its text is silent.
+              THE OUTCOME HAS A SHAPE (Paul's item 29): a drawn check beside a post the board took,
+              the "!" beside every other notice -- the reveal's own Badge, aria-hidden, a sibling of
+              the status so the sentence it carries is exactly the sentence and nothing else.
+            */}
+            <div class="otp-outcome" data-outcome={notice ? notice.key : ''}>
+              {notice && <Badge glyph={notice.key === 'handleAssigned' ? 'check' : 'missed'} />}
+              <p class="otp-error" role="status" data-announce="post" data-notice={notice?.key}>
+                {notice?.text ?? ''}
+              </p>
+            </div>
 
             <section class="otp-board" aria-labelledby="otp-board-heading">
               <h2 class="otp-section-label otp-board__title" id="otp-board-heading">

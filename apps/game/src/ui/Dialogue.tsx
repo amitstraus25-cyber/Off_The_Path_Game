@@ -1,5 +1,5 @@
 import type { v2 } from '@otp/core';
-import { Panel, useFocusTrap } from './components';
+import { Panel, useFocusTrap, usePanelCover } from './components';
 import { LeaveGlyph, SkillCard, TakeGlyph } from './SkillCard';
 
 export interface OfferProps {
@@ -48,6 +48,16 @@ export function Dialogue({
   onWalkOn,
 }: OfferProps) {
   const trap = useFocusTrap();
+  /*
+   * ROOM FOR THE FACE YOU ARE TALKING TO (Paul's round, 2026-10-22): in the portrait cabinet the
+   * offer docks over the bottom of the world and its top edge sliced Purple's eyes on a two-line
+   * card at 375. The forest stands the camera lower while it is open (forest-scene.ts). Portrait
+   * only: in landscape the offer is a centred modal over a dimmed world, not a dock.
+   */
+  usePanelCover(
+    () => trap.current?.querySelector<HTMLElement>('.otp-panel') ?? null,
+    () => typeof matchMedia === 'function' && matchMedia('(orientation: portrait)').matches,
+  );
   return (
     <div
       class="otp-layer otp-layer--modal"

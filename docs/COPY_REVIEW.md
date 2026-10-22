@@ -62,8 +62,38 @@ is refused by a server on another (`runlog.ts`, `content-mismatch`), and no rule
 
 The other perk toasts were read against the same rule and left alone, because each says only what
 the skill does in either copy: `perkForkSigns`, `perkEarlyWelcome`, `perkWingRideNobody`,
-`perkWalkFaster`, `perkLantern`, `perkRewind`. `docs/GAME_DESIGN_V2.md` section 10 still quotes
-the old Word Weaver reveal and Night Light note; the file is the source of truth.
+`perkWalkFaster`, `perkLantern`, `perkRewind`. `docs/GAME_DESIGN_V2.md` section 10 now quotes the
+new Word Weaver reveal and Night Light note too (Paul's round, 2026-10-22); the file is still the
+source of truth.
+
+### 0b. Paul's design round (2026-10-22, night)
+
+Every string the round added or changed, all **DRAFT** until the human read. PAUL_BRIEF section 7
+is why this table exists: no test can confirm what a sentence means, and these are sentences. The
+content version was **not** bumped, for the reason in 0a; no rule changed.
+
+| Path                        | Was                                                                  | Now                                                                                                  | For the read                                                                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ui.reveal.caught`          | You spotted {caught} of {bad} bad skills.                            | You kept {caught} of {bad} bad skills out of your basket.                                            | **Blocking.** Reverses the afternoon round's "spotted". Now counts the basket, read or not (a run that walked past all four to a 100 read "0"); shown on every ending. |
+| `ui.chrome.landingAgent`    | (new: the first sentence of `landingPremise`)                        | Little Purple is your AI agent.                                                                      | Its own line so the fit ladder can never hide it on a landscape phone.                                                                                                 |
+| `ui.chrome.landingPremise`  | Little Purple is your AI agent. Three skills on the path are good, … | Three skills on the path are good, four are malicious. Take only the good three and race to Grandma. | The rest of the premise; still yields on a short card.                                                                                                                 |
+| `endings.late.lines[0]`     | You found the door long after dark.                                  | The light went before you found the door.                                                            | The late ending never reached a door; the old line said it did.                                                                                                        |
+| `ui.chrome.arriveAskLate`   | (new; late runs read "Step inside")                                  | See what happened                                                                                    | The late ending's way on to the reveal.                                                                                                                                |
+| `ui.chrome.arriveChipLabel` | (new)                                                                | At Grandma's door (U+2019)                                                                           | The Arrive header's chip, beside the "N of 7 met" count. Late runs show `worldGoal` ("Find Grandma") instead.                                                          |
+| `ui.chrome.arriveSpeaker`   | (new)                                                                | Purple                                                                                               | The speaker eyebrow over the Arrive lines (UI_FOUNDATIONS section 8, 04), replaced by the ending's title on the last beat.                                             |
+| `ui.chrome.landingChip`     | (new)                                                                | Cyera research                                                                                       | The header chip on Title, How to play and Results. Brand to confirm the wording.                                                                                       |
+| `ui.chrome.howToGoing`      | (new)                                                                | Starting…                                                                                            | The start button while the server is asked for the run.                                                                                                                |
+| `ui.reveal.unanswered`      | You walked past                                                      | Passed by                                                                                            | The tile's line for a card never answered; one line at every width now.                                                                                                |
+| `ui.chrome.revealTilesHint` | Tap a card to flip it and see why.                                   | Tap or click a card to flip it and see why.                                                          | Says the desktop's gesture too.                                                                                                                                        |
+| `ui.chrome.controlsHint`    | Arrows or WASD to walk, Space to talk, Esc to go back.               | Arrows or WASD to walk, E to talk, Esc to go back.                                                   | E is the key UI_FOUNDATIONS section 8 names; Space and Enter still work. Also the title's hint.                                                                        |
+| `endings.wolf.title`        | That's not Grandma                                                   | That's not Grandma (U+2019)                                                                          | Typographic apostrophe only.                                                                                                                                           |
+| `ui.landing.subtitle`       | That's not my grandma                                                | That's not my grandma (U+2019)                                                                       | Typographic apostrophe only.                                                                                                                                           |
+
+Two smaller things for the same read. The reveal tiles' accessible names are now "Wood Map, Caught
+it, Safe, You took, See why" -- the face's own words, punctuated -- which a screen-reader user hears
+and nobody sees. And the late ending's portrait is Purple's, not Grandma's, so its first beat's
+label "Little Purple on the doorstep" (in `Cottage.tsx`, not content) is still a claim about a
+doorstep the late run never reached: it wants a content key and a line of its own.
 
 **All of these live in `content/game.json` and are changed there only.** Copy that lives in `.tsx`
 instead is a bug, and `docs/UX_REVIEW.md` finding 13 records roughly 35 of them.

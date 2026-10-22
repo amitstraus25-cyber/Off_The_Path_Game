@@ -333,7 +333,7 @@ test('the greedy run takes everything and lets the wolf in at 0', async ({ page 
   await walkIntoCottage(page);
   await throughTheDoor(page, 'wolf');
   await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '0');
-  await expect(page.locator('[data-ending="wolf"]')).toContainText("That's not Grandma");
+  await expect(page.locator('[data-ending="wolf"]')).toContainText('That’s not Grandma');
   /*
    * After the zero, the cards that let the wolf in are already turned over -- every bad skill, since
    * this run took them all -- and every good one is face up, waiting. Each one taken bad is a missed
@@ -366,13 +366,16 @@ test('the clock override ends a run late, and a late run is not posted', async (
   expect(run.log.at(-1)?.e).toBe('late');
   await expect(page.locator('[data-ending="late"]')).toContainText('After dark');
   /*
-   * The count counts only cards that were OPENED, so a run the clock ended before anyone was met is
-   * told it spotted none -- not "4 of 4" beside a 0, which read as praise for reading nothing. The
-   * score says why it is 0, in words.
+   * The line counts the BASKET since Paul's round (2026-10-22): "You kept N of 4 bad skills out of
+   * your basket". The clock ended this run before anyone was met, so nothing went in and all four
+   * stayed out -- which is true, and is said beside the 0 and the sentence that says why it is 0.
+   * (It counted only cards that were opened until then, and read "0 of 4" on a 100 that walked
+   * past the bad cards.) Each tile's Caught / Missed still counts only what was read: none here.
    */
   await expect(page.locator('.otp-replay__caught')).toHaveText(
-    raw.ui.reveal.caught.replace('{caught}', '0').replace('{bad}', '4'),
+    raw.ui.reveal.caught.replace('{caught}', '4').replace('{bad}', '4'),
   );
+  await expect(page.locator('[data-reveal][data-kind="bad"][data-call="caught"]')).toHaveCount(0);
   await expect(page.locator('[data-zero="late"]')).toBeVisible();
   await expect(page.locator('.otp-replay [data-action="replay"]')).toBeVisible();
   await expect(page.locator('[data-post="unavailable"]')).toBeVisible();
@@ -475,8 +478,10 @@ test('keyboard only: begin, talk, read, answer, arrive, reveal, replay', async (
 
 /*
  * The advance ring has a 44px floor that does not scale with --otp-ui, so on a phone it sat on the
- * end of the first arrive line ("waves" at 360 and 375). The text column must end before the ring
- * begins on every beat that shows it.
+ * end of the first arrive line ("waves" at 360 and 375). The ring and the text must not share a
+ * pixel on any beat that shows it -- beside the text where there is width for its column, and
+ * since Paul's round (2026-10-22) in its own row under the text on a portrait phone, so the two are
+ * measured as boxes rather than as a right edge against a left one.
  */
 for (const width of [360, 375, 390]) {
   test(`at ${width}px the advance ring never sits on an arrive line`, async ({ page }) => {
@@ -491,10 +496,12 @@ for (const width of [360, 375, 390]) {
     for (let beat = 0; beat < 10 && (await advance.isVisible()); beat++) {
       const ring = (await advance.boundingBox())!;
       const words = (await arrive.locator('.otp-arrive__text').boundingBox())!;
-      expect(
-        words.x + words.width,
-        `beat ${beat}: the text runs under the advance ring at ${width}px`,
-      ).toBeLessThanOrEqual(ring.x);
+      const apart =
+        words.x + words.width <= ring.x ||
+        ring.x + ring.width <= words.x ||
+        words.y + words.height <= ring.y ||
+        ring.y + ring.height <= words.y;
+      expect(apart, `beat ${beat}: the text runs under the advance ring at ${width}px`).toBe(true);
       await advance.click();
     }
   });

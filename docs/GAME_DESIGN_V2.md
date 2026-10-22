@@ -318,7 +318,7 @@ names the perk the player enjoyed; every bad reveal names the perk and the harm,
 | ------------ | ----------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
 | Wood Map     | It draws you a map of the whole wood.                 | Drew the wood as you walked. Kept the map for you. | Your map went to the wolf. He knew where you'd be. |
 | Way Teller   | It shows you who lives down each path.                | Showed you who lived down each path.               | One note on a tree was the wolf's. It obeyed.      |
-| Word Weaver  | It sends word ahead, so Grandma expects you.          | Sent word ahead. She was at the door.              | She expected you. So did the wolf.                 |
+| Word Weaver  | It sends word ahead, so Grandma expects you.          | Sent word ahead. She was expecting you.            | She expected you. So did the wolf.                 |
 | Wing Ride    | It flies you to your next friend on the path.         | Flew you to your next friend.                      | It flew you where the wolf's map said.             |
 | Slow Post    | It carries your heavy things, sealed. You walk light. | You walked faster. It reached her, sealed.         | It reached her. The peeking friend was the wolf.   |
 | Night Light  | It lights your way when the sun goes down.            | Lit your way as dusk fell.                         | One sign was the wolf's. The light followed it.    |
@@ -343,7 +343,7 @@ shows an id.
 | Word Weaver  | Oversharing and public exposure | A copy pinned at a crossing is public data anyone can read. Sending word ahead should not mean telling the whole wood. |
 | Wing Ride    | Supply-chain risk               | A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight.   |
 | Slow Post    | Third-party data sharing        | A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way.     |
-| Night Light  | Autonomy without human approval | A helper that acts on every sign without asking skips your say on the steps that matter. Keep a person in the loop.    |
+| Night Light  | Autonomy without human approval | A helper that acts on every sign without asking leaves you out. Keep a human in the loop for steps that matter.        |
 | Long Evening | Over-broad access               | A skill is an identity too, a non-human one. Give it only the access its job needs.                                    |
 
 Each is one or two sentences of at most 25 words (the lint), with no fear words and no product
@@ -421,7 +421,7 @@ do. No perk points at the cottage, by construction: none of the kinds can.
 ```
 { kind: 'minimap' }                           the minimap is drawn from the take on; none without it
 { kind: 'fork-signs' }                        a sign at each fork: who lives that way (nearest unmet)
-{ kind: 'early-welcome' }                     Grandma is at the door: the knock beat is skipped
+{ kind: 'early-welcome' }                     word went ahead ("No need to knock. Word went ahead of you."): the knock beat is skipped
 { kind: 'wing-ride', flightMs: 2000 }         once, at the take, a flight to wingRideTarget()
 { kind: 'walk-faster', factor: 1.15 }         Purple walks 15% faster for the rest of the run
 { kind: 'lantern' }                           a warm light circle around Purple in the dusk

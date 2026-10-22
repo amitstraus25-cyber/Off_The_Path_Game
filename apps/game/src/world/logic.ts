@@ -180,6 +180,45 @@ export function cameraFollow(
   return { x: pull(centre.x, target.x, deadzone.x), y: pull(centre.y, target.y, deadzone.y) };
 }
 
+/**
+ * THE PART OF THE VIEW A DOCKED PANEL COVERS, in game pixels (Paul's round, 2026-10-22).
+ *
+ * The UI says how much of the CANVAS a panel covers, as a share of its height (`otp:panel-cover`,
+ * forest-scene.ts). The camera's view can be shorter than the canvas -- the payoff frame is
+ * letterboxed, an even band top and bottom -- so the panel covers the band first and only the rest
+ * of it reaches the picture. A share outside 0..0.9 is clamped: the event is a DOM event anything on
+ * the page can dispatch, and no panel the game draws covers more than nine tenths of the world.
+ */
+export function coveredView(share: number, canvasHeight: number, viewHeight: number): number {
+  const safe = Number.isFinite(share) ? Math.min(0.9, Math.max(0, share)) : 0;
+  return Math.max(0, safe * canvasHeight - (canvasHeight - viewHeight) / 2);
+}
+
+/**
+ * The camera centre's y that frames the span `top..bottom` in what a docked panel leaves of the view.
+ *
+ * With nothing covered it is the span's own centre, exactly as before. With a panel docked over the
+ * bottom `covered` pixels, the span is centred in the room left above it. When the span is taller
+ * than that room, `keep` -- a bottom edge at or above `bottom` that must stay in view -- is tried
+ * in its place, and when even that does not fit, `keep` is held `margin` clear of the panel and the
+ * top is what gives. At the door that is the choice the payoff needs: Purple's feet and the wolf's
+ * prints are the story on the step, and the chimney row is the part of the shot that can go.
+ */
+export function frameAboveCover(
+  top: number,
+  bottom: number,
+  viewHeight: number,
+  covered: number,
+  margin = 0,
+  keep = bottom,
+): number {
+  const room = viewHeight - Math.max(0, covered);
+  const centred = (lower: number): number => top - (room - (lower - top)) / 2 + viewHeight / 2;
+  if (bottom - top + 2 * margin <= room) return centred(bottom);
+  if (keep - top + 2 * margin <= room) return centred(keep);
+  return keep + margin - room + viewHeight / 2;
+}
+
 /** Keeps the camera inside the world; returns rounded coordinates so tiles never shimmer. */
 export function cameraTopLeft(
   centre: Vec,

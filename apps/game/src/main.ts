@@ -279,7 +279,7 @@ async function start(): Promise<void> {
   /*
    * THE KNOCK (content `world.knockMs`): Purple is at the door and has knocked, and the run waits on
    * the clock before it goes in -- unless the Word Weaver sent word ahead (`early-welcome`), when
-   * Grandma is at the door already and the beat is skipped. The server's walk floor charges the
+   * word went ahead (`chrome.doorWelcome`) and the beat is skipped. The server's walk floor charges the
    * knock to every other arrival (core floor.ts), so the wait is held here, never shortened.
    */
   let knocking: ReturnType<typeof setTimeout> | null = null;
