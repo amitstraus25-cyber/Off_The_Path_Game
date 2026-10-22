@@ -94,6 +94,18 @@ Leaderboard: `leaderboardTitle`, `leaderboardDown`.
 
 All **PLACEHOLDER** except `cta`, `ctaPrompt`, `quest` and `leaderboardTitle`, which come from the mocks.
 
+**Legal must ALSO review the work-email copy (the client's decision, 2026-10-22)**, which is shown
+only once `OTP_WORK_EMAIL=required` is set and is in `content/game.v2.json` under `ui.contact`:
+`emailLabel` ("Work email"), `emailHint` ("Never shown on the board."), the consent line `consent`
+("Cyera may contact me about this research.", recorded as consent version `research-contact-v1`),
+the four refusal sentences, and `privacy`, which REPLACES `privacyLine` while the address is asked
+for: "Your name and score go on the public board. Your work email is kept privately, only so Cyera
+can contact you about this research, and is never shown. No account, no cookies." The consent line
+is versioned: if Legal changes a word of it, the version changes too (`consentVersion`), and core's
+`test/v2/contact.test.ts` fails until both are updated, because every stored address records the
+version it was given under. `privacyLine` itself is unchanged and is still the line shown with the
+flag off, where it is still true.
+
 **Legal must review** `privacyLine` ("We store your handle and score only. No account, no email, no
 cookies.") and `handleHint` against decision D10 before launch. **That review has not happened**, and
 two things should go into it rather than being settled here:

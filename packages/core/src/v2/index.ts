@@ -13,3 +13,4 @@ export * from './sim.ts';
 export * from './load.ts';
 export * from './floor.ts';
 export * from './board.ts';
+export * from './contact.ts';

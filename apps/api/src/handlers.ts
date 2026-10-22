@@ -2,7 +2,7 @@ import { DEFAULT_TOP_LIMIT, topLimit, v2 } from '@otp/core';
 import { fail, json, note } from './http.ts';
 import type { RecentRuns, WriteBudget } from './limit.ts';
 import { submitRunSchema } from './schema.ts';
-import type { LeaderboardStore } from './store.ts';
+import type { ContactRow, LeaderboardStore } from './store.ts';
 import type { RunTokens } from './token.ts';
 
 /*
@@ -24,6 +24,12 @@ export interface Deps {
   starts: WriteBudget;
   /** Per instance, the run tokens that have already become rows. */
   recent: RecentRuns;
+  /**
+   * OTP_WORK_EMAIL is exactly `required` (src/env.ts): a post must carry a work email and the
+   * consent, and the two are written with the score in one transaction. False is today's board --
+   * a handle and a score -- with any email fields a post carries ignored and stored nowhere.
+   */
+  emailRequired: boolean;
   /** The server's clock, epoch milliseconds. Injected so the time bounds are testable. */
   now: () => number;
 }
@@ -147,13 +153,20 @@ export function handleStart(request: Request, deps: Deps): Response {
     note('shed a start: this instance has spent its start budget');
     return fail(429, UNAVAILABLE, { 'retry-after': '60' });
   }
-  return json(deps.tokens.issue(deps.now()));
+  /*
+   * `emailRequired` rides on the start because the start is the one request every run makes
+   * before Results, so the screen knows whether to ask for an address before the player is there.
+   * It is advisory: the score route decides, and a game that never read this meets the same
+   * refusal (422 `email-missing`) with nothing spent.
+   */
+  return json({ ...deps.tokens.issue(deps.now()), emailRequired: deps.emailRequired });
 }
 
 /**
  * POST /api/score -- the security boundary.
  *
- * Takes `{ handle, log, token }` and no score. The token must be one this service issued; the log
+ * Takes `{ handle, log, token }` and no score -- and, when OTP_WORK_EMAIL requires it, a work
+ * `email` and `consent: true`, checked before anything is spent. The token must be one this service issued; the log
  * must be dealt from the token's seed; its claimed duration must fit the time the server saw pass
  * since the token was issued; and it is replayed through the real v2 reducer and scored with the
  * game's own `result()`. That recomputed number is the only one ever stored. CLAUDE.md golden rule
@@ -197,6 +210,28 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
    */
   const name = v2.checkName(parsed.data.handle);
   if (!name.ok) return refuse('name', 'that name cannot go on the board');
+
+  /*
+   * THE WORK EMAIL AND THE CONSENT (the client, 2026-10-22), when OTP_WORK_EMAIL requires them --
+   * and only then: with the flag off the two fields are not read at all, so nothing a game sends
+   * can reach the table or a log line.
+   *
+   * Refused like the name, with 422 and a `reason` the game words, BEFORE THE TOKEN IS SPENT:
+   * a player who typed a personal address fixes it and posts the same run. The address that goes
+   * on is the normalised one `checkContact` returns (core contact.ts), never the raw string. The
+   * consent version is read from this service's own copy of the content -- the words the game
+   * shipped -- never from the request, which could name any version it liked.
+   *
+   * THE ADDRESS IS NEVER SAID BACK. Not in a refusal (the error strings below are fixed), not in
+   * the success body (`row` is a handle and a score), not in a log line (`note` is never handed
+   * it, and the store logs a failed write by status and SQLSTATE code only).
+   */
+  let contact: ContactRow | null = null;
+  if (deps.emailRequired) {
+    const checked = v2.checkContact(parsed.data.email, parsed.data.consent);
+    if (!checked.ok) return refuse(checked.reason, CONTACT_REFUSED[checked.reason]);
+    contact = { email: checked.email, consentVersion: deps.content.ui.contact.consentVersion };
+  }
 
   const ticket = deps.tokens.open(parsed.data.token);
   if (!ticket) {
@@ -288,7 +323,12 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
 
   const row = { handle: name.name, score: run.total };
   try {
-    await deps.store.add(row);
+    /*
+     * With an address, ONE call that writes both rows or neither (migration 0007's function, one
+     * transaction): if the address cannot be stored, neither is the score, and the player is told
+     * the board is unavailable rather than shown a row whose required email does not exist.
+     */
+    await (contact ? deps.store.addWithContact(row, contact) : deps.store.add(row));
   } catch (err) {
     // Not a row, so not spent: a player whose insert hit a blip can post again.
     deps.recent.release(ticket.id);
@@ -327,8 +367,22 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
   return json({ ...row, rank, ...(entries ? { entries } : {}) });
 }
 
+/** Why a post was refused with 422: the name, a wolf run, or the work email and its consent. */
+export type RefusalReason = 'name' | 'wolf' | v2.ContactRefusal;
+
 /** A refusal the game words by `reason` rather than by status: 422, nothing spent. */
-const refuse = (reason: 'name' | 'wolf', error: string): Response => json({ error, reason }, 422);
+const refuse = (reason: RefusalReason, error: string): Response => json({ error, reason }, 422);
+
+/**
+ * The caller-facing sentence for each contact refusal. FIXED STRINGS: none of them is built from
+ * the request, so the address a player typed cannot come back in one.
+ */
+const CONTACT_REFUSED: Record<v2.ContactRefusal, string> = {
+  'email-missing': 'a work email is needed to post a score',
+  'email-invalid': 'that email address is not valid',
+  'email-personal': 'a work email is needed, not a personal one',
+  'consent-missing': 'consent is needed to post a score',
+};
 
 /**
  * How long the edge may serve a board: fresh for 10 s, then served stale for up to 20 s more while

@@ -136,7 +136,17 @@ fifteen days before — clear of the fourteen-day rule below, which is why it wa
 - Pin exact dependency versions. Before adding or upgrading a package, check its publish date and
   **skip versions published in the last 14 days**. Commit the lockfile. Run `pnpm audit` in CI.
 - Strict CSP (see ARCHITECTURE). No `eval`, no inline scripts, no `innerHTML` with data. Escape handles on render.
-- The leaderboard stores a handle and a score only. No accounts, no email, no cookies, no raw IPs.
+- The leaderboard shows a handle and a score only. No accounts, no cookies, no raw IPs. **Since the
+  client's decision of 2026-10-22, posting a score may require a WORK email and a consent tick**
+  (purpose: Cyera may contact the player about this research), behind the server flag
+  `OTP_WORK_EMAIL` (on only when exactly `required`; off by default, and off means today's board
+  exactly). The address is validated by core `v2.checkContact` (the server is the authority;
+  personal providers are one list, `FREE_EMAIL_PROVIDERS`), stored only in
+  `public.leaderboard_contact` (migration 0007: service role cannot read it, written with the score
+  in one transaction, 12-month retention), and **never returned by any route, never logged, never
+  in an error message, never on the board**. The consent wording is versioned in content
+  (`ui.contact.consentVersion`); changing the words means a new version. The flag goes on only
+  after the migration has run and Legal has signed off (apps/api/README.md, "Work email").
 - Treat anything from the network (API responses, `postMessage`) as untrusted; validate with the shared schema.
 
 ## Definition of done (every task)

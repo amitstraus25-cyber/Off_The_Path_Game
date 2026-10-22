@@ -65,6 +65,8 @@ const CONFIGURED = {
 beforeEach(() => {
   vi.stubEnv('SUPABASE_URL', '');
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
+  // Off unless a test turns it on, whatever the shell running the suite has set.
+  vi.stubEnv('OTP_WORK_EMAIL', '');
 });
 
 afterEach(() => {
@@ -180,5 +182,54 @@ describe('the routes as Vercel invokes them', () => {
       'never-read-here',
     ])
       expect(seen).not.toContain(value);
+  });
+
+  it('reads OTP_WORK_EMAIL once, and only "required" turns it on', async () => {
+    const { startRoute } = await load(
+      { ...CONFIGURED, OTP_WORK_EMAIL: 'required' },
+      () => new Response(null),
+    );
+    const on = (await (await startRoute(post('/api/start', {}))).json()) as {
+      emailRequired: boolean;
+    };
+    expect(on.emailRequired).toBe(true);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const typo = await load(
+      { ...CONFIGURED, OTP_WORK_EMAIL: 'Required' },
+      () => new Response(null),
+    );
+    const off = (await (await typo.startRoute(post('/api/start', {}))).json()) as {
+      emailRequired: boolean;
+    };
+    expect(off.emailRequired).toBe(false);
+    // Said by name, so a deploy with a typo can be found from the Vercel log.
+    expect(warn.mock.calls.flat().join(' ')).toContain('OTP_WORK_EMAIL is set but is not exactly');
+    warn.mockRestore();
+  });
+
+  it('with the flag on, posts through the contact function, end to end through the route', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(1_761_100_000_000);
+    const { calls, startRoute, scoreRoute } = await load(
+      { ...CONFIGURED, OTP_WORK_EMAIL: 'required' },
+      () => new Response('true', { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    const { seed, token } = (await (await startRoute(post('/api/start', {}))).json()) as {
+      seed: number;
+      token: string;
+    };
+    const log = v2.toRunLog(runOf('careful', seed));
+    vi.setSystemTime(1_761_100_000_000 + claimedMs(log) + 15_000);
+
+    const res = await scoreRoute(
+      post('/api/score', { handle: HANDLE, log, token, email: 'ops@acme.com', consent: true }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).not.toContain('ops@acme.com');
+    expect(calls[0]!.url).toBe(
+      'https://project-ref.supabase.co/rest/v1/rpc/leaderboard_post_with_contact',
+    );
   });
 });

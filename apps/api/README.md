@@ -18,8 +18,14 @@
 > | `GET /api/top`   | 200 JSON, or **503** when env unset | 404         | 500 (cannot tell env from a crash) |
 >
 > Then `POST /api/start` with `content-type: application/json` and body `{}`: **200**
-> `{seed, token}` means the environment is set (the signing key is derived from it); **503** means
+> `{seed, token, emailRequired}` means the environment is set (the signing key is derived from it); **503** means
 > it is not, and the game will play on its own seed with posting switched off.
+>
+> **Work email (the client's decision, 2026-10-22): built, OFF by default.** With
+> `OTP_WORK_EMAIL=required` a post must carry a work email and a consent tick, and the address is
+> written beside the score in a table the service cannot read. Off, everything here is exactly as
+> at `8c4dc49`. It goes on only after three steps the client takes by hand -- see
+> ["Work email"](#work-email-the-clients-decision-2026-10-22).
 
 Three routes behind the game, on the same origin, with no new dependencies.
 
@@ -28,11 +34,11 @@ posture, the migrations in `supabase/migrations/`, how to rotate a key without d
 happens when the free tier pauses, how to tell whether the board is actually working and what to do
 when it is not. This file is the service; that one is the database.
 
-| Route             | What it does                                                                                                                                                                                                                                                                                                                                                                                      |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/start` | Draws a seed and answers `{ seed, token }`: the seed sealed with the issue time in an HMAC-signed token. Stores nothing.                                                                                                                                                                                                                                                                          |
-| `POST /api/score` | Takes `{ handle, log, token }`. Checks the name, the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100, time counted), stores it. Answers `{ handle, score, rank, entries? }`: the stored (tidied) name, the score, the rank counted right after the insert (null if the count failed) and the top 10 read from the table, not the edge. |
-| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie, rows from `BOARD_SINCE` on and above 0. Cached at the edge for 10 s plus 20 s stale (`TOP_CACHE`), so never more than 30 s old.                                                                                                                                                                |
+| Route             | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/start` | Draws a seed and answers `{ seed, token, emailRequired }`: the seed sealed with the issue time in an HMAC-signed token, and whether this run's post needs a work email (`OTP_WORK_EMAIL`). Stores nothing.                                                                                                                                                                                                                                                                                                           |
+| `POST /api/score` | Takes `{ handle, log, token }`, plus `{ email, consent }` when `OTP_WORK_EMAIL=required` (ignored and stored nowhere when it is not). Checks the name, the contact, the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100, time counted), stores it. Answers `{ handle, score, rank, entries? }`: the stored (tidied) name, the score, the rank counted right after the insert (null if the count failed) and the top 10 read from the table, not the edge. |
+| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie, rows from `BOARD_SINCE` on and above 0. Cached at the edge for 10 s plus 20 s stale (`TOP_CACHE`), so never more than 30 s old.                                                                                                                                                                                                                                                                                   |
 
 ## The run token (Phase E)
 
@@ -87,12 +93,14 @@ the claim stores the figure `score()` computes from the replayed log.
 
 ## Environment variables
 
-Two, and only two. Both are already set on Production and Preview and both are marked sensitive.
+Two secrets, both already set on Production and Preview and both marked sensitive, and since
+2026-10-22 one flag that is not a secret and is **not set yet**.
 
-| Variable                    | Used for                                                                |
-| --------------------------- | ----------------------------------------------------------------------- |
-| `SUPABASE_URL`              | The project origin, e.g. `https://<ref>.supabase.co`. Must be `https:`. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Sent as the `apikey` and `Authorization: Bearer` headers on every call. |
+| Variable                    | Used for                                                                                                               |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`              | The project origin, e.g. `https://<ref>.supabase.co`. Must be `https:`.                                                |
+| `SUPABASE_SERVICE_ROLE_KEY` | Sent as the `apikey` and `Authorization: Bearer` headers on every call.                                                |
+| `OTP_WORK_EMAIL`            | `required` (exactly) turns the work email on. Unset, empty or anything else: off, and anything else is logged by name. |
 
 Nothing else is read. The `POSTGRES_*` variables would need a Postgres driver, which is a
 dependency this service does not have and does not want (CLAUDE.md rule 7: fewer dependencies is a
@@ -138,6 +146,86 @@ the two keys, so a third one cannot arrive by accident.
 repository and the database can be compared rather than assumed. Running it against the live
 project changes nothing; its verification query prints the table's actual columns, constraints,
 indexes, grants and RLS state, which is the first thing to run when the board misbehaves.
+
+## Work email (the client's decision, 2026-10-22)
+
+The client decided in chat on 2026-10-22: **to post a score a player gives a WORK email and ticks a
+consent line whose only purpose is that Cyera may contact them about this research.** Personal
+providers are refused. It is built, tested, and **switched off** until the three steps at the end
+of this section are done, in order.
+
+**The flag.** `OTP_WORK_EMAIL`, read once per cold start by `src/env.ts` (`readWorkEmailFlag`). On
+only when it is exactly `required`. Off is today's service exactly: the body may carry `email` and
+`consent` (the schema allows them, so a newer game posting to an older config is not a 400), and
+they are **not read** -- not checked, not stored, not logged. `POST /api/start` answers
+`emailRequired: false` and Results shows nothing new. A value that is set and is not `required`
+fails closed and logs `OTP_WORK_EMAIL is set but is not exactly "required"` (the name, never the
+value).
+
+**The check** is `v2.checkContact` in `packages/core/src/v2/contact.ts`, called by the game for a
+friendly message and by `handleScore` as the authority: trimmed and lower-cased; at most 254
+characters; ASCII `atext` local part of at most 64; a domain of at least two DNS labels with an
+alphabetic (or `xn--`) top label, not an IP, not a test or documentation domain; then **not a free
+or disposable provider** (`FREE_EMAIL_PROVIDERS`, the one list -- exact domains, and brands matched
+under any country suffix, so `yahoo.co.uk` and `gmx.de` are caught and `mail.mil` is not); then
+consent exactly `true`. Each refusal is **422** with `reason` `email-missing`, `email-invalid`,
+`email-personal` or `consent-missing`, answered after the name check and **before the token is
+spent**, so the player fixes it and posts the same run.
+
+**The write is one transaction.** With the flag on, the service never calls the plain insert. It
+calls `POST /rest/v1/rpc/leaderboard_post_with_contact` (migration 0007), a `security definer`
+function that inserts the score row and the contact row together and returns `true`. If the contact
+insert fails, the score insert rolls back with it, and the service answers 503 having stored
+nothing; the token is released, so the player can try again. A 200 is believed only as JSON whose
+body is exactly `true` (`believeContactWrite` in `src/store.ts`), for the reason `believeInsert`
+gives: a paused project or a proxy's page must not read as a stored row.
+
+**The address never comes back.** It is sent in the body of that one POST -- never in a URL. It is
+not in any response (the success body is `{handle, score, rank, entries?}` with the flag on or
+off), not in any refusal (the error strings are fixed), and not in any log line: a failed contact
+write is logged by status and **SQLSTATE code only** (`codeFrom`), never PostgREST's `message`,
+because Postgres may quote an argument into a message. `GET /api/top` reads `public.leaderboard`
+only, and a source guard in `test/work-email.test.ts` fails if `store.ts` ever names the contact
+table as a path. Underneath all of that, the migration grants `service_role` **no** privilege on
+`public.leaderboard_contact`: even a leaked service key cannot read an address back.
+
+**The consent version is the server's.** `consent_version` is read from this service's copy of
+`content/game.v2.json` (`ui.contact.consentVersion`, today `research-contact-v1`), never from the
+request; a body naming one is a 400. Core's `test/v2/contact.test.ts` pins each version to its
+exact wording, so a change to the consent line fails the suite until the version is bumped.
+
+**Retention and deletion** are the migration's: twelve months from consent (D10's number), a
+cascade from the score row, and an `admin` find-by-address / remove-by-id pair beside 0004's. An
+address is an identity, so an erasure request is honoured in full. `docs/DATABASE.md`, "Decision
+5", has the procedure.
+
+**The tests:** `test/work-email.test.ts` (the flag both ways, every refusal, the transaction, the
+address in no response, log or URL, the store's own guards), `test/start.test.ts` and
+`test/routes.test.ts` (the flag through the real route files). In the game:
+`apps/game/test/contact.test.ts` and `apps/game/e2e/work-email.spec.ts`.
+
+### Turning it on -- the client's three steps, in this order
+
+1. **Run `supabase/migrations/0007_leaderboard_work_email.sql`** in the Supabase SQL editor (pg_cron
+   enabled first), then its verification block. Expect: no grants on `leaderboard_contact` to
+   `anon`, `authenticated` or `service_role`; execute on the function for `service_role` only; the
+   retention job active; and the notice `transaction proved`.
+2. **Get Legal's sign-off.** This reopens D10 ("handle and score only"). The paragraph for Legal, the
+   consent wording and the retention period are in `docs/DATABASE.md`, "Decision 5"; the
+   player-facing lines are in `docs/COPY_REVIEW.md`.
+3. **Set `OTP_WORK_EMAIL=required`** in Vercel on Production and Preview, then **redeploy**
+   (variables are read at cold start). Prove it: `POST /api/start` with `{}` answers
+   `"emailRequired":true`; a post without an email answers 422 `email-missing`; a post with one
+   answers 200, and a row appears in `leaderboard_contact` (read it in the SQL editor -- the
+   service cannot).
+
+**If step 3 is done before step 1**, every post with an address answers 503 (PostgREST: function
+not found, `PGRST202` in the log) and the player reads "No reply came back for that post." Unset the
+variable and redeploy; nothing was stored.
+
+**Not run, and not runnable from here:** the migration and the RPC against a real Supabase. The
+function's 200-and-`true` answer is PostgREST's documented behaviour for a scalar function,
+asserted against a fake `fetch` like every other request shape in this service.
 
 ## Vercel settings
 
@@ -254,6 +342,9 @@ of the board are wired, and both are waiting on the same thing: a function at `/
 | A loop writing rows as fast as it can          | Thirty writes a minute per instance, then `429` with `retry-after`. The budget is spent only on a row that is about to exist, so nonsense cannot exhaust it. Per instance — see below.                                                                                                                                                                                                   |
 | A name the board refuses                       | 422 `reason: 'name'` by `v2.checkName`, and refused again by the store immediately before the insert (it stores only the tidy form). Names are typed since 2026-10-22; the suggested `brave-lantern-42` handles all pass.                                                                                                                                                                |
 | A name designed to break a page                | `<`, `>`, `&`, quotes other than the apostrophe, `@`, `.`, `/`, `:` and every control or format character are not allowed characters, the game renders through Preact text nodes, and `GET /api/top` drops any row whose name `checkName` would now refuse.                                                                                                                              |
+| A post with no work email, flag on             | 422 `reason: 'email-missing'` before the token is spent; nothing written. `email-invalid`, `email-personal` and `consent-missing` likewise. The refusal never repeats the address.                                                                                                                                                                                                       |
+| An address or a consent version smuggled in    | With the flag off, `email` and `consent` are not read at all. A `consentVersion` key is a 400 (strict schema); the version stored is always the server's own content's. `consent: "true"` is a 400, not a yes.                                                                                                                                                                           |
+| Reading the addresses back                     | Not possible through this service: no route returns one, and the service role holds no privilege on `public.leaderboard_contact` (migration 0007), so even the service key cannot select it. Only the table owner, in the SQL editor.                                                                                                                                                    |
 | A wolf run                                     | 422 `reason: 'wolf'`, nothing written. It finished at 0; the board ranks runs that kept the wolf out, and a quiet board of zeros read as a broken one.                                                                                                                                                                                                                                   |
 | A body that is not JSON, or does not say it is | 400 and 415. A JSON-only endpoint cannot be reached by a plain cross-origin form post.                                                                                                                                                                                                                                                                                                   |
 | Probing for the shape of an acceptable log     | Gets `{"error":"that submission is not valid"}`. No zod issue, no field name, no database status: the detail goes to the server log, not to the caller.                                                                                                                                                                                                                                  |

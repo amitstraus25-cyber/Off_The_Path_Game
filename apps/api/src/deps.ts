@@ -1,5 +1,5 @@
 import { content } from './content.ts';
-import { readStoreConfig } from './env.ts';
+import { readStoreConfig, readWorkEmailFlag } from './env.ts';
 import { note } from './http.ts';
 import { createRecentRuns, createWriteBudget } from './limit.ts';
 import { createStore } from './store.ts';
@@ -17,6 +17,8 @@ import type { Deps } from './handlers.ts';
 
 const configured = readStoreConfig(process.env);
 if (!configured.ok) note(`not configured: ${configured.reason}`);
+const workEmail = readWorkEmailFlag(process.env);
+if (workEmail.reason) note(workEmail.reason);
 
 export const deps: Deps = {
   content,
@@ -29,6 +31,8 @@ export const deps: Deps = {
   // Every run asks for a start, posted or not, so this bucket is four times the write budget.
   starts: createWriteBudget(120),
   recent: createRecentRuns(),
+  // OTP_WORK_EMAIL, exactly `required`, or off (src/env.ts). Read once per cold start, like the rest.
+  emailRequired: workEmail.required,
   // Called, not captured, so a test's fake clock reaches it.
   now: () => Date.now(),
 };

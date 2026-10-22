@@ -187,7 +187,8 @@ describe('startRun', () => {
 
   it('asks our own origin for a run, as JSON, with no cookie', async () => {
     const sent = intercept(() => new Response(JSON.stringify({ seed: 7, token: TOKEN })));
-    await expect(startRun()).resolves.toEqual({ seed: 7, token: TOKEN });
+    // A server from before the flag says nothing about email: none is asked for.
+    await expect(startRun()).resolves.toEqual({ seed: 7, token: TOKEN, emailRequired: false });
     expect(sent[0]!.url).toBe('/api/start');
     expect(sent[0]!.init.method).toBe('POST');
     expect(sent[0]!.init.credentials).toBe('omit');
@@ -199,7 +200,25 @@ describe('startRun', () => {
 
   it('hands back only a seed and a token, whatever else the reply carried', async () => {
     intercept(() => new Response(JSON.stringify({ seed: 7, token: TOKEN, extra: 'x' })));
-    await expect(startRun()).resolves.toEqual({ seed: 7, token: TOKEN });
+    await expect(startRun()).resolves.toEqual({ seed: 7, token: TOKEN, emailRequired: false });
+  });
+
+  it('asks for a work email only when the server said exactly true', async () => {
+    for (const [said, wanted] of [
+      [true, true],
+      [false, false],
+      ['true', false],
+      [1, false],
+      [null, false],
+    ] as const) {
+      intercept(() => new Response(JSON.stringify({ seed: 7, token: TOKEN, emailRequired: said })));
+      await expect(startRun(), JSON.stringify(said)).resolves.toEqual({
+        seed: 7,
+        token: TOKEN,
+        emailRequired: wanted,
+      });
+      vi.unstubAllGlobals();
+    }
   });
 
   it('answers null -- play on a local seed -- for anything it cannot believe', async () => {

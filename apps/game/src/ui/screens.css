@@ -461,7 +461,8 @@
   min-width: 0;
 }
 
-.otp-handle__label {
+.otp-handle__label,
+.otp-email__label {
   font-size: max(11px, calc(12px * var(--otp-ui)));
   font-weight: 500;
   letter-spacing: 0.14em;
@@ -469,7 +470,8 @@
   color: var(--cyera-ash);
 }
 
-.otp-handle__input {
+.otp-handle__input,
+.otp-email__input {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -486,7 +488,8 @@
 
 /* A name the board will not take: the boundary thickens to Deep Purple, and the sentence below says
    why. Weight and words, never a red. */
-.otp-handle__input[aria-invalid='true'] {
+.otp-handle__input[aria-invalid='true'],
+.otp-email__input[aria-invalid='true'] {
   border-color: var(--cyera-deep-purple);
   border-width: 3px;
 }
@@ -496,7 +499,8 @@
   align-self: flex-end;
 }
 
-.otp-handle__problem {
+.otp-handle__problem,
+.otp-contact__problem {
   display: flex;
   align-items: baseline;
   gap: calc(8px * var(--otp-ui));
@@ -505,7 +509,8 @@
 }
 
 /* The "!" disc the reveal's marked line wears, so a problem is a shape and a sentence. */
-.otp-handle__problem::before {
+.otp-handle__problem::before,
+.otp-contact__problem::before {
   content: '!' / '';
   flex: none;
   display: inline-grid;
@@ -518,6 +523,70 @@
   font-size: 0.9em;
   font-weight: 700;
   line-height: 1;
+}
+
+/*
+ * THE WORK EMAIL AND THE CONSENT (2026-10-22), shown only when the server asks for them. One item
+ * of `.otp-post` the full width of the form, so on every width the order reads name, address,
+ * consent, then Post on its own line under them. The address wears the name field's boundary
+ * (the shared rules above): it is the same kind of control and must not look like a second kind.
+ */
+.otp-contact {
+  flex: 1 1 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--otp-ui));
+}
+
+.otp-email {
+  display: flex;
+  flex-direction: column;
+  gap: calc(4px * var(--otp-ui));
+  min-width: 0;
+}
+
+.otp-email__hint {
+  margin-top: 0;
+}
+
+/*
+ * The consent: a real checkbox inside its label, so the whole sentence is the hit target and a
+ * screen reader names the box by the sentence. The box takes the Deep Purple accent and keeps the
+ * touch minimum as a row; an unmet consent thickens to an outline, never a red (UI_FOUNDATIONS 5).
+ */
+.otp-consent {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--otp-ui));
+  min-height: var(--otp-touch-min);
+  color: var(--cyera-black);
+  font-size: max(14px, calc(15px * var(--otp-ui)));
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.otp-consent__box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--cyera-deep-purple);
+  cursor: pointer;
+}
+
+.otp-consent__box[aria-invalid='true'] {
+  outline: 3px solid var(--cyera-deep-purple);
+  outline-offset: 2px;
+}
+
+/*
+ * Post while the address or the consent is not yet good: aria-disabled, so it stays focusable and
+ * a press says why (Results.tsx), and dimmed so it reads as not ready. Scoped to the form that
+ * asks for an address -- the sibling after `.otp-contact` -- so the form without one is untouched.
+ */
+.otp-contact ~ .otp-button[aria-disabled='true'] {
+  opacity: 0.6;
 }
 
 .otp-fine {

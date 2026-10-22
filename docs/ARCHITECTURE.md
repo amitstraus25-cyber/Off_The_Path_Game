@@ -225,6 +225,17 @@ untouched, and the player is told no reply came back for the post (`ui.chrome.le
 No cookies, no accounts, no email, no run id and no IP address in the table. A handle and a score,
 which is D10's decision expressed as the schema.
 
+**The work email (the client's decision, 2026-10-22), behind `OTP_WORK_EMAIL`.** Off by default,
+and off is the paragraph above exactly. On (the value exactly `required`, set in Vercel after
+migration 0007 and Legal's sign-off), `POST /api/start` answers `emailRequired: true`, Results asks
+for a work email and a consent tick, and `POST /api/score` refuses a post without them (422,
+`reason` one of `email-missing`, `email-invalid`, `email-personal`, `consent-missing`, before the
+token is spent). The address goes into a SEPARATE table, `public.leaderboard_contact`, through one
+function that writes the score row and the contact row in one transaction; the service role can
+call that function and cannot read the table. `public.leaderboard` is unchanged and `GET /api/top`
+still reads only it. The address is never in a response, a log line or a URL. Validation is
+`v2.checkContact` in core, called by both ends (`packages/core/src/v2/contact.ts`).
+
 ## 9. Embedding contract (`apps/game/src/embed/postMessage.ts`)
 
 **The channel is outbound only. There is no inbound message handling anywhere in the game**, and

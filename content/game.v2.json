@@ -391,6 +391,17 @@
       "handleChars": "Use letters, numbers, spaces, hyphens or apostrophes, and start and end with a letter or number.",
       "handleContact": "That looks like contact details. Please use just a name.",
       "handleBlocked": "Please pick a different name."
+    },
+    "contact": {
+      "consentVersion": "research-contact-v1",
+      "emailLabel": "Work email",
+      "emailHint": "Never shown on the board.",
+      "consent": "Cyera may contact me about this research.",
+      "emailMissing": "Enter your work email to post your score.",
+      "emailInvalid": "That does not look like an email address. Check it and try again.",
+      "emailPersonal": "Please use your work email, not a personal one.",
+      "consentMissing": "Tick the box so Cyera may contact you about this research.",
+      "privacy": "Your name and score go on the public board. Your work email is kept privately, only so Cyera can contact you about this research, and is never shown. No account, no cookies."
     }
   }
 }

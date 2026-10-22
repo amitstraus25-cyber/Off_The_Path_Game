@@ -52,3 +52,34 @@ export function readStoreConfig(env: Record<string, string | undefined>): Config
 
   return { ok: true, config: { url: parsed.origin, serviceRoleKey } };
 }
+
+/*
+ * THE WORK-EMAIL FLAG (the client's decision, 2026-10-22): `OTP_WORK_EMAIL`, a third variable and
+ * the only one that is not a secret. ON WHEN IT IS EXACTLY `required` and off for anything else,
+ * including unset, so the default is today's behaviour: a handle and a score, the email fields of
+ * a post ignored and stored nowhere.
+ *
+ * EXACT, not trimmed or case-folded. The flag turns on the collection of personal data, so the
+ * only spelling that does it is the one the runbook prints; `Required` or `required ` is a typo,
+ * and a typo must fail closed -- to collecting nothing -- rather than open. It does not fail
+ * silently: a value that is set and is not `required` is reported, by NAME (the value is not a
+ * secret, but nothing from the environment is echoed into a log, so nobody has to decide which
+ * ones are).
+ *
+ * It must not be switched on before migration 0007 has been run and Legal has signed off on
+ * reopening D10 (apps/api/README.md, "Work email"): with the flag on and the function missing,
+ * every post answers 503.
+ */
+export const WORK_EMAIL_REQUIRED = 'required';
+
+export type WorkEmailFlag = { required: boolean; reason?: string };
+
+export function readWorkEmailFlag(env: Record<string, string | undefined>): WorkEmailFlag {
+  const value = env['OTP_WORK_EMAIL'];
+  if (value === WORK_EMAIL_REQUIRED) return { required: true };
+  if (value === undefined || value === '') return { required: false };
+  return {
+    required: false,
+    reason: `OTP_WORK_EMAIL is set but is not exactly "${WORK_EMAIL_REQUIRED}", so work email is off`,
+  };
+}

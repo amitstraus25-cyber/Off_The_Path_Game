@@ -22,6 +22,14 @@ and no migration was written. Scores are now 0 to 100 (v1's were out of 1,000), 
 left in the table outranks every v2 run; **whether old rows are cleared is the client's data
 decision**, made by hand through Decision 3's delete path. No deploy deletes anything.
 
+**The client's decision of 2026-10-22: a WORK EMAIL to post a score. Built, not switched on.**
+To post, a player gives a work email and ticks a consent line whose only purpose is that Cyera may
+contact them about this research. That reopens D10, so it lives in a NEW table,
+`public.leaderboard_contact`, written by migration `0007` -- **not run; the client runs it** -- and
+the service uses it only once `OTP_WORK_EMAIL=required` is set in Vercel. Until then
+`public.leaderboard` is the whole database and everything above stays true. The design, the
+paragraph for Legal and the client's three steps are [Decision 5](#decision-5--the-work-email).
+
 **What changed on 2026-10-22 (the client round: free names, speed, the missing post).** No
 migration, and the table is still two columns.
 
@@ -73,7 +81,7 @@ mounted. Then `POST /api/start` with `content-type: application/json` and `{}` a
 so a `200` here proves that variable is present (not that it is right; `/api/top` proves that).
 
 A `404` here is positive proof of absence: our code cannot produce one. `handleStart`,
-`handleScore` and `handleTop` between them return `200`, `400`, `403`, `405`, `409`, `410`, `413`,
+`handleScore` and `handleTop` between them return `200`, `400`, `403`, `405`, `409`, `410`, `413`, `422`,
 `415`, `429` and `503`, and nothing else. If you are looking at a `404`, the request never reached a line we wrote, and no
 amount of database investigation will help.
 
@@ -173,6 +181,11 @@ in a tidy-up, every call 401s and the board looks "down" with the table perfectl
 | `service_role`     | `SELECT`, `INSERT` — after 0004 | Exactly what `store.ts` issues: one GET, one POST.      |
 | owner (`postgres`) | everything, from the SQL editor | Retention, admin functions, migrations.                 |
 
+On `public.leaderboard_contact` (after `0007`): `anon`, `authenticated` and **`service_role`**
+hold **nothing**. The service writes it only by executing `public.leaderboard_post_with_contact`,
+which runs as the owner; it cannot select, update or delete a single address. The owner reads it in
+the SQL editor.
+
 `supabase/migrations/0004_leaderboard_delete_path.sql` takes `UPDATE`, `DELETE` and `TRUNCATE` away
 from `service_role`. The service has never used them and no route could. The point is that a leaked
 `SUPABASE_SERVICE_ROLE_KEY` can then add junk rows — which rate limiting and Decision 1 bound — but
@@ -182,7 +195,9 @@ cannot wipe or rewrite the board. That is the difference between an incident and
 
 ## Environment variables
 
-Two, and only two. Both already exist on Production and Preview, both marked sensitive.
+Two secrets, both already on Production and Preview, both marked sensitive -- and one flag, not a
+secret and **not set yet**: `OTP_WORK_EMAIL`, which turns the work email on when it is exactly
+`required` ([Decision 5](#decision-5--the-work-email)). It touches no credential.
 
 | Variable                    | Read by                           | Used for                                                       |
 | --------------------------- | --------------------------------- | -------------------------------------------------------------- |
@@ -243,13 +258,15 @@ top what it does, why, whether it is safe on a table that already has rows, and 
 There is no migration runner wired into this project and none is proposed: five files over the life
 of a marketing asset does not earn a tool.
 
-| File                                 | Decision | Safe to run now?                                  |
-| ------------------------------------ | -------- | ------------------------------------------------- |
-| `0001_leaderboard_baseline.sql`      | —        | **Yes.** Idempotent; changes nothing live.        |
-| `0002_leaderboard_log_hash.sql`      | 1        | **Only after D10 is reopened.** See below.        |
-| `0003_leaderboard_retention.sql`     | 2        | **Yes.** Implements a policy already decided.     |
-| `0004_leaderboard_delete_path.sql`   | 3        | **Yes.** Changes no row.                          |
-| `0005_leaderboard_rank_tiebreak.sql` | 4        | **Yes, and optional.** Pair with the code change. |
+| File                                 | Decision | Safe to run now?                                   |
+| ------------------------------------ | -------- | -------------------------------------------------- |
+| `0001_leaderboard_baseline.sql`      | —        | **Yes.** Idempotent; changes nothing live.         |
+| `0002_leaderboard_log_hash.sql`      | 1        | **Only after D10 is reopened.** See below.         |
+| `0003_leaderboard_retention.sql`     | 2        | **Yes.** Implements a policy already decided.      |
+| `0004_leaderboard_delete_path.sql`   | 3        | **Yes.** Changes no row.                           |
+| `0005_leaderboard_rank_tiebreak.sql` | 4        | **Yes, and optional.** Pair with the code change.  |
+| `0006_clear_v1_rows.sql`             | —        | **Client's call.** Deletes the v1 rows for good.   |
+| `0007_leaderboard_work_email.sql`    | 5        | **Only after Legal signs off.** Then set the flag. |
 
 Run them in order. `0001` first, always — it is also the drift check.
 
@@ -593,6 +610,91 @@ returns fewer rows with a `200`, and our code reads that as a short board rather
 
 ---
 
+## Decision 5 — the work email
+
+**The question, decided by the client in chat on 2026-10-22:** to post a score, a player must give a
+**work** email and tick a consent line whose only purpose is that Cyera may contact them about this
+research. Personal and disposable providers are refused. This reverses D4 ("handle only, no email
+field") and reopens D10 ("handle and score only").
+
+### What is built
+
+- **A new table, not a new column.** `public.leaderboard` is unchanged -- still a handle and a
+  score -- and `GET /api/top` still reads only it. Addresses go in `public.leaderboard_contact`:
+  `id`, `leaderboard_id` (foreign key to the score row, unique, `on delete cascade`), `email`
+  (normalised: trimmed, lower case, at most 254), `consent_version`, `consented_at`.
+- **One function writes both rows in one transaction.**
+  `public.leaderboard_post_with_contact(handle, score, email, consent_version)`, `security definer`,
+  `search_path = ''`, returning `true` and nothing about the rows. If the contact insert fails, the
+  score insert is rolled back: there is never a score on the board without the email that was
+  required to post it. The migration's verification block proves this in the database itself.
+- **The service cannot read it.** RLS on with no policies, as on `leaderboard`, and -- unlike
+  `leaderboard` -- every privilege revoked from `service_role` too. Execute on the function is the
+  service role's only access. A leaked service key can post junk through the function (rate
+  limiting bounds that) and cannot read one address.
+- **Never out of the service.** No route returns an address; no refusal repeats it; a failed write
+  is logged by SQLSTATE code only. `apps/api/README.md`, "Work email", has the request-side detail.
+- **Retention: twelve months from consent**, nightly at 03:23 UTC (`leaderboard-contact-retention`),
+  and a contact row also goes when its score row goes (0003's retention, or a takedown).
+- **The flag.** `OTP_WORK_EMAIL=required` in Vercel. Off by default; off is today's service.
+
+### The consent, and its versions
+
+Every stored address records **which wording** the player agreed to. The version is read from the
+server's own copy of `content/game.v2.json` (`ui.contact.consentVersion`), never from the request.
+The words a version names never change; a change of words is a new version, added here and in core's
+`test/v2/contact.test.ts`, which fails until both agree.
+
+| `consent_version`     | The words beside the checkbox               | Since                     |
+| --------------------- | ------------------------------------------- | ------------------------- |
+| `research-contact-v1` | "Cyera may contact me about this research." | 2026-10-22 (not yet live) |
+
+### The paragraph for Legal
+
+**A draft for Legal review, not an approved description; it needs sign-off before it is used
+anywhere:**
+
+> To post a score to the public leaderboard of the Off the Path game, a player will be asked for a
+> work email address and to tick "Cyera may contact me about this research." Personal email
+> providers are refused. The address is stored separately from the leaderboard, linked to the one
+> score it was given with, together with the consent wording's version and the time of consent. It
+> is never displayed, never returned by the game's service, and never written to logs; the service
+> that writes it cannot read it back, and only database administrators can. Its only use is
+> contacting the player about this research. It is deleted twelve months after consent, or when
+> its score is removed, or on request. The board itself continues to show a name and a score only.
+
+What Legal is asked to decide: that this purpose and wording are sufficient for the jurisdictions
+the page serves; the twelve months; and who, by name, may read the table and export from it.
+
+### Deleting an address, and reading the list
+
+**An address is an identity**, which a handle is not, so the reasoning in Decision 3 does not carry
+over: a request to delete "my email" is a privacy request, honoured in full, for every row carrying
+it, without asking which run was theirs.
+
+```sql
+select * from admin.leaderboard_contact_find('Jane.Doe@acme.com');   -- normalised for you
+select * from admin.leaderboard_contact_remove(1234);                 -- one row, by id
+select * from admin.leaderboard_remove(5678);  -- also the score, if they ask: the cascade takes the contact
+```
+
+Record ids and timestamps in the ticket, never the address. The people the consent covers read the
+list in the SQL editor as the owner (`0007` prints the query). **Any copy taken out of this table --
+a CRM import, a spreadsheet -- is outside every control here**, its retention and deletion
+included; whoever exports owns that.
+
+### Turning it on -- the client's three steps, in this order
+
+1. **Run `0007`** in the SQL editor (pg_cron enabled first), and its verification block.
+2. **Get Legal's sign-off** on the paragraph above, the consent wording and the retention.
+3. **Set `OTP_WORK_EMAIL=required`** in Vercel (Production and Preview) and redeploy. Then
+   `POST /api/start` answers `"emailRequired":true` and Results asks for the address.
+
+Step 3 before step 1 makes every post answer 503 (`PGRST202`, function not found, in the log); unset
+the variable and redeploy to undo. Nothing is stored in that state.
+
+---
+
 ## When the free tier pauses
 
 Supabase pauses a free-tier project after roughly a week without activity. **A research page nobody
@@ -696,6 +798,15 @@ having count(*) > 1;
 
 -- Retention job, if 0003 has been run.
 select jobid, jobname, schedule, active from cron.job where jobname = 'leaderboard-retention';
+
+-- The work email, if 0007 has been run. Counts only: no address leaves this query.
+select count(*) as contacts_total, min(consented_at) as oldest, max(consented_at) as newest
+from public.leaderboard_contact;
+select consent_version, count(*) from public.leaderboard_contact group by consent_version;
+select count(*) as contacts_past_retention
+from public.leaderboard_contact
+where consented_at < now() - interval '12 months';
+select jobid, jobname, schedule, active from cron.job where jobname = 'leaderboard-contact-retention';
 ```
 
 ---
