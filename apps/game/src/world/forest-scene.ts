@@ -238,12 +238,32 @@ const CONTACT_ROWS = 4;
  * And three quarters of a tile apart rather than a whole one, the oldest print level with her feet:
  * a trail that ran a row below her made the bottom of the payoff shot a row deeper than the story,
  * and with the Arrive panel docked over the world that row was paid for with the chimney.
+ *
+ * INSIDE HER OWN ROWS (2026-10-23). The oldest print sat level with her feet -- its cell's bottom
+ * half a tile BELOW them, at 688 against her 672 -- so the lowest thing the payoff had to keep above
+ * the panel was a print, not Purple. At 844x390 with the Word Weaver's welcome that half tile is
+ * the difference between a shot that holds the lit window and one that cannot: the panel leaves
+ * 104.84 game pixels, the window's top (576) to the old print's foot (688) is 112, and to her feet
+ * (672) it is 96. So the trail is two lane rows deep, not two and a half: a print every half tile
+ * from the step to her feet, the oldest cell ending exactly where she stands. To keep three 25px
+ * paws apart in 64px, the zig-zag swings a whole tile instead of half: the outer prints at 2.25
+ * tiles, the middle one still at 1.5. Measured off fx-pawprints.png, ink to ink: 5, 4 and 6 clear
+ * pixels between the prints (the old trail had 3 and 2), 5 clear of her back-view figure (as
+ * before), and 11 short of the mailbox's cell.
  */
 const PAW_TRAIL: readonly { frame: 0 | 1 | 2; dx: number; dy: number }[] = [
-  { frame: 0, dx: TILE * 2, dy: TILE * 0.5 },
-  { frame: 1, dx: TILE * 1.5, dy: TILE * 1.25 },
-  { frame: 2, dx: TILE * 2, dy: TILE * 2 },
+  { frame: 0, dx: TILE * 2.25, dy: TILE * 0.5 },
+  { frame: 1, dx: TILE * 1.5, dy: TILE * 1 },
+  { frame: 2, dx: TILE * 2.25, dy: TILE * 1.5 },
 ];
+
+/**
+ * Where Purple waits at the door, in tiles from the top-left of `trigger-cottage`: the door's
+ * column, her feet on the bottom of the lane's second row (see `stageArrival`). One constant
+ * because two things read it -- the arrival that puts her there and the frame composed around
+ * the spot -- and the frame must never read where she actually stopped.
+ */
+const DOORSTEP = { x: 0.5, y: 2 } as const;
 
 /**
  * How many rows of doorstep lane stay in the arrival shot below the facade. Three, because that is
@@ -590,6 +610,13 @@ export class ForestScene extends Phaser.Scene {
   private sketched: MapSketch | null = null;
   /** The building itself, which is what the arrival shot is framed on. */
   private facade!: MapObject;
+  /**
+   * The lit window's cell, which the arrival shot may never push out of its top edge: the tile the
+   * map draws as `wall-window-lit`, or the facade's bottom row on a map without one.
+   */
+  private litWindow: Rect = { x: 0, y: 0, width: TILE, height: TILE };
+  /** `prop-mailbox`, which the arrival keeps above the panel; null on a map without one. */
+  private mailbox: MapObject | null = null;
   /** The wolf's prints on the lane outside the door. Hidden until an arrival that earned them. */
   private paws: Phaser.GameObjects.Sprite[] = [];
   /** True once the run has reached the cottage, so the arrival is staged exactly once. */
@@ -743,6 +770,8 @@ export class ForestScene extends Phaser.Scene {
     const facade = findObject(this.map, 'prop-cottage');
     if (!facade) throw new Error('Map has no "prop-cottage" object');
     this.facade = facade;
+    this.mailbox = findObject(this.map, 'prop-mailbox') ?? null;
+    this.litWindow = this.findLitWindow();
     this.createPaws();
     this.createPerkProps();
     this.openedDoor = this.createOpenDoor(tiles);
@@ -1034,6 +1063,20 @@ export class ForestScene extends Phaser.Scene {
    * into the window would sit there through the whole walk and on Grandma's ending too. Hidden, it
    * cannot give the ending away from across the garden.
    */
+  /**
+   * The lit window's cell in world pixels: the `wall-window-lit` tile `decor-below` draws, which is
+   * the cell the wolf's silhouette is laid over. On a map without one, the facade's bottom row --
+   * the row the windows and the door share -- so the arrival still has a top it must keep.
+   */
+  private findLitWindow(): Rect {
+    const lit = (gids as Record<string, number>)['wall-window-lit'];
+    const cell =
+      lit === undefined ? null : (this.decorBelow?.findTile((t) => t.index === lit) ?? null);
+    if (cell) return { x: cell.pixelX, y: cell.pixelY, width: TILE, height: TILE };
+    const row = this.facade.y + this.facade.height - TILE;
+    return { x: this.facade.x, y: row, width: this.facade.width, height: TILE };
+  }
+
   private createWindowWolf(): Phaser.GameObjects.Image | null {
     const lit = (gids as Record<string, number>)['wall-window-lit'];
     if (lit === undefined || !this.decorBelow || !this.textures.exists('fx-window-wolf'))
@@ -1680,7 +1723,7 @@ export class ForestScene extends Phaser.Scene {
     // SECOND row of the lane, not the first (Paul's round, 2026-10-22): on the step her 48px figure
     // stood in front of the door and hid the open one the Word Weaver earns, so she stands a tile
     // back and the lit arch shows above her head.
-    this.position = { x: this.cottage.x + TILE / 2, y: this.cottage.y + TILE * 2 };
+    this.position = this.doorstep();
     this.stopWalking();
     this.facing = 'up';
     this.purple.stop();
@@ -1952,7 +1995,17 @@ export class ForestScene extends Phaser.Scene {
     // The centre eases after Purple and holds still while she is inside the deadzone; cameraTopLeft
     // still rounds, so the scroll stays on whole pixels and the tiles never shimmer.
     const restedAt = this.camera.y;
-    this.camera = cameraFollow(this.camera, this.focus(), deltaMs);
+    /*
+     * At the door the camera is PLACED on `doorFocus` every frame, never followed toward it. The
+     * follow holds still inside a 20px deadzone, so a target that moved by less than that -- a
+     * resize, a panel that measured itself a line taller -- left the shot composed for a panel
+     * that was no longer there, healed only if a cover event happened to re-cut it. A placement
+     * has no such history: the payoff frame is a function of the map, the canvas and the panel,
+     * the same on every frame and at every frame rate.
+     */
+    this.camera = this.arrived
+      ? this.doorFocus()
+      : cameraFollow(this.camera, this.focus(), deltaMs);
     /*
      * Whether the camera itself moved this frame, which is the question the lift's lifetime turns
      * on. Measured on the CAMERA and not on Purple: inside the deadzone she moves and it does not,
@@ -2227,6 +2280,14 @@ export class ForestScene extends Phaser.Scene {
     const bottom = this.facade.y + this.facade.height + TILE * LANE_ROWS;
     const x = this.facade.x + this.facade.width / 2;
     /*
+     * EVERY INPUT HERE IS A FIXED POINT OF THE MAP (2026-10-23): the facade, the lane, the lit
+     * window's cell, the mailbox, the spot `stageArrival` puts her on and the trail's own offsets.
+     * Never `this.position` -- where she stopped walking is not a fact about the shot, and a frame
+     * that read it would move with a frame-capped step that carried her a few pixels further into
+     * the trigger. e2e/window-wolf.spec.ts arrives from several stopping points, under CPU
+     * throttling, and demands the same scroll from all of them.
+     */
+    /*
      * AND ABOVE THE PANEL (Paul's round, 2026-10-22). The Arrive panel docks over the bottom of the
      * world, and at 1280x800, 1024x768 and 844x390 it covered Purple, the door lane and the wolf's
      * prints -- the payoff hidden under the words about it. So the span is framed in what the panel
@@ -2237,10 +2298,30 @@ export class ForestScene extends Phaser.Scene {
     const world = { width: this.map.widthInPixels, height: this.map.heightInPixels };
     const view = this.viewFor({ x, y: (top + bottom) / 2 }, world);
     const covered = coveredView(this.cover, this.scale.gameSize.height, view.height);
-    // What must stay in shot when the whole span cannot: her feet and the lowest print.
-    const lowestPrint = Math.max(...PAW_TRAIL.map((p) => p.dy)) + TILE / 2;
-    const keep = this.cottage.y + Math.max(TILE * 2, lowestPrint);
-    return { x, y: frameAboveCover(top, bottom, view.height, covered, COVER_MARGIN, keep) };
+    // What must stay above the panel when the whole span cannot: her feet, the lowest print's
+    // cell and the mailbox, whichever reaches lowest.
+    const lowestPrint = this.cottage.y + Math.max(...PAW_TRAIL.map((p) => p.dy)) + TILE / 2;
+    const mailbox = this.mailbox ? this.mailbox.y + this.mailbox.height : 0;
+    const keep = Math.max(this.doorstep().y, lowestPrint, mailbox);
+    /*
+     * And what must stay below the top edge however tall the panel comes out: the lit window, with
+     * the wolf in it on his ending. Without this bound the top gave without limit, and the Word
+     * Weaver's welcome -- one more line in the panel -- slid the window out of the frame at 844x390
+     * (CI run 39859836223; `frameAboveCover` has the numbers).
+     */
+    const must = this.litWindow.y;
+    return {
+      x,
+      y: frameAboveCover(top, bottom, view.height, covered, COVER_MARGIN, keep, must),
+    };
+  }
+
+  /** The spot she waits on at the door: fixed by the lane, whatever row she walked in on. */
+  private doorstep(): Vec {
+    return {
+      x: this.cottage.x + TILE * DOORSTEP.x,
+      y: this.cottage.y + TILE * DOORSTEP.y,
+    };
   }
 
   /** Where Purple is standing right now: the minimap's marker, and the specs. */

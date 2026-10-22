@@ -46,23 +46,61 @@ const windowWolf = (page: Page): Promise<WindowProbe> =>
     () => (window.__otp!.scene as unknown as { windowWolfShown: WindowProbe }).windowWolfShown,
   );
 
-/** Every offer answered through the store, then the door. `wolf` lets him in with one bad skill. */
-async function arrive(page: Page, ending: 'wolf' | 'grandma'): Promise<void> {
-  await page.evaluate((wolf) => {
-    const { store, content } = window.__otp!;
-    const good = store.getState().good;
-    let taken = false;
-    for (const c of content.characters) {
-      store.dispatch({ type: 'MEET', c: c.id });
-      store.dispatch({ type: 'INSPECT', s: c.skillId });
-      // Never the Wing Ride: its flight carries Purple off the doorstep (design-round.spec.ts).
-      const take = wolf && !taken && c.skillId !== 'short-cut' && !good.includes(c.skillId);
-      if (take) taken = true;
-      store.dispatch({ type: 'VERDICT', s: c.skillId, v: take ? 'take' : 'leave' });
-    }
-    store.dispatch({ type: 'ENTER_COTTAGE' });
-  }, ending === 'wolf');
+/**
+ * Every offer answered through the store, ready for the door: `wolf` lets him in with one bad skill,
+ * and `weaver` takes the Word Weaver or leaves it, so the Arrive panel's welcome beat is chosen
+ * here rather than by the deal.
+ *
+ * WHY `weaver` IS A PARAMETER (CI run 39859836223). This used to take "the first bad skill in
+ * walking order", and on the 4 deals of 35 where that is the Word Weaver's, the welcome makes the
+ * panel a line taller -- which at 844x390 pushed the lit window out of the top of the frame. The
+ * spec met that one run in nine, both attempts of one CI run drew it, and it never failed here.
+ * A frame that depends on the panel has to be judged at the panel's tallest, every time.
+ *
+ * Grandma's ending with the welcome needs the Word Weaver's good copy, so when the deal made it bad
+ * the run is re-dealt from the first seed that makes it good -- the same RESET, START, BEGIN main.ts
+ * plays at the start of every run.
+ */
+async function answer(page: Page, ending: 'wolf' | 'grandma', weaver: boolean): Promise<void> {
+  await page.evaluate(
+    ([wolf, w]) => {
+      const { store, content } = window.__otp!;
+      if (w && !wolf && !store.getState().good.includes('word-weaver')) {
+        for (let seed = 0; !store.getState().good.includes('word-weaver'); seed++)
+          store.dispatch({ type: 'RESET', seed });
+        store.dispatch({ type: 'START', runId: crypto.randomUUID() });
+        store.dispatch({ type: 'BEGIN' });
+      }
+      const good = store.getState().good;
+      let taken = false;
+      for (const c of content.characters) {
+        store.dispatch({ type: 'MEET', c: c.id });
+        store.dispatch({ type: 'INSPECT', s: c.skillId });
+        let take = false;
+        if (c.skillId === 'word-weaver') take = w;
+        // Never the Wing Ride: its flight carries Purple off the doorstep (design-round.spec.ts).
+        else if (wolf && !taken && c.skillId !== 'short-cut' && !good.includes(c.skillId))
+          take = taken = true;
+        store.dispatch({ type: 'VERDICT', s: c.skillId, v: take ? 'take' : 'leave' });
+      }
+    },
+    [ending === 'wolf', weaver] as const,
+  );
+  const state = await page.evaluate(() => window.__otp!.store.getState());
+  expect(state.phase, 'the answers did not leave the run in the forest').toBe('forest');
+  const tookWeaver = state.basket.some((b) => b.s === 'word-weaver');
+  expect(tookWeaver, `the Word Weaver was ${weaver ? 'not ' : ''}taken`).toBe(weaver);
+}
+
+/** Answered as `answer` says, then the door, without the walk. */
+async function arrive(page: Page, ending: 'wolf' | 'grandma', weaver: boolean): Promise<void> {
+  await answer(page, ending, weaver);
+  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'ENTER_COTTAGE' }));
   await expect(page.locator(`[data-arrive="${ending}"]`)).toBeVisible();
+  // The welcome is a beat of its own: three lines in the panel with it, two without.
+  await expect(page.locator(`[data-arrive="${ending}"] .otp-arrive__line`)).toHaveCount(
+    weaver ? 3 : 2,
+  );
 }
 
 /**
@@ -178,48 +216,64 @@ for (const [width, height] of [
   [1280, 800],
   [844, 390],
 ] as const) {
-  test(`at ${width}x${height} the wolf's ending puts him in the lit window, in full view`, async ({
-    browser,
-  }) => {
-    test.slow();
-    const page = await pageAt(browser, width, height);
-    await page.goto('/');
-    await startGame(page);
-    await arrive(page, 'wolf');
-    // He fades up rather than snapping in, then holds.
-    await expect.poll(async () => (await windowWolf(page)).alpha, { timeout: 4000 }).toBe(1);
-    await page.waitForTimeout(300);
-    const shape = await windowWolf(page);
-    expect(shape.width).toBe(32);
-    expect(await onScreen(page, shape), `the lit window at ${width}x${height}`).toEqual([]);
-    const box = await mailbox(page);
-    expect(box.object, 'the map has no prop-mailbox').not.toBeNull();
-    expect(await onScreen(page, box.object!), `the mailbox at ${width}x${height}`).toEqual([]);
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/arrive-wolf-${width}x${height}.png` });
-    await page.context().close();
-  });
+  for (const weaver of [false, true]) {
+    const welcome = weaver ? ', with the welcome' : '';
+    const tag = `${width}x${height}${weaver ? '-welcome' : ''}`;
 
-  test(`at ${width}x${height} Grandma's ending leaves the lit window empty, mailbox in view`, async ({
-    browser,
-  }) => {
-    test.slow();
-    const page = await pageAt(browser, width, height);
-    await page.goto('/');
-    await startGame(page);
-    await arrive(page, 'grandma');
-    await page.waitForTimeout(SETTLED_MS);
-    const shape = await windowWolf(page);
-    expect(shape.alpha, `the wolf is in Grandma's window on her ending at ${width}x${height}`).toBe(
-      0,
-    );
-    // The window itself is still composed into the shot: the overlay's cell IS the window's cell.
-    expect(await onScreen(page, shape), `the lit window at ${width}x${height}`).toEqual([]);
-    const box = await mailbox(page);
-    expect(box.object).not.toBeNull();
-    expect(await onScreen(page, box.object!), `the mailbox at ${width}x${height}`).toEqual([]);
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/arrive-grandma-${width}x${height}.png` });
-    await page.context().close();
-  });
+    test(`at ${width}x${height} the wolf's ending puts him in the lit window, in full view${welcome}`, async ({
+      browser,
+    }) => {
+      test.slow();
+      const page = await pageAt(browser, width, height);
+      await page.goto('/');
+      await startGame(page);
+      await arrive(page, 'wolf', weaver);
+      // He fades up rather than snapping in, then holds.
+      await expect.poll(async () => (await windowWolf(page)).alpha, { timeout: 4000 }).toBe(1);
+      await page.waitForTimeout(300);
+      const shape = await windowWolf(page);
+      expect(shape.width).toBe(32);
+      expect(await onScreen(page, shape), `the lit window at ${width}x${height}${welcome}`).toEqual(
+        [],
+      );
+      const box = await mailbox(page);
+      expect(box.object, 'the map has no prop-mailbox').not.toBeNull();
+      expect(
+        await onScreen(page, box.object!),
+        `the mailbox at ${width}x${height}${welcome}`,
+      ).toEqual([]);
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/arrive-wolf-${tag}.png` });
+      await page.context().close();
+    });
+
+    test(`at ${width}x${height} Grandma's ending leaves the lit window empty, mailbox in view${welcome}`, async ({
+      browser,
+    }) => {
+      test.slow();
+      const page = await pageAt(browser, width, height);
+      await page.goto('/');
+      await startGame(page);
+      await arrive(page, 'grandma', weaver);
+      await page.waitForTimeout(SETTLED_MS);
+      const shape = await windowWolf(page);
+      expect(
+        shape.alpha,
+        `the wolf is in Grandma's window on her ending at ${width}x${height}`,
+      ).toBe(0);
+      // The window itself is still composed into the shot: the overlay's cell IS the window's cell.
+      expect(await onScreen(page, shape), `the lit window at ${width}x${height}${welcome}`).toEqual(
+        [],
+      );
+      const box = await mailbox(page);
+      expect(box.object).not.toBeNull();
+      expect(
+        await onScreen(page, box.object!),
+        `the mailbox at ${width}x${height}${welcome}`,
+      ).toEqual([]);
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/arrive-grandma-${tag}.png` });
+      await page.context().close();
+    });
+  }
 
   test(`at ${width}x${height} the late ending shows no wolf in any window`, async ({ browser }) => {
     const page = await pageAt(browser, width, height);
@@ -245,11 +299,135 @@ for (const [width, height] of [
   });
 }
 
+/*
+ * THE ARRIVAL FRAME IS A FUNCTION OF THE MAP, NOT OF WHERE PURPLE STOPPED (2026-10-23).
+ *
+ * The first reading of CI run 39859836223 was that a frame-capped step on a slow runner carried
+ * her a few pixels further into the door trigger and the camera, following her, landed lower.
+ * Measured, that was not the cause -- the spec never walks, and its numbers reproduce to the pixel
+ * from the deal alone (see `answer`) -- but it is the right thing to guard, because a frame that
+ * read her position would fail exactly that way on a slow phone in landscape.
+ *
+ * So she reaches the door four ways at the tightest viewport, with the tallest panel: dropped on
+ * the step's top-left corner, dropped on the lane's far bottom corner, walked up the lane, and
+ * walked up the lane with the CPU throttled six times (CDP `Emulation.setCPUThrottlingRate`), which
+ * stretches every frame and with it every step. Where she was on the last frame before the arrival
+ * is recorded, and must differ; the camera's scroll must not, and the window and the mailbox must
+ * be in view on every one.
+ */
+test('at 844x390 the arrival frame is the same wherever Purple stopped, even starved of frames', async ({
+  browser,
+}) => {
+  test.slow();
+  const ways = [
+    'dropped on the step',
+    'dropped in the far corner',
+    'walked up',
+    'walked up at 6x CPU',
+  ];
+  const shots: {
+    how: string;
+    stop: { x: number; y: number } | null;
+    scroll: { x: number; y: number };
+    window: string[];
+    mailbox: string[];
+  }[] = [];
+  for (const how of ways) {
+    const page = await pageAt(browser, 844, 390);
+    await page.goto('/');
+    await startGame(page);
+    // The Word Weaver taken: the tallest panel, and no knock -- she is let in the frame she arrives.
+    await answer(page, 'wolf', true);
+    if (how.includes('6x')) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+    }
+    // Where she stands on every frame until the arrival is staged; the last one is where she stopped.
+    await page.evaluate(() => {
+      const scene = window.__otp!.scene as unknown as {
+        arrived: boolean;
+        purplePosition: { x: number; y: number };
+      };
+      const w = window as unknown as { __stop: { x: number; y: number } | null };
+      w.__stop = null;
+      const watch = (): void => {
+        if (scene.arrived) return;
+        w.__stop = scene.purplePosition;
+        requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+    });
+    const door = await page.evaluate(() =>
+      window.__otp!.mapObjects!.find((m) => m.name === 'trigger-cottage')!,
+    );
+    const at = {
+      'dropped on the step': { x: door.x + 1, y: door.y + 1 },
+      'dropped in the far corner': { x: door.x + door.width - 1, y: door.y + door.height - 1 },
+      'walked up': { x: door.x + door.width / 2, y: door.y + door.height + 24 },
+      'walked up at 6x CPU': { x: door.x + door.width / 2, y: door.y + door.height + 24 },
+    }[how]!;
+    await page.evaluate((p) => {
+      window.__otp!.scene!.position = p;
+      window.__otp!.scene!.placePurple();
+    }, at);
+    if (how.startsWith('walked')) {
+      // A frame on the lane below the trigger, then up it until the door lets her in.
+      await page.waitForTimeout(100);
+      await page.keyboard.down('ArrowUp');
+      await expect(page.locator('[data-arrive="wolf"]')).toBeVisible({ timeout: 20_000 });
+      await page.keyboard.up('ArrowUp');
+    } else {
+      await expect(page.locator('[data-arrive="wolf"]')).toBeVisible();
+    }
+    await page.waitForTimeout(SETTLED_MS);
+    const stop = await page.evaluate(
+      () => (window as unknown as { __stop: { x: number; y: number } | null }).__stop,
+    );
+    const scroll = await page.evaluate(() => {
+      const cam = (
+        window.__otp!.scene as unknown as {
+          cameras: { main: { scrollX: number; scrollY: number } };
+        }
+      ).cameras.main;
+      return { x: cam.scrollX, y: cam.scrollY };
+    });
+    const box = await mailbox(page);
+    expect(box.object, 'the map has no prop-mailbox').not.toBeNull();
+    shots.push({
+      how,
+      stop,
+      scroll,
+      window: await onScreen(page, await windowWolf(page)),
+      mailbox: await onScreen(page, box.object!),
+    });
+    await page.context().close();
+  }
+  console.log(
+    `arrival from four stopping points at 844x390\n  ${shots
+      .map(
+        (s) => `${s.how}: stopped at ${JSON.stringify(s.stop)}, scroll ${JSON.stringify(s.scroll)}`,
+      )
+      .join('\n  ')}`,
+  );
+  // The premise: she really did stop in different places. Two drops a whole lane apart, at least.
+  const stops = shots.map((s) => s.stop);
+  expect(stops.every(Boolean), 'a run never recorded where she stood').toBe(true);
+  expect(
+    Math.hypot(stops[0]!.x - stops[1]!.x, stops[0]!.y - stops[1]!.y),
+    'the two drops did not stop her in different places',
+  ).toBeGreaterThan(32);
+  for (const s of shots) {
+    expect(s.scroll, `the frame moved with where she stopped (${s.how})`).toEqual(shots[0]!.scroll);
+    expect(s.window, `the lit window, ${s.how}`).toEqual([]);
+    expect(s.mailbox, `the mailbox, ${s.how}`).toEqual([]);
+  }
+});
+
 test('under reduced motion he is in the window at once, with no fade', async ({ browser }) => {
   const page = await pageAt(browser, 1280, 800, true);
   await page.goto('/');
   await startGame(page);
-  await arrive(page, 'wolf');
+  await arrive(page, 'wolf', false);
   // The first frame after the arrival is staged: a fade would still be near 0 here.
   await page.evaluate(
     () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
@@ -262,7 +440,7 @@ test('a replay takes him out of the window', async ({ page }) => {
   test.slow();
   await page.goto('/');
   await startGame(page);
-  await arrive(page, 'wolf');
+  await arrive(page, 'wolf', false);
   await expect.poll(async () => (await windowWolf(page)).alpha, { timeout: 4000 }).toBe(1);
   await toTheReveal(page);
   await page.locator('.otp-replay [data-action="replay"]').click();

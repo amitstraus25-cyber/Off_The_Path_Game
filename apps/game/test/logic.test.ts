@@ -302,4 +302,66 @@ describe('framing above a docked panel', () => {
     expect(300 + 4).toBe(top + 200);
     expect(top).toBeGreaterThan(0);
   });
+
+  /*
+   * THE TOP GIVES ONLY AS FAR AS `must` (CI run 39859836223). The numbers are the payoff frame's at
+   * 844x390 -- chimney row 480, lane bottom 704, keep 672, lit window 576, a 268px view -- so the
+   * cases below are the shot itself, without and with the Word Weaver's welcome in the panel.
+   */
+  const DOOR = { top: 480, bottom: 704, keep: 672, must: 576, view: 268, margin: 4 };
+  const viewTop = (covered: number): number =>
+    frameAboveCover(DOOR.top, DOOR.bottom, DOOR.view, covered, DOOR.margin, DOOR.keep, DOOR.must) -
+    DOOR.view / 2;
+  /** The same shot with no bound on the top: the rule before 2026-10-23. */
+  const unbounded = (covered: number): number =>
+    frameAboveCover(DOOR.top, DOOR.bottom, DOOR.view, covered, DOOR.margin, DOOR.keep) -
+    DOOR.view / 2;
+
+  it('changes nothing while the bottom-anchored shot still leaves `must` a margin inside', () => {
+    // Two lines in the panel: 139.16 covered, room 128.84. Bottom-anchored, as it always was.
+    const covered = 139.16;
+    expect(viewTop(covered)).toBeCloseTo(unbounded(covered), 9);
+    expect(DOOR.must - viewTop(covered)).toBeGreaterThanOrEqual(DOOR.margin);
+  });
+
+  it('keeps the lit window in shot when the welcome makes the panel a line taller', () => {
+    // Three lines: 163.16 covered, room 104.84 -- the deal CI drew.
+    const covered = 163.16;
+    const top = viewTop(covered);
+    const panelTop = top + DOOR.view - covered;
+    expect(top, 'the lit window is above the top edge').toBeLessThanOrEqual(DOOR.must);
+    expect(panelTop - DOOR.keep, 'the doorstep went under the panel').toBeGreaterThanOrEqual(0);
+    /*
+     * The defect, in one line: the old shot kept the oldest print's cell (688) with no bound on
+     * the top, and that lands the top edge at 587.16 -- the 587 CI measured, under the window.
+     */
+    const old = frameAboveCover(DOOR.top, DOOR.bottom, DOOR.view, covered, DOOR.margin, 688);
+    expect(Math.round(old - DOOR.view / 2)).toBe(587);
+  });
+
+  it('holds the window even when the panel grows past what the doorstep can spare', () => {
+    // A fourth line (another 24px): unbounded, the top would follow the doorstep down past 576.
+    const covered = 187.16;
+    expect(unbounded(covered)).toBeGreaterThan(DOOR.must);
+    expect(viewTop(covered)).toBeLessThanOrEqual(DOOR.must);
+  });
+
+  it('shrinks both margins evenly when `must..keep` fits only without them', () => {
+    // Room 98: 96 of span, 2 spare, 1 above and 1 below.
+    const covered = DOOR.view - 98;
+    expect(DOOR.must - viewTop(covered)).toBeCloseTo(1, 9);
+  });
+
+  it('puts `must` on the top edge and lets the bottom give when even `must..keep` does not fit', () => {
+    expect(viewTop(DOOR.view - 60)).toBe(DOOR.must);
+  });
+
+  it('never lets the window out of the top, for any panel the scene accepts', () => {
+    // 0 to the 0.9 clamp in `coveredView`, in half pixels.
+    for (let covered = 0; covered <= DOOR.view * 0.9; covered += 0.5)
+      expect(
+        viewTop(covered),
+        `the window left the frame at ${covered} covered`,
+      ).toBeLessThanOrEqual(DOOR.must);
+  });
 });

@@ -203,6 +203,25 @@ export function coveredView(share: number, canvasHeight: number, viewHeight: num
  * in its place, and when even that does not fit, `keep` is held `margin` clear of the panel and the
  * top is what gives. At the door that is the choice the payoff needs: Purple's feet and the wolf's
  * prints are the story on the step, and the chimney row is the part of the shot that can go.
+ *
+ * BUT THE TOP ONLY GIVES AS FAR AS `must` (2026-10-23). The first version let it give without
+ * limit, so a taller panel slid the whole shot down until the facade's own windows went out of the
+ * top of the frame. That is CI run 39859836223: at 844x390, on the wolf's ending with the Word
+ * Weaver taken, the welcome is a third beat, the Arrive panel is one line taller (cover 0.519 ->
+ * 0.609 of the canvas), and the camera's top edge landed at y 587 -- eleven pixels BELOW the top of
+ * the lit window at 576, with the wolf the whole ending is about cut in half under the header.
+ * Nothing about Purple or the frame rate was involved: it reproduces to the pixel on any machine
+ * from the deal alone, and the spec only met it on the 4 deals of 35 (`dealCount`) where the
+ * first bad skill in walking order is the Word Weaver's -- both attempts of that run drew one.
+ *
+ * So `must`, a top edge at or below `top` that must stay in view, bounds the give. In order:
+ *   the whole span centred; else `top..keep` centred; else `keep` held `margin` clear of the panel
+ *   as long as that leaves `must` at least `margin` inside the top; else `must..keep` centred in
+ *   the room, the two margins shrinking evenly; and when even `must..keep` is taller than the room,
+ *   `must` on the top edge, and the bottom is what gives -- the window over the doorstep, because
+ *   the window is where the ending is shown and the doorstep is where it is told.
+ * With `must` left out the result is the old one in every case, which is what keeps every frame
+ * that was right before this change exactly where it was.
  */
 export function frameAboveCover(
   top: number,
@@ -211,12 +230,17 @@ export function frameAboveCover(
   covered: number,
   margin = 0,
   keep = bottom,
+  must?: number,
 ): number {
   const room = viewHeight - Math.max(0, covered);
-  const centred = (lower: number): number => top - (room - (lower - top)) / 2 + viewHeight / 2;
-  if (bottom - top + 2 * margin <= room) return centred(bottom);
-  if (keep - top + 2 * margin <= room) return centred(keep);
-  return keep + margin - room + viewHeight / 2;
+  const half = viewHeight / 2;
+  const centred = (upper: number, lower: number): number =>
+    upper - (room - (lower - upper)) / 2 + half;
+  if (bottom - top + 2 * margin <= room) return centred(top, bottom);
+  if (keep - top + 2 * margin <= room) return centred(top, keep);
+  if (must === undefined || keep - must + 2 * margin <= room) return keep + margin - room + half;
+  if (keep - must <= room) return centred(must, keep);
+  return must + half;
 }
 
 /** Keeps the camera inside the world; returns rounded coordinates so tiles never shimmer. */
