@@ -133,7 +133,10 @@ const facesWithPrefix = (prefix: string): Record<string, FacePainter> =>
 /** The five dialogue portraits. */
 export const PORTRAIT_PAINTERS: Record<string, FacePainter> = facesWithPrefix('portrait-');
 
-/** The nine item icons: one per v2 skill, plus the key and the letter, which no v2 skill wears. */
+/**
+ * The ten item icons: one per v2 skill, plus the key, the letter and the translator's horn, which
+ * no v2 skill wears (Word Weaver moved to `item-weaver` on 2026-10-22).
+ */
 export const ITEM_PAINTERS: Record<string, FacePainter> = facesWithPrefix('item-');
 
 // ---------------------------------------------------------------- effects

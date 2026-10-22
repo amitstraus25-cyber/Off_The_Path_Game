@@ -77,7 +77,7 @@ const FULL_BASKET: HudBasketItem[] = [
   { skillId: 'way-teller', name: 'Way Teller', icon: 'item-signpost' },
   { skillId: 'night-light', name: 'Night Light', icon: 'item-lantern' },
   { skillId: 'slow-post', name: 'Slow Post', icon: 'item-parcel' },
-  { skillId: 'word-weaver', name: 'Word Weaver', icon: 'item-translator' },
+  { skillId: 'word-weaver', name: 'Word Weaver', icon: 'item-weaver' },
   { skillId: 'short-cut', name: 'Short Cut', icon: 'item-shortcut' },
   { skillId: 'latch-lifter', name: 'Latch Lifter', icon: 'item-latch' },
 ];

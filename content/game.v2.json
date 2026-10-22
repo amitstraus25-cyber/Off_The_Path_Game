@@ -113,7 +113,7 @@
     {
       "id": "word-weaver",
       "name": "Word Weaver",
-      "icon": "item-translator",
+      "icon": "item-weaver",
       "promise": "It sends word ahead, so Grandma expects you.",
       "realWorld": {
         "term": "Oversharing and public exposure",

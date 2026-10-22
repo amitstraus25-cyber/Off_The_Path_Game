@@ -1,5 +1,5 @@
 /*
- * The six portraits, the nine items and the three effects, redrawn for the 32px standard.
+ * The six portraits, the ten items and the three effects, redrawn for the 32px standard.
  *
  * The portraits are the one place in this game with room for a face. Everything else is read at the
  * playing camera, where a character is an outline and two pixels of eye; these are shown in the DOM
@@ -1474,6 +1474,123 @@ const latch: Painter = (img) => {
   img.outline(shade('trunk', 0)); // the door's own dark
 };
 
+/**
+ * The Owl's Word Weaver: a quill drawing out a thread of words. "It sends word ahead, so Grandma
+ * expects you", and "my sister wove these words" -- so the object is the pen and the yarn at once:
+ * a long white feather laid corner to corner, its nib dipped Deep Purple, and from the nib a
+ * twisted two-tone cord written out in cursive loops along the bottom, leaving off the right edge
+ * on its way ahead of you.
+ *
+ * It replaces `item-translator`, the speaking horn, which was drawn for the retired v1 skill
+ * ("copies every message to a helper") and matched none of this card's words.
+ *
+ * The feather is `fur`, the one pale ramp no item had used, so it does not read as the letter's
+ * paper (`wall`) or the parcel's kraft (`path`); and it is barred, faintly, as an owl's own
+ * feathers are. The cord takes the seals' two tokens (`night` 2 is #441363, `night` 3 above it), so
+ * the three things on the card that carry a message agree -- and it is the only icon with no box,
+ * sheet or envelope in it, which is what keeps it clear of the letter and the map.
+ *
+ * The fine print is in the cord, the translator's trick. Each cursive loop crosses itself once,
+ * and at every crossing hangs a scrap of paper the size of a fingernail: the bad card "leaves a
+ * copy at every crossing". The icon is the same for the good and the bad card, so the scraps give
+ * nothing away; they only reward looking, in the reveal.
+ */
+const weaver: Painter = (img) => {
+  // ---- the quill: tip at the top-right, nib at the lower-left
+  const tipX = 55;
+  const tipY = 7;
+  const nibX = 11;
+  const nibY = 43;
+  const len = Math.hypot(nibX - tipX, nibY - tipY);
+  const ux = (nibX - tipX) / len; // along the shaft, tip to nib
+  const uy = (nibY - tipY) / len;
+  const px = uy; // across it: positive is the lower-right, shaded vane
+  const py = -ux;
+  const vane = len * 0.74; // where the barbs stop and the bare quill begins
+
+  for (let y = 0; y < 64; y++)
+    for (let x = 0; x < 64; x++) {
+      const rx = x + 0.5 - tipX;
+      const ry = y + 0.5 - tipY;
+      const s = rx * ux + ry * uy;
+      const d = rx * px + ry * py;
+      if (s < 0 || s > len) continue;
+      if (s <= vane) {
+        // The vane: rounded at the tip, widest a third of the way down, tapering into the quill.
+        // The lit vane is the narrow one, as on a flight feather.
+        const f = s / vane;
+        const swell = Math.sin(Math.PI * Math.pow(f, 0.62));
+        const w = (d < 0 ? 9 : 13.5) * swell;
+        const a = Math.abs(d);
+        if (a > w) continue;
+        const barb = s - 0.85 * a; // barbs sweep back toward the tip as they leave the shaft
+        let c: RGBA;
+        if (d < 0) c = a > w - 1.2 ? shade('fur', 3) : shade('fur', 2);
+        else c = a > w - 1.6 ? shade('fur', 0) : shade('fur', 1);
+        // The owl's bars, in the owl's own brown: she is barred like this in her portrait.
+        const bar = (((barb - 4) % 9) + 9) % 9;
+        if (bar < 2.4 && s > 6 && a > 1.2)
+          c = d < 0 ? shade('trunk', 3) : a > w - 1.6 ? shade('trunk', 1) : shade('trunk', 2);
+        if (a <= 0.8) c = shade('fur', 3); // the rachis, a white line down the middle
+        img.px(x, y, c);
+        continue;
+      }
+      // The bare quill: a round tube, narrowing to the nib.
+      const g = (s - vane) / (len - vane);
+      const r = 1.9 * (1 - g) + 0.6 * g;
+      if (Math.abs(d) > r) continue;
+      if (g > 0.72)
+        img.px(x, y, d < 0 ? shade('night', 3) : shade('night', 2)); // dipped
+      else img.px(x, y, d < -0.4 ? shade('fur', 3) : d > 0.6 ? shade('fur', 0) : shade('fur', 2));
+    }
+  img.outline(keyline('fur')); // the feather's own dark
+
+  // ---- the cord: cursive loops, a prolate trochoid, out of the nib and off to the right
+  const cord = new Img(img.w, img.h);
+  const k = 2.05; // advance per radian
+  const loop = 5.6; // loop radius; k < loop is what makes them loop
+  const x0 = nibX + 1;
+  const yc = nibY + 1 + loop;
+  const at = (t: number): readonly [number, number] => [
+    x0 + k * t - loop * Math.sin(t),
+    yc - loop * Math.cos(t),
+  ];
+  let arc = 0;
+  let [lx, ly] = at(0);
+  const tEnd = Math.PI * 6 + 2.6; // just past the third loop's crossing
+  for (let t = 0; t <= tEnd; t += 0.02) {
+    const [x, y] = at(t);
+    arc += Math.hypot(x - lx, y - ly);
+    [lx, ly] = [x, y];
+    // Two strands twisted together: the colour turns over every few pixels of length.
+    cord.ellipse(x, y, 1.3, 1.3, Math.floor(arc / 2.6) % 2 ? shade('night', 3) : shade('night', 2));
+  }
+  // The tail, leaving the frame on its way ahead.
+  for (let x = lx; x <= 63; x += 0.25) {
+    const y = ly - (x - lx) * 0.42;
+    arc += 0.25;
+    cord.ellipse(x, y, 1.3, 1.3, Math.floor(arc / 2.6) % 2 ? shade('night', 3) : shade('night', 2));
+  }
+
+  /*
+   * Where each loop crosses itself: t = 2n*pi +- tau, with loop * sin(tau) = k * tau. Three Newton
+   * steps from 2.4 settle it well inside a pixel. A scrap of paper hangs from each crossing.
+   */
+  let tau = 2.4;
+  for (let i = 0; i < 3; i++) tau -= (loop * Math.sin(tau) - k * tau) / (loop * Math.cos(tau) - k);
+  for (let n = 1; 2 * n * Math.PI + tau <= tEnd; n++) {
+    const [cx, cy] = at(2 * n * Math.PI + tau);
+    const sx = Math.round(cx) - 2;
+    const sy = Math.round(cy) + 2;
+    cord.rect(sx, sy, 5, 4, shade('wall', 2));
+    cord.rect(sx, sy, 5, 1, shade('wall', 3));
+    cord.rect(sx + 4, sy + 1, 1, 3, shade('wall', 0));
+    cord.rect(sx + 1, sy + 2, 3, 1, shade('wall', 0)); // a line of the copied words
+  }
+  cord.outline(keyline('night'));
+  img.blit(cord, 0, 0);
+};
+
 // ----------------------------------------------------------------------------- effects
 
 /*
@@ -1648,6 +1765,7 @@ export const FACE_PAINTERS: Record<string, Painter> = {
   'item-parcel': parcel,
   'item-shortcut': shortcut,
   'item-latch': latch,
+  'item-weaver': weaver,
   'fx-dust': (img) => paintDustFrame(img, 0),
   'fx-interact-prompt': (img) => paintInteractPromptFrame(img, 0),
   'fx-pawprints': (img) => paintPawprintsFrame(img, 0),
