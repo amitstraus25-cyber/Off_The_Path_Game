@@ -118,9 +118,9 @@ In the order they unblock things. None of these can be done from the repository.
    checked for this update.
 2. **Make Vercel deploy only after CI is green.** `.github/workflows/ci.yml` has no deploy step, so
    nothing ties a deploy to a passing run.
-3. **The real research URL.** The call to action still falls back to
-   `https://www.cyera.com/off-the-path` (`DEFAULT_RESEARCH_URL`), which the 2026-10-21 sweep found
-   to be a 404. Set `VITE_RESEARCH_URL`. Promised for 2026-10-22.
+3. **The research URL, for good.** The call to action points at `https://www.cyera.com/research`
+   for now (the client's choice, 2026-10-23). The game's own page will be
+   `cyera.com/research/malicious-skills`; whether the CTA then links or scrolls is with the agency.
 4. **The landing-page background image**, promised for 2026-10-22. The landing ships without one.
 5. **Brand sign-off, two items.** The pixel trace of the Cyera symbol on Purple's back (`8c4dc49`;
    CLAUDE.md rule 5 forbids redrawn logo variants, and `docs/ART_PRODUCTION.md` says the mark is
@@ -773,8 +773,8 @@ ticked below with the reason; the rest are not re-triaged against v2 and stay as
 
 **Majors**
 
-- [ ] The call to action, "Read the Research", points at **`https://www.cyera.com/off-the-path`,
-      which is a 404**. The real URL is needed from the web team, set as `VITE_RESEARCH_URL`.
+- [x] The call to action, "Read the Research", pointed at a 404 (`/off-the-path`). Since 2026-10-23
+      it defaults to `https://www.cyera.com/research`, the client's interim choice.
 - [x] The privacy line says "no cookies" while `localStorage['otp:music']` persists. Widen the
       sentence or drop the persistence, then guard by enumerating storage after a full run.
 - [x] The question buttons eat the first press while a line types, up to nine presses a run — the

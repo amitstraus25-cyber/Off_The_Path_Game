@@ -61,11 +61,12 @@ const RESEARCH_URL_RAW = (import.meta.env.VITE_RESEARCH_URL as string | undefine
 /**
  * The research page the one call to action points at.
  *
- * Still a build-time default, and still the one thing here nobody has confirmed: the HOST is not a
- * guess (only cyera.com pages may frame this asset at all), the PATH is. A wrong default costs one
- * redirect; it is written down once, here, rather than guessed at in a component.
+ * A build-time default, overridden by VITE_RESEARCH_URL. The client set it on 2026-10-23 to Cyera's
+ * research hub, "in the mean time": the game's own page will be cyera.com/research/malicious-skills
+ * (not live yet), and whether the call to action then links there or scrolls the page it is embedded
+ * in is a question out with the web agency. The old default, /off-the-path, was a 404.
  */
-export const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/off-the-path';
+export const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/research';
 
 /**
  * Where events go when the browser will not say who the parent is.
