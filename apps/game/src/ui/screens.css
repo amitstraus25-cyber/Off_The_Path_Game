@@ -1144,6 +1144,13 @@ h2.otp-section-label {
 .otp-title-panel .otp-howto > li::before {
   color: var(--cyera-deep-purple);
 }
+/*
+ * The two rules the client asked to be unmissable (content `howTo.stress`): a heavier weight of the
+ * same Black, and nothing else -- no colour, no box, so the list stays four plain lines.
+ */
+.otp-howto > li > strong {
+  font-weight: 600;
+}
 /* Ash, not Stone: Stone is 3.6:1 on this ground and the hint is the smallest type on the card. */
 .otp-title-panel .otp-hint {
   color: var(--cyera-ash);
@@ -1345,11 +1352,18 @@ h2.otp-section-label {
 }
 .otp-title-panel[data-fit='4'] .otp-howto {
   font-size: 12px;
-  line-height: 1.25;
+  line-height: 1.2;
   gap: 3px;
 }
 .otp-title-panel[data-fit='4'] .otp-howto > li {
   padding-left: 17px;
+}
+/* The how-to's own heading steps down with it: on a 375px-tall landscape phone the 28px heading
+   and its margin were the room the fourth step (the dusk) needed. It stays the screen's heading,
+   in the same face, and still twice the size of the steps under it. */
+.otp-title-panel[data-fit='4'] .otp-title__mark.otp-howto__title {
+  font-size: 24px;
+  margin-bottom: 4px;
 }
 .otp-title-panel[data-fit='4'] .otp-howto__label {
   font-size: 11px;

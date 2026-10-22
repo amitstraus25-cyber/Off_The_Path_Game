@@ -126,6 +126,48 @@ describe('what the forest is told about the perks', () => {
     expect(world.darkest()).toBe(darkest);
   });
 
+  /*
+   * "SLOWLY, SLOWLY GETTING A LITTLE DARKER" (the client, 2026-10-22). Sampled every 100ms -- six
+   * frames -- across the whole of the dusk: it never lightens, it never jumps (no step bigger than
+   * a hundredth of the cap in a tenth of a second), and it lands on the cap at time up and not
+   * before. The bounds are shares of the content's own `darkest`, never a number from the code.
+   */
+  it('the dusk deepens smoothly from 2:00 left to the cap, with no steps', () => {
+    const run = forest();
+    const world = gameRun(run.store);
+    const { fromLeftMs, darkest } = content.world.dusk;
+    const start = v2.TIME_LIMIT_MS - fromLeftMs;
+    let last = 0;
+    let biggest = 0;
+    for (let at = start; at <= v2.TIME_LIMIT_MS; at += 100) {
+      run.at(at);
+      const now = world.dusk();
+      expect(now, `at ${at}ms`).toBeGreaterThanOrEqual(last);
+      biggest = Math.max(biggest, now - last);
+      last = now;
+    }
+    expect(biggest, 'the biggest step in 100ms').toBeLessThan(darkest / 100);
+    expect(last).toBeCloseTo(darkest, 5);
+    // Halfway through the dusk it is halfway to the cap: a straight line, not a late plunge.
+    run.at(start + fromLeftMs / 2);
+    expect(world.dusk()).toBeCloseTo(darkest / 2, 5);
+  });
+
+  it("opens Grandma's door for an early welcome, good copy or bad, and for nothing else", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const run = forest(seed);
+      const world = gameRun(run.store);
+      expect(world.welcome()).toBe(false);
+      answer(run.store, 'lantern', 'take');
+      expect(world.welcome()).toBe(false);
+      answer(run.store, 'early-welcome', 'take');
+      expect(world.welcome()).toBe(true);
+    }
+    const left = forest();
+    answer(left.store, 'early-welcome', 'leave');
+    expect(gameRun(left.store).welcome()).toBe(false);
+  });
+
   it('says who the run is talking to, for the hop', () => {
     const run = forest();
     const world = gameRun(run.store);

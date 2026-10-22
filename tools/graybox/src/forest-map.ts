@@ -867,12 +867,46 @@ export function generateForestMap(): GeneratedMap {
   /** The furthest west: short of the fountain glade, the owl's fork and the market. */
   const eastOf = (y: number): number => (y >= 22 ? 12 : y >= 8 ? 25.5 : 20);
   const centreCache = new Map<number, number>();
+  const heldCentre = (y: number): number => {
+    const wander = (bend(0, y / 5.1) - 0.5) * 11.5 + (bend(31, y / 2.3) - 0.5) * 3.4;
+    const free = riverTrend(y) + wander * meanderFreedom(y);
+    return nearLimit(nearLimit(free, eastOf(y), 1), westOf(y), -1);
+  };
+  /*
+   * ===========================================================================
+   * THE JOIN UNDER THE DECK: THE RIVER LEAVES THE BRIDGE ONE COLUMN A ROW, NOT THREE AT ONCE.
+   * ===========================================================================
+   *
+   * The client, 2026-10-22, on a screenshot of the crossing: "fix little rocks here by the under the
+   * bridge. I'd make it a little cleaner." What they were looking at was a three-column step in the
+   * water directly below the deck. Both limits above change at row 22 -- `eastOf` lets go of the
+   * owl's fork (25.5 -> 12) and `westOf` takes up the well glade (34 -> 26.5) -- and rows 18 to 23 are
+   * the damped crossing, where nothing is allowed to wander, so the river did all its moving in one
+   * row: water at columns 25-28 under the planks and 22-25 the row after. Measured off the map, that
+   * left `shore-s` at (27,22) and (28,22) with NO water north of them -- a strip of waterline and two
+   * boulders drawn against the underside of the deck, the "little rocks" -- and the track's own sand
+   * at (22,21) and (23,21) meeting open water across a bare tile edge, with no bank at all.
+   *
+   * So the rows between the last plank and the first row the limits are settled on are a straight
+   * blend of the two, which is a staircase of one column a row: the same step the river takes
+   * everywhere else it runs on the diagonal, and a step the four shore tiles can draw.
+   *
+   * THE ROW COUNT IS HELD, ON PURPOSE. Rows 22 and 23 are inside the damped crossing, where the
+   * half-width is exactly 2, so a fractional centre gives four water cells a row whatever the blend
+   * does -- and the water loop below draws one `rnd()` per water cell, in row order, so the same count
+   * keeps every draw after it where it was and the rest of the forest does not reshuffle. Moving the
+   * join outside the damped rows would change that count and replant the wood.
+   */
+  /** The last row the deck's line holds, and the first row the downstream limits are settled on. */
+  const JOIN = { from: 21, to: 24 } as const;
   const riverCentre = (y: number): number => {
     const hit = centreCache.get(y);
     if (hit !== undefined) return hit;
-    const wander = (bend(0, y / 5.1) - 0.5) * 11.5 + (bend(31, y / 2.3) - 0.5) * 3.4;
-    const free = riverTrend(y) + wander * meanderFreedom(y);
-    const held = nearLimit(nearLimit(free, eastOf(y), 1), westOf(y), -1);
+    const held =
+      y > JOIN.from && y < JOIN.to
+        ? heldCentre(JOIN.from) +
+          ((heldCentre(JOIN.to) - heldCentre(JOIN.from)) * (y - JOIN.from)) / (JOIN.to - JOIN.from)
+        : heldCentre(y);
     centreCache.set(y, held);
     return held;
   };
@@ -3726,35 +3760,44 @@ export function generateForestMap(): GeneratedMap {
       const hitsColumns = t.x + t.k.trunk.length - 1 >= x && t.x <= x + w - 1;
       const hitsRows = t.y >= y && t.y + top <= y + h - 1;
       if (!hitsColumns || !hitsRows) continue;
-      trees.splice(i, 1);
-      /*
-       * ...AND IT ONLY EVER TAKES ITS OWN TILE, collision included.
-       *
-       * This used to `clear()` both trunk cells unconditionally, which is a loaded gun pointing at
-       * the one invariant the level cannot lose. Later passes write over a trunk cell and make it
-       * solid for their own reasons -- the garden fence runs along row 12 through planted wood --
-       * and clearing the collision under a fence rail opens a way round the notice post. So a cell
-       * that no longer holds a trunk is somebody else's now: it keeps its tile and its collision,
-       * and the tree simply goes off the register. Cells inside the rectangle have already had
-       * both wiped by the sweep above.
-       */
-      for (let dx = 0; dx < t.k.trunk.length; dx++) {
-        if (!isTrunk(t.x + dx, t.y)) continue;
-        set(below, t.x + dx, t.y, 0);
-        clear(t.x + dx, t.y);
-      }
-      /*
-       * A shared cell belongs to its neighbour, asked of the REGISTER rather than of the tile. The
-       * tile cannot answer it -- two crowns write the same cell and the second one wins -- and `t`
-       * is already struck off above, so anything still covering this cell is somebody else's tree.
-       */
-      for (const [dx, dy] of t.k.crown) {
-        const tx = t.x + dx;
-        const ty = t.y + dy;
-        if (!isCanopy(tx, ty)) continue;
-        if (trees.some((other) => crownsOver(other, tx, ty))) continue;
-        set(above, tx, ty, 0);
-      }
+      strike(i);
+    }
+  };
+  /**
+   * Strike the tree at register index `i` off the map: its own trunk tiles and collision, and every
+   * crown cell no surviving tree also covers. Shared by `clearArea` and the river sweep, so the two
+   * cannot disagree about what felling a tree means.
+   */
+  const strike = (i: number): void => {
+    const t = trees[i]!;
+    trees.splice(i, 1);
+    /*
+     * ...AND IT ONLY EVER TAKES ITS OWN TILE, collision included.
+     *
+     * This used to `clear()` both trunk cells unconditionally, which is a loaded gun pointing at
+     * the one invariant the level cannot lose. Later passes write over a trunk cell and make it
+     * solid for their own reasons -- the garden fence runs along row 12 through planted wood --
+     * and clearing the collision under a fence rail opens a way round the notice post. So a cell
+     * that no longer holds a trunk is somebody else's now: it keeps its tile and its collision,
+     * and the tree simply goes off the register. Cells inside the rectangle have already had
+     * both wiped by the sweep above.
+     */
+    for (let dx = 0; dx < t.k.trunk.length; dx++) {
+      if (!isTrunk(t.x + dx, t.y)) continue;
+      set(below, t.x + dx, t.y, 0);
+      clear(t.x + dx, t.y);
+    }
+    /*
+     * A shared cell belongs to its neighbour, asked of the REGISTER rather than of the tile. The
+     * tile cannot answer it -- two crowns write the same cell and the second one wins -- and `t`
+     * is already struck off above, so anything still covering this cell is somebody else's tree.
+     */
+    for (const [dx, dy] of t.k.crown) {
+      const tx = t.x + dx;
+      const ty = t.y + dy;
+      if (!isCanopy(tx, ty)) continue;
+      if (trees.some((other) => crownsOver(other, tx, ty))) continue;
+      set(above, tx, ty, 0);
     }
   };
 
@@ -5243,6 +5286,8 @@ export function generateForestMap(): GeneratedMap {
    *   - A tile in the middle of a long `shore-w` or `shore-e` COLUMN is left alone. The drawn
    *     waterline runs above and below it, so the river still reads as a river and the boulder
    *     reads as standing in it -- the gorge the board draws, which nobody has complained about.
+   *     (Until 2026-10-22, when the client did: the dredge pass now lifts that cover too, below
+   *     the border band. See `onBank` there.)
    *
    * Trunks stay. A trunk tile is opaque over barely half its area, so the waterline still shows
    * under a tree standing on the bank, and the tree is solid either way.
@@ -5337,6 +5382,22 @@ export function generateForestMap(): GeneratedMap {
   };
 
   /**
+   * A member of the cast seated OFF the track, in open ground. `bystander`'s opposite: it refuses a
+   * cell on the sand or touching it, and a cell that already holds anything -- a trunk, a bush, a
+   * stone -- because clearing one away to seat somebody is how a character ends up carved out of the
+   * middle of a tree. Reachability is not asserted here; the audit's flood and `map.test.ts` both
+   * walk to every member of the cast on the finished map, which is the only map that counts.
+   */
+  const inTheClearing = (name: string, x: number, y: number) => {
+    if (isPath(x, y) || NEIGHBOURS.some(([dx, dy]) => isPath(x + dx, y + dy)))
+      throw new Error(`${name} at ${x},${y} is on the track or beside it, not in the clearing`);
+    if (isWater(x, y) || at(below, x, y) !== 0 || at(collision, x, y) !== 0)
+      throw new Error(`${name} at ${x},${y} is not open ground: something already stands there`);
+    clearArea(x, y, 1, 1);
+    return { name, x: x * TILE, y: y * TILE, width: TILE, height: TILE };
+  };
+
+  /**
    * The row just south of the track at this column.
    *
    * The three forest bystanders used to carry hard-coded rows, which was fine while the track
@@ -5350,11 +5411,10 @@ export function generateForestMap(): GeneratedMap {
     if (last < 0) throw new Error(`no track at column ${x} to stand a bystander beside`);
     return last + 1;
   };
-  /** The row just NORTH of the track at this column: `besideTrack`'s mirror, for the same reason. */
-  const aboveTrack = (x: number): number => {
-    for (let y = 0; y < MAP_H; y++) if (isPath(x, y)) return y - 1;
-    throw new Error(`no track at column ${x} to stand a bystander above`);
-  };
+  /*
+   * (`aboveTrack`, `besideTrack`'s mirror, stood here. Its one caller was the Cat on the north verge,
+   * and she left the track for the clearing on 2026-10-22; an unused helper is lint's to refuse.)
+   */
 
   // --- Purple's pad and the spawn clearing ----------------------------------------------------------
   const spawnX = SPAWN.x;
@@ -5413,6 +5473,11 @@ export function generateForestMap(): GeneratedMap {
      * 125. That ZERO-tile last leg above was the defect, not a nicety: it meant the Cat's talking
      * ring already stood in `trigger-cottage`, which ends the run. See the note on her placement.)
      *
+     * (2026-10-22 again, after the Cat moved up into the clearing at (39,16): 113 tiles -- rabbit 7,
+     * toadstool 3, owl 19, magpie 34, snail 9, lantern keeper 10, cat 16, door 15. The six tiles are
+     * the walk up the lane to her and back down to the sand; they moved the derived par past the
+     * content's `scoring.parMs` of 106000, to 106,749 ms, which the core par test reports.)
+     *
      * The other three bystanders keep the stretch of the walk they were placed for: the far side
      * of the bridge, the gate approach, and the doorstep.
      */
@@ -5440,8 +5505,41 @@ export function generateForestMap(): GeneratedMap {
      */
     /*
      * ===========================================================================
-     * OFF THE DOORSTEP, ONTO THE MAIN TRACK: (39,19), the north verge of the climb past the snail.
-     * Moved 2026-10-22 on the client's report, and everything below this block is HISTORY.
+     * OFF THE TRACK AND UP INTO THE CLEARING: (39,16). Moved 2026-10-22, second time that day, on
+     * the client's word, and the (39,19) block below it is now HISTORY too.
+     * ===========================================================================
+     *
+     * The client, on a screenshot of Purple at the cottage approach (they call her "the fox"):
+     * "I'd take him off the path and put him there in between the trees there and that opening."
+     * The opening is the lane of lawn above the climb past the snail, columns 38 to 40, between the
+     * wood on the west and the elder whose trunk stands at (40-42,16) -- three rows up from where she
+     * sat on the verge. (39,16) is its middle: the elder's roots on her east, the bank of white
+     * flowers at (38,16)-(38,18) on her west, open lawn north and south. "A cat sits AGAINST
+     * something" (the history below) holds better here than it ever did on the verge.
+     *
+     * WHAT STILL HOLDS, each asserted somewhere rather than argued here:
+     *  - she is still the LAST face before the door: the player comes back up from the Lantern
+     *    Keeper's fork, passes the snail at (38,23), turns up the lane at column 39, meets her, and
+     *    walks back down to the notice (x 42) and the gate (x 46). The core clock test derives that
+     *    tour from this map and holds it under the measured edge;
+     *  - she is reachable, and from below: (39,17), (39,18) and (39,19) are open lawn down to the
+     *    sand at (40,19), and `map.test.ts` asserts a cell beside her she can be spoken to from;
+     *  - she is nowhere near the door: about nine tiles of talking distance from `trigger-cottage`
+     *    against the five `cast-clear-of-door.test.ts` demands;
+     *  - her talking ring (38-40 x 15-17) touches neither the snail's (37-39 x 22-24) nor
+     *    `notice-forest-post` (42-45 x 20-22), so speaking to her opens nobody else's card;
+     *  - she is not on rows 20 or 21, the due-east walker's line.
+     *
+     * `bystander` would refuse this cell -- it requires the track as a neighbour, which is the whole
+     * of what the client asked to change -- so `inTheClearing` seats her instead, and asserts the
+     * two things that matter off the track: that she is not standing on or beside it, and that the
+     * cell is open ground rather than a tree she would be carved out of.
+     */
+    inTheClearing('bystander-cat', 39, 16),
+    /*
+     * ===========================================================================
+     * HISTORY (until the second move, 2026-10-22): OFF THE DOORSTEP, ONTO THE MAIN TRACK: (39,19),
+     * the north verge of the climb past the snail.
      * ===========================================================================
      *
      * The client, verbatim: "You can't reach the cat because the cat is after the door." She stood
@@ -5471,8 +5569,9 @@ export function generateForestMap(): GeneratedMap {
      * `aboveTrack(39)` rather than 19 in figures, so a later bend in the track moves her with it
      * instead of planting her in the sand. Core's `WALK_WORLD` (packages/core/src/v2/floor.ts) caches
      * her talking spot and `test/v2/floor.test.ts` fails until it is re-derived, which is the point.
+     *
+     * (That placement was `bystander('bystander-cat', 39, aboveTrack(39))`.)
      */
-    bystander('bystander-cat', 39, aboveTrack(39)),
     /*
      * HISTORY (until 2026-10-22): ON THE DOORSTEP ROW, TOUCHING THE WALL, east of the door.
      *
@@ -6943,6 +7042,69 @@ export function generateForestMap(): GeneratedMap {
     felled += cut;
   }
 
+  // --- no tree stands in the river ----------------------------------------------------------------
+  /*
+   * ===========================================================================
+   * NO TREE IN THE RIVER, AND NONE ON A BANK STEP. 2026-10-22, on the client's "look at all the
+   * stones along the bank of the river, make sure there's no issues there".
+   * ===========================================================================
+   *
+   * Walked bank by bank through `pnpm world`, the worst thing on the river was not a stone. It was
+   * three trees in the south-west reach, where the water steps two columns a row: a sapling at
+   * (16,36) whose trunk stood on a `shore-s` and whose whole crown -- a sapling's crown is the row
+   * directly above its trunk -- sat on open water at (16-17,35), so a tree grew out of the middle of
+   * the river with grey bank stones poking out either side of its roots; a mid tree at (18,36) with
+   * half its crown on the water at (18-19,34); and a sapling at (20,29) with half of its on (21,28).
+   * Counted off the shipped map, those three are the only trees with as much as half a crown over
+   * water. The other two crowns that reach the water -- the west-bank elders at (22,17) and (21,35),
+   * one quarter of nine each -- are a tree leaning over the edge, which is what a wooded bank looks
+   * like, and they stay.
+   *
+   * And seven more stood with a trunk on a bank STEP or CORNER -- (11,35) (14,34) (18,32) (19,31)
+   * (29,6) (10,39), and (21,23), the sapling the bridge join above grew on the new bank under the
+   * deck. Those are the tiles the uncover pass calls the only waterline their water will ever get
+   * (`soleShoreline`), and a trunk on one sits on the grey stones with the waterline showing in
+   * slivers either side of its roots: the "stones overlapping water and grass edges" of the brief.
+   * The uncover pass exempted trunks because a trunk is half transparent; that holds on a long bank
+   * column, where the waterline runs on above and below, and not on a tile that IS the waterline.
+   *
+   * THE RULE, both halves read off the kind: half the crown or more on open water, so an elder's
+   * corner leaning out is allowed and a sapling with one of its two crown cells on the water is not;
+   * or any trunk cell on a `soleShoreline` tile. A trunk on a long bank column stays.
+   *
+   * WHY HERE, after the connectivity flood -- three positions were tried and measured:
+   *  - refused inside `plantKind` from the start: it replanted the whole map. The undergrowth clumps
+   *    draw `rnd()` once per frontier step and the frontier grows with every tree that took, so one
+   *    refused sapling by the river moved every draw after it, and the arrival camera's top edge,
+   *    thirty columns from any water, fell from 9 of 20 closed columns to 6 and failed its guard;
+   *  - struck at the landmarks, past the last state-dependent draw (and again just above the second
+   *    hem): no reshuffle, but trees struck that early are trees the later passes plan around. The
+   *    mid at (32,8) and the elder at (20,35) are felled by the connectivity flood anyway; taking
+   *    them first changed what the flood did, it stopped felling the elder above the waterfall at
+   *    (33,4), and that elder's fully opaque middle quarter put blind cells at (34,2) (34,3) while
+   *    (35,5) (35,6) opened onto another: 105 against `OPEN_ENOUGH`'s ratchet of 101, and 108 with
+   *    the step half of the rule;
+   *  - struck HERE, once every pass that fells has run and before the pass that seals what is left
+   *    over: exactly the ten trees above, and the blind count stays at 101. Nothing after this line
+   *    plants a tree, so nothing can put one back; audit 14 at the foot of the file says so.
+   */
+  const standsInRiver = (t: Tree): boolean =>
+    t.k.crown.filter(([dx, dy]) => isWater(t.x + dx, t.y + dy)).length * 2 >= t.k.crown.length ||
+    t.k.trunk.some((_n, dx) => soleShoreline(t.x + dx, t.y));
+  {
+    const struck: string[] = [];
+    for (let i = trees.length - 1; i >= 0; i--) {
+      const t = trees[i]!;
+      if (!standsInRiver(t)) continue;
+      struck.push(`(${t.x},${t.y})`);
+      strike(i);
+    }
+    console.log(
+      `  river: ${struck.length} tree(s) struck from a bank step or from over open water` +
+        (struck.length ? ` -- ${struck.join(' ')}` : ''),
+    );
+  }
+
   // --- pockets that would not open, sealed -------------------------------------------------------
   /*
    * WHAT IS LEFT OVER BECOMES THICKET, which is the honest answer rather than a patch.
@@ -7233,6 +7395,10 @@ export function generateForestMap(): GeneratedMap {
    * are shore tiles held by those three rules and they stay; audit 9 permits them by name and
    * counts them, so the number is on the run rather than in a comment.
    *
+   * (SUPERSEDED IN PART, 2026-10-22: it now DOES lift cover off a bank tile below the border band
+   * -- the "middle of a long bank column" rule is reversed, see the note at `onBank` below. The
+   * border rule stands, and audit 9 counts the seven border tiles it leaves.)
+   *
    * It is the LAST writer on purpose. Every earlier position for it loses: `sealBorder` runs twice
    * and the second call is below the connectivity flood, the hem-stone swap is below that, and the
    * lone-bush pass above plants a companion beside whatever it finds. A clearing pass that anything
@@ -7248,7 +7414,38 @@ export function generateForestMap(): GeneratedMap {
         const floor = at(ground, x, y) & BASE_GID;
         const onWater = WET_GROUND.has(floor);
         const onSand = (TILE_NAMES[floor - 1] ?? '').startsWith('path');
-        if (!onWater && !onSand) continue;
+        /*
+         * ...AND OFF EVERY BANK TILE BELOW THE BORDER BAND, 2026-10-22, which reverses half of the
+         * uncover pass's third rule. That rule left a bush or a boulder standing in the middle of a
+         * long `shore-w`/`shore-e` column, on the argument that the waterline above and below carries
+         * the river and the boulder "reads as standing in the gorge". Walked through `pnpm world` on
+         * the client's "look at all the stones along the bank", it does not read that way: every
+         * cover tile here paints its own full 32x32 of lawn, so what it draws is a square of grass
+         * bitten out of the stone bank with deep water meeting it across a straight tile edge --
+         * (29,17) beside the bridge, (29,12) above it, (11,36) and (30,5) further off. A bank tile
+         * is walkable land, so the cell gets its collision back with its tile.
+         *
+         * THE BORDER BAND KEEPS ITS COVER, for the uncover pass's own reason, which still holds: the
+         * seal is solid scrub so the player cannot see the end of the world, and a bank she can see
+         * and cannot walk onto at the top of the frame is an invisible wall. Audit 9 counts those
+         * and now fails on any other.
+         */
+        const onBank = (TILE_NAMES[floor - 1] ?? '').startsWith('shore') && !onBorder(x, y);
+        /*
+         * ...AND NO BOULDER TOUCHES THE DECK, corner or edge. The scree is laid by a field that knows
+         * nothing about the crossing, and it put a boulder at (29,22), hard against the planks' south-
+         * east corner and the bank stones under them: three kinds of grey edge meeting in one tile, at
+         * the one spot of the river every player stands on. The client's "make it a little cleaner"
+         * there is this tile as much as the join. Lifted here, by the last writer, rather than refused
+         * in the scree pass, because a cell the scree leaves empty is a cell the undergrowth frontier
+         * can grow into, and that frontier draws `rnd()` per step -- see the river sweep's note.
+         */
+        const byDeck =
+          standing === 'rock' &&
+          [...NEIGHBOURS, [1, 1], [-1, 1], [1, -1], [-1, -1]].some(([dx, dy]) =>
+            nameAt(ground, x + dx!, y + dy!).startsWith('bridge'),
+          );
+        if (!onWater && !onSand && !onBank && !byDeck) continue;
         set(below, x, y, 0);
         /*
          * The collision goes with the tile. `rock` is in `MUST_STOP_HER`, so leaving the cell solid
@@ -7260,7 +7457,7 @@ export function generateForestMap(): GeneratedMap {
         dredged.push([x, y]);
       }
     console.log(
-      `  dredged: ${dredged.length} opaque tile(s) lifted off water, waterfall or sand` +
+      `  dredged: ${dredged.length} opaque tile(s) lifted off water, waterfall, sand or bank` +
         (dredged.length ? ` -- ${dredged.map(([x, y]) => `(${x},${y})`).join(' ')}` : ''),
     );
   }
@@ -7445,12 +7642,24 @@ export function generateForestMap(): GeneratedMap {
   };
 
   /*
-   * 1. NO BANK ENDS IN MID-AIR. Water may meet the deck, the waterfall or the track -- a bridge
-   * crosses water, the fall IS water, and the one place the sand meets the river is the ford west
-   * of the deck, where a shore tile would break the bridge approach `map.test.ts` measures. Water
-   * meeting GRASS is the bank that stopped.
+   * 1. NO BANK ENDS IN MID-AIR. Water may meet the deck or the waterfall -- a bridge crosses water
+   * and the fall IS water. Water meeting GRASS is the bank that stopped.
+   *
+   * ...AND NO LONGER THE TRACK, since 2026-10-22. This used to allow "the ford west of the deck",
+   * the one place the sand met the river, because a shore tile there would break the bridge
+   * approach. The ford was never a ford: it was the river taking its three-column step directly
+   * under the deck (the JOIN note on `riverCentre`), which left the sand at (22,21) and (23,21)
+   * meeting open water across a bare tile edge. With the join a staircase, the water clears the
+   * track everywhere but under the planks, so sand against water is now a fault like grass.
+   *
+   * THE WET SIDE IS READ OFF THE DRAWN GROUND, not off `isWater`. `isWater` is the river's
+   * geometry, and the geometry runs on under the deck; so `shore-s` at (27,22) and (28,22), drawing
+   * a waterline against the underside of the planks with no water there to draw, passed this for as
+   * long as it shipped. That pair was the "little rocks under the bridge" the client circled.
    */
+  const DRAWN_WET = new Set(['water', 'water-2', 'waterfall']);
   const bare: [number, number][] = [];
+  const forded: [number, number][] = [];
   const miszoned: [number, number][] = [];
   const smothered: [number, number][] = [];
   const shores: Record<string, number> = {};
@@ -7467,16 +7676,22 @@ export function generateForestMap(): GeneratedMap {
           'shore-s': [0, -1],
         };
         const [dx, dy] = wetSide[here]!;
-        if (!isWater(x + dx, y + dy)) miszoned.push([x, y]);
+        if (!DRAWN_WET.has(nameAt(ground, x + dx, y + dy))) miszoned.push([x, y]);
         // A one-tile step has nothing either side to carry the waterline, so an opaque tile on it
         // hides the whole shoreline and the seam is bare again however good the ground tile is.
         if (!onBorder(x, y) && soleShoreline(x, y) && OPAQUE_FLOOR.has(nameAt(below, x, y)))
           smothered.push([x, y]);
       }
+      if (
+        here.startsWith('path') &&
+        NEIGHBOURS.some(([dx, dy]) => DRAWN_WET.has(nameAt(ground, x + dx, y + dy)))
+      )
+        forded.push([x, y]);
       if (!here.startsWith('grass') || isWater(x, y)) continue;
       if (NEIGHBOURS.some(([dx, dy]) => isWater(x + dx, y + dy))) bare.push([x, y]);
     }
   fault('grass tile(s) meeting the water with no shore on them', bare);
+  fault('track tile(s) meeting the water off the deck, with no bank between', forded);
   fault('shore tile(s) with the water on the wrong side', miszoned);
   fault('shoreline(s) with no second tile to carry them, hidden under an opaque tile', smothered);
 
@@ -8003,14 +8218,28 @@ export function generateForestMap(): GeneratedMap {
         if (!OPAQUE_FLOOR.has(nameAt(below, x, y))) continue;
         const floor = at(ground, x, y) & BASE_GID;
         const here = TILE_NAMES[floor - 1] ?? '';
-        if (here.startsWith('shore')) {
+        /*
+         * A bank tile may carry cover ON THE BORDER BAND ONLY, since 2026-10-22 (the note in the
+         * dredge pass). Below the band a covered bank is a lawn square bitten out of the stones,
+         * and it is a fault like any other cell here.
+         */
+        if (here.startsWith('shore') && onBorder(x, y)) {
           onBanks++;
           continue;
         }
-        if (WET.has(floor) || here.startsWith('path')) aground.push([x, y]);
+        const touchesDeck = [...NEIGHBOURS, [1, 1], [-1, 1], [1, -1], [-1, -1]].some(([dx, dy]) =>
+          nameAt(ground, x + dx!, y + dy!).startsWith('bridge'),
+        );
+        if (nameAt(below, x, y) === 'rock' && touchesDeck) aground.push([x, y]);
+        if (WET.has(floor) || here.startsWith('path') || here.startsWith('shore'))
+          aground.push([x, y]);
       }
-    fault('opaque tile(s) standing on water, on the waterfall or on the track', aground);
-    verdictLines.push(`${onBanks} shoreline tile(s) left under cover by the uncover pass's rules`);
+    fault(
+      'opaque tile(s) standing on water, on the waterfall, on the track or on a bank, or a ' +
+        'boulder against the deck',
+      aground,
+    );
+    verdictLines.push(`${onBanks} shoreline tile(s) left under cover on the border band`);
   }
 
   /*
@@ -8267,6 +8496,42 @@ export function generateForestMap(): GeneratedMap {
     verdictLines.push(
       `gate: ${placed.length} leaf/leaves across the ${cells.length}-cell opening at column ` +
         `${gap.x0}, rows ${gap.y0}-${gap.y1}`,
+    );
+  }
+
+  /*
+   * ===========================================================================
+   * 14. NO TREE IN THE RIVER, read off what is DRAWN rather than off the register the sweep used.
+   * ===========================================================================
+   *
+   * The river sweep strikes trees off the register by a rule about the register; a guard written
+   * the same way would move with the sweep and pass in silence (PAUL_BRIEF trap 5). So this asks
+   * the layers. Two counts, two different kinds of bound:
+   *  - a TRUNK TILE drawn on a bank step or corner is zero, and is not a ratchet: those are the
+   *    tiles that carry the only waterline their water gets;
+   *  - a CROWN TILE drawn over open water is a RATCHET at 2. Those two are the west-bank elders at
+   *    (22,17) and (21,35) leaning one corner out over the water, at (24,14) and (23,32), which is a
+   *    wooded bank and is kept on purpose. Lower it if they go; never raise it. A third is a tree
+   *    growing out of the river, which is what the sapling at (16,36) was.
+   */
+  {
+    const RIVER_CROWNS = 2;
+    const rooted: [number, number][] = [];
+    const overhung: [number, number][] = [];
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        if (isTrunk(x, y) && soleShoreline(x, y)) rooted.push([x, y]);
+        if (isWater(x, y) && isCanopy(x, y)) overhung.push([x, y]);
+      }
+    fault('tree trunk(s) drawn on a bank step or corner, over the only waterline there', rooted);
+    if (overhung.length > RIVER_CROWNS)
+      fault(
+        `crown tile(s) drawn over open water (want at most ${RIVER_CROWNS}, the two west-bank ` +
+          'elders leaning out; any more is a tree standing in the river)',
+        overhung,
+      );
+    verdictLines.push(
+      `river: ${overhung.length} crown tile(s) over open water, ${rooted.length} trunk(s) on a bank step`,
     );
   }
 

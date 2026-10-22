@@ -120,6 +120,58 @@ for (const v of SIZES) {
   });
 }
 
+/*
+ * THE WORLD'S CHROME READS (the client, 2026-10-22: "make the text on the web page at least a
+ * little bit bigger ... enlarge the time left, the WASD arrows to walk, space to talk"). Every
+ * visible piece of small in-world type is measured as RENDERED: 15px or more on the desktop window
+ * the client reviews at (24 for the clock's face), and never under 12 anywhere. And the bigger type
+ * still leaves the clock, the basket, the hint, the quest chip and the pad apart from each other --
+ * the minimap is held apart from all of them by the test above.
+ *
+ * Each selector is checked visible before it is measured, and the clock and the chip are always
+ * visible, so the check cannot pass on an empty list (PAUL_BRIEF trap 6).
+ */
+for (const v of SIZES) {
+  test(`at ${v.width}x${v.height}${v.touch ? ' (touch)' : ''} the world's type is big enough and nothing overlaps`, async ({
+    browser,
+  }) => {
+    const page = await pageAt(browser, v);
+    await intoTheForest(page);
+    const desktop = v.width >= 1280 && !v.touch;
+    const TYPE = [
+      { sel: '.otp-hud2__clock', desk: 24 },
+      { sel: '.otp-hud2__timer .otp-hud2__label', desk: 15 },
+      { sel: '.otp-hud2__basket .otp-hud2__label', desk: 15 },
+      { sel: '.otp-world-hint', desk: 15 },
+      { sel: '.otp-chip', desk: 15 },
+    ];
+    let measured = 0;
+    for (const { sel, desk } of TYPE) {
+      const el = page.locator(sel).first();
+      if (!(await el.isVisible())) continue;
+      measured++;
+      const px = await el.evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
+      expect(px, `${sel} at ${v.width}x${v.height}`).toBeGreaterThanOrEqual(desktop ? desk : 12);
+    }
+    expect(measured, 'the clock and the chip at least').toBeGreaterThanOrEqual(2);
+
+    const pieces = ['.otp-hud2__timer', '.otp-hud2__basket', '.otp-world-hint', '.otp-chip'];
+    if (v.touch) pieces.push('.otp-stick', '.otp-a-button');
+    const boxes: [string, Box][] = [];
+    for (const sel of pieces) {
+      const el = page.locator(sel).first();
+      if (await el.isVisible()) boxes.push([sel, (await el.boundingBox())!]);
+    }
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++)
+        expect(
+          apart(boxes[i]![1], boxes[j]![1]),
+          `${boxes[i]![0]} overlaps ${boxes[j]![0]} at ${v.width}x${v.height}`,
+        ).toBe(true);
+    await page.context().close();
+  });
+}
+
 test('the map is drawn at a whole number of CSS pixels per tile', async ({ browser }) => {
   const scales: Record<string, number> = {};
   for (const v of [SIZES[0], SIZES[2], SIZES[3]]) {

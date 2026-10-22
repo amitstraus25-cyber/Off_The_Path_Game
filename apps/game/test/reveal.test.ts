@@ -41,11 +41,50 @@ describe('the instructions say what the deal does', () => {
     expect(premise).toMatch(/grandma/);
   });
 
+  /*
+   * Ten words, up from eight, for ONE line: the client asked (2026-10-22) for "take only the good
+   * ones, leave the malicious ones" in so many words, and "Read each card. Take only the good,
+   * leave the malicious." is ten. The ceiling still stops a step turning into a paragraph.
+   */
   it('the how-to is four short lines at most, and says faster scores higher', () => {
     expect(content.ui.howTo.steps.length).toBeLessThanOrEqual(4);
     for (const step of content.ui.howTo.steps)
-      expect(step.split(/\s+/).length, step).toBeLessThanOrEqual(8);
+      expect(step.split(/\s+/).length, step).toBeLessThanOrEqual(10);
     expect(content.ui.howTo.steps.join(' ')).toMatch(/faster/i);
+  });
+
+  it('the how-to says to take only the good skills and leave the malicious ones', () => {
+    const line = content.ui.howTo.steps.find((step) => /take only/i.test(step));
+    expect(line, 'no step says to take only the good ones').toBeDefined();
+    expect(line!).toMatch(/good/i);
+    expect(line!).toMatch(/leave the malicious/i);
+  });
+
+  /*
+   * TRAP 1 AGAIN: "At 2:00 left" is `world.dusk.fromLeftMs` written as words, so it is read back
+   * against the number, formatted the way the HUD's face shows it. Move the dusk and this fails
+   * until the sentence moves with it.
+   */
+  it("the how-to names the moment the dusk starts, and it is the content's", () => {
+    const seconds = content.world.dusk.fromLeftMs / 1000;
+    const face = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    const line = content.ui.howTo.steps.find((step) => /dark/i.test(step));
+    expect(line, 'no step says the forest gets darker').toBeDefined();
+    expect(line!).toContain(face);
+  });
+
+  it('the stressed lines are lines that exist, and they are the two the client named', () => {
+    const { steps, stress = [] } = content.ui.howTo;
+    for (const i of stress) expect(steps[i], `stress index ${i}`).toBeDefined();
+    const stressed = stress.map((i) => steps[i]!);
+    expect(
+      stressed.some((s) => /take only/i.test(s)),
+      'the take-only line is stressed',
+    ).toBe(true);
+    expect(
+      stressed.some((s) => /dark/i.test(s)),
+      'the dusk line is stressed',
+    ).toBe(true);
   });
 });
 

@@ -303,10 +303,21 @@ export function HowTo({ ui, onGo, busy }: HowToProps) {
       focus
     >
       <h1 class="otp-title__mark otp-howto__title">{ui.howTo.title}</h1>
+      {/*
+        THE TWO RULES THAT MUST NOT BE MISSED (the client, 2026-10-22): which skills to take, and
+        that the light goes at 2:00. Content names them in `howTo.stress`; the line is the same words
+        either way, set in a heavier weight -- no colour, no icon, nothing a reader could not see.
+      */}
       <ol class="otp-howto" data-howto="">
-        {ui.howTo.steps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
+        {ui.howTo.steps.map((step, i) =>
+          ui.howTo.stress?.includes(i) ? (
+            <li key={step} data-stress="">
+              <strong>{step}</strong>
+            </li>
+          ) : (
+            <li key={step}>{step}</li>
+          ),
+        )}
       </ol>
     </TitleCard>
   );

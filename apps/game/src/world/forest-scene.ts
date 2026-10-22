@@ -33,6 +33,7 @@ import { sketchMap } from './minimap';
 import type { MapSketch } from './minimap';
 import { readForks } from './forks';
 import type { Fork } from './forks';
+import { brightestWarm, openDoor } from './door';
 import gids from '../assets/tileset-forest.gids.json';
 
 /** The gap between the top of a character's head and the bottom of the prompt bubble. */
@@ -127,8 +128,19 @@ const FLIGHT = {
   fadeMs: 160,
 } as const;
 
-/** The paper bird's take-off: up and away to the west, nowhere near the cottage, then gone. */
-const PAPER_BIRD = { ms: 1600, rise: TILE * 7, drift: -TILE * 2, frameRate: 10 } as const;
+/**
+ * The paper bird's flight: off Purple's hand and away TOWARDS GRANDMA'S DOOR (the client,
+ * 2026-10-22: "make sure it flies in the direction of grandma and not the other direction"), a
+ * long glide along the bearing to the cottage with a climb on top of it, fading as it goes. It
+ * used to fly west on the argument that it must not show the way; the client wants the word to be
+ * seen going where it is going, and the minimap and the fork signs already show the way for
+ * anyone who took them. `reach` is how far along the bearing it gets before it is gone -- never
+ * past the door itself.
+ */
+const PAPER_BIRD = { ms: 2200, reach: TILE * 9, climb: TILE * 3, frameRate: 10 } as const;
+
+/** The open door sits over the closed one in `decor-below` (depth 1) and under every figure. */
+const DOOR_DEPTH = 1.5;
 
 /**
  * The pool of shade a figure stands in.
@@ -541,6 +553,10 @@ export class ForestScene extends Phaser.Scene {
   private glow: Phaser.GameObjects.Sprite | null = null;
   /** A wing ride in progress, or null. */
   private flight: Flight | null = null;
+  /** Grandma's door standing open (`early-welcome`), laid over the closed one; null if unbuilt. */
+  private openedDoor: Phaser.GameObjects.Image | null = null;
+  /** The decor layer the door is painted in, kept so the open door can be built from its tile. */
+  private decorBelow: Phaser.Tilemaps.TilemapLayer | null = null;
 
   constructor(run: WorldRun, bus: Bus, controls: Input, hasInput: () => boolean = () => true) {
     super('Forest');
@@ -563,7 +579,7 @@ export class ForestScene extends Phaser.Scene {
     const tiles = phaserMap.addTilesetImage('tileset-forest', 'tileset-forest');
     if (!tiles) throw new Error('Tileset "tileset-forest" is missing from the map');
     this.ground = phaserMap.createLayer('ground', tiles)?.setDepth(0) ?? null;
-    phaserMap.createLayer('decor-below', tiles)?.setDepth(1);
+    this.decorBelow = phaserMap.createLayer('decor-below', tiles)?.setDepth(1) ?? null;
     // The canopy layer always draws over Purple, so she walks behind tree tops.
     phaserMap.createLayer('decor-above', tiles)?.setDepth(10_000);
     // Read before anybody is placed: every figure asks for the colour of their own tile on arrival.
@@ -606,6 +622,7 @@ export class ForestScene extends Phaser.Scene {
     this.facade = facade;
     this.createPaws();
     this.createPerkProps();
+    this.openedDoor = this.createOpenDoor(tiles);
     // Objects named `notice-<id>` hand their id straight to the content's notices.
     this.notices = this.map.objects.filter((o) => o.name.startsWith('notice-'));
 
@@ -801,12 +818,73 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
+   * GRANDMA'S DOOR, OPEN: built once at boot from the closed door tile the game loaded (world/door.ts
+   * says how, and why the art is not regenerated for it), laid over the closed door hidden, and
+   * shown by `drawPerks` while the run has an early welcome.
+   *
+   * The door's cell is read off the map, not named: `trigger-cottage` is the lane and its first
+   * column is the door's (see `stageArrival`), so the door is the `decor-below` tile one row above
+   * the lane's top-left. The lamp is the lit window's own light. If any of that cannot be read --
+   * no tile there, no lit window, a tileset the canvas cannot read back -- there is no open door
+   * and the closed one stands, which is the run without the perk: wrong by omission, never by
+   * invention.
+   */
+  private createOpenDoor(tiles: Phaser.Tilemaps.Tileset): Phaser.GameObjects.Image | null {
+    const col = Math.floor(this.cottage.x / TILE);
+    const row = Math.floor(this.cottage.y / TILE) - 1;
+    const door = this.decorBelow?.getTileAt(col, row);
+    const lit = (gids as Record<string, number>)['wall-window-lit'];
+    const image = tiles.image?.getSourceImage();
+    if (!door || lit === undefined || !image) return null;
+    const key = 'fx-door-open';
+    try {
+      const read = (gid: number): Uint8ClampedArray | null => {
+        const at = tiles.getTileTextureCoordinates(gid) as { x: number; y: number } | null;
+        if (!at) return null;
+        const canvas = document.createElement('canvas');
+        canvas.width = TILE;
+        canvas.height = TILE;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return null;
+        ctx.drawImage(image as CanvasImageSource, at.x, at.y, TILE, TILE, 0, 0, TILE, TILE);
+        return ctx.getImageData(0, 0, TILE, TILE).data;
+      };
+      const closed = read(door.index);
+      const glass = read(lit);
+      const lamp = glass ? brightestWarm(glass) : null;
+      if (!closed || !lamp) return null;
+      if (!this.textures.exists(key)) {
+        const texture = this.textures.createCanvas(key, TILE, TILE);
+        if (!texture) return null;
+        texture.context.putImageData(new ImageData(openDoor(closed, TILE, lamp), TILE, TILE), 0, 0);
+        texture.refresh();
+      }
+    } catch {
+      return null;
+    }
+    return this.add
+      .image(col * TILE, row * TILE, key)
+      .setOrigin(0, 0)
+      .setDepth(DOOR_DEPTH)
+      .setVisible(false);
+  }
+
+  /** Whether Grandma's door is drawn open this frame: for the specs. */
+  get doorOpen(): boolean {
+    return this.openedDoor?.visible ?? false;
+  }
+
+  /**
    * The perks that are a STATE of the forest rather than a moment, re-read every frame from the run
    * (world/run.ts), so a replay that clears the perks clears what they drew with no bookkeeping.
    */
   private drawPerks(): void {
     const signs = this.run.forkSigns();
     for (const board of this.forkBoards) if (board.visible !== signs) board.setVisible(signs);
+
+    const welcome = this.run.welcome();
+    const door = this.openedDoor;
+    if (door && door.visible !== welcome) door.setVisible(welcome);
 
     const dusk = this.run.dusk();
     const main = this.cameras.main;
@@ -892,9 +970,10 @@ export class ForestScene extends Phaser.Scene {
   private readonly castBoxes: Rect[] = [];
 
   /**
-   * THE WORD WEAVER'S PAPER BIRD: it takes off from Purple's hand and leaves, up and away to the
-   * west -- it is word sent ahead, and it must not show the way to the door, so it does not fly
-   * east. Gone under reduced motion: the toast says the perk, and nothing flies.
+   * THE WORD WEAVER'S PAPER BIRD: it takes off from Purple's hand and flies towards Grandma's door
+   * -- word sent ahead, seen going where it is going (`PAPER_BIRD`). The art faces east (its beak
+   * is at the right of the frame), so it is mirrored when the cottage lies west of her. Gone under
+   * reduced motion: the toast says the perk, and nothing flies.
    */
   releasePaperBird(): void {
     if (this.reducedMotion) return;
@@ -910,15 +989,49 @@ export class ForestScene extends Phaser.Scene {
       .setScale(2)
       .setDepth(SKY_DEPTH)
       .play('fx-paperbird-flap');
+    const end = this.paperBirdEnd(bird.x, bird.y);
+    bird.setFlipX(end.x < bird.x);
+    this.paperBird = bird;
+    this.paperBirdTo = end;
     this.tweens.add({
       targets: bird,
-      x: bird.x + PAPER_BIRD.drift,
-      y: bird.y - PAPER_BIRD.rise,
+      x: end.x,
+      y: end.y,
       alpha: 0,
       duration: PAPER_BIRD.ms,
       ease: 'Sine.easeIn',
-      onComplete: () => bird.destroy(),
+      onComplete: () => {
+        bird.destroy();
+        if (this.paperBird === bird) this.paperBird = null;
+      },
     });
+  }
+
+  /**
+   * Where the paper bird is last seen, from (x, y): `reach` along the bearing to the middle of
+   * Grandma's door, or the door itself if that is nearer, and `climb` higher than that line.
+   */
+  private paperBirdEnd(x: number, y: number): Vec {
+    const door = { x: this.cottage.x + TILE / 2, y: this.cottage.y - TILE / 2 };
+    const dx = door.x - x;
+    const dy = door.y - y;
+    const far = Math.hypot(dx, dy);
+    const go = far > 0 ? Math.min(1, PAPER_BIRD.reach / far) : 0;
+    return { x: Math.round(x + dx * go), y: Math.round(y + dy * go - PAPER_BIRD.climb) };
+  }
+
+  /** The paper bird in the air, and where it is flying to: for the specs. Null once it is gone. */
+  private paperBird: Phaser.GameObjects.Sprite | null = null;
+  private paperBirdTo: Vec | null = null;
+  get paperBirdFlight(): { from: Vec; to: Vec; door: Vec; flipped: boolean } | null {
+    const bird = this.paperBird;
+    if (!bird || !this.paperBirdTo) return null;
+    return {
+      from: { x: bird.x, y: bird.y },
+      to: this.paperBirdTo,
+      door: { x: this.cottage.x + TILE / 2, y: this.cottage.y - TILE / 2 },
+      flipped: bird.flipX,
+    };
   }
 
   /** Whether a wing ride is in the air: main.ts keeps the walk paused for it. */

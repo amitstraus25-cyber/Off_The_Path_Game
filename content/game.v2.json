@@ -10,7 +10,7 @@
     "good": 20,
     "clean": 10,
     "speed": 30,
-    "parMs": 106000
+    "parMs": 107000
   },
   "world": {
     "knockMs": 3000,
@@ -287,11 +287,12 @@
     "howTo": {
       "title": "How to play",
       "steps": [
-        "Seven characters offer skills.",
-        "Three are good. Four are malicious.",
-        "Read each card. Take the good ones.",
-        "Reach Grandma in 3:00. Faster scores more."
+        "Seven skills: three good, four malicious.",
+        "Read each card. Take only the good, leave the malicious.",
+        "Reach Grandma in 3:00. Faster scores more.",
+        "From 2:00 left, the forest slowly darkens."
       ],
+      "stress": [1, 3],
       "go": "Start walking"
     },
     "cabinet": {
@@ -394,7 +395,7 @@
       "worldBearings": "north of you|north-east of you|east of you|south-east of you|south of you|south-west of you|west of you|north-west of you",
       "worldDistances": "a few steps away|a short walk away|a long way off",
       "leaderboardClosed": "Posting has closed for that run.",
-      "landingPremise": "Three good skills, four malicious ones. Find the good three and race to Grandma.",
+      "landingPremise": "Three good skills, four malicious ones. Take only the good three and race to Grandma.",
       "revealChoices": "Correct choices",
       "revealSpeed": "Speed bonus",
       "revealTime": "Your time",

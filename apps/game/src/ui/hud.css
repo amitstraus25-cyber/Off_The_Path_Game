@@ -66,7 +66,10 @@ html[data-cabinet='overlay'] .otp-ui {
      one spelling and not the other. */
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
-  font-size: max(14px, calc(20px * var(--otp-ui)));
+  /* 24px at full scale, 16.8 at the smallest step: the face is the number the player reads most
+     (the client, 2026-10-22, "enlarge the time left"). Line-height 1 keeps it inside the pill's
+     declared height, `--otp-hud-basket-h`, at every step. */
+  font-size: max(16px, calc(24px * var(--otp-ui)));
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0;
@@ -153,8 +156,8 @@ html[data-cabinet='overlay'] .otp-ui {
   border-radius: var(--otp-r-inset);
   background: var(--cyera-natural);
   color: var(--cyera-black);
-  /* The caption floor: nothing here is set below 11px. */
-  font-size: 11px;
+  /* The caption floor, raised with the rest of the HUD: nothing here is set below 12px. */
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.02em;
@@ -366,7 +369,9 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   border-radius: var(--otp-r-pill);
   background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
   color: var(--cyera-offwhite);
-  font: 600 11px/1 var(--cyera-font-sans);
+  /* 13px: a step up from 11 with the rest of the world's chrome, at every scale (the chip stands
+     on a 32x48 face drawn one CSS pixel per art pixel, so it does not scale with --otp-ui). */
+  font: 600 13px/1 var(--cyera-font-sans);
   white-space: nowrap;
 }
 

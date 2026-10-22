@@ -412,3 +412,41 @@ for (const [width, height] of [
     expect(await title.evaluate((h) => getComputedStyle(h).textTransform)).toBe('none');
   });
 }
+
+/*
+ * THE RESEARCH FOOTER IS CENTRED (the client, 2026-10-22: "here in the bottom, I'd center this").
+ * Measured on what is painted -- the line's text and the logo -- against the footer's own box, so
+ * a change of card width, padding or wording moves both sides of the comparison together.
+ */
+for (const size of [
+  { width: 1280, height: 800 },
+  { width: 768, height: 1024 },
+  { width: 375, height: 812 },
+]) {
+  test(`the research footer sits in the middle of the card at ${size.width}`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await serveEmptyBoard(page);
+    await playTo(page, { take: 'good', seconds: 60 });
+    const foot = page.locator('.otp-foot');
+    await foot.scrollIntoViewIfNeeded();
+    await expect(foot).toContainText(say('researchFooter'));
+    const { box, ink } = await foot.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const painted = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+      const b = el.getBoundingClientRect();
+      return {
+        box: { left: b.left, right: b.right },
+        ink: {
+          left: Math.min(...painted.map((r) => r.left)),
+          right: Math.max(...painted.map((r) => r.right)),
+        },
+      };
+    });
+    expect(ink.right - ink.left, 'the footer paints nothing').toBeGreaterThan(40);
+    const offCentre = (ink.left + ink.right) / 2 - (box.left + box.right) / 2;
+    expect(Math.abs(offCentre), 'px off the footer centre').toBeLessThanOrEqual(2);
+    // The logo is part of what is centred, and it is there.
+    await expect(page.locator('.otp-foot .otp-mark')).toBeVisible();
+  });
+}

@@ -295,8 +295,19 @@ const ui = z.strictObject({
     subtitle: text,
     start: text,
   }),
-  /** The user's ask: three or four short lines, read before the clock starts; `go` starts it. */
-  howTo: z.strictObject({ title: text, steps: z.array(text).min(3).max(4), go: text }),
+  /**
+   * The user's ask: three or four short lines, read before the clock starts; `go` starts it.
+   * `stress` names, by position, the lines the screen sets heavier (the client, 2026-10-22: "take
+   * only the good ones" and "at 2:00 it gets darker" must be unmissable). Optional, and a weight
+   * only: the words are the same words with or without it. apps/game/test/reveal.test.ts holds
+   * every index to a line that exists.
+   */
+  howTo: z.strictObject({
+    title: text,
+    steps: z.array(text).min(3).max(4),
+    stress: z.array(z.number().int().min(0)).optional(),
+    go: text,
+  }),
   /** The arcade cabinet's marquee: the words beside the Cyera logo across the top of every screen. */
   cabinet: z.strictObject({ marquee: text }),
   /** 01 Explore: the forest's frame title, which is also its hidden h1. */

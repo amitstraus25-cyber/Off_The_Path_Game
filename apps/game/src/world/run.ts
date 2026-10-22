@@ -42,6 +42,8 @@ export interface WorldRun {
   walkFactor(): number;
   forkSigns(): boolean;
   lantern(): boolean;
+  /** Word went ahead (`early-welcome`): Grandma's door stands open as Purple comes up the lane. */
+  welcome(): boolean;
   dusk(): number;
   /** The darkest the dusk ever gets (the content's cap), so the lantern can scale against it. */
   darkest(): number;
@@ -70,6 +72,7 @@ export function gameRun(store: Store): WorldRun {
     walkFactor: () => v2.walkFactor(store.getState()),
     forkSigns: () => v2.hasPerk(store.getState(), 'fork-signs'),
     lantern: () => v2.hasPerk(store.getState(), 'lantern'),
+    welcome: () => v2.hasPerk(store.getState(), 'early-welcome'),
     dusk: () => {
       const state = store.getState();
       return v2.duskAt(content, state, runAt(state, store.elapsed()));

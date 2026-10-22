@@ -235,9 +235,9 @@ under par, falls in a straight line to 0 at 3:00, and is never negative; t is th
 describes (apps/api). The bonus is rounded to a whole point with integer arithmetic until the one
 division, so browser and server cannot round apart (`speedBonus`, scoring.ts).
 
-**Par is 1:46 (`scoring.parMs` 106000), derived, not chosen.** It is the arrival time of a careful
-run that walks the shortest content-order tour of the shipped map once (107 four-connected tiles at
-`WALK_SPEED`, 28.5 s), knocks at the door (`world.knockMs`, 3 s) and reads every greeting and every
+**Par is 1:47 (`scoring.parMs` 107000), derived, not chosen.** It is the arrival time of a careful
+run that walks the shortest content-order tour of the shipped map once (113 four-connected tiles at
+`WALK_SPEED`, about 30 s, since the Cat moved into the clearing on 2026-10-22), knocks at the door (`world.knockMs`, 3 s) and reads every greeting and every
 card at `v2.BRISK` -- 238 words a minute, the Brysbaert meta-analysis rate the clock check's 200 is
 slowed from, with no pause to decide -- in the slowest of the 35 deals, **with no perk saving any
 time** (the no-perk tour: every leg walked, the knock paid, the raw stamp). Measured at 1:45.1 on

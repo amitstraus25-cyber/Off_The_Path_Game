@@ -110,6 +110,13 @@ interface Scene {
   flight: { fade: boolean } | null;
   flying: boolean;
   duskShown: number;
+  doorOpen: boolean;
+  paperBirdFlight: {
+    from: { x: number; y: number };
+    to: { x: number; y: number };
+    door: { x: number; y: number };
+    flipped: boolean;
+  } | null;
   position: { x: number; y: number };
   purplePosition: { x: number; y: number };
   placePurple(): void;
@@ -190,17 +197,36 @@ for (const variant of ['good', 'bad'] as const) {
       await expect(page.locator('[data-fork-signs]')).toHaveAttribute('aria-hidden', 'true');
     });
 
-    test(`the Word Weaver's bird flies off and Grandma opens before the knock (${variant})`, async ({
+    test(`the Word Weaver's bird flies towards Grandma, her door stands open, and there is no knock (${variant})`, async ({
       page,
     }) => {
       await intoTheForest(page);
       await deal(page, seedFor('early-welcome', variant));
+      expect(await scene(page, (s) => s.doorOpen), 'the door stood open before the welcome').toBe(
+        false,
+      );
       await take(page, 'early-welcome');
       await expect(toast(page)).toHaveText(say('perkEarlyWelcome'));
       expect(
         await scene(page, (s) => s.children.list.some((c) => c.texture?.key === 'fx-paperbird')),
         'no paper bird took off',
       ).toBe(true);
+      /*
+       * THE BIRD FLIES TOWARDS GRANDMA (the client, 2026-10-22: "make sure it flies in the direction
+       * of grandma and not the other direction"). Where it is headed is nearer the door than where
+       * it took off, and the art -- drawn facing east -- is mirrored exactly when the door is west.
+       */
+      const flight = await scene(page, (s) => s.paperBirdFlight);
+      expect(flight, 'the bird has no flight to read').not.toBeNull();
+      const gap = (a: { x: number; y: number }) =>
+        Math.hypot(flight!.door.x - a.x, flight!.door.y - a.y);
+      expect(gap(flight!.to), 'the bird flew away from the door').toBeLessThan(gap(flight!.from));
+      expect(Math.sign(flight!.to.x - flight!.from.x), 'east or west, as the door lies').toBe(
+        Math.sign(flight!.door.x - flight!.from.x),
+      );
+      expect(flight!.flipped).toBe(flight!.door.x < flight!.from.x);
+      // And the door stands open for the walk up the lane, on the next frame the forest draws.
+      await expect.poll(() => scene(page, (s) => s.doorOpen), { timeout: 2000 }).toBe(true);
       await meetAllBut(page, []);
       const waited = await knockAtTheDoor(page);
       expect(waited, 'the welcome still made her knock and wait').toBeLessThan(
