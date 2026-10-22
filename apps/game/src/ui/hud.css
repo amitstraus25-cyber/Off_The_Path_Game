@@ -127,12 +127,22 @@ html[data-hud='strip'] .otp-ui .otp-layer.otp-layer--toast {
   text-align: center;
 }
 
+/* Two invisible rulers at the urgent weight hold the column at the widest face the clock can
+   show: the current face, and '0:00' and '8:88', the widest figures in any proportional fallback.
+   Haffer's figures are tabular, but where it is not loaded (CI's Linux runner, some phones) the
+   fallback's digits are not, and the pill's edge moved 1-3px a second (2026-10-23). */
+.otp-hud2 .otp-hud2__clock::before,
 .otp-hud2 .otp-hud2__clock::after {
-  content: attr(data-face);
   font-weight: 600;
   height: 0;
   overflow: hidden;
   visibility: hidden;
+}
+.otp-hud2 .otp-hud2__clock::before {
+  content: '0:00';
+}
+.otp-hud2 .otp-hud2__clock::after {
+  content: '8:88';
 }
 
 /*
