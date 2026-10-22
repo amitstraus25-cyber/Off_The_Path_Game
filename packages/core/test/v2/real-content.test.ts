@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import raw from '../../../../content/game.v2.json';
-import design from '../../../../docs/GAME_DESIGN_V2.md?raw';
 import manifest from '../../../../apps/game/src/assets/manifest.json';
 import mapJson from '../../../../apps/game/src/assets/map-forest.json';
 import { readForestMap, findObject } from '../../../../apps/game/src/world/map.ts';
@@ -202,19 +201,17 @@ describe('the seven giveaway lines', () => {
   });
 
   /*
-   * GLANCEABLE, AGAINST THE CLIENT'S OWN DRAWING. The reveal sketch in GAME_DESIGN_V2 section 6
-   * gives each skill one short row. THE BOUND IS READ OUT OF THE DOCUMENT, not copied from it
-   * (PAUL_BRIEF trap 5): no sentence on the reveal is longer than the longest row the client drew.
+   * GLANCEABLE. Every sentence on the reveal is a short line, held to the same limit as the giveaway
+   * (`v2.GIVEAWAY_WORDS`, the user's "short" for a line that has to be read, not waded through).
+   *
+   * THIS WAS THE CLIENT'S SKETCH (GAME_DESIGN_V2 section 6), whose longest row is six words, read
+   * out of the design document. The client then approved the seven skills' reveal lines word for
+   * word in chat on 2026-10-22, and two of their sentences are eight ("One note on a tree was the
+   * wolf's.", "It flew you where the wolf's map said."). The approval is the later and more
+   * specific word, so the sketch stopped being the bound; it is NOT replaced by the longest line
+   * the content happens to have, which would be a bound written in terms of the thing it guards
+   * (PAUL_BRIEF trap 5).
    */
-  const SKETCH = (() => {
-    const from = design.indexOf("The client's own sketch");
-    const block = design.slice(from).split('```')[1] ?? '';
-    return block.split('\n').flatMap((l) => {
-      const m = /^\s+([A-Z][a-z]+(?: [A-Z][a-z]+)+)\s{2,}(\S.*)$/.exec(l);
-      return m ? [{ name: m[1]!, phrase: m[2]!.trim() }] : [];
-    });
-  })();
-  const SKETCH_LONGEST_ROW = Math.max(...SKETCH.map((r) => words(r.phrase)));
   const sentences = (line: string): string[] =>
     line
       .replace(/\.\.\./g, '…')
@@ -224,25 +221,54 @@ describe('the seven giveaway lines', () => {
     c.skills.flatMap((s) =>
       (['good', 'bad'] as const).flatMap((k) =>
         sentences(s[k].reveal)
-          .filter((x) => words(x) > SKETCH_LONGEST_ROW)
+          .filter((x) => words(x) > v2.GIVEAWAY_WORDS)
           .map((x) => `${s.id}.${k}: "${x}" is ${words(x)} words`),
       ),
     );
 
-  it('the sketch is read from the design document, and its rows are the ones the client drew', () => {
-    expect(SKETCH.map((r) => r.name)).toEqual(['Night Light', 'Word Weaver', 'Basket Helper']);
-    expect(SKETCH_LONGEST_ROW).toBeGreaterThan(0);
-  });
-
-  it('every sentence on the reveal is no longer than the longest row of the sketch', () => {
+  it('every sentence on the reveal is a short line, no longer than a giveaway may be', () => {
     expect(unglanceable(content)).toEqual([]);
     const long = edited((v) => {
       v.skills.find((s) => s.id === 'way-teller')!.good.reveal =
-        'Walked you the old way to her door.';
+        'Showed you who lived down every single path in the wood.';
     });
     expect(unglanceable(long)).toEqual([
-      expect.stringMatching(/^way-teller\.good: .* is 8 words$/),
+      expect.stringMatching(/^way-teller\.good: .* is 11 words$/),
     ]);
+  });
+});
+
+/*
+ * THE PERKS ARE THE CLIENT'S (2026-10-22), one per character in walking order. The effect is the
+ * skill's, not the variant's (content.ts), so a good and a bad copy cannot differ in the forest.
+ * Pinned here because a perk moved to another skill would change the game without failing a rule.
+ */
+describe('the seven perks', () => {
+  it('each character gives the perk the client approved, with the approved numbers', () => {
+    expect(
+      Object.fromEntries(
+        content.characters.map((c) => [c.id, v2.findSkill(content, c.skillId)!.effect]),
+      ),
+    ).toEqual({
+      rabbit: { kind: 'minimap' },
+      toadstool: { kind: 'fork-signs' },
+      owl: { kind: 'early-welcome' },
+      magpie: { kind: 'wing-ride', flightMs: expect.any(Number) },
+      snail: { kind: 'walk-faster', factor: 1.15 },
+      'lantern-keeper': { kind: 'lantern' },
+      cat: { kind: 'rewind', ms: 20_000 },
+    });
+    // Dusk from the HUD's 2:00, for everyone.
+    expect(content.world.dusk.fromLeftMs).toBe(120_000);
+  });
+
+  it("the magpie's flight lands beside the next unmet friend in walking order, never at the door", () => {
+    const order = content.characters.map((c) => c.id);
+    const upTo = (id: string) => order.slice(0, order.indexOf(id) + 1);
+    expect(v2.wingRideTarget(content, upTo('magpie'), 'magpie')).toBe('snail');
+    // Everyone met but the rabbit: it wraps round to her.
+    expect(v2.wingRideTarget(content, order.slice(1), 'magpie')).toBe('rabbit');
+    expect(v2.wingRideTarget(content, order, 'magpie')).toBeNull();
   });
 });
 
@@ -303,6 +329,10 @@ describe('the cast stands on art that exists', () => {
    * on Word Weaver and `item-key` on Latch Lifter -- art that belonged to the retired rulebook's
    * starting basket, not to these skills. A reused icon that meant something else is worse than a
    * labelled gap, so both wait for art now.
+   *
+   * Later on 2026-10-22, the approved set: the Magpie's Wing Ride and the Cat's Long Evening take
+   * two NEW icons the client named, `item-wings` and `item-hourglass`. Until a painter ships them
+   * they are on the list; when they land, the second test fails until they come off it.
    */
   const AWAITING_ART: readonly string[] = [];
 
@@ -343,6 +373,12 @@ describe('the cast stands on art that exists', () => {
  * a conversation is the longest greeting read at that rate, plus a second to press on; a card is
  * charged by the simulator itself, from the words on the card THE DEAL SHOWS -- so a bad card's
  * giveaway line costs its reading time too, and the check is run over all 35 deals.
+ *
+ * THE KNOCK AND THE PERKS. The simulator charges the knock at the door (`world.knockMs`) to every
+ * paced arrival but an early-welcome one, and gives a careful basket the time its perks save. The
+ * clock check is asked both ways: with the perks, each run held to its own deadline, and without
+ * them, held to the bare three minutes -- the second is the layout's question, so the measured
+ * edge below is the no-perk one.
  */
 const PRESS_ON_MS = 1_000;
 const WANDER = 2;
@@ -424,6 +460,8 @@ describe('the clock, at the pace of the real map', () => {
     expect(check.ending, why).not.toBe('late');
     expect(check.ok, why).toBe(true);
     expect(check.marginMs, why).toBeGreaterThan(0);
+    // And with no perk helping at all -- every walk walked, every knock knocked, no rewind counted.
+    expect(v2.clockCheck(content, paceFor(tiles), { perks: false }).ok, why).toBe(true);
   });
 
   /*
@@ -438,14 +476,22 @@ describe('the clock, at the pace of the real map', () => {
    */
   it("the longest tour Phase C can lay out is a measured edge, and today's map is inside it", () => {
     // The worst deal's talking and reading, with no walking at all: the clock check, unwalked.
-    const readingMs = v2.clockCheck(content, { walkMs: 0, talkMs: talkMs() }).elapsedMs;
+    const readingMs = v2.clockCheck(
+      content,
+      { walkMs: 0, talkMs: talkMs() },
+      { perks: false },
+    ).elapsedMs;
     const maxTourTiles = Math.floor(
       (((v2.TIME_LIMIT_MS - readingMs) / 1000) * WALK_SPEED) / TILE / WANDER,
     );
-    expect(v2.clockCheck(content, paceFor(maxTourTiles)).ok, `${maxTourTiles} tiles`).toBe(true);
-    expect(v2.clockCheck(content, paceFor(maxTourTiles + 1)).ok, `${maxTourTiles + 1} tiles`).toBe(
-      false,
+    const noPerks = { perks: false };
+    expect(v2.clockCheck(content, paceFor(maxTourTiles), noPerks).ok, `${maxTourTiles} tiles`).toBe(
+      true,
     );
+    expect(
+      v2.clockCheck(content, paceFor(maxTourTiles + 1), noPerks).ok,
+      `${maxTourTiles + 1} tiles`,
+    ).toBe(false);
     expect(tour().tiles).toBeLessThanOrEqual(maxTourTiles);
   });
 });
@@ -460,6 +506,11 @@ describe('the clock, at the pace of the real map', () => {
  * `v2.BRISK`: the adult silent-reading rate itself, 238 words a minute, with no pause to decide.
  * Taken in the SLOWEST deal, so a brisk reader can earn the whole bonus in every deal, not only in
  * the deals whose bad cards happen to be short.
+ *
+ * THE NO-PERK TOUR (2026-10-22): par is measured as if no perk saved a second -- every leg walked,
+ * the knock at the door paid, the elapsed time read raw -- so a perk is a way to BEAT par, never
+ * the price of reaching it. A deal whose good three include the wing ride, the faster walk, the
+ * early welcome or the long evening is easier to bring in at par, and that is the perk.
  *
  * `scoring.parMs` in the content must sit at or above that and within ten seconds of it: under it
  * and no honest reader can reach 100; far over it and the bonus stops measuring anything. A copy
@@ -480,6 +531,7 @@ describe('par is the brisk careful run on the shortest walk, in the slowest deal
         seed,
         pace: { walkMs, talkMs: briskTalkMs() },
         reading: v2.BRISK,
+        perks: false,
       }),
     );
     const slowest = runs.reduce((w, p) => (p.elapsedMs > w.elapsedMs ? p : w));

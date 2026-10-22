@@ -44,7 +44,19 @@ import { svgCoverage } from '../src/svg-coverage.ts';
 
 import { CAST_FRAMES } from '../src/sprites/cast.ts';
 import { CAPE_MARK, PURPLE_FRAMES } from '../src/sprites/char-purple.ts';
-import { NPC_PAINTERS } from '../src/sprites.ts';
+import {
+  FX_SHEETS,
+  HOP_FRAMES,
+  IDLE_FRAMES,
+  ITEM_PAINTERS,
+  LIFE_KEYS,
+  NPC_PAINTERS,
+  paintFxSheet,
+  paintHopSheet,
+  paintIdleSheet,
+  paintNpcSheet,
+  PORTRAIT_SIZE,
+} from '../src/sprites.ts';
 import { CROWNS, TREE_TILES } from '../src/tiles/w-trees.ts';
 import { UNDERGROWTH_TILES } from '../src/tiles/w-undergrowth.ts';
 import { OUTDOOR_TILES } from '../src/tiles/s-outdoor.ts';
@@ -288,8 +300,109 @@ describe('the map', () => {
    * cells of `map-forest.json` that changed are the two the map owner re-pointed on purpose,
    * `decor-below` (11,17) and (14,17), 48 -> 82 and 48 -> 83; all 81 earlier names keep their gid in
    * `tileset-forest.gids.json`; and the sheet stays 384x224, because `ceil(83 / 12)` is still 7.
+   *
+   * 91 since 2026-10-22, later the same day: eight crown OVERLAP tiles (`elder-tr-over-mc` ...
+   * `elder-tr-over-sapling-tl`) APPENDED at gids 84 to 91, laid only by the pass after the canopy
+   * rebuild. Verified on the regeneration that committed them: all 83 earlier names keep their gid
+   * in `tileset-forest.gids.json`, the only map cells that changed are the `decor-above` cells that
+   * pass reports re-pointing (65), and the sheet grows to 384x256 because `ceil(91 / 12)` is 8.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(83);
+    expect(TILE_NAMES).toHaveLength(91);
+  });
+});
+
+/*
+ * THE CHARACTER LIFE STRIPS AND THE NEW SMALL ART (2026-10-22).
+ *
+ * Contracts and rules, not thresholds -- each one has a reader outside this workspace or is a rule
+ * docs/ASSETS.md states, so writing it out is right here for the reason the notes above give.
+ */
+describe('the idle and hop strips', () => {
+  const W = 32;
+  const H = 48;
+  const frameOf = (sheet: Img, i: number): Uint8Array => {
+    const out = new Uint8Array(W * H * 4);
+    for (let y = 0; y < H; y++)
+      out.set(
+        sheet.data.subarray((y * sheet.w + i * W) * 4, (y * sheet.w + i * W + W) * 4),
+        y * W * 4,
+      );
+    return out;
+  };
+  const same = (a: Uint8Array, b: Uint8Array): boolean => a.every((v, i) => v === b[i]);
+
+  it('covers every character the map spawns', () => {
+    expect([...LIFE_KEYS].sort()).toEqual(Object.keys(NPC_PAINTERS).sort());
+  });
+
+  it.each([...LIFE_KEYS])(
+    '%s: idle is four frames and hop two, at the static frame size',
+    (key) => {
+      const idle = paintIdleSheet(key);
+      const hop = paintHopSheet(key);
+      expect([idle.w, idle.h]).toEqual([W * IDLE_FRAMES, H]);
+      expect([hop.w, hop.h]).toEqual([W * HOP_FRAMES, H]);
+      expect(IDLE_FRAMES).toBe(4);
+      expect(HOP_FRAMES).toBe(2);
+    },
+  );
+
+  /*
+   * Frame 0 of the idle IS the static sprite: the scene can swap a standing character onto its idle
+   * without a pop. And frames 1 and 2 are not frame 0 -- the breath and the beat are drawn, not a
+   * still repeated -- which is the whole of what the strip is for.
+   */
+  it.each([...LIFE_KEYS])('%s: idle starts on the static frame and then moves', (key) => {
+    const idle = paintIdleSheet(key);
+    const still = frameOf(paintNpcSheet(key), 0);
+    expect(same(frameOf(idle, 0), still), 'idle frame 0 is not the static frame 0').toBe(true);
+    expect(same(frameOf(idle, 1), still), 'idle frame 1 (the breath) draws nothing new').toBe(
+      false,
+    );
+    expect(same(frameOf(idle, 2), still), 'idle frame 2 (the beat) draws nothing new').toBe(false);
+  });
+
+  /*
+   * The hop is a pixel of air: frame 1's bottom row is empty while the static sprite stands on its
+   * contact bar there. If that row is ever painted, the hop has stopped leaving the ground.
+   */
+  it.each([...LIFE_KEYS])('%s: the top of the hop has daylight under the feet', (key) => {
+    const hop = paintHopSheet(key);
+    const still = paintNpcSheet(key);
+    const row = (img: Img, x0: number): number[] =>
+      Array.from({ length: W }, (_v, x) => img.get(x0 + x, H - 1)[3]);
+    expect(
+      row(still, 0).some((a) => a > 0),
+      'the static sprite does not stand on row 47',
+    ).toBe(true);
+    expect(
+      row(hop, W).every((a) => a === 0),
+      'hop frame 1 still touches row 47',
+    ).toBe(true);
+  });
+});
+
+describe('no partial alpha in the new art (docs/ASSETS.md)', () => {
+  const partial = (img: Img): number => {
+    let n = 0;
+    for (let i = 3; i < img.data.length; i += 4) if (img.data[i] !== 0 && img.data[i] !== 255) n++;
+    return n;
+  };
+  it.each([...LIFE_KEYS])('%s idle and hop', (key) => {
+    expect(partial(paintIdleSheet(key))).toBe(0);
+    expect(partial(paintHopSheet(key))).toBe(0);
+  });
+  it.each(Object.keys(FX_SHEETS))('%s', (key) => {
+    expect(partial(paintFxSheet(key))).toBe(0);
+  });
+  it.each(['item-wings', 'item-hourglass'])('%s', (key) => {
+    const img = new Img(PORTRAIT_SIZE, PORTRAIT_SIZE);
+    ITEM_PAINTERS[key]!(img);
+    expect(partial(img)).toBe(0);
+    // And it is a drawing, not an empty square: an icon fills a good part of its frame.
+    let opaque = 0;
+    for (let i = 3; i < img.data.length; i += 4) if (img.data[i] === 255) opaque++;
+    expect(opaque / (PORTRAIT_SIZE * PORTRAIT_SIZE)).toBeGreaterThan(0.3);
   });
 });

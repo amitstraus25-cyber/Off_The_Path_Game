@@ -89,6 +89,14 @@ export interface HudProps {
   basket: ReadonlyArray<HudBasketItem>;
   /** Overrides for `DEFAULT_HUD_LABELS`; anything left out keeps its default. */
   labels?: Partial<HudLabels>;
+  /**
+   * THE CLOCK WINDING BACK (the Cat's Long Evening, 2026-10-22). While a rewind is being shown,
+   * `faceMs` is what the FACE reads -- counting up from the old time to the new one -- and `winding`
+   * puts a calm Lilac ring on the pill. The polite region and the urgent shape keep reading
+   * `remainingMs`, the true time left, so a screen reader is not told every second the face passes.
+   */
+  faceMs?: number;
+  winding?: boolean;
 }
 
 /**
@@ -172,7 +180,13 @@ export function iconUrl(icon: string | null): string | null {
   }
 }
 
-export function Hud({ remainingMs, basket, labels: override }: HudProps) {
+export function Hud({
+  remainingMs,
+  basket,
+  labels: override,
+  faceMs = remainingMs,
+  winding = false,
+}: HudProps) {
   const labels: HudLabels = { ...DEFAULT_HUD_LABELS, ...override };
   const wells = Math.max(HUD_SLOTS, basket.length);
   return (
@@ -183,11 +197,12 @@ export function Hud({ remainingMs, basket, labels: override }: HudProps) {
         aria-live="off"
         aria-label={labels.time}
         data-urgent={isUrgent(remainingMs) ? 'true' : 'false'}
+        data-winding={winding ? 'true' : 'false'}
       >
         <span class="otp-hud-basket__label otp-hud2__label" aria-hidden="true">
           {labels.time}
         </span>
-        <span class="otp-hud2__clock">{formatClock(remainingMs)}</span>
+        <span class="otp-hud2__clock">{formatClock(faceMs)}</span>
       </div>
       <p
         class="otp-visually-hidden"

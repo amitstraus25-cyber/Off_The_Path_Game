@@ -25,6 +25,7 @@ describe('createState', () => {
       inspected: [],
       verdicts: {},
       basket: [],
+      perks: [],
       active: null,
       log: [],
     });

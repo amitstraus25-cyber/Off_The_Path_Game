@@ -10,10 +10,12 @@ import raw from '../../../content/game.v2.json';
 export const content: v2.Content = v2.loadContent(raw);
 
 /**
- * Five seconds a walk and a second a talk and a card: a careful run arrives at 54 s, inside par
- * (1:45), so it scores 100. Five seconds because the walk floor charges the longest straight leg
- * of the content-order tour at a little over four (core floor.ts); one second a walk, as this
- * used to be, is now a log faster than the map and is refused.
+ * Five seconds a walk and a second a talk and a card: a careful run arrives by 57 s -- eight walks,
+ * fourteen seconds of talking and cards, and the 3 s knock at the door -- inside par (1:46), so it
+ * scores 100; a basket with the faster walk, the wing ride or the early welcome arrives sooner.
+ * Five seconds because the walk floor charges the longest straight leg of the content-order tour
+ * at a little over four (core floor.ts); one second a walk, as this used to be, is now a log
+ * faster than the map and is refused.
  */
 export const PACE: v2.Pace = { walkMs: 5000, talkMs: 1000 };
 const QUICK_READ = { msPerWord: 0, buttonWords: 0, decideMs: 1000 };

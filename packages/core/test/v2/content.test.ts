@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ContentError } from '../../src/v2/load.ts';
 import {
   BANNED_WORDS,
+  EFFECT_KINDS,
+  EFFECT_MAX_MS,
   GIVEAWAY_WORDS,
   LAUNCH_CAST,
   REAL_WORLD_SENTENCES,
@@ -79,6 +81,79 @@ describe('schema', () => {
       (v.skills[0]!.bad as Record<string, unknown>)[key] = 'Fixture: a different one.';
       expect(() => loadContent(v), key).toThrow(ContentError);
     }
+    // Nor its own perk: what a taken skill does in the forest is the skill's, in both variants.
+    const perk = variant();
+    (perk.skills[0]!.bad as Record<string, unknown>)['effect'] = { kind: 'rewind', ms: 20_000 };
+    expect(() => loadContent(perk)).toThrow(ContentError);
+  });
+
+  /*
+   * THE PERK IS DATA, ONE OF THE KINDS THE GAME HAS (content.ts `EFFECT_KINDS`). Every skill needs
+   * one; a kind the game has no code for, a number out of range, or a stray field is refused.
+   */
+  it('holds every skill to one perk of a known kind, with its numbers in range', () => {
+    const none = variant() as { skills: Record<string, unknown>[] };
+    delete none.skills[0]!['effect'];
+    expect(() => loadContent(none)).toThrow(/effect/);
+    const refused: unknown[] = [
+      { kind: 'teleport-to-cottage' },
+      { kind: 'walk-faster', factor: 1 },
+      { kind: 'walk-faster', factor: 3 },
+      { kind: 'rewind', ms: 0 },
+      { kind: 'rewind', ms: EFFECT_MAX_MS + 1 },
+      { kind: 'rewind', ms: 1.5 },
+      { kind: 'wing-ride' },
+      { kind: 'wing-ride', flightMs: -1 },
+      { kind: 'minimap', ms: 5 },
+    ];
+    for (const effect of refused) {
+      const v = variant();
+      (v.skills[0] as Record<string, unknown>)['effect'] = effect;
+      expect(() => loadContent(v), JSON.stringify(effect)).toThrow(ContentError);
+    }
+    const kinds = [
+      { kind: 'minimap' },
+      { kind: 'fork-signs' },
+      { kind: 'early-welcome' },
+      { kind: 'wing-ride', flightMs: 0 },
+      { kind: 'walk-faster', factor: 2 },
+      { kind: 'lantern' },
+      { kind: 'rewind', ms: EFFECT_MAX_MS },
+    ];
+    expect(kinds.map((k) => k.kind)).toEqual([...EFFECT_KINDS]);
+    for (const effect of kinds) {
+      const v = variant();
+      (v.skills[0] as Record<string, unknown>)['effect'] = effect;
+      expect(loadContent(v).skills[0]!.effect, effect.kind).toEqual(effect);
+    }
+  });
+
+  it('holds the knock and the dusk to their ranges: never more than half dark, never dark from the start', () => {
+    const refused: [string, (v: ReturnType<typeof variant>) => void, RegExp][] = [
+      ['a negative knock', (v) => void (v.world.knockMs = -1), /world\.knockMs/],
+      [
+        'a knock longer than a perk may be',
+        (v) => void (v.world.knockMs = EFFECT_MAX_MS + 1),
+        /knockMs/,
+      ],
+      ['a dusk darker than half', (v) => void (v.world.dusk.darkest = 0.51), /darkest/],
+      ['no dusk at all', (v) => void (v.world.dusk.darkest = 0), /darkest/],
+      ['a dusk that never starts', (v) => void (v.world.dusk.fromLeftMs = 0), /fromLeftMs/],
+      [
+        'a dusk from before the clock starts',
+        (v) => void (v.world.dusk.fromLeftMs = 180_001),
+        /would open in the dark/,
+      ],
+    ];
+    for (const [name, mutate, message] of refused) {
+      const v = variant();
+      mutate(v);
+      expect(() => loadContent(v), name).toThrow(message);
+    }
+    const whole = variant();
+    whole.world.dusk.fromLeftMs = 180_000;
+    whole.world.dusk.darkest = 0.5;
+    expect(loadContent(whole).world.dusk).toEqual({ fromLeftMs: 180_000, darkest: 0.5 });
   });
 
   it('needs a real-world note on every skill, and only the ui keys the screens ask for', () => {

@@ -60,7 +60,8 @@
  */
 import { ember, Img, keyline, lumaOf, pull, rose, shade, tone } from '../paint.ts';
 import type { Ramp, RGBA } from '../paint.ts';
-import { BYSTANDER_FRAMES, BYSTANDER_PLAN } from './bystanders.ts';
+import { BLINK, BYSTANDER_FRAMES, BYSTANDER_PLAN, REST } from './bystanders.ts';
+import type { Pose, PosedPainter } from './bystanders.ts';
 
 /**
  * How many values a shaded mass is allowed to use between `lo` and `hi`.
@@ -371,8 +372,15 @@ const RABBIT_CLOTH_SEAT: RGBA = pull(keyline('gold', 70), 0.32, 0.24);
  * which moves the head, ears and face only -- the body, paws and feet stay planted, which is what
  * makes a one-pixel bob look like breathing rather than like the sprite sliding.
  */
-function paintRabbit(img: Img, blink: boolean): void {
-  const b = blink ? 1 : 0;
+function paintRabbit(img: Img, pose: Pose): void {
+  const blink = pose.blink;
+  const b = pose.dip;
+  /**
+   * His beat is an EAR TWITCH: the upright left ear's tip flicks out and drops (`pose.beat` 1 is the
+   * full flick). Only the tip moves -- the base stays where the four px of sky are measured from --
+   * and it flicks OUTWARD, so the sky between the ears only ever widens.
+   */
+  const tw = pose.beat;
 
   /*
    * --- the basket, first, so the body laps over it and it reads as carried on the far hip ---
@@ -481,7 +489,7 @@ function paintRabbit(img: Img, blink: boolean): void {
       rose,
     );
   };
-  ear(11.4, 11.4, 16.3);
+  ear(11.4, 11.4 - 1.6 * tw, 16.3 + 0.8 * tw);
   ear(20.6, 24.0, 18.4);
 
   // --- body: small, under a big head, and narrow enough to leave the paws against the chest ---
@@ -703,8 +711,11 @@ const OWL_CATCH: RGBA = shade('wall', 3);
  *
  * He keeps `trunk` with a `wall` breast, which is the board's own recipe.
  */
-function paintOwl(img: Img, blink: boolean): void {
-  const b = blink ? 1 : 0;
+function paintOwl(img: Img, pose: Pose): void {
+  // His beat IS the blink, so he has no `beat` of his own: an idle strip shuts his eyes without
+  // the dip, which the two-frame sheet never could.
+  const blink = pose.blink;
+  const b = pose.dip;
 
   /*
    * --- ear tufts: pointed, leaning out, with the lit tip the board gives them ---
@@ -987,8 +998,16 @@ const KEEPER_CATCH_FAR: RGBA = tone('gold', 0.08);
  * neutral, which is what makes gold the only saturated colour on him. He was once `night`, whose
  * top two steps are byte-identical to Purple's cloak, so the forest held two purple-hooded figures.
  */
-function paintKeeper(img: Img, blink: boolean): void {
-  const b = blink ? 1 : 0;
+function paintKeeper(img: Img, pose: Pose): void {
+  const blink = pose.blink;
+  const b = pose.dip;
+  /*
+   * HIS BEAT IS THE LANTERN FLICKERING: `pose.beat` 1 flares the flame a row taller and the panes a
+   * step brighter, 2 gutters it short and dim, and the light it throws on his coat follows. Every
+   * offset below is exactly zero at 0, so the two-frame sheet is untouched.
+   */
+  const flare = pose.beat === 1 ? 1 : 0;
+  const gutter = pose.beat === 2 ? 1 : 0;
   const CX = 20;
   /** The nose pad: below the fur ramp, a step under the eye, still clear of the keyline. */
   const NOSE: RGBA = keyline('wood', 30);
@@ -1180,7 +1199,8 @@ function paintKeeper(img: Img, blink: boolean): void {
        * hood and down the front of a coat is not light falling on cloth, it is gold braid sewn onto
        * it. The lamp hangs over rows 15..29; this is the span it can plausibly reach.
        */
-      img.px(x, y + b, tone('gold', Math.max(0.02, 0.22 - Math.abs(y - 23) * 0.022)));
+      const lit = 0.22 + 0.04 * flare - 0.06 * gutter;
+      img.px(x, y + b, tone('gold', Math.max(0.02, lit - Math.abs(y - 23) * 0.022)));
       break;
     }
   }
@@ -1212,10 +1232,20 @@ function paintKeeper(img: Img, blink: boolean): void {
   img.frame(4, 15, 3, 3, shade('wood', 0)); // hanging ring
   taper(img, 2.0, 19.0, 8.2, 19.0, 2.8, 2.8, 'wood', 0.1, 0.8); // cap
   orb(img, 5, 23.4, 3.8, 4.4, 'gold', 0.05, 0.6); // the frame
-  orb(img, 5, 23.4, 2.8, 3.4, 'gold', 0.55, 1); // the panes
+  orb(img, 5, 23.4, 2.8, 3.4, 'gold', 0.55 + 0.1 * flare - 0.12 * gutter, 1 - 0.1 * gutter); // panes
   img.rect(5, 20, 1, 7, shade('gold', 0)); // mullions, which the flame passes in front of
   img.rect(2, 23, 7, 1, shade('gold', 0));
-  orb(img, 5, 23.8, 1.4, 2.1, 'wall', 0.6, 1); // the flame, the brightest thing in the frame
+  // The flame, the brightest thing in the frame: taller when it flares, a stub when it gutters.
+  orb(
+    img,
+    5,
+    23.8 - 0.5 * flare + 0.4 * gutter,
+    1.4 - 0.3 * gutter,
+    2.1 + 0.6 * flare - 0.6 * gutter,
+    'wall',
+    0.6,
+    1,
+  );
   taper(img, 2.0, 27.8, 8.2, 27.8, 2.8, 2.8, 'wood', 0.08, 0.7); // base
 
   base(img, 13, 28, 47, KEEPER_DARK);
@@ -1548,16 +1578,26 @@ function paintWolf(img: Img, frame: 0 | 1 | 2 | 3): void {
  * the silhouette in the window and 3 is the silhouette in Grandma's bonnet and shawl.
  */
 export const CAST_FRAMES: Record<string, (img: Img) => void> = {
-  'npc-rabbit-0': (img) => paintRabbit(img, false),
-  'npc-rabbit-1': (img) => paintRabbit(img, true),
-  'npc-owl-0': (img) => paintOwl(img, false),
-  'npc-owl-1': (img) => paintOwl(img, true),
-  'npc-lantern-keeper-0': (img) => paintKeeper(img, false),
-  'npc-lantern-keeper-1': (img) => paintKeeper(img, true),
+  'npc-rabbit-0': (img) => paintRabbit(img, REST),
+  'npc-rabbit-1': (img) => paintRabbit(img, BLINK),
+  'npc-owl-0': (img) => paintOwl(img, REST),
+  'npc-owl-1': (img) => paintOwl(img, BLINK),
+  'npc-lantern-keeper-0': (img) => paintKeeper(img, REST),
+  'npc-lantern-keeper-1': (img) => paintKeeper(img, BLINK),
   'npc-wolf-0': (img) => paintWolf(img, 0),
   'npc-wolf-1': (img) => paintWolf(img, 1),
   'npc-wolf-2': (img) => paintWolf(img, 2),
   'npc-wolf-3': (img) => paintWolf(img, 3),
+};
+
+/**
+ * The three spawned members of the cast by sprite key, posable, for the idle and hop strips. The
+ * wolf is not here: he is never spawned on the map and has his own four frames.
+ */
+export const CAST_POSED: Record<string, PosedPainter> = {
+  'npc-rabbit': paintRabbit,
+  'npc-owl': paintOwl,
+  'npc-lantern-keeper': paintKeeper,
 };
 
 // ------------------------------------------------------------------- the gate (10.1 and 10.2)

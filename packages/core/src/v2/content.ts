@@ -59,12 +59,63 @@ const variant = z.strictObject({
   reveal: text,
 });
 
+/**
+ * WHAT A TAKEN SKILL DOES IN THE FOREST: its perk (the client, 2026-10-22). One per skill, at the
+ * SKILL's level and not the variant's, so a good and a bad copy of a skill cannot do different
+ * things in the game -- the same "one copy to compare" construction as the promise. The bad skill
+ * keeps its promise; what it also does is only ever said on its card and its reveal.
+ *
+ * The kinds are the code the game has; everything else is data. A new skill picks one of these
+ * and needs nothing more. NONE OF THEM POINTS AT THE COTTAGE, and that is a rule of this list, not
+ * a promise per skill: a kind that led Purple to the door would be a new kind, reviewed as one.
+ *
+ *  - `minimap`        the minimap is drawn, from the take on; without it there is none.
+ *  - `fork-signs`     at each fork, a sign: who lives down that branch (the nearest unmet one).
+ *  - `early-welcome`  Grandma is at the door already: the knock beat (`world.knockMs`) is skipped.
+ *  - `wing-ride`      once, at the take, a flight to the next unmet character's talking spot
+ *                     (`wingRideTarget`, perks.ts), lasting `flightMs`. Nobody unmet: nothing.
+ *  - `walk-faster`    Purple walks `factor` times as fast for the rest of the run.
+ *  - `lantern`        a warm light around Purple as the dusk comes on (`world.dusk`).
+ *  - `rewind`         `ms` given back to the clock: to the time left, and off the time the
+ *                     speed bonus counts. Never past the start (the reducer clamps it).
+ */
+export const EFFECT_KINDS = [
+  'minimap',
+  'fork-signs',
+  'early-welcome',
+  'wing-ride',
+  'walk-faster',
+  'lantern',
+  'rewind',
+] as const;
+export type EffectKind = (typeof EFFECT_KINDS)[number];
+
+/** The longest a timed perk may be, so no single perk is a second clock. */
+export const EFFECT_MAX_MS = 30_000;
+
+const effect = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('minimap') }),
+  z.strictObject({ kind: z.literal('fork-signs') }),
+  z.strictObject({ kind: z.literal('early-welcome') }),
+  z.strictObject({
+    kind: z.literal('wing-ride'),
+    /** How long the flight takes, in ms, during which the clock runs and Purple cannot act. */
+    flightMs: z.number().int().min(0).max(EFFECT_MAX_MS),
+  }),
+  z.strictObject({ kind: z.literal('walk-faster'), factor: z.number().gt(1).max(2) }),
+  z.strictObject({ kind: z.literal('lantern') }),
+  z.strictObject({ kind: z.literal('rewind'), ms: z.number().int().min(1).max(EFFECT_MAX_MS) }),
+]);
+export type Effect = z.infer<typeof effect>;
+
 const skill = z.strictObject({
   id: slug,
   name: text,
   icon: slug,
   /** One line, in the character's voice. True in both variants: a bad skill keeps it too. */
   promise: text,
+  /** What taking it does in the forest, the same in both variants (see `effect` above). */
+  effect,
   /**
    * The real cybersecurity idea the forest story stands for, for the reveal: `term` names it and
    * `note` links the two in one or two plain sentences. One per skill, shared by both variants,
@@ -202,6 +253,25 @@ export const CHROME_KEYS = [
   'worldMetCount',
   'revealCaught',
   'revealMissed',
+  /*
+   * THE PERKS, as the forest says them (the client, 2026-10-22). One line per effect KIND, never per
+   * skill, so a new skill that picks an existing kind needs no new words; `perkRewind` carries
+   * {seconds}, the time the rewind gave back. `perkWingRideNobody` is the ride with nobody left to
+   * fly to. `doorKnock` and `doorWelcome` are the knock beat and its skip (`early-welcome`), and
+   * `revealWatchFor` labels a SAFE tile's real-world note, which must not read as if the skill had
+   * done the harmful thing.
+   */
+  'revealWatchFor',
+  'perkMinimap',
+  'perkForkSigns',
+  'perkEarlyWelcome',
+  'perkWingRide',
+  'perkWingRideNobody',
+  'perkWalkFaster',
+  'perkLantern',
+  'perkRewind',
+  'doorKnock',
+  'doorWelcome',
 ] as const;
 export type ChromeKey = (typeof CHROME_KEYS)[number];
 
@@ -341,6 +411,26 @@ export const contentSchema = z.strictObject({
     speed: z.number().int().min(0),
     /** Arriving at or under this many elapsed milliseconds earns the whole speed bonus. */
     parMs: z.number().int().min(1),
+  }),
+  /**
+   * THE FOREST'S TIMED BEATS, as data so the game and the server read the same numbers.
+   *
+   * `knockMs` is the knock at the cottage door: after Purple's feet reach the door and before the
+   * run's `arrived` stamp, on the clock, for every run but one with an `early-welcome` perk. The
+   * game must hold the beat at least this long; the server's walk floor charges it (floor.ts).
+   *
+   * `dusk` is the evening coming on, for everyone: from `fromLeftMs` left on the clock (120000 is
+   * the HUD's 2:00) it deepens in a straight line to `darkest` at time up, and never further.
+   * `darkest` is the share of the light taken away, capped by the schema at a half so the path and
+   * the cast are always visible. A rewind adds to the time left, so it pushes the dusk back with it
+   * (`duskLevel`, perks.ts).
+   */
+  world: z.strictObject({
+    knockMs: z.number().int().min(0).max(EFFECT_MAX_MS),
+    dusk: z.strictObject({
+      fromLeftMs: z.number().int().min(1),
+      darkest: z.number().gt(0).max(0.5),
+    }),
   }),
   characters: z.array(character).min(1),
   skills: z.array(skill).min(1),

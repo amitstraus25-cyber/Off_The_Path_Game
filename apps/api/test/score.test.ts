@@ -58,7 +58,9 @@ describe('the score the board stores', () => {
 
   it('counts the clock: the same careful basket, walked slowly, earns less of the speed bonus', async () => {
     const h = harness();
-    // Twenty seconds a walk: a careful run arrives at 2:54, six seconds from the buzzer.
+    // Twenty seconds a walk: a careful run arrives by 2:57 -- the knock included -- a few seconds
+    // from the buzzer (sooner with a faster walk or a wing ride, later on the bare clock with a
+    // rewind, which the score then counts twenty seconds back).
     const run = ticketed(h.clock, { pace: { walkMs: 20_000, talkMs: 1000 } });
     const slow = scoreOf(run.log);
 
@@ -412,8 +414,8 @@ describe('the clock the player does not control', () => {
   });
 
   it('closes the post once the run has been off the clock longer than the window', async () => {
-    // The bound on restamping a slow run, and the token's lifetime: claimed < 3:00, so no token
-    // older than 3:00 plus the window can pass it.
+    // The bound on restamping a slow run, and the token's lifetime: claimed < 3:20 (3:00 and at
+    // most one rewind), so no token older than that plus the window can pass it.
     expect((await postSeen((claimed) => claimed + POST_WINDOW_MS)).status).toBe(200);
     const late = await postSeen((claimed) => claimed + POST_WINDOW_MS + 1);
     expect(late.status).toBe(410);
@@ -473,7 +475,9 @@ describe('the clock the player does not control', () => {
   });
 
   it('charges the walk the log describes, so a full tour must wait longer than the walk to the door', async () => {
-    const { floorMs: tour } = v2.walkFloor(content, ticketed({ now: T0 }).log.events);
+    // Leave-all meets everyone and takes no perk, so the two floors differ by the walking alone.
+    const leaveAll = ticketed({ now: T0 }, { strategy: 'leave-all' });
+    const { floorMs: tour } = v2.walkFloor(content, leaveAll.log.events);
     const { floorMs: direct } = v2.walkFloor(content, [{ e: 'arrived', at: 0 }]);
     expect(tour).toBeGreaterThan(direct + 2_000);
   });

@@ -630,9 +630,18 @@ function RevealTile({
             <dd data-reveal-line="">{row.line}</dd>
           </div>
         </dl>
-        <p class="otp-reveal__real" data-real-world="">
+        {/*
+          A SAFE TILE'S NOTE IS WHAT TO WATCH FOR, never "In the real world" (the client,
+          2026-10-22). The note explains the bad copy's giveaway, and under "In the real world" on a
+          skill that was dealt good it read as if this one had done the harmful thing.
+        */}
+        <p
+          class="otp-reveal__real"
+          data-real-world=""
+          data-real-label={row.good ? 'watch' : 'real'}
+        >
           <span class="otp-reveal__term">
-            {words.realWorld}: {skill.realWorld.term}.
+            {row.good ? s('revealWatchFor') : words.realWorld}: {skill.realWorld.term}.
           </span>{' '}
           {skill.realWorld.note}
         </p>

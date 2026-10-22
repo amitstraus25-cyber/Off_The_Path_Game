@@ -1481,6 +1481,46 @@ export function generateForestMap(): GeneratedMap {
     }
   };
   layTrack();
+  /*
+   * THE FORKS ARE RECORDED AS THEY ARE LAID, which is the only moment the map knows them.
+   *
+   * After this point a cell of sand is a cell of sand: nothing in `pathTiles` says whether it is the
+   * carriageway or a footpath, and a junction read back off the finished ground is a guess about
+   * which of two meeting runs is the road. So the carriageway is snapshotted here, each footpath
+   * records what it added and where it set out from, and `forkAt` below turns that into the cell
+   * where the walkable path actually branches -- the carriageway tile the footpath leaves from. The
+   * `fork-*` objects (for the Way Teller's signs) are placed from it, one per footpath, west to east.
+   */
+  const carriageway = new Set(pathTiles);
+  const footpaths: { from: readonly [number, number]; added: number[] }[] = [];
+  const layFootpath = (points: [number, number][]): void => {
+    const before = new Set(pathTiles);
+    layPath(points, 1);
+    footpaths.push({ from: points[0]!, added: [...pathTiles].filter((k) => !before.has(k)) });
+  };
+  /**
+   * Where a footpath branches: the carriageway cell beside the footpath cell nearest its start.
+   * Both are measured from the start waypoint, so a footpath that runs alongside the road for a few
+   * cells (the south fork does, for three) forks where it LEAVES, not somewhere along the run.
+   */
+  const forkAt = (f: (typeof footpaths)[number]): { x: number; y: number } => {
+    const [fx, fy] = f.from;
+    const dist = (x: number, y: number): number => Math.abs(x - fx) + Math.abs(y - fy);
+    let best: { x: number; y: number; d: number } | undefined;
+    for (const key of f.added) {
+      if (!pathTiles.has(key)) continue;
+      const x = key % MAP_W;
+      const y = (key - x) / MAP_W;
+      for (const [dx, dy] of NEIGHBOURS) {
+        const nk = (y + dy) * MAP_W + (x + dx);
+        if (!carriageway.has(nk) || !pathTiles.has(nk)) continue;
+        const d = dist(x, y) * 100 + dist(x + dx, y + dy);
+        if (!best || d < best.d) best = { x: x + dx, y: y + dy, d };
+      }
+    }
+    if (!best) throw new Error(`the footpath from (${fx},${fy}) never meets the carriageway`);
+    return { x: best.x, y: best.y };
+  };
   /**
    * The northernmost track row at this column.
    *
@@ -1604,20 +1644,17 @@ export function generateForestMap(): GeneratedMap {
    * out; measured on the real rows it was three. Climbing inside column 9 until the path is clear of
    * both of them spends the one column the claim promised.
    */
-  layPath(
-    [
-      [FORK_X, trackTop(FORK_X)],
-      [FORK_X, FORK_TURN],
-      [9, 16],
-      [9, 14],
-      [10, 13],
-      [11, 12],
-      [14, 12],
-      [16, 12],
-      [18, 12],
-    ],
-    1,
-  );
+  layFootpath([
+    [FORK_X, trackTop(FORK_X)],
+    [FORK_X, FORK_TURN],
+    [9, 16],
+    [9, 14],
+    [10, 13],
+    [11, 12],
+    [14, 12],
+    [16, 12],
+    [18, 12],
+  ]);
   /*
    * The south fork now runs THROUGH the well glade on its way to the lantern, which is what turns
    * the glade from scenery into a destination: the path visibly goes somewhere, and the thing it
@@ -1628,17 +1665,14 @@ export function generateForestMap(): GeneratedMap {
    * rise towards the gate: a footpath that branches off a slope meets it at a corner, and the two
    * together drew a third straight edge across the east of the map.
    */
-  layPath(
-    [
-      [31, trackTop(31) + 1],
-      [32, 23],
-      [34, 25],
-      [35, 28],
-      [36, 31],
-      [37, 33],
-    ],
-    1,
-  );
+  layFootpath([
+    [31, trackTop(31) + 1],
+    [32, 23],
+    [34, 25],
+    [35, 28],
+    [36, 31],
+    [37, 33],
+  ]);
 
   /*
    * The old one-tile fringe pass stood here. It is gone, and the note it left is worth keeping: it
@@ -2144,9 +2178,21 @@ export function generateForestMap(): GeneratedMap {
     framing?: boolean;
   }
   const trees: Tree[] = [];
-  const CANOPY_GIDS = new Set(
-    Object.values(KINDS).flatMap((k) => k.crown.map(([dx, dy]) => gid(k.tileAt(dx, dy)))),
-  );
+  const CANOPY_GIDS = new Set([
+    ...Object.values(KINDS).flatMap((k) => k.crown.map(([dx, dy]) => gid(k.tileAt(dx, dy)))),
+    // The four elder overlaps are canopy too: only the pass after the rebuild lays them, but every
+    // audit that asks "is this cell crown" has to say yes to them.
+    ...[
+      'elder-tr-over-mc',
+      'elder-tl-over-mc',
+      'elder-mr-over-bc',
+      'elder-ml-over-bc',
+      'elder-tc-over-mr',
+      'elder-tc-over-ml',
+      'elder-tl-over-sapling-tr',
+      'elder-tr-over-sapling-tl',
+    ].map(gid),
+  ]);
   /** Masked, because the canopy is re-stamped mirrored and a flipped gid is not that gid. */
   const isCanopy = (x: number, y: number): boolean => CANOPY_GIDS.has(at(above, x, y) & BASE_GID);
   const TRUNK_GIDS = new Set(Object.values(KINDS).flatMap((k) => k.trunk.map((n) => gid(n))));
@@ -5569,6 +5615,24 @@ export function generateForestMap(): GeneratedMap {
       height: TILE * FACADE_H,
     },
     { name: 'prop-stall', ...landmarks['stall']!, width: TILE * 4, height: TILE },
+    /*
+     * THE FORKS, for the Way Teller's signs: one tile each, on the carriageway cell the footpath
+     * leaves from (see `forkAt`), numbered west to east. APPENDED, so every object above keeps the
+     * id it had. They are NOT props -- a `prop-*` must be solid, and this cell is the road -- so
+     * the audit holds them to the other rule: every tile of a non-prop, non-cast object walkable.
+     * Where the game stands the sign is its business; the crook of each fork is the tile beside
+     * this one on the side away from both runs of sand.
+     */
+    ...footpaths
+      .map(forkAt)
+      .sort((a, b) => a.x - b.x || a.y - b.y)
+      .map((f, i) => ({
+        name: `fork-${i + 1}`,
+        x: f.x * TILE,
+        y: f.y * TILE,
+        width: TILE,
+        height: TILE,
+      })),
   ].map((o, i) => ({ id: i + 1, rotation: 0, visible: true, ...o }));
 
   // The gate tiles must stay walkable even after the fence loop.
@@ -6093,7 +6157,71 @@ export function generateForestMap(): GeneratedMap {
         flip ? gid(mirroredTile(t.k, dx, dy)) + FLIP_H : gid(t.k.tileAt(dx, dy)),
       );
   }
-
+  /*
+   * ===========================================================================
+   * AND WHERE TWO CROWNS SHARE A CELL, THE ONE IN FRONT IS DRAWN IN FRONT.
+   * ===========================================================================
+   *
+   * `layCrown` gives a shared cell to whichever quarter covers the other's pixels, which is the
+   * rule that keeps holes out of the canopy -- and it is blind to depth. An elder's middle and
+   * bottom quarters are opaque in every pixel, so they cover anything, and where an elder stands a
+   * row in front of another (one column across) the BACK tree took cells of the FRONT tree's crown:
+   * its dark underside printed as a square inside the front crown, cut on two sides by the tile
+   * grid. It was the clearest seam left in the wood, visible at the game's own zoom in the keeper's
+   * frame, the magpie's frame and along the south of the map.
+   *
+   * The pairs that occur are drawn in `tiles/w-trees.ts` as one tile each -- the front quarter laid
+   * over the back -- and this puts them down, which is the only change to the canopy: a cell that is
+   * not an inversion of one of those pairs is not touched. Measured on this map by the count printed
+   * below: 65 cells, 48 of them elder over elder and 17 an elder's top corner over a sapling behind
+   * it. Only where the winning quarter and the front-most crown it beat face the same way, so the
+   * tile is that pair or its mirror with the flip bit; a mixed pair is left as it was (one remains,
+   * at (57,17)). Where three crowns share a cell the middle one had already lost and still does.
+   * Audit 9's blind-cell ratchet reads 101 before and after, so no cell Purple could be seen in has
+   * become one she vanishes in. `test/crown-depth.test.ts` reads the result back off the shipped map
+   * by the elders' trunks, with none of this code: 22 back-over-front cells before, 0 after.
+   */
+  {
+    const OVERLAP: Record<string, string> = {
+      'elder-tr/elder-mc': 'elder-tr-over-mc',
+      'elder-tl/elder-mc': 'elder-tl-over-mc',
+      'elder-mr/elder-bc': 'elder-mr-over-bc',
+      'elder-ml/elder-bc': 'elder-ml-over-bc',
+      'elder-tc/elder-mr': 'elder-tc-over-mr',
+      'elder-tc/elder-ml': 'elder-tc-over-ml',
+      'elder-tl/sapling-tr': 'elder-tl-over-sapling-tr',
+      'elder-tr/sapling-tl': 'elder-tr-over-sapling-tl',
+    };
+    /** Every crown quarter laid on each cell, as drawn: name, flip and the tree's trunk row. */
+    const laid = new Map<number, { name: string; flip: boolean; y: number }[]>();
+    for (const t of trees) {
+      if (t.k !== KINDS['elder'] && t.k !== KINDS['sapling']) continue;
+      for (const [dx, dy] of t.k.crown) {
+        const key = (t.y + dy) * MAP_W + t.x + dx;
+        const name = t.flip ? mirroredTile(t.k, dx, dy) : t.k.tileAt(dx, dy);
+        const list = laid.get(key) ?? [];
+        list.push({ name, flip: t.flip, y: t.y });
+        laid.set(key, list);
+      }
+    }
+    let fronted = 0;
+    for (const [key, list] of laid) {
+      if (list.length < 2) continue;
+      const x = key % MAP_W;
+      const y = (key - x) / MAP_W;
+      // The quarter that actually won the cell, and the front-most crown it beat, if any. Where
+      // three crowns share a cell the middle one lost before this pass and still does.
+      const back = list.find((q) => at(above, x, y) === gid(q.name) + (q.flip ? FLIP_H : 0));
+      if (!back) continue;
+      const front = list.filter((q) => q.y > back.y).sort((p, q) => q.y - p.y)[0];
+      if (!front || front.flip !== back.flip) continue;
+      const tile = OVERLAP[`${front.name}/${back.name}`];
+      if (!tile) continue;
+      set(above, x, y, gid(tile) + (front.flip ? FLIP_H : 0));
+      fronted++;
+    }
+    console.log(`  overlaps: ${fronted} cell(s) where a crown in front is now drawn in front`);
+  }
   // --- cast shadow -------------------------------------------------------------------------------
   /*
    * CAST SHADOW -- the last pass, and the one that stops nine hundred trees floating on a lawn.

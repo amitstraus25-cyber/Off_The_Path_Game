@@ -2791,6 +2791,40 @@ const elderCanopyTile =
     img.blit(elderCrown(), -qx * TILE, -qy * TILE);
   };
 
+/*
+ * ===========================================================================
+ * TWO CROWNS, ONE CELL: the front crown drawn OVER the back one, as one tile.
+ * ===========================================================================
+ *
+ * The map holds one gid per cell, so where two crowns overlap one of them has to lose the cell, and
+ * the overlap rule (`layCrown` in forest-map.ts) gives it to whichever quarter covers the other's
+ * pixels. Where an elder stands one row in front of another and a column across, that rule hands
+ * the BACK tree cells of the FRONT tree's crown, because the back tree's middle and bottom quarters
+ * (`mc`, `bc`) are opaque in every pixel and so cover anything. What rendered was a dark square of
+ * the back crown's underside sitting INSIDE the front crown, edged on two sides by a tile boundary
+ * -- the clearest seam left in the wood, and visible at the game's own zoom in the keeper's and the
+ * magpie's frames. Read off the committed map before this fix: 22 such opaque cells.
+ *
+ * These are the pairs, drawn the way a painter would draw them: the back quarter first, then the
+ * front quarter laid over it, its keyline and lit rim and all. Elder over elder is six quarter
+ * pairs, three for each diagonal a front tree can stand on, and an elder's top corner over a
+ * sapling's crown behind it is two. Mirrored pairs are each other's flip, so two mirrored trees take
+ * the same tile with the flip bit, and these eight cover every such overlap whichever way the two
+ * trees face -- as long as they face the SAME way, which the facing adoption in forest-map.ts makes
+ * the common case. On today's map five of the eight are placed (65 cells, the pass prints the
+ * count); the other three are the opposite diagonal, kept so the fix does not depend on which way
+ * this seed happens to stack its elders. Audit 9 in forest-map.ts counts the cells they make blind
+ * to Purple against its ratchet, and the count did not move: 101 before and after.
+ */
+const overlapTile =
+  (front: (img: Img) => void, back: (img: Img) => void) =>
+  (img: Img): void => {
+    back(img);
+    const over = new Img(TILE, TILE);
+    front(over);
+    img.blit(over, 0, 0);
+  };
+
 /**
  * The whole sapling, drawn once at 64x64: pool, bark, blades, crown. The four tiles are quarters of
  * this one image, so a sapling cannot come apart the way a crown and a trunk placed as separate
@@ -2849,6 +2883,15 @@ export const TREE_TILES: Record<string, (img: Img) => void> = {
   'sapling-tr': saplingTile(1, 0),
   'sapling-bl': saplingTile(0, 1),
   'sapling-br': saplingTile(1, 1),
+  // Where a crown stands a row in front of another, the front crown's quarter over the back's.
+  'elder-tr-over-mc': overlapTile(elderCanopyTile(2, 0), elderCanopyTile(1, 1)),
+  'elder-tl-over-mc': overlapTile(elderCanopyTile(0, 0), elderCanopyTile(1, 1)),
+  'elder-mr-over-bc': overlapTile(elderCanopyTile(2, 1), elderCanopyTile(1, 2)),
+  'elder-ml-over-bc': overlapTile(elderCanopyTile(0, 1), elderCanopyTile(1, 2)),
+  'elder-tc-over-mr': overlapTile(elderCanopyTile(1, 0), elderCanopyTile(2, 1)),
+  'elder-tc-over-ml': overlapTile(elderCanopyTile(1, 0), elderCanopyTile(0, 1)),
+  'elder-tl-over-sapling-tr': overlapTile(elderCanopyTile(0, 0), saplingTile(1, 0)),
+  'elder-tr-over-sapling-tl': overlapTile(elderCanopyTile(2, 0), saplingTile(0, 0)),
 };
 
 /* ------------------------------------------------------------------- the shoulder, guarded */

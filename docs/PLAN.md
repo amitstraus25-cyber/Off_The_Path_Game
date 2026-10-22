@@ -34,6 +34,29 @@ everything the 2026-10-21 sweep found that is not yet fixed.
 
 ### In progress
 
+- **The seven perks, wired into the game (2026-10-22, built, not committed, not ticked).** Every
+  effect is read from the skill's `effect` kind through core's perks.ts, never a skill id, and is
+  the same for the good copy and the bad one. Wood Map: the minimap is drawn only once taken (the
+  door's question stays for everyone). Way Teller: a wooden board at each `fork-N` and DOM chips on
+  it -- face, name and a CSS arrow per heading, naming the nearest unmet character down that way
+  along the path (`world/forks.ts`), never the cottage. Word Weaver: a paper bird flies off west,
+  and the arrival opens on "Grandma is at the door already." with the knock skipped. Wing Ride: a
+  2 s arc, carried by a copy of the giver, the camera following, then the next unmet friend's offer
+  opens; under reduced motion a fade; with nobody left it does nothing and says so. Slow Post: the
+  walk and its legs run at x1.15. Night Light: from 2:00 left the world layer dims for everyone
+  under a Black wash capped at the content's 0.45 (never the DOM), and the lantern's ADD glow
+  circles Purple. Long Evening: the HUD and the hard stop read core's `timeLeftMs`/`deadlineMs`;
+  the face winds up over 1.2 s under a Lilac outline. A one-line polite toast per perk
+  (`chrome.perk*`), and the knock beat (`world.knockMs`) is held before ENTER_COTTAGE. The cast
+  play their idle strips, turn to face Purple within three tiles and hop once on a meeting; none of
+  it under reduced motion. The minimap drops to one pixel a tile at short landscape and narrow
+  phones, steps back to 25% whenever a figure is under it, and Purple's marker is a 12px diamond at
+  every scale. A safe reveal tile's note reads "What to watch for". `e2e/perks.spec.ts`,
+  `test/forks.test.ts`, `test/perk-effects.test.ts`; `e2e/minimap.spec.ts` takes the map first.
+  **Assumed:** a fork's sign lists one character per heading (up to three); the face is the
+  figure's sheet frame at 1x, since most of the cast have no portrait. **Not reviewed:** the
+  eleven new chrome lines need the COPY_REVIEW read.
+
 - **Client round 2026-10-22 (built, not committed, not ticked).** Four asks, all approved by the
   client in chat:
   - **The arcade cabinet is THE presentation**, reversing the "no to the cabinet" above on the

@@ -20,6 +20,31 @@ Product marketing reviews tone; Legal reviews the leaderboard and privacy lines.
 > both directions between the file and the UI and would be the place to hang a coverage check.
 > `docs/UX_REVIEW.md` finding 13 is the long version of this.
 
+## 0. The v2 skills, as shipped in `content/game.v2.json` (draft 8, 2026-10-22)
+
+**This section is current; sections 1 to 4 below describe v1's `game.json`, which is gone.** The
+client approved the seven skills in chat on 2026-10-22: for each, the name, the promise, the
+giveaway line, the bad reveal, the lesson (`realWorld.term`) and the perk are theirs, word for word,
+and are **APPROVED (client)** -- not to be reworded here. Wood Map's and Long Evening's whole cards
+were given too. Everything else on the cards and reveals was written by engineering to fit the
+approved lines and is **DRAFT**: the good card's other line, the leave lines, the good reveals, the
+real-world notes, and the Rabbit's, Toadstool's and Magpie's greetings (changed to fit the new
+skills). The full text is in `docs/GAME_DESIGN_V2.md` section 10; the file is the source of truth.
+
+| Skill        | Approved (client)                                                                    | Draft (engineering), for the human read                                                    |
+| ------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Wood Map     | promise; both cards; bad reveal "Your map went to the wolf. He knew where you'd be." | leave "You walk without a map."; good reveal; note; greet "Hello! I drew this map myself." |
+| Way Teller   | promise; giveaway "Obeys any note pinned to a tree."; bad reveal                     | "Shows who lives down each path." / "Trusts only its own signposts."; good reveal; greet   |
+| Word Weaver  | promise; giveaway "Pins a copy up at every crossing."; bad reveal                    | "Sends word ahead to Grandma." / "Folds it shut, for her eyes only."; good reveal; note    |
+| Wing Ride    | promise; giveaway "Takes tonight's route from a stranger's map."; bad reveal         | "Plans tonight's route from its own map." / "Flies you to your next friend."; greet; note  |
+| Slow Post    | promise; giveaway "Lets a friend peek inside on the way."; bad reveal                | "Carries your parcel, so you walk faster."; good reveal "You walked faster. …"             |
+| Night Light  | promise; giveaway "Goes wherever the signs say, without asking you."; bad reveal     | "Waits for you to choose the way." / "Lights your way after dark."; good reveal; note      |
+| Long Evening | promise; both cards; bad reveal "You had more time. The wolf had her key."           | leave "The sun sets on time."; good reveal; note "A skill is an identity too, …"           |
+
+Two questions for the read, not settled here. Night Light's note ends "Keep a person in the loop":
+is "person" right, or does research prefer "human"? And Long Evening's note says "a non-human
+identity" outright, which is the client's framing and research's to confirm.
+
 **All of these live in `content/game.json` and are changed there only.** Copy that lives in `.tsx`
 instead is a bug, and `docs/UX_REVIEW.md` finding 13 records roughly 35 of them.
 After any change run `pnpm test` (the content lint and the two-way string scan run with it) and `pnpm e2e`.

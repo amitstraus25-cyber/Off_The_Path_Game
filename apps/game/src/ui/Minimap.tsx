@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'preact/hooks';
 import { TILE } from '../world/logic';
 import { TERRAIN, pathFor, terrainRuns } from '../world/minimap';
 import type { MapSketch } from '../world/minimap';
-import type { Vec } from '../world/logic';
+import type { Rect, Vec } from '../world/logic';
 
 /*
  * THE MINIMAP, top right of the world (the client, 2026-10-22: "how do i get to this? i cant find
@@ -35,13 +35,23 @@ export interface MinimapProps {
   where(): Vec | null;
   /** The polite sentence, already filled (`Map: 5 of 7 met`). */
   summary: string;
+  /**
+   * Where the cast stand on the canvas this frame, in GAME pixels from its top-left, and the
+   * canvas's width in game pixels (forest-scene.ts). When a figure is under the map, the map steps
+   * back to a faint outline so it never hides a character. Absent: the map never yields.
+   */
+  view?: { castOnCanvas(): readonly Rect[]; readonly canvasWidth: number } | null;
 }
 
-/** A dot's radius and Purple's half-diagonal, in tiles. Sized to read at two CSS pixels a tile. */
+/**
+ * A dot's radius and Purple's half-diagonal, in tiles, sized to read at two CSS pixels a tile.
+ * Purple's is the biggest mark on the map (the review of 2026-10-22: "a larger, easier-to-find
+ * Purple marker"), and hud.css keeps it that size in CSS pixels where the map is drawn smaller.
+ */
 const DOT_R = 1.4;
-const PURPLE_HALF = 1.9;
+const PURPLE_HALF = 2.4;
 
-export function Minimap({ sketch, met, where, summary }: MinimapProps) {
+export function Minimap({ sketch, met, where, summary, view = null }: MinimapProps) {
   const box = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const purple = useRef<SVGGElement>(null);
@@ -76,12 +86,43 @@ export function Minimap({ sketch, met, where, summary }: MinimapProps) {
     let shownY = Number.NaN;
     /** CSS pixels per tile, so the marker moves in whole pixels. Re-read on resize, not per frame. */
     let perTile = 0;
+    /** The map's own box in the world's coordinates, and CSS pixels per game pixel. */
+    let mine: Rect | null = null;
+    let zoom = 0;
+    let yielding = false;
     const measure = (): void => {
       const width = svg.current?.getBoundingClientRect().width ?? 0;
       perTile = width > 0 ? width / sketch.cols : 0;
+      const el = box.current;
+      const world = el?.parentElement;
+      if (!el || !world || !view) return;
+      const a = el.getBoundingClientRect();
+      const w = world.getBoundingClientRect();
+      mine = { x: a.left - w.left, y: a.top - w.top, width: a.width, height: a.height };
+      zoom = view.canvasWidth > 0 ? w.width / view.canvasWidth : 0;
+    };
+    /** Whether any figure on the canvas stands under the map's box. */
+    const covering = (): boolean => {
+      if (!view || !mine || zoom === 0) return false;
+      const m = mine;
+      return view
+        .castOnCanvas()
+        .some(
+          (r) =>
+            r.x * zoom < m.x + m.width &&
+            (r.x + r.width) * zoom > m.x &&
+            r.y * zoom < m.y + m.height &&
+            (r.y + r.height) * zoom > m.y,
+        );
     };
     const step = (): void => {
       frame = requestAnimationFrame(step);
+      if (perTile === 0 || (view && !mine)) measure();
+      const yieldNow = covering();
+      if (yieldNow !== yielding && box.current) {
+        yielding = yieldNow;
+        box.current.dataset['yield'] = yieldNow ? 'true' : 'false';
+      }
       const at = where();
       const g = purple.current;
       if (!g) return;
@@ -89,7 +130,6 @@ export function Minimap({ sketch, met, where, summary }: MinimapProps) {
         g.setAttribute('visibility', 'hidden');
         return;
       }
-      if (perTile === 0) measure();
       const snap = (v: number): number =>
         perTile > 0 ? Math.round((v / TILE) * perTile) / perTile : v / TILE;
       const x = snap(at.x);
@@ -106,11 +146,11 @@ export function Minimap({ sketch, met, where, summary }: MinimapProps) {
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', measure);
     };
-  }, [sketch, where]);
+  }, [sketch, where, view]);
 
   const { cottage } = sketch;
   return (
-    <div class="otp-minimap" ref={box} data-minimap="">
+    <div class="otp-minimap" ref={box} data-minimap="" data-yield="false">
       <svg
         ref={svg}
         class="otp-minimap__map"

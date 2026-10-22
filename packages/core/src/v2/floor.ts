@@ -1,4 +1,5 @@
 import type { Content } from './content.ts';
+import { wingRideTarget } from './perks.ts';
 import type { RunEvent } from './state.ts';
 
 /*
@@ -82,31 +83,67 @@ export interface WalkFloor {
 
 /**
  * The shortest walk the log describes: from the spawn to each character in the order the log met
- * them, then to the door. Only `met` and `arrived` move Purple; every other event happens where she
- * stands. Pure, and assumes nothing about whether the log is otherwise legal -- the replay decides
- * that (runlog.ts).
+ * them, then to the door. Only `met` and `arrived` move Purple, and one perk; every other event
+ * happens where she stands. Pure, and assumes nothing about whether the log is otherwise legal --
+ * the replay decides that (runlog.ts).
+ *
+ * THE PERKS (content.ts `effect`), each read off the log's own take verdicts, so the floor never
+ * refuses an honest run that used one -- and never charges a run for a perk it did not take:
+ *
+ *  - `walk-faster`: every leg after the take is walked at `walkSpeed` x `factor`.
+ *  - `wing-ride`: the take flies Purple to the talking spot of `wingRideTarget` (perks.ts) at the
+ *    flight's cost, `flightMs`, instead of any walk; she lands ON the spot, so the meeting after
+ *    it costs no further distance. Nobody unmet: no flight, nothing charged.
+ *  - `early-welcome`: the arrival is not charged the knock (`content.world.knockMs`), which every
+ *    other arrival is, because the game holds the knock on the clock before stamping `arrived`.
+ *
+ * A `rewind` changes no stamp -- stamps are real elapsed time (perks.ts) -- so it is not here.
  */
 export function walkFloor(
   content: Content,
   events: readonly RunEvent[],
   world: WalkWorld = WALK_WORLD,
 ): WalkFloor {
-  const msFor = (pixels: number): number => (Math.max(0, pixels) / world.walkSpeed) * 1000;
+  let speed = world.walkSpeed;
+  const msFor = (pixels: number): number => (Math.max(0, pixels) / speed) * 1000;
+  const spotOf = (c: string): Point | undefined => {
+    const spawn = content.characters.find((x) => x.id === c)?.spawn;
+    return spawn === undefined ? undefined : world.spots[spawn];
+  };
+  const met: string[] = [];
   let from: Point | null = world.start;
   let reach = world.reach.start;
+  let welcome = false;
   let floorMs = 0;
   let tooFast: number | null = null;
   events.forEach((e, i) => {
     if (e.e === 'met') {
-      const spawn = content.characters.find((c) => c.id === e.c)?.spawn;
-      const to = spawn === undefined ? undefined : world.spots[spawn];
+      const to = spotOf(e.c);
       if (from && to)
         floorMs += msFor(Math.hypot(to.x - from.x, to.y - from.y) - reach - world.reach.character);
       from = to ?? null;
       reach = world.reach.character;
+      met.push(e.c);
     } else if (e.e === 'arrived') {
       if (from) floorMs += msFor(toRect(from, world.door) - reach - world.reach.door);
-    } else return;
+      if (!welcome) floorMs += content.world.knockMs;
+    } else {
+      if (e.e === 'verdict' && e.v === 'take') {
+        const effect = content.skills.find((s) => s.id === e.s)?.effect;
+        const giver = content.characters.find((c) => c.skillId === e.s)?.id;
+        if (effect?.kind === 'walk-faster') speed *= effect.factor;
+        if (effect?.kind === 'early-welcome') welcome = true;
+        if (effect?.kind === 'wing-ride') {
+          const to = wingRideTarget(content, met, giver);
+          if (to !== null) {
+            floorMs += effect.flightMs;
+            from = spotOf(to) ?? null;
+            reach = 0;
+          }
+        }
+      }
+      return;
+    }
     if (tooFast === null && e.at < floorMs) tooFast = i;
   });
   return { floorMs, tooFast };

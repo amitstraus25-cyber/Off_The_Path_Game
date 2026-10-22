@@ -275,13 +275,18 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
    *
    *   - claimed > seen: the log says more time passed than had. Not a run anyone played.
    *   - seen - claimed > POST_WINDOW_MS: too long off the clock. This is the bound on restamping a
-   *     slow run, and it also makes the token short-lived: since claimed < 3:00, no token older
-   *     than 3:00 plus the window can pass it. 410, because the run was real and its window shut.
+   *     slow run, and it also makes the token short-lived: since claimed is under the run's
+   *     deadline -- 3:00, plus 20 s for a Long Evening rewind (core perks.ts) -- no token older
+   *     than that plus the window can pass it. 410, because the run was real and its window shut.
    *   - any meeting, or the arrival, stamped sooner than walking there allows, or `seen` under the
    *     whole walk (`v2.walkFloor`): faster than the map. Not a run.
    *
    * THE SPEED BONUS IS READ OFF `claimed` (core `speedBonus`), so these bounds are what the bonus
    * rests on: claimed is at most what the server saw, and at least the walk the log describes.
+   * `claimed` is REAL elapsed time even after a rewind; the bonus counts it less what the rewind
+   * gave back (core `result().timeMs`), which the replay re-derives from the log's own take, so
+   * the twenty seconds are never the client's word. The floor reads the log's perks the same way:
+   * a faster walk, a wing ride and an early welcome lower it only for a log that took them.
    * What they cannot do is tell an honest 1:45 from a forger who waits 1:45 with a careful log for
    * the seed the token handed them -- `deal()` is public. That was true of the 100 before speed
    * counted, and it is the reason the edge rate limit is a precondition (README).

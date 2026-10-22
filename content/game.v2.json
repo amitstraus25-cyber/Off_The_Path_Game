@@ -1,6 +1,6 @@
 {
   "rules": 2,
-  "version": "2.0.0-draft.7",
+  "version": "2.0.0-draft.8",
   "status": "draft: copy awaits the human read",
   "deal": {
     "good": 3
@@ -10,7 +10,14 @@
     "good": 20,
     "clean": 10,
     "speed": 30,
-    "parMs": 105000
+    "parMs": 106000
+  },
+  "world": {
+    "knockMs": 3000,
+    "dusk": {
+      "fromLeftMs": 120000,
+      "darkest": 0.45
+    }
   },
   "characters": [
     {
@@ -18,14 +25,14 @@
       "name": "Rabbit",
       "spawn": "npc-rabbit",
       "skillId": "cottage-finder",
-      "greet": "Hello! I made this compass myself. Never once lost."
+      "greet": "Hello! I drew this map myself. Never once lost."
     },
     {
       "id": "toadstool",
       "name": "Toadstool",
       "spawn": "bystander-toadstool",
       "skillId": "way-teller",
-      "greet": "My aunt carved this signpost. It knows the old way."
+      "greet": "My aunt carved this signpost. It knows everyone in the wood."
     },
     {
       "id": "owl",
@@ -39,7 +46,7 @@
       "name": "Magpie",
       "spawn": "bystander-magpie",
       "skillId": "short-cut",
-      "greet": "My cousin drew this map. Clever bird, my cousin."
+      "greet": "My cousin and I fly this wood every night. Hop on!"
     },
     {
       "id": "snail",
@@ -66,50 +73,52 @@
   "skills": [
     {
       "id": "cottage-finder",
-      "name": "Cottage Finder",
+      "name": "Wood Map",
       "icon": "item-compass",
-      "promise": "This compass will help you find Grandma.",
+      "promise": "It draws you a map of the whole wood.",
+      "effect": { "kind": "minimap" },
       "realWorld": {
         "term": "Data exfiltration",
-        "note": "Your note is your data. A skill can do its job and still copy that data to someone you never chose."
+        "note": "Your map is your data. A skill can do its job and still send that data to someone you never chose."
       },
       "good": {
         "card": {
-          "take": ["Reads Grandma's address from your note.", "Points you to her door."],
-          "leave": "You guess the way."
+          "take": ["Draws the wood as you walk.", "Keeps the map for you alone."],
+          "leave": "You walk without a map."
         },
-        "reveal": "Found her door from your note."
+        "reveal": "Drew the wood as you walked. Kept the map for you."
       },
       "bad": {
         "card": {
-          "take": ["Sends a copy of your note to a stranger.", "Points you to her door."],
-          "leave": "You guess the way."
+          "take": ["Draws the wood as you walk.", "Sends your map to a stranger."],
+          "leave": "You walk without a map."
         },
-        "reveal": "Found her door. A copy went to the wolf."
+        "reveal": "Your map went to the wolf. He knew where you'd be."
       }
     },
     {
       "id": "way-teller",
       "name": "Way Teller",
       "icon": "item-signpost",
-      "promise": "It takes you to her door, the old way.",
+      "promise": "It shows you who lives down each path.",
+      "effect": { "kind": "fork-signs" },
       "realWorld": {
         "term": "Indirect prompt injection",
         "note": "A skill that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge."
       },
       "good": {
         "card": {
-          "take": ["Walks you the old way to her door.", "Keeps to the path it knows."],
-          "leave": "You find your own way."
+          "take": ["Shows who lives down each path.", "Trusts only its own signposts."],
+          "leave": "You guess at every fork."
         },
-        "reveal": "Walked you the old way."
+        "reveal": "Showed you who lived down each path."
       },
       "bad": {
         "card": {
-          "take": ["Walks you the old way to her door.", "Obeys any note pinned to a tree."],
-          "leave": "You find your own way."
+          "take": ["Shows who lives down each path.", "Obeys any note pinned to a tree."],
+          "leave": "You guess at every fork."
         },
-        "reveal": "Walked you the old way. Obeyed the wolf's note too."
+        "reveal": "One note on a tree was the wolf's. It obeyed."
       }
     },
     {
@@ -117,71 +126,77 @@
       "name": "Word Weaver",
       "icon": "item-weaver",
       "promise": "It sends word ahead, so Grandma expects you.",
+      "effect": { "kind": "early-welcome" },
       "realWorld": {
         "term": "Oversharing and public exposure",
-        "note": "A copy pinned at a crossing is public data anyone can read. Delivering the real note does not take the copies down."
+        "note": "A copy pinned at a crossing is public data anyone can read. Sending word ahead should not mean telling the whole wood."
       },
       "good": {
         "card": {
-          "take": ["Carries your note to Grandma, folded shut.", "Gets there before you do."],
-          "leave": "You arrive unannounced."
+          "take": ["Sends word ahead to Grandma.", "Folds it shut, for her eyes only."],
+          "leave": "You knock and wait."
         },
-        "reveal": "Sent word ahead. She expected you."
+        "reveal": "Sent word ahead. She was at the door."
       },
       "bad": {
         "card": {
-          "take": [
-            "Carries your note to Grandma, folded shut.",
-            "Pins a copy up at every crossing."
-          ],
-          "leave": "You arrive unannounced."
+          "take": ["Sends word ahead to Grandma.", "Pins a copy up at every crossing."],
+          "leave": "You knock and wait."
         },
         "reveal": "She expected you. So did the wolf."
       }
     },
     {
       "id": "short-cut",
-      "name": "Short Cut",
-      "icon": "item-shortcut",
-      "promise": "It gives you the quicker tracks, fresh each evening.",
+      "name": "Wing Ride",
+      "icon": "item-wings",
+      "promise": "It flies you to your next friend on the path.",
+      "effect": { "kind": "wing-ride", "flightMs": 2000 },
       "realWorld": {
         "term": "Supply-chain risk",
-        "note": "A stranger can redraw their map any night. A skill that fetches its instructions from elsewhere can change after you said yes."
+        "note": "A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight."
       },
       "good": {
         "card": {
-          "take": ["Draws tonight's tracks from its own map.", "Shows you the quicker way."],
-          "leave": "You go the long way."
+          "take": ["Plans tonight's route from its own map.", "Flies you to your next friend."],
+          "leave": "You walk every step."
         },
-        "reveal": "A quicker way. You made good time."
+        "reveal": "Flew you to your next friend."
       },
       "bad": {
         "card": {
-          "take": ["Fetches tonight's tracks from a stranger's map.", "Shows you the quicker way."],
-          "leave": "You go the long way."
+          "take": [
+            "Takes tonight's route from a stranger's map.",
+            "Flies you to your next friend."
+          ],
+          "leave": "You walk every step."
         },
-        "reveal": "A quicker way. The wolf drew it."
+        "reveal": "It flew you where the wolf's map said."
       }
     },
     {
       "id": "slow-post",
       "name": "Slow Post",
       "icon": "item-parcel",
-      "promise": "It carries the heavy things, sealed. You walk light.",
+      "promise": "It carries your heavy things, sealed. You walk light.",
+      "effect": { "kind": "walk-faster", "factor": 1.15 },
       "realWorld": {
         "term": "Third-party data sharing",
         "note": "A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way."
       },
       "good": {
         "card": {
-          "take": ["Carries your parcel, sealed.", "Opens for Grandma's hands only."],
+          "take": ["Carries your parcel, so you walk faster.", "Opens for Grandma's hands only."],
           "leave": "You carry it yourself."
         },
-        "reveal": "You walked light. It reached her, sealed."
+        "reveal": "You walked faster. It reached her, sealed."
       },
       "bad": {
         "card": {
-          "take": ["Carries your parcel, sealed.", "Lets a friend peek inside on the way."],
+          "take": [
+            "Carries your parcel, so you walk faster.",
+            "Lets a friend peek inside on the way."
+          ],
           "leave": "You carry it yourself."
         },
         "reveal": "It reached her. The peeking friend was the wolf."
@@ -191,48 +206,53 @@
       "id": "night-light",
       "name": "Night Light",
       "icon": "item-lantern",
-      "promise": "It shows you what the signs say.",
+      "promise": "It lights your way when the sun goes down.",
+      "effect": { "kind": "lantern" },
       "realWorld": {
         "term": "Autonomy without human approval",
-        "note": "Reading the signs to you helps you choose. Acting on them without asking skips your say on the steps that matter."
+        "note": "A helper that acts on every sign without asking skips your say on the steps that matter. Keep a person in the loop."
       },
       "good": {
         "card": {
-          "take": ["Reads every sign aloud to you.", "Leaves the choosing to you."],
-          "leave": "You read in the dark."
+          "take": ["Waits for you to choose the way.", "Lights your way after dark."],
+          "leave": "You walk on in the dusk."
         },
-        "reveal": "Read you every sign."
+        "reveal": "Lit your way as dusk fell."
       },
       "bad": {
         "card": {
-          "take": ["Reads every sign aloud to you.", "Does what the signs say without asking you."],
-          "leave": "You read in the dark."
+          "take": [
+            "Goes wherever the signs say, without asking you.",
+            "Lights your way after dark."
+          ],
+          "leave": "You walk on in the dusk."
         },
-        "reveal": "One sign was the wolf's. It obeyed."
+        "reveal": "One sign was the wolf's. The light followed it."
       }
     },
     {
       "id": "latch-lifter",
-      "name": "Latch Lifter",
-      "icon": "item-latch",
-      "promise": "It opens Grandma's door, even where it sticks.",
+      "name": "Long Evening",
+      "icon": "item-hourglass",
+      "promise": "It holds back the dark a little longer.",
+      "effect": { "kind": "rewind", "ms": 20000 },
       "realWorld": {
         "term": "Over-broad access",
-        "note": "A latch that lifts for anyone never checks who asks. A skill is an identity too: give it only the access its job needs."
+        "note": "A skill is an identity too, a non-human one. Give it only the access its job needs."
       },
       "good": {
         "card": {
-          "take": ["Lifts her latch when you knock.", "Locks it again behind you."],
-          "leave": "You knock and wait."
+          "take": ["Holds back the dark for a while.", "Asks for nothing else."],
+          "leave": "The sun sets on time."
         },
-        "reveal": "Opened at the first knock."
+        "reveal": "Held back the dark. You had more time."
       },
       "bad": {
         "card": {
-          "take": ["Lifts her latch for anyone who knocks.", "Locks it again behind you."],
-          "leave": "You knock and wait."
+          "take": ["Holds back the dark for a while.", "Asks for the key to Grandma's door too."],
+          "leave": "The sun sets on time."
         },
-        "reveal": "The wolf knocked first. It opened."
+        "reveal": "You had more time. The wolf had her key."
       }
     }
   ],
@@ -399,7 +419,18 @@
       "worldGoal": "Find Grandma",
       "worldMetCount": "{met} of {total} met",
       "revealCaught": "Caught it",
-      "revealMissed": "Missed it"
+      "revealMissed": "Missed it",
+      "revealWatchFor": "What to watch for",
+      "perkMinimap": "The map is yours.",
+      "perkForkSigns": "Signs at each fork now show who lives that way.",
+      "perkEarlyWelcome": "Word is flying ahead to Grandma.",
+      "perkWingRide": "Hold tight. Off to your next friend!",
+      "perkWingRideNobody": "You've met everyone, so there's nobody to fly to.",
+      "perkWalkFaster": "Your load is lighter. You walk faster.",
+      "perkLantern": "Your lantern is lit for the dusk.",
+      "perkRewind": "The dark holds back. {seconds} seconds more.",
+      "doorKnock": "You knock and wait.",
+      "doorWelcome": "Grandma is at the door already."
     },
     "contact": {
       "consentVersion": "research-contact-v1",

@@ -295,6 +295,23 @@ export const TILE_NAMES: readonly string[] = [
    */
   'stall-counter-l',
   'stall-counter-r',
+  /*
+   * Eight crown OVERLAPS, appended for the reason above, 2026-10-22: the front crown's quarter
+   * drawn over the back crown's, for the cells where two trees a row apart share a square and the
+   * BACK one used to win it -- an elder's opaque underside printing as a dark square inside the
+   * crown in front of it. Painters and the measurement in `tiles/w-trees.ts` (`overlapTile`),
+   * placement in forest-map.ts after the canopy rebuild. 83 + 8 = 91 names is `Math.ceil(91 / 12)`
+   * = 8 rows, so the sheet grows from 384 x 224 to 384 x 256; every existing gid keeps its value
+   * and its cell.
+   */
+  'elder-tr-over-mc',
+  'elder-tl-over-mc',
+  'elder-mr-over-bc',
+  'elder-ml-over-bc',
+  'elder-tc-over-mr',
+  'elder-tc-over-ml',
+  'elder-tl-over-sapling-tr',
+  'elder-tr-over-sapling-tl',
 ];
 
 /*

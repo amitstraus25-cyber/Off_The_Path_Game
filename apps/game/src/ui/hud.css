@@ -89,6 +89,16 @@ html[data-cabinet='overlay'] .otp-ui {
   font-weight: 700;
 }
 
+/*
+ * THE CLOCK WINDING BACK (the Cat's Long Evening): a calm Lilac outline while the face counts up to
+ * the time given back (ui/App.tsx `useWinding`). An outline rather than the urgent ring, so "more
+ * time" and "nearly out of time" are two different shapes; no colour change, no motion of its own.
+ */
+.otp-hud2 .otp-hud2__timer[data-winding='true'] {
+  outline: 2px solid var(--cyera-lilac);
+  outline-offset: 2px;
+}
+
 /* ------------------------------------------------------------------------------ the basket */
 
 /*
@@ -204,8 +214,21 @@ html[data-cabinet='overlay'] .otp-ui {
   --otp-map-px: 1;
 }
 
+/*
+ * SHORT LANDSCAPE AND NARROW PHONES (the minimap review, 2026-10-22). At 844x390 two pixels a tile
+ * made a 128x92 box over a world barely 300px tall, and on a 375 phone it took a third of the top
+ * edge; both hid characters standing in that corner. One pixel a tile there, and the map steps back
+ * to a faint outline whenever a figure is under it anyway (`data-yield`, below).
+ */
+@media (max-height: 500px), (max-width: 420px) {
+  .otp-ui {
+    --otp-map-px: 1;
+  }
+}
+
 .otp-minimap {
   position: absolute;
+  transition: opacity var(--otp-motion-slow) ease-out;
   /* Whole pixels from the world's own whole-pixel edges, so the tiles do not smear across two.
      The first line is the fallback for a browser without `round()`. */
   top: calc(14px * var(--otp-ui));
@@ -267,15 +290,27 @@ html[data-cabinet='overlay'] .otp-ui {
 }
 
 /* Purple: a different SHAPE (a diamond) in the colour the brand gives her controls, ringed in Black
-   so she reads on the path and on the open ground alike. */
+   so she reads on the path and on the open ground alike. The biggest mark on the map, and the same
+   size in CSS pixels at every map scale -- a 12px diamond -- because the scale divides out the
+   map's own pixels a tile. */
 .otp-minimap__purple {
   fill: var(--cyera-lilac);
-  stroke: var(--cyera-black);
-  stroke-width: 0.7;
+  stroke: var(--cyera-offwhite);
+  stroke-width: 0.8;
+}
+
+.otp-minimap__purple path {
+  transform: scale(calc(2.5 / var(--otp-map-px)));
+}
+
+/* A figure under the map: the map steps back so it never hides them. */
+.otp-minimap[data-yield='true'] {
+  opacity: 0.25;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .otp-minimap__who {
+  .otp-minimap__who,
+  .otp-minimap {
     transition: none;
   }
 }
@@ -283,4 +318,118 @@ html[data-cabinet='overlay'] .otp-ui {
 /* The keyboard hint at the top left stops before the minimap at the top right. */
 html .otp-ui[data-map-shown='true'] .otp-world-hint {
   max-width: calc(100% - 42px * var(--otp-ui) - var(--otp-minimap-w));
+}
+
+/* ------------------------------------------------------------------------- the fork signs */
+
+/*
+ * THE WAY TELLER'S LABELS (ui/ForkSigns.tsx): a chip per heading, standing on top of the canvas's
+ * wooden board at each fork and moved with it by a transform the component writes. The layer is the
+ * world's own box and clips to it, so a board scrolled off the canvas takes its chips along.
+ *
+ * Tokens only and no Lime (Explore spends none). The chip is the HUD pills' own translucent Black
+ * with Offwhite type; the arrow is a CSS triangle -- a shape, not a glyph -- turned by heading.
+ */
+.otp-forksigns {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.otp-forksign {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* The board's top-centre is the transform's point; the chips stand on it. */
+  width: 0;
+  height: 0;
+}
+
+.otp-forksign__list {
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.otp-forksign__chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 2px;
+  border-radius: var(--otp-r-pill);
+  background: color-mix(in srgb, var(--cyera-black) 82%, transparent);
+  color: var(--cyera-offwhite);
+  font: 600 11px/1 var(--cyera-font-sans);
+  white-space: nowrap;
+}
+
+/* The figure's rest frame, one CSS pixel per art pixel: the sheet's first 32x48 cell. */
+.otp-forksign__face {
+  display: block;
+  width: 32px;
+  height: 48px;
+  overflow: hidden;
+}
+
+.otp-forksign__face img {
+  display: block;
+  height: 48px;
+  width: auto;
+  max-width: none;
+  image-rendering: pixelated;
+}
+
+.otp-forksign__arrow {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--cyera-haze);
+}
+
+.otp-forksign__chip[data-heading='left'] .otp-forksign__arrow {
+  transform: rotate(180deg);
+}
+
+.otp-forksign__chip[data-heading='up'] .otp-forksign__arrow {
+  transform: rotate(-90deg);
+}
+
+.otp-forksign__chip[data-heading='down'] .otp-forksign__arrow {
+  transform: rotate(90deg);
+}
+
+/* ------------------------------------------------------------------------------ the toast */
+
+/*
+ * THE PERK'S LINE (ui/App.tsx): `.otp-toast`, the existing notice, in the WORLD's box at every
+ * orientation, standing just above the clock and the basket. The shared `.otp-layer` slot lifts a
+ * toast 140px over a touch pad that, in the cabinet, stands outside the screen in every landscape
+ * layout but `overlay` -- so at 844x390 that lift put the line across the middle of the world, on
+ * top of Purple, at the one moment the player is looking at what the perk did.
+ */
+html .otp-ui .otp-layer.otp-layer--toast {
+  top: var(--otp-canvas-y, 0px);
+  left: max(0px, var(--otp-canvas-x, 0px));
+  right: auto;
+  bottom: auto;
+  width: min(var(--otp-canvas-w, 0px), 100%);
+  height: calc(
+    var(--otp-canvas-h, 0px) - var(--otp-hud-basket-bottom) - var(--otp-hud-basket-h) - 10px *
+      var(--otp-ui)
+  );
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+html .otp-ui .otp-layer.otp-layer--toast .otp-toast {
+  margin-bottom: 0;
+  max-width: calc(100% - 28px * var(--otp-ui));
 }

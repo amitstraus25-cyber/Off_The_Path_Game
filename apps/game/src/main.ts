@@ -10,7 +10,8 @@ import type { Manifest } from './world/assets';
 import { BootScene, ForestScene } from './world/scenes';
 import type { MapSketch } from './world/minimap';
 import type { Vec } from './world/logic';
-import { cardOwed, gameRun, localSeed, walkOn } from './world/run';
+import { cardOwed, gameRun, localSeed, outOfTime, walkOn } from './world/run';
+import { perkLine } from './ui/perks';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
@@ -30,6 +31,9 @@ import './ui/screens.css';
 
 /** How often the clock is read for the HUD and the hard stop. Four times a second is plenty. */
 const TICK_MS = 250;
+
+/** How long a perk's line (or the knock's) stays up in the toast before the slot empties. */
+const TOAST_MS = 2600;
 
 const cssColor = (name: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -272,8 +276,30 @@ async function start(): Promise<void> {
   let pending: Promise<RunStart | null> | null = null;
   let starting = false;
 
+  /*
+   * THE KNOCK (content `world.knockMs`): Purple is at the door and has knocked, and the run waits on
+   * the clock before it goes in -- unless the Word Weaver sent word ahead (`early-welcome`), when
+   * Grandma is at the door already and the beat is skipped. The server's walk floor charges the
+   * knock to every other arrival (core floor.ts), so the wait is held here, never shortened.
+   */
+  let knocking: ReturnType<typeof setTimeout> | null = null;
+  /*
+   * A WING RIDE IN THE AIR: from the take to the landing, the walk is paused and the clock runs. The
+   * offer of the character it lands beside opens only once `flightMs` has passed on the run clock,
+   * because the server refuses a meeting stamped inside the flight (core floor.ts).
+   */
+  let flying = false;
+  let landing: ReturnType<typeof setTimeout> | null = null;
+  /** The toast's one line, or ''. `said` counts lines, so the same line twice is said twice. */
+  let toast = { text: '', said: 0 };
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
   const walkable = (): boolean =>
-    loadFailure === null && !doorAsking && store.getState().phase === 'forest';
+    loadFailure === null &&
+    !doorAsking &&
+    knocking === null &&
+    !flying &&
+    store.getState().phase === 'forest';
   const input = createInput(window, {
     // Esc on an open offer walks on, exactly as the panel's own Walk on does.
     onBack: () => walkOn(store),
@@ -328,6 +354,8 @@ async function start(): Promise<void> {
     pending = null;
     token = answer?.token ?? null;
     emailRequired = answer?.emailRequired ?? false;
+    // The last run's beats are the last run's: no knock, no ride and no line carries over.
+    settleBeats();
     store.dispatch({ type: 'RESET', seed: answer?.seed ?? localSeed() });
     store.dispatch({ type: 'START', runId: crypto.randomUUID() });
     store.dispatch({ type: 'BEGIN' });
@@ -353,6 +381,80 @@ async function start(): Promise<void> {
     syncWorldChrome();
   };
 
+  /** Puts one line in the toast for `TOAST_MS`. The toast's region is polite (ui/App.tsx). */
+  const say = (text: string): void => {
+    if (!text) return;
+    toast = { text, said: toast.said + 1 };
+    if (toastTimer !== null) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toastTimer = null;
+      toast = { ...toast, text: '' };
+      draw();
+    }, TOAST_MS);
+    draw();
+  };
+
+  /** Clears every timed beat: the knock, the ride's landing and the toast. On a replay and an end. */
+  const settleBeats = (): void => {
+    if (knocking !== null) clearTimeout(knocking);
+    knocking = null;
+    if (landing !== null) clearTimeout(landing);
+    landing = null;
+    flying = false;
+    if (toastTimer !== null) clearTimeout(toastTimer);
+    toastTimer = null;
+    toast = { ...toast, text: '' };
+  };
+
+  /**
+   * At the door with nobody left to ask about (or "Go in" pressed): knock, wait `knockMs`, go in --
+   * or go straight in when Grandma was told to expect you.
+   */
+  const knock = (): void => {
+    const state = store.getState();
+    if (state.phase !== 'forest' || knocking !== null) return;
+    if (v2.hasPerk(state, 'early-welcome')) {
+      store.dispatch({ type: 'ENTER_COTTAGE' });
+      return;
+    }
+    say(strings['doorKnock'] ?? '');
+    knocking = setTimeout(() => {
+      knocking = null;
+      if (store.getState().phase === 'forest') store.dispatch({ type: 'ENTER_COTTAGE' });
+      syncWorldChrome();
+      draw();
+    }, content.world.knockMs);
+    syncWorldChrome();
+  };
+
+  /**
+   * A PERK HAS JUST BEEN TAKEN: say it, and start what it does. Everything a perk does as a STATE --
+   * the minimap, the fork signs, the lantern, the dusk, the faster walk, the clock wound back -- is
+   * read from the store by whoever draws it; only the two MOMENTS are started here: the paper bird
+   * taking off, and the wing ride. Read off the perk's kind, never off a skill id.
+   */
+  const perkTaken = (perk: v2.Perk): void => {
+    say(perkLine(perk));
+    if (perk.kind === 'early-welcome') forest.releasePaperBird();
+    if (perk.kind !== 'wing-ride' || perk.to === null) return;
+    const to = perk.to;
+    const giver = content.characters.find((c) => c.skillId === perk.s)?.id ?? null;
+    const meet = (): void => {
+      landing = null;
+      flying = false;
+      syncWorldChrome();
+      if (store.getState().phase === 'forest') store.dispatch({ type: 'MEET', c: to });
+      draw();
+    };
+    flying = forest.flyTo(to, giver, perk.flightMs, () => {
+      // Down on the canvas; the meeting waits for the flight's whole length on the RUN clock.
+      const owed = perk.at + perk.flightMs - store.elapsed();
+      if (owed > 0) landing = setTimeout(meet, owed);
+      else meet();
+    });
+    syncWorldChrome();
+  };
+
   const draw = (): void =>
     void render(
       h(App, {
@@ -368,9 +470,11 @@ async function start(): Promise<void> {
         },
         onDoorGoIn: () => {
           closeDoor();
-          if (store.getState().phase === 'forest') store.dispatch({ type: 'ENTER_COTTAGE' });
+          knock();
           draw();
         },
+        toast: toast.text,
+        signs: sketch ? forest : null,
         music: {
           on: music.wanted,
           onToggle: () => {
@@ -422,14 +526,15 @@ async function start(): Promise<void> {
    * still unmet the door asks first (ui/DoorCheck.tsx), and the answer dispatches the entry.
    */
   bus.on('enteredCottage', () => {
-    if (store.getState().phase !== 'forest' || doorAsking) return;
+    if (store.getState().phase !== 'forest' || doorAsking || knocking !== null) return;
     if (unmetCount() > 0) {
       doorAsking = true;
       syncWorldChrome();
       draw();
       return;
     }
-    store.dispatch({ type: 'ENTER_COTTAGE' });
+    knock();
+    draw();
   });
   bus.on('loadFailed', ({ keys }) => {
     loadFailure = keys;
@@ -453,9 +558,17 @@ async function start(): Promise<void> {
 
   let lastPhase = store.getState().phase;
   let lastVerdicts = 0;
+  let lastPerks = 0;
   store.subscribe((state) => {
     // The question belongs to the forest: a run that leaves it (the clock, a replay) takes it along.
     if (state.phase !== 'forest') doorAsking = false;
+    // And so do the knock and a ride: a run that ended under them is not let in or met afterwards.
+    if (!v2.RUNNING.has(state.phase) && (knocking !== null || flying)) settleBeats();
+    // A new perk is said and started once, in the order taken. A RESET empties the list.
+    if (state.perks.length < lastPerks) lastPerks = 0;
+    const fresh = state.perks.slice(lastPerks);
+    lastPerks = state.perks.length;
+    for (const perk of fresh) perkTaken(perk);
     /*
      * THE CARD OPENS BY ITSELF. A MEET has just put the run in `talk`: read its card now, and let
      * the nested dispatch do this listener's work for the state it produces. `lastPhase` is moved
@@ -485,10 +598,12 @@ async function start(): Promise<void> {
   });
 
   // The hard stop and the HUD's second hand. The reducer also ends a run on any action stamped
-  // past the limit, so a throttled background tab cannot buy time by starving this timer.
+  // past the limit, so a throttled background tab cannot buy time by starving this timer. The limit
+  // is the run's own DEADLINE (core `deadlineMs`): a Long Evening moves it 20 s later, and a TIME_UP
+  // sent at the bare three minutes would be refused ('time-not-up') on every tick of those 20 s.
   setInterval(() => {
     if (!v2.RUNNING.has(store.getState().phase)) return;
-    if (store.elapsed() >= v2.TIME_LIMIT_MS) store.dispatch({ type: 'TIME_UP' });
+    if (outOfTime(store.getState(), store.elapsed())) store.dispatch({ type: 'TIME_UP' });
     else draw();
   }, TICK_MS);
 

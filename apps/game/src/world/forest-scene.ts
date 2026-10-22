@@ -31,6 +31,8 @@ import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
 import { sketchMap } from './minimap';
 import type { MapSketch } from './minimap';
+import { readForks } from './forks';
+import type { Fork } from './forks';
 import gids from '../assets/tileset-forest.gids.json';
 
 /** The gap between the top of a character's head and the bottom of the prompt bubble. */
@@ -68,16 +70,65 @@ const PROMPT_BOB = { key: 'fx-prompt-bob', frameRate: 2 } as const;
  */
 const IDLE = {
   /** The shortest open-eyed hold, in ms. The cast is spread upwards from here. */
-  holdMs: 3000,
+  holdMs: 3500,
   /** Added per character, wrapped by `spreadMs`, so no two share a period. */
   stepMs: 250,
-  /** How far the hold is allowed to be spread, so the slowest blink still lands inside 3-5s. */
+  /** How far the hold is allowed to be spread, so the slowest beat still lands inside 3.5-5.5s. */
   spreadMs: 2000,
-  /** A blink, not a doze. */
-  blinkMs: 120,
+  /**
+   * One frame of the character's own beat, in ms. THE STRIPS (2026-10-22): every character now
+   * ships a four-frame `-idle` strip -- the rest frame, then a breath and their own beat (the
+   * rabbit's ear, the keeper's lantern flaring, the snail's eye stalks) -- whose frame 0 is
+   * byte-identical to the static sprite, so swapping onto it does not pop. Three beat frames at this
+   * length is 330ms in every 3.8-5.8s: glimpsed, never held.
+   */
+  beatMs: 110,
   /** How far apart the cast start, so they are not in step before their periods separate them. */
   startStepMs: 430,
 } as const;
+
+/**
+ * THE HOP when Purple arrives to talk: the `-hop` strip's crouch, then the whole figure a pixel up
+ * with its eyes shut happy, then back to the idle. Once per meeting, and never under reduced motion.
+ */
+const HOP = { crouchMs: 110, upMs: 200 } as const;
+
+/** How near Purple has to come before a character turns to face her. */
+const FACE_RADIUS = TILE * 3;
+
+/**
+ * THE FOREST AFTER DARK, drawn over the world layer only: a camera-fixed wash in the brand's Deep
+ * Purple at the share of the light core's `duskAt` takes away -- never past the content's cap, so
+ * the path and the cast always read. It sits above the canopy and under nothing but the lantern's
+ * glow, the paper bird and the flight; every panel is DOM and is never dimmed.
+ */
+const DUSK_DEPTH = 20_000;
+/** The lantern's warm circle, an additive blend over the wash (the art is drawn for ADD). */
+const GLOW_DEPTH = 20_001;
+/** Above the canopy and the wash: a flight is in the open sky. */
+const SKY_DEPTH = 20_002;
+/**
+ * The glow's opacity: a faint warm ring the moment the lantern is lit, filling in as the dusk
+ * deepens, so the take is visible before 2:00 and the light matters most when it is darkest.
+ */
+const GLOW = { least: 0.3, most: 0.7, scale: 2, lift: TILE * (5 / 8) } as const;
+
+/**
+ * THE WING RIDE: the arc a carried Purple rides, and the quick fade that stands in for it under
+ * reduced motion. The flight's length is the content's `flightMs`, never a number here.
+ */
+const FLIGHT = {
+  /** The arc's height at its middle, as a share of the distance flown, and its ceiling. */
+  arcShare: 0.25,
+  arcMax: TILE * 3,
+  /** How far above her head the carrier flies. */
+  carrierAbove: TILE * 1.25,
+  /** The reduced-motion stand-in: out, across, in. */
+  fadeMs: 160,
+} as const;
+
+/** The paper bird's take-off: up and away to the west, nowhere near the cottage, then gone. */
+const PAPER_BIRD = { ms: 1600, rise: TILE * 7, drift: -TILE * 2, frameRate: 10 } as const;
 
 /**
  * The pool of shade a figure stands in.
@@ -178,6 +229,79 @@ interface Npc extends Interactable {
   prompt: Phaser.GameObjects.Sprite;
   /** The pool of shade under their feet, tinted from the tile they are standing on. */
   shadow: Phaser.GameObjects.Ellipse;
+  /**
+   * Which way the art faces, measured off the frame (`facingOf`): -1 left, 1 right. A figure turns
+   * to face Purple by flipping when she stands on the other side of them.
+   */
+  faces: -1 | 1;
+  /** The sheet the figure was placed from (`npc-rabbit`); its strips are `<sheet>-idle`, `-hop`. */
+  sheet: string;
+}
+
+/** One wing ride in progress (`flyTo`). */
+interface Flight {
+  from: Vec;
+  to: Vec;
+  ms: number;
+  t: number;
+  /** The reduced-motion fade stands in for the arc; the clock still runs the whole `ms`. */
+  fade: boolean;
+  /** The figure carrying her, a copy of the giver's sprite, and the giver left at home. */
+  carrier: Phaser.GameObjects.Sprite | null;
+  giver: Npc | null;
+  landed: () => void;
+}
+
+/**
+ * Which way a figure's art faces, from its own pixels: where the top of the drawing (the head) sits
+ * against the middle of the whole drawing. The magpie's head is to the left of his tail, so he faces
+ * left; a figure drawn square-on reads as facing right, and flipping it is the turn.
+ *
+ * Measured, not tabled, for the reason `headroomOf` gives. Degrades to facing right.
+ */
+function facingOf(frame: Phaser.Textures.Frame | null): -1 | 1 {
+  if (!frame) return 1;
+  const { cutX, cutY, cutWidth: w, cutHeight: h } = frame;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return 1;
+    ctx.drawImage(frame.source.image as CanvasImageSource, cutX, cutY, w, h, 0, 0, w, h);
+    const { data } = ctx.getImageData(0, 0, w, h);
+    let top = -1;
+    let sum = 0;
+    let n = 0;
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        if (data[(y * w + x) * 4 + 3]! > 0) {
+          if (top === -1) top = y;
+          sum += x;
+          n++;
+        }
+    if (n === 0) return 1;
+    // The head: the top third of the drawing's own height.
+    const headRows = Math.max(1, Math.round((h - top) / 3));
+    let hs = 0;
+    let hn = 0;
+    for (let y = top; y < top + headRows; y++)
+      for (let x = 0; x < w; x++)
+        if (data[(y * w + x) * 4 + 3]! > 0) {
+          hs += x;
+          hn++;
+        }
+    return hn > 0 && hs / hn < sum / n - 1 ? -1 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** A CSS colour token as Phaser's packed 0xRRGGBB, or null where the page does not define it. */
+function tokenColor(name: string): number | null {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!/^#[0-9a-f]{6}$/i.test(raw)) return null;
+  return Phaser.Display.Color.HexStringToColor(raw).color;
 }
 
 /**
@@ -406,6 +530,17 @@ export class ForestScene extends Phaser.Scene {
   private sinceStep = 0;
   /** Reused each frame so the update loop allocates nothing. */
   private readonly step: Vec = { x: 0, y: 0 };
+  /** Who the run was talking to last frame, so a character hops once on the meeting's edge. */
+  private talking: string | null = null;
+  /** The forks and who lies down each way, read off the map once (world/forks.ts). */
+  private forkList: Fork[] = [];
+  /** One wooden sign per fork, standing only while the run has the `fork-signs` perk. */
+  private forkBoards: Phaser.GameObjects.Sprite[] = [];
+  /** The dusk's wash over the world, and the lantern's warm circle over it. */
+  private duskWash: Phaser.GameObjects.Rectangle | null = null;
+  private glow: Phaser.GameObjects.Sprite | null = null;
+  /** A wing ride in progress, or null. */
+  private flight: Flight | null = null;
 
   constructor(run: WorldRun, bus: Bus, controls: Input, hasInput: () => boolean = () => true) {
     super('Forest');
@@ -470,6 +605,7 @@ export class ForestScene extends Phaser.Scene {
     if (!facade) throw new Error('Map has no "prop-cottage" object');
     this.facade = facade;
     this.createPaws();
+    this.createPerkProps();
     // Objects named `notice-<id>` hand their id straight to the content's notices.
     this.notices = this.map.objects.filter((o) => o.name.startsWith('notice-'));
 
@@ -570,6 +706,9 @@ export class ForestScene extends Phaser.Scene {
   private resetToSpawn(): void {
     const spawn = findObject(this.map, 'spawn-purple');
     if (!spawn) return;
+    // A ride cut short by a replay lands nowhere: the giver goes home and nobody is met.
+    this.endFlight(false);
+    this.talking = null;
     this.position = { x: spawn.x + TILE / 2, y: spawn.y + PURPLE_FEET_BELOW_SPAWN };
     this.lastOutside.x = this.position.x;
     this.lastOutside.y = this.position.y;
@@ -624,6 +763,286 @@ export class ForestScene extends Phaser.Scene {
     );
   }
 
+  /**
+   * What the perks draw on the canvas, laid down hidden at boot and shown by `drawPerks` while the
+   * run has the perk: a wooden sign at every fork, the dusk's wash and the lantern's glow. No words
+   * on any of them -- the fork sign's who-and-which-way is DOM over the board (ui/ForkSigns.tsx).
+   */
+  private createPerkProps(): void {
+    if (this.sketched) {
+      const forks = this.map.objects.filter((o) => o.name.startsWith('fork-'));
+      const props = this.map.objects.filter((o) => o.name.startsWith('prop-'));
+      this.forkList = readForks(this.sketched, forks, props);
+    }
+    this.forkBoards = this.forkList.map((f) => {
+      // The board points from its crook towards the road it stands beside (frame 0 left, 1 right).
+      const frame = f.sign.col <= f.col ? 1 : 0;
+      const x = f.sign.col * TILE + TILE / 2;
+      const y = (f.sign.row + 1) * TILE;
+      return this.add
+        .sprite(x, y, 'prop-forksign', frame)
+        .setOrigin(0.5, 1)
+        .setDepth(y)
+        .setVisible(false);
+    });
+    this.duskWash = this.add
+      .rectangle(0, 0, 1, 1, tokenColor('--cyera-black') ?? 0, 1)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(DUSK_DEPTH)
+      .setAlpha(0)
+      .setVisible(false);
+    this.glow = this.add
+      .sprite(0, 0, 'fx-lantern-glow', 0)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setScale(GLOW.scale)
+      .setDepth(GLOW_DEPTH)
+      .setVisible(false);
+  }
+
+  /**
+   * The perks that are a STATE of the forest rather than a moment, re-read every frame from the run
+   * (world/run.ts), so a replay that clears the perks clears what they drew with no bookkeeping.
+   */
+  private drawPerks(): void {
+    const signs = this.run.forkSigns();
+    for (const board of this.forkBoards) if (board.visible !== signs) board.setVisible(signs);
+
+    const dusk = this.run.dusk();
+    const main = this.cameras.main;
+    const wash = this.duskWash;
+    if (wash) {
+      if (wash.width !== main.width || wash.height !== main.height)
+        wash.setSize(main.width, main.height);
+      if (wash.alpha !== dusk) wash.setAlpha(dusk);
+      if (wash.visible !== dusk > 0) wash.setVisible(dusk > 0);
+    }
+
+    const glow = this.glow;
+    if (glow) {
+      const lit = this.run.lantern();
+      if (glow.visible !== lit) glow.setVisible(lit);
+      if (lit) {
+        const darkest = this.run.darkest();
+        const share = darkest > 0 ? Math.min(1, dusk / darkest) : 0;
+        glow
+          .setPosition(Math.round(this.position.x), Math.round(this.position.y - GLOW.lift))
+          // Never full: at full strength the additive light washes Purple out in her own circle.
+          .setAlpha(GLOW.least + (GLOW.most - GLOW.least) * share);
+      }
+    }
+  }
+
+  /** The dusk's wash as it stands this frame, 0 when there is none: for the specs. */
+  get duskShown(): number {
+    return this.duskWash?.visible ? this.duskWash.alpha : 0;
+  }
+
+  /** The forks and who lies down each way, for the sign labels (ui/ForkSigns.tsx). */
+  get forks(): readonly Fork[] {
+    return this.forkList;
+  }
+
+  /**
+   * Where the top of a fork's board is, in world pixels: the DOM label stands on it. Null for a
+   * fork the map does not have.
+   */
+  boardTop(name: string): Vec | null {
+    const i = this.forkList.findIndex((f) => f.name === name);
+    const board = this.forkBoards[i];
+    if (!board) return null;
+    return { x: board.x, y: board.y - board.height };
+  }
+
+  /**
+   * A world point on the canvas, in GAME pixels from the canvas's top-left -- the camera's own
+   * viewport offset and scroll applied -- or null before the scene is built. The DOM multiplies by
+   * the canvas's CSS scale, which only the page knows.
+   */
+  toCanvas(world: Vec): Vec | null {
+    const main = this.cameras?.main;
+    if (!main) return null;
+    return { x: main.x + world.x - main.scrollX, y: main.y + world.y - main.scrollY };
+  }
+
+  /** The canvas's width in game pixels, for the DOM's scale. */
+  get canvasWidth(): number {
+    return this.scale.gameSize.width;
+  }
+
+  /**
+   * Every visible figure's frame on the canvas, in game pixels: what the minimap must not cover.
+   * Reused, not reallocated, past the first call -- the minimap asks every frame.
+   */
+  castOnCanvas(): readonly Rect[] {
+    const main = this.cameras?.main;
+    if (!main) return [];
+    while (this.castBoxes.length < this.npcs.length)
+      this.castBoxes.push({ x: 0, y: 0, width: 0, height: 0 });
+    this.npcs.forEach((npc, i) => {
+      const r = this.castBoxes[i]!;
+      const s = npc.sprite;
+      r.width = s.visible ? s.width : 0;
+      r.height = s.visible ? s.height : 0;
+      r.x = main.x + s.x - s.width / 2 - main.scrollX;
+      r.y = main.y + s.y - s.height - main.scrollY;
+    });
+    return this.castBoxes;
+  }
+  private readonly castBoxes: Rect[] = [];
+
+  /**
+   * THE WORD WEAVER'S PAPER BIRD: it takes off from Purple's hand and leaves, up and away to the
+   * west -- it is word sent ahead, and it must not show the way to the door, so it does not fly
+   * east. Gone under reduced motion: the toast says the perk, and nothing flies.
+   */
+  releasePaperBird(): void {
+    if (this.reducedMotion) return;
+    if (!this.anims.exists('fx-paperbird-flap'))
+      this.anims.create({
+        key: 'fx-paperbird-flap',
+        frames: [0, 1, 2, 3].map((frame) => ({ key: 'fx-paperbird', frame })),
+        frameRate: PAPER_BIRD.frameRate,
+        repeat: -1,
+      });
+    const bird = this.add
+      .sprite(Math.round(this.position.x), Math.round(this.position.y - TILE), 'fx-paperbird', 0)
+      .setScale(2)
+      .setDepth(SKY_DEPTH)
+      .play('fx-paperbird-flap');
+    this.tweens.add({
+      targets: bird,
+      x: bird.x + PAPER_BIRD.drift,
+      y: bird.y - PAPER_BIRD.rise,
+      alpha: 0,
+      duration: PAPER_BIRD.ms,
+      ease: 'Sine.easeIn',
+      onComplete: () => bird.destroy(),
+    });
+  }
+
+  /** Whether a wing ride is in the air: main.ts keeps the walk paused for it. */
+  get flying(): boolean {
+    return this.flight !== null;
+  }
+
+  /**
+   * THE MAGPIE'S WING RIDE: Purple is carried to the talking spot of `to` over `ms`, the camera
+   * following, by a copy of the giver's own figure flying above her (the giver steps out of their
+   * spot for the flight). Under reduced motion it is a quick fade out and in instead, and the clock
+   * still runs the whole `ms`. `landed` is called once, when she is down.
+   *
+   * Collision is not consulted on the way -- she is in the air -- but the landing spot is a walkable
+   * place beside the character, within talking reach.
+   */
+  flyTo(to: string, giver: string | null, ms: number, landed: () => void): boolean {
+    const target = this.npcs.find((n) => n.id === to);
+    if (!target) return false;
+    this.endFlight(false);
+    const spots = [
+      { x: target.x, y: target.y + TILE * 0.75 },
+      { x: target.x - TILE, y: target.y + TILE * 0.5 },
+      { x: target.x + TILE, y: target.y + TILE * 0.5 },
+      { x: target.x, y: target.y - TILE },
+    ];
+    const spot = spots.find((s) => !blocked(this.map.collision, s.x, s.y)) ?? spots[0]!;
+    const home = this.npcs.find((n) => n.id === giver) ?? null;
+    let carrier: Phaser.GameObjects.Sprite | null = null;
+    if (!this.reducedMotion && home) {
+      carrier = this.add
+        .sprite(this.position.x, this.position.y, home.sprite.texture.key, 0)
+        .setOrigin(0.5, 1)
+        .setDepth(SKY_DEPTH + 1);
+      home.sprite.setVisible(false);
+      home.shadow.setVisible(false);
+      this.hidePrompt(home);
+    }
+    this.stopWalking();
+    this.clearReach();
+    this.flight = {
+      from: { ...this.position },
+      to: spot,
+      ms: Math.max(1, ms),
+      t: 0,
+      fade: this.reducedMotion,
+      carrier,
+      giver: home,
+      landed,
+    };
+    if (this.flight.fade) this.cameras.main.fadeOut(FLIGHT.fadeMs);
+    return true;
+  }
+
+  /** One frame of the ride. */
+  private stepFlight(deltaMs: number): void {
+    const f = this.flight;
+    if (!f) return;
+    f.t = Math.min(f.ms, f.t + deltaMs);
+    if (f.fade) {
+      // Out, across while dark, in: the camera's own fade, and the position moves in the dark.
+      if (f.t >= FLIGHT.fadeMs && (this.position.x !== f.to.x || this.position.y !== f.to.y)) {
+        this.position = { ...f.to };
+        this.placePurple();
+        this.camera = this.purpleFocus();
+        this.cameras.main.fadeIn(FLIGHT.fadeMs);
+      }
+    } else {
+      const p = f.t / f.ms;
+      const eased = 0.5 - Math.cos(Math.PI * p) / 2;
+      const dx = f.to.x - f.from.x;
+      const dy = f.to.y - f.from.y;
+      const lift =
+        Math.min(FLIGHT.arcMax, Math.hypot(dx, dy) * FLIGHT.arcShare) * Math.sin(Math.PI * p);
+      this.position = { x: f.from.x + dx * eased, y: f.from.y + dy * eased };
+      this.facing = facingFrom({ x: dx, y: dy }, this.facing);
+      this.purple.setFrame(`purple-idle-${this.facing}-0`);
+      const x = Math.round(this.position.x);
+      const y = Math.round(this.position.y - lift);
+      this.purple.setPosition(x, y).setDepth(SKY_DEPTH);
+      this.seatShadow(this.purpleShadow, this.position.x, this.position.y);
+      if (f.carrier) {
+        const giverFaces = f.giver?.faces ?? 1;
+        f.carrier
+          .setPosition(x, Math.round(y - FLIGHT.carrierAbove))
+          .setFlipX(dx !== 0 && Math.sign(dx) !== giverFaces);
+      }
+    }
+    if (f.t >= f.ms) this.endFlight(true);
+  }
+
+  /**
+   * Down: Purple on the spot, the carrier away and the giver home. `landed` only when the ride
+   * finished rather than being cut short by a replay.
+   */
+  private endFlight(arrived: boolean): void {
+    const f = this.flight;
+    if (!f) return;
+    this.flight = null;
+    if (arrived) {
+      this.position = { ...f.to };
+      this.facing = 'up';
+      this.purple.setFrame(`purple-idle-${this.facing}-0`);
+    }
+    this.placePurple();
+    if (f.fade) this.cameras.main.resetFX();
+    if (f.carrier) {
+      const carrier = f.carrier;
+      this.tweens.add({
+        targets: carrier,
+        y: carrier.y - TILE * 4,
+        alpha: 0,
+        duration: 500,
+        ease: 'Sine.easeIn',
+        onComplete: () => carrier.destroy(),
+      });
+    }
+    if (f.giver) {
+      f.giver.sprite.setVisible(true);
+      this.seatShadow(f.giver.shadow, f.giver.sprite.x, f.giver.sprite.y);
+    }
+    if (arrived) f.landed();
+  }
+
   private createNpcs(): void {
     // Who each spawn is depends on the rulebook: v1's bystanders are v2's cast (world/run.ts).
     for (const spawn of [...npcSpawns(this.map), ...bystanderSpawns(this.map)]) {
@@ -658,7 +1077,18 @@ export class ForestScene extends Phaser.Scene {
     // Seated once: nobody in the cast ever moves off the tile they were placed on.
     const shadow = this.addShadow(footprintOf(this.textures.getFrame(key, 0)));
     this.seatShadow(shadow, sprite.x, sprite.y);
-    return { kind, id: spawn.id, x: spawn.x, y: sprite.y, sprite, prompt, shadow };
+    const faces = facingOf(this.textures.getFrame(key, 0));
+    return {
+      kind,
+      id: spawn.id,
+      x: spawn.x,
+      y: sprite.y,
+      sprite,
+      prompt,
+      shadow,
+      faces,
+      sheet: key,
+    };
   }
 
   private createAnimations(): void {
@@ -683,24 +1113,86 @@ export class ForestScene extends Phaser.Scene {
         repeat: -1,
       });
 
-    // One idle per character, each with a hold of its own. See IDLE.
+    /*
+     * One idle per character, each with a hold of its own (see IDLE), off the character's own
+     * four-frame `-idle` strip -- or, for a sheet that has none yet, the static sheet's two frames,
+     * the open eye and the blink, which is how the forest breathed before the strips were painted.
+     * And one hop, off the `-hop` strip, for a figure that has one.
+     */
     this.npcs.forEach((npc, i) => {
-      const key = npc.sprite.texture.key;
-      if (this.anims.exists(this.idleKey(npc))) return;
-      this.anims.create({
-        key: this.idleKey(npc),
-        frames: [
-          { key, frame: 0, duration: IDLE.holdMs + ((i * IDLE.stepMs) % IDLE.spreadMs) },
-          { key, frame: 1, duration: IDLE.blinkMs },
-        ],
-        repeat: -1,
-      });
+      const hold = IDLE.holdMs + ((i * IDLE.stepMs) % IDLE.spreadMs);
+      const strip = `${npc.sheet}-idle`;
+      if (!this.anims.exists(this.idleKey(npc)))
+        this.anims.create({
+          key: this.idleKey(npc),
+          frames: this.textures.exists(strip)
+            ? [0, 1, 2, 3].map((frame) => ({
+                key: strip,
+                frame,
+                duration: frame === 0 ? hold : IDLE.beatMs,
+              }))
+            : [
+                { key: npc.sheet, frame: 0, duration: hold },
+                { key: npc.sheet, frame: 1, duration: IDLE.beatMs },
+              ],
+          repeat: -1,
+        });
+      const hop = `${npc.sheet}-hop`;
+      if (this.textures.exists(hop) && !this.anims.exists(this.hopKey(npc)))
+        this.anims.create({
+          key: this.hopKey(npc),
+          frames: [
+            { key: hop, frame: 0, duration: HOP.crouchMs },
+            { key: hop, frame: 1, duration: HOP.upMs },
+          ],
+          repeat: 0,
+        });
     });
   }
 
   /** The idle animation belonging to one character, named after the sheet it plays from. */
   private idleKey(npc: Npc): string {
-    return `${npc.sprite.texture.key}-idle`;
+    return `${npc.sheet}-idle`;
+  }
+
+  /** The hop belonging to one character. */
+  private hopKey(npc: Npc): string {
+    return `${npc.sheet}-hop`;
+  }
+
+  /**
+   * ONE HOP when Purple arrives to talk, then back to breathing. Nothing under reduced motion, where
+   * nothing breathes either: the figure stays on its rest frame.
+   */
+  private hop(id: string): void {
+    if (this.reducedMotion) return;
+    const npc = this.npcs.find((n) => n.id === id);
+    if (!npc || !this.anims.exists(this.hopKey(npc))) return;
+    npc.sprite.play(this.hopKey(npc));
+    npc.sprite.once(`animationcomplete-${this.hopKey(npc)}`, () => {
+      npc.sprite.play(this.idleKey(npc));
+    });
+  }
+
+  /**
+   * THE CAST NOTICES PURPLE: each figure turns to face her while she is near and back to its own way
+   * once she has gone, and the one she has just come to talk to hops. Every frame, whatever the
+   * phase, because a meeting can come from a press of A, a wing ride landing or a spec.
+   */
+  private lifeOfCast(): void {
+    const talking = this.run.talkingTo();
+    if (talking !== this.talking) {
+      this.talking = talking;
+      if (talking !== null) this.hop(talking);
+    }
+    for (const npc of this.npcs) {
+      const dx = this.position.x - npc.x;
+      const near = Math.hypot(dx, this.position.y - npc.y) <= FACE_RADIUS;
+      // Straight above or below them, a figure keeps whichever way it was already looking.
+      if (near && Math.abs(dx) < 2) continue;
+      const flip = near && Math.sign(dx) !== npc.faces;
+      if (npc.sprite.flipX !== flip) npc.sprite.setFlipX(flip);
+    }
   }
 
   /**
@@ -755,8 +1247,13 @@ export class ForestScene extends Phaser.Scene {
     const input = this.controls.read();
 
     if (!this.arrived && this.run.atCottage()) this.stageArrival();
+    this.drawPerks();
+    this.lifeOfCast();
 
-    if (exploring) {
+    if (this.flight) {
+      // In the air: no walking, no triggers, no one in reach. The camera follows her down.
+      this.stepFlight(deltaMs);
+    } else if (exploring) {
       this.move(input.x, input.y, deltaMs, input.carry);
       // One proximity test per frame, shared by the bubble, the announcement and the A button,
       // rather than three scans of the cast that can disagree with each other by a pixel.
@@ -848,7 +1345,10 @@ export class ForestScene extends Phaser.Scene {
    */
   private move(ix: number, iy: number, deltaMs: number, carry: number | null = null): void {
     const direction = movementVector({ x: ix, y: iy });
-    const frame = (WALK_SPEED * deltaMs) / 1000;
+    // The Slow Post's lighter load: core's `walkFactor`, 1 without the perk. The legs keep pace.
+    const factor = this.run.walkFactor();
+    if (this.purple.anims.timeScale !== factor) this.purple.anims.timeScale = factor;
+    const frame = (WALK_SPEED * factor * deltaMs) / 1000;
     const distance = carry === null ? frame : Math.min(frame, carry);
     if (carry !== null && (direction.x !== 0 || direction.y !== 0)) this.controls.spend(distance);
     this.step.x = direction.x * distance;

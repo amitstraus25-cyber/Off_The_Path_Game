@@ -183,6 +183,33 @@ export const BYSTANDER_PLAN = {
   'bystander-cat': { w: 14, h: 30, widest: 'the shoulder', breaks: 'the tail, off the top-right' },
 } as const satisfies Record<string, { w: number; h: number; widest: string; breaks: string }>;
 
+// ------------------------------------------------------------------------------- the pose
+
+/**
+ * One pose of a character, which is what every painter here and in `cast.ts` now draws.
+ *
+ * THE TWO LEGACY FRAMES ARE TWO POSES, and that is the whole of why this exists. Every character's
+ * frame 1 did two things at once -- shut the eyes AND dipped a pixel (the head, the twig, the
+ * stalks) -- because a two-frame sheet had room for one change. The idle and hop strips
+ * (`sprites.ts`) need the breath without the blink and the blink without the breath, plus one beat
+ * that is the character's own, so the three are separate fields and `REST` and `BLINK` are the two
+ * old frames spelled as poses. Those two draw byte for byte what the boolean drew: every beat below
+ * enters its painter as an offset that is exactly zero at rest.
+ */
+export interface Pose {
+  /** Eyes shut. */
+  readonly blink: boolean;
+  /** The one-row breath: whatever this character moves when it breathes dips a row. */
+  readonly dip: 0 | 1;
+  /** The character's own beat, signed; 0 is at rest. What it moves is up to the painter. */
+  readonly beat: number;
+}
+
+/** Frame 0 of every two-frame sheet: open eyes, at rest. */
+export const REST: Pose = { blink: false, dip: 0, beat: 0 };
+/** Frame 1 of every two-frame sheet: the blink and the dip together, as the boolean drew them. */
+export const BLINK: Pose = { blink: true, dip: 1, beat: 0 };
+
 // ----------------------------------------------------------------------------- the toadstool
 
 /*
@@ -232,9 +259,15 @@ const CAP_LINE = pull(keyline('wood'), 0.62, 0.52);
  *
  * He is rooted and never bobs. The blink moves the twig arm a pixel instead, which is the only tell
  * that the thing addressing you is the mushroom and not something behind it.
+ *
+ * HIS BEAT IS THE CAP, which wobbles a whole pixel sideways on the stem (`pose.beat`, signed). The
+ * stem, the ring and the face stay planted, so it reads as a hat settling and not as the mushroom
+ * sliding; the gills and the spots travel with the cap because they are on it.
  */
-function paintToadstool(img: Img, blink: boolean): void {
-  const t = blink ? 1 : 0;
+function paintToadstool(img: Img, pose: Pose): void {
+  const blink = pose.blink;
+  const t = pose.dip;
+  const w = pose.beat;
 
   /*
    * --- stem: a short tapered column with a swollen base, lit down the left ---
@@ -280,19 +313,19 @@ function paintToadstool(img: Img, blink: boolean): void {
    * face of the same dome under one light ARE the same value -- and with the body at 108 there is no
    * step left above `rust` 3 that is not a pink.
    */
-  dome(img, 16, 38, 9.6, 7.0, rust(0));
-  dome(img, 15.4, 37.4, 9.0, 6.4, rust(2)); // the cap proper
-  dome(img, 13.6, 35.4, 5.6, 4.0, rust(3)); // the lit quarter only
+  dome(img, 16 + w, 38, 9.6, 7.0, rust(0));
+  dome(img, 15.4 + w, 37.4, 9.0, 6.4, rust(2)); // the cap proper
+  dome(img, 13.6 + w, 35.4, 5.6, 4.0, rust(3)); // the lit quarter only
   // The shaded flank: a crescent down the low right, where the dome turns away from the light.
   for (let y = 33; y <= 37; y++) {
     const dy = (y + 0.5 - 37.4) / 6.4;
     const half = 9.0 * Math.sqrt(Math.max(0, 1 - dy * dy));
-    const edge = Math.round(15.4 + half);
+    const edge = Math.round(15.4 + w + half);
     img.rect(edge - 2, y, 2, 1, rust(1));
   }
   // Rim light along the very top of the dome, one pixel thick and no more.
-  for (let x = 8; x <= 19; x++) {
-    const dx = (x + 0.5 - 15.4) / 9.0;
+  for (let x = 8 + w; x <= 19 + w; x++) {
+    const dx = (x + 0.5 - (15.4 + w)) / 9.0;
     const y = Math.round(37.4 - 6.4 * Math.sqrt(Math.max(0, 1 - dx * dx)));
     img.px(x, y + 1, rust(3));
   }
@@ -309,8 +342,8 @@ function paintToadstool(img: Img, blink: boolean): void {
    * CAP_LINE rather than `rust` 0: the tile takes its gills a full keyline under the cap's own
    * darkest, and at this size the brim needs that gap or the band vanishes into the flank.
    */
-  img.line(6, 38, 25, 38, CAP_LINE);
-  img.rect(9, 39, 14, 1, CAP_LINE);
+  img.line(6 + w, 38, 25 + w, 38, CAP_LINE);
+  img.rect(9 + w, 39, 14, 1, CAP_LINE);
 
   // Spots: a dark seat, a mid face, a cream core inset up-left, so each one sits on the curve.
   // `wall` rather than `fur`, which is what the live tile spots this cap with: the cottage cream
@@ -320,9 +353,9 @@ function paintToadstool(img: Img, blink: boolean): void {
     [19, 33, 2.1],
     [22, 36, 1.7],
   ] as const) {
-    img.ellipse(sx, sy, r, r * 0.9, rust(0));
-    img.ellipse(sx - 0.3, sy - 0.4, r - 0.5, (r - 0.5) * 0.9, shade('wall', 1));
-    img.ellipse(sx - 0.7, sy - 0.8, r - 1.1, (r - 1.1) * 0.9, shade('wall', 2));
+    img.ellipse(sx + w, sy, r, r * 0.9, rust(0));
+    img.ellipse(sx + w - 0.3, sy - 0.4, r - 0.5, (r - 0.5) * 0.9, shade('wall', 1));
+    img.ellipse(sx + w - 0.7, sy - 0.8, r - 1.1, (r - 1.1) * 0.9, shade('wall', 2));
   }
 
   /*
@@ -472,8 +505,15 @@ const HORN_DARK: RGBA = keyline('stone', 18);
  * low mass, a white scapular patch on the shoulder, and the iridescence as three touching pixels on
  * the wing's trailing edge rather than one blue pixel on the tail.
  */
-function paintMagpie(img: Img, blink: boolean): void {
-  const b = blink ? 1 : 0; // the head dips; the feet, the body and the tail are planted
+function paintMagpie(img: Img, pose: Pose): void {
+  const blink = pose.blink;
+  const b = pose.dip; // the head dips; the feet, the body and the tail are planted
+  /*
+   * HER BEAT IS THE HEAD TILT: the skull, the eye and the bill rise a row (`k`) and the bill's point
+   * a row more than its root, so the head cocks up at you rather than lifting off the neck. The neck
+   * follows the skull, the body and tail stay planted. At `k` 0 every line below is the old one.
+   */
+  const k = pose.beat > 0 ? 1 : 0;
 
   /*
    * TAIL, drawn first and so behind everything. It leaves the rump HIGH -- its axis runs from row
@@ -505,7 +545,7 @@ function paintMagpie(img: Img, blink: boolean): void {
    * nine-pixel skull and an eleven-pixel body, running up and forward, so the outline is pinched
    * under the jaw at the front and steps three rows at the nape behind.
    */
-  taper(img, 10.4, 33.6 + b, 13.2, 35.8, 5.2, 6.2, PLUMAGE(0.34));
+  taper(img, 10.4, 33.6 + b - k, 13.2, 35.8, 5.2, 6.2, PLUMAGE(0.34));
 
   /*
    * THE WHITE UNDERSIDE, drawn as ONE low block along the whole bottom of the body and terminating
@@ -554,9 +594,9 @@ function paintMagpie(img: Img, blink: boolean): void {
    * back as a black bar across the throat -- the head needs the outline's own edge there and
    * nothing else, which is what the notch between chin and breast now gives it.
    */
-  img.ellipse(8.6, 31.2 + b, 4.3, 4.1, PLUMAGE(0.08));
-  img.ellipse(8.2, 30.8 + b, 3.5, 3.3, PLUMAGE(0.5));
-  img.ellipse(7.3, 29.3 + b, 1.9, 1.4, PLUMAGE(0.74));
+  img.ellipse(8.6, 31.2 + b - k, 4.3, 4.1, PLUMAGE(0.08));
+  img.ellipse(8.2, 30.8 + b - k, 3.5, 3.3, PLUMAGE(0.5));
+  img.ellipse(7.3, 29.3 + b - k, 1.9, 1.4, PLUMAGE(0.74));
 
   /*
    * BILL -- joint 3. Short, heavy, POINTED and PALE, coming off the lower front of the skull on the
@@ -564,8 +604,16 @@ function paintMagpie(img: Img, blink: boolean): void {
    * whole way round the point. Integer rows, so the upper mandible is one pixel longer than the
    * lower and the bill ends in a point rather than in a blunt grey tube.
    */
-  img.rect(4, 32 + b, 4, 1, HORN);
-  img.rect(5, 33 + b, 3, 1, HORN_DARK);
+  if (k === 0) {
+    img.rect(4, 32 + b, 4, 1, HORN);
+    img.rect(5, 33 + b, 3, 1, HORN_DARK);
+  } else {
+    // Cocked: the root a row up with the skull, the point a row above that, so the bill angles.
+    img.rect(6, 31 + b, 2, 1, HORN);
+    img.rect(4, 30 + b, 2, 1, HORN);
+    img.rect(6, 32 + b, 2, 1, HORN_DARK);
+    img.px(5, 31 + b, HORN_DARK);
+  }
 
   /*
    * EYE -- joint 2, and the owl's own construction from `cast.ts`: INTEGER pixels, never an ellipse,
@@ -579,20 +627,21 @@ function paintMagpie(img: Img, blink: boolean): void {
    * `fur` 1 ring is 25 luma on a mark four pixels wide, which is not a glint, it is a dirty pixel
    * -- on a head this dark the ring itself is the light.
    */
+  const e = b - k;
   if (!blink) {
-    img.rect(7, 28 + b, 4, 4, shade('fur', 1));
+    img.rect(7, 28 + e, 4, 4, shade('fur', 1));
     for (const [cx, cy] of [
       [7, 28],
       [10, 28],
       [7, 31],
       [10, 31],
     ] as const)
-      img.px(cx, cy + b, PLUMAGE(0.08)); // the corners off, so the ring is round and not a patch
-    img.rect(8, 29 + b, 2, 2, PLUMAGE(0));
+      img.px(cx, cy + e, PLUMAGE(0.08)); // the corners off, so the ring is round and not a patch
+    img.rect(8, 29 + e, 2, 2, PLUMAGE(0));
   } else {
     // The lid closes to the lower half of the ring, so the eye shuts rather than vanishing.
-    img.rect(7, 30 + b, 4, 1, shade('fur', 1));
-    img.rect(7, 29 + b, 4, 1, MAGPIE_DARK);
+    img.rect(7, 30 + e, 4, 1, shade('fur', 1));
+    img.rect(7, 29 + e, 4, 1, MAGPIE_DARK);
   }
 
   /*
@@ -618,7 +667,7 @@ function paintMagpie(img: Img, blink: boolean): void {
    * BEAK, which is a blackbird. One pixel of `gold` 3 on a horn-grey bill is 85 luma above what it
    * sits on: a glint of something carried, with none of the hardware.
    */
-  img.px(3, 32 + b, shade('gold', 3));
+  img.px(3, 32 + b - 2 * k, shade('gold', 3));
 
   base(img, 11, 16, 47, MAGPIE_DARK);
   img.outline(MAGPIE_DARK);
@@ -660,8 +709,11 @@ const SHELL_GROOVE: RGBA = mix(shade('stone', 0), SNAIL_DARK, 0.66);
  *
  * He does not bob. A snail that bobbed would be moving, and the joke is that he is not.
  */
-function paintSnail(img: Img, blink: boolean): void {
-  const b = blink ? 1 : 0;
+function paintSnail(img: Img, pose: Pose): void {
+  const blink = pose.blink;
+  const b = pose.dip;
+  /** His beat: both eye stalks sway a pixel sideways at the tip, signed. The roots stay put. */
+  const s = pose.beat;
 
   /*
    * --- foot: one long low wedge with the head end raised, and nothing that could read as a leg ---
@@ -808,8 +860,8 @@ function paintSnail(img: Img, blink: boolean): void {
     taper(img, x0, y0, x1, y1 + b, 2.6, 1.8, shade('stone', 1));
     taper(img, x0 - 0.4, y0 - 0.4, x1 - 0.4, y1 - 0.4 + b, 1.4, 1.0, shade('stone', 2));
   };
-  stalk(7.2, 40.8, 5.8, 38.8);
-  stalk(9.6, 40.9, 11.2, 39.0);
+  stalk(7.2, 40.8, 5.8 + s, 38.8);
+  stalk(9.6, 40.9, 11.2 + s, 39.0);
   /*
    * The eyes on the ends of them: a dark knob with ONE pale pixel of light, not a pale knob with a
    * dark speck in it. `fur` 3 filled to 2 px across, which is what they were, is the brightest
@@ -821,9 +873,9 @@ function paintSnail(img: Img, blink: boolean): void {
     [5.8, 38.2],
     [11.2, 38.4],
   ] as const) {
-    img.ellipse(ex, ey + b, 0.9, 0.9, SNAIL_DARK);
-    if (!blink) img.px(Math.floor(ex), Math.floor(ey) + b, shade('fur', 2));
-    else img.px(Math.floor(ex), Math.floor(ey) + 1 + b, shade('stone', 2));
+    img.ellipse(ex + s, ey + b, 0.9, 0.9, SNAIL_DARK);
+    if (!blink) img.px(Math.floor(ex + s), Math.floor(ey) + b, shade('fur', 2));
+    else img.px(Math.floor(ex + s), Math.floor(ey) + 1 + b, shade('stone', 2));
   }
   // Lower tentacles, the short pair he actually smells with. Short: any longer and they read as
   // legs, which 10.2 says he does not have.
@@ -855,8 +907,17 @@ const CAT_DARK: RGBA = keyline('wood');
  * Her haunch bars drop from four to three and her whisker dimples from six to four: at twelve
  * pixels of interior width, four bars is a dirty sprite.
  */
-function paintCat(img: Img, blink: boolean): void {
-  const b = blink ? 1 : 0; // the head and ears dip; the paws and the tail stay planted
+function paintCat(img: Img, pose: Pose): void {
+  const blink = pose.blink;
+  const b = pose.dip; // the head and ears dip; the paws and the tail stay planted
+  /**
+   * Her beat is the tail: its tip swishes out to the right by `sw` pixels and the rings ride along
+   * in proportion to how far up the tail they sit. The root stays on the hip. Only rightward --
+   * swung left, the tip runs into her own right ear two rows above it.
+   */
+  const sw = Math.max(0, pose.beat) * 1.2;
+  /** How far a point `y` rows up the tail moves with the tip: 0 at the root (row 41), 1 at the tip. */
+  const along = (y: number): number => Math.round(sw * ((41 - y) / 15.6));
 
   // --- body: mass in shade, inset up-left, lit shoulder ---
   img.ellipse(15.4, 36.4, 4.6, 7.8, shade('wood', 0));
@@ -920,10 +981,10 @@ function paintCat(img: Img, blink: boolean): void {
    * cylinder lying against the body, and the CAT_DARK groove down its inner edge is the whole of
    * that read.
    */
-  img.line(18.0, 26.0, 18.6, 40.6, CAT_DARK);
-  taper(img, 19.0, 41.0, 20.4, 25.4, 3.0, 2.4, CAT_DARK);
-  taper(img, 18.9, 40.6, 20.3, 25.6, 2.2, 1.6, shade('wood', 1));
-  taper(img, 18.7, 40.0, 20.1, 26.4, 1.1, 1.0, shade('wood', 2));
+  img.line(18.0 + sw, 26.0, 18.6, 40.6, CAT_DARK);
+  taper(img, 19.0, 41.0, 20.4 + sw, 25.4, 3.0, 2.4, CAT_DARK);
+  taper(img, 18.9, 40.6, 20.3 + sw, 25.6, 2.2, 1.6, shade('wood', 1));
+  taper(img, 18.7, 40.0, 20.1 + sw, 26.4, 1.1, 1.0, shade('wood', 2));
   /*
    * Two rings on it. The tail was drawn in the body's own two levels of `wood` and standing against
    * the hip, which is both the same ramp and the same value, so at size it read as a plank rather
@@ -932,8 +993,8 @@ function paintCat(img: Img, blink: boolean): void {
    * on the forehead and two here the count is still inside "three is a tabby, thirty is a dirty
    * sprite", because no one group of them is more than three.
    */
-  img.rect(19, 35, 2, 1, CAT_DARK);
-  img.rect(20, 30, 2, 1, CAT_DARK);
+  img.rect(19 + along(35), 35, 2, 1, CAT_DARK);
+  img.rect(20 + along(30), 30, 2, 1, CAT_DARK);
 
   /*
    * --- ears, and the V between them, which is the whole of her silhouette above the shoulder ---
@@ -1027,12 +1088,23 @@ function paintCat(img: Img, blink: boolean): void {
  * `-0` is the open-eyed frame, `-1` the blink.
  */
 export const BYSTANDER_FRAMES: Record<string, (img: Img) => void> = {
-  'bystander-toadstool-0': (img) => paintToadstool(img, false),
-  'bystander-toadstool-1': (img) => paintToadstool(img, true),
-  'bystander-magpie-0': (img) => paintMagpie(img, false),
-  'bystander-magpie-1': (img) => paintMagpie(img, true),
-  'bystander-snail-0': (img) => paintSnail(img, false),
-  'bystander-snail-1': (img) => paintSnail(img, true),
-  'bystander-cat-0': (img) => paintCat(img, false),
-  'bystander-cat-1': (img) => paintCat(img, true),
+  'bystander-toadstool-0': (img) => paintToadstool(img, REST),
+  'bystander-toadstool-1': (img) => paintToadstool(img, BLINK),
+  'bystander-magpie-0': (img) => paintMagpie(img, REST),
+  'bystander-magpie-1': (img) => paintMagpie(img, BLINK),
+  'bystander-snail-0': (img) => paintSnail(img, REST),
+  'bystander-snail-1': (img) => paintSnail(img, BLINK),
+  'bystander-cat-0': (img) => paintCat(img, REST),
+  'bystander-cat-1': (img) => paintCat(img, BLINK),
+};
+
+/** A character painter that takes a pose, for the idle and hop strips `sprites.ts` assembles. */
+export type PosedPainter = (img: Img, pose: Pose) => void;
+
+/** The bystanders' painters by sprite key, posable. `BYSTANDER_FRAMES` is two poses of each. */
+export const BYSTANDER_POSED: Record<string, PosedPainter> = {
+  'bystander-toadstool': paintToadstool,
+  'bystander-magpie': paintMagpie,
+  'bystander-snail': paintSnail,
+  'bystander-cat': paintCat,
 };

@@ -17,15 +17,16 @@ import { Img, rgb } from './paint.ts';
 import type { RGBA } from './paint.ts';
 import { TILE_NAMES, paintTileset } from './tiles.ts';
 import {
-  FX_SIZES,
+  FX_SHEETS,
   ITEM_PAINTERS,
+  LIFE_KEYS,
   NPC_PAINTERS,
   PORTRAIT_PAINTERS,
   PORTRAIT_SIZE,
-  paintDust,
-  paintInteractPrompt,
+  paintFxSheet,
+  paintHopSheet,
+  paintIdleSheet,
   paintNpcSheet,
-  paintPawprints,
   paintPurpleSheet,
   PURPLE_H,
   PURPLE_W,
@@ -152,6 +153,11 @@ if (want('npcs')) {
   for (const name of [...Object.keys(NPC_PAINTERS), 'npc-wolf']) {
     write(`sheet-${name}.png`, sheet(paintNpcSheet(name), PURPLE_W, PURPLE_H));
   }
+  // The idle and hop strips, each on its own sheet so a loop can be read left to right.
+  for (const name of LIFE_KEYS) {
+    write(`sheet-${name}-idle.png`, sheet(paintIdleSheet(name), PURPLE_W, PURPLE_H));
+    write(`sheet-${name}-hop.png`, sheet(paintHopSheet(name), PURPLE_W, PURPLE_H));
+  }
 }
 
 if (want('portraits')) {
@@ -171,11 +177,6 @@ if (want('items')) {
 }
 
 if (want('fx')) {
-  const fx = FX_SIZES;
-  write('sheet-fx-dust.png', sheet(paintDust(), fx['fx-dust'], fx['fx-dust']));
-  write(
-    'sheet-fx-interact-prompt.png',
-    sheet(paintInteractPrompt(), fx['fx-interact-prompt'], fx['fx-interact-prompt']),
-  );
-  write('sheet-fx-pawprints.png', sheet(paintPawprints(), fx['fx-pawprints'], fx['fx-pawprints']));
+  for (const [key, fx] of Object.entries(FX_SHEETS))
+    write(`sheet-${key}.png`, sheet(paintFxSheet(key), fx.size, fx.size));
 }

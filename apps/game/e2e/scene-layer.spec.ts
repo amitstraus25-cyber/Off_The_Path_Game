@@ -40,9 +40,11 @@ test('every character in the cast stands on the bottom edge of their own tile', 
 }) => {
   const feet = await page.evaluate(() => {
     const scene = window.__otp!.scene as unknown as {
-      npcs: { id: string; sprite: { y: number; texture: { key: string } } }[];
+      npcs: { id: string; sheet: string; sprite: { y: number } }[];
     };
-    return scene.npcs.map((n) => ({ key: n.sprite.texture.key, y: n.sprite.y }));
+    // The sheet each figure was placed from, which is its spawn's name. Not the sprite's live
+    // texture: a figure breathing on its `-idle` strip has that strip's key while it plays.
+    return scene.npcs.map((n) => ({ key: n.sheet, y: n.sprite.y }));
   });
   const objects = await page.evaluate(() => window.__otp!.mapObjects!);
 

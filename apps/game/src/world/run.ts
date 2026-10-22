@@ -29,6 +29,22 @@ export interface WorldRun {
   castOf(spawnName: string): { kind: 'character' | 'bystander'; id: string } | null;
   /** Whether this character still talks: false once their offer has a verdict. */
   stillOffering(characterId: string): boolean;
+  /**
+   * Who the run is talking to right now, or null. The scene hops that character once when this
+   * changes to them, whatever sent the MEET -- a press of A, a wing ride landing, or a spec.
+   */
+  talkingTo(): string | null;
+  /**
+   * THE PERKS, as the forest draws them (core v2 perks.ts, read through `hasPerk` and friends and
+   * never by skill id): how much faster Purple walks, whether the fork signs and the lantern are
+   * out, and how dark the dusk is right now (0 until 2:00 left, never past the content's cap).
+   */
+  walkFactor(): number;
+  forkSigns(): boolean;
+  lantern(): boolean;
+  dusk(): number;
+  /** The darkest the dusk ever gets (the content's cap), so the lantern can scale against it. */
+  darkest(): number;
 }
 
 /** The forest's questions, answered from the store. */
@@ -50,8 +66,25 @@ export function gameRun(store: Store): WorldRun {
       const c = v2.findCharacter(content, characterId);
       return c !== undefined && store.getState().verdicts[c.skillId] === undefined;
     },
+    talkingTo: () => store.getState().active,
+    walkFactor: () => v2.walkFactor(store.getState()),
+    forkSigns: () => v2.hasPerk(store.getState(), 'fork-signs'),
+    lantern: () => v2.hasPerk(store.getState(), 'lantern'),
+    dusk: () => {
+      const state = store.getState();
+      return v2.duskAt(content, state, runAt(state, store.elapsed()));
+    },
+    darkest: () => content.world.dusk.darkest,
   };
 }
+
+/**
+ * The run's REAL elapsed time for the screens: the live clock while the run runs, frozen where it
+ * stopped otherwise. Real, not the rewound run clock: core's `timeLeftMs` and `duskAt` take the real
+ * stamp and subtract what a rewind gave back themselves (perks.ts, "two clocks").
+ */
+export const runAt = (state: v2.State, elapsed: number): number =>
+  v2.RUNNING.has(state.phase) ? elapsed : state.now;
 
 /**
  * THE CARD OPENS BY ITSELF (the client, 2026-10-22). The skill whose card a run is owed, or null.
@@ -88,11 +121,20 @@ export function hudBasket(state: v2.State, content: v2.Content): HudBasketItem[]
   });
 }
 
-/** Time left on the HUD: the live clock while the run runs, frozen where it stopped otherwise. */
+/**
+ * Time left on the HUD: the live clock while the run runs, frozen where it stopped otherwise.
+ *
+ * Against the run's own DEADLINE (core `timeLeftMs`), not the bare three minutes: a Long Evening
+ * moves the deadline 20 s later, and a HUD that kept reading `TIME_LIMIT_MS` showed 0:00 for the
+ * whole of the time it gave back while the run was still alive.
+ */
 export function remainingMs(state: v2.State, elapsed: number): number {
-  const at = v2.RUNNING.has(state.phase) ? elapsed : state.now;
-  return Math.max(0, v2.TIME_LIMIT_MS - at);
+  return v2.timeLeftMs(state, runAt(state, elapsed));
 }
+
+/** Whether the run's clock has reached its deadline: the hard stop main.ts sends TIME_UP on. */
+export const outOfTime = (state: v2.State, elapsed: number): boolean =>
+  v2.RUNNING.has(state.phase) && elapsed >= v2.deadlineMs(state);
 
 /** A seed for a run the server did not start: the browser's CSPRNG, as core asks (deal.ts). */
 export const localSeed = (): number => crypto.getRandomValues(new Uint32Array(1))[0]!;

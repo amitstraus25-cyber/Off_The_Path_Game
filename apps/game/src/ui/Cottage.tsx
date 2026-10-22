@@ -8,6 +8,11 @@ export interface CottageProps {
   /** Which ending the run reached, and its words from content (`endings`). */
   ending: v2.Ending;
   words: v2.Content['endings'][v2.Ending];
+  /**
+   * A first beat said before the ending's own lines, or '': the Word Weaver's welcome, Grandma at
+   * the door already (App.tsx decides when).
+   */
+  welcome?: string;
   onFinish(): void;
 }
 
@@ -56,8 +61,8 @@ const Caret = () => (
  * that speaks is born empty and then mutated, because a live region inserted with its text is
  * announced by no screen reader.
  */
-export function Cottage({ ending, words, onFinish }: CottageProps) {
-  const beats = words.lines;
+export function Cottage({ ending, words, welcome = '', onFinish }: CottageProps) {
+  const beats = welcome ? [welcome, ...words.lines] : words.lines;
   const [shown, setShown] = useState(1);
   const done = shown >= beats.length;
   const visible = beats.slice(0, shown);

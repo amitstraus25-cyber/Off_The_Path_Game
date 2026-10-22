@@ -52,7 +52,7 @@
  * shape on cream ground. It keeps `ink` 0; the argument is at the call site in
  * `paintInteractPromptFrame`.
  */
-import { Img, keyline, shade } from '../paint.ts';
+import { clamp01, ember, Img, keyline, mix, rose, shade, tone } from '../paint.ts';
 import type { Painter, RGBA } from '../paint.ts';
 
 /** Portraits and items. The effects are smaller and say their own size at the top of each painter. */
@@ -1591,6 +1591,207 @@ const weaver: Painter = (img) => {
   img.blit(cord, 0, 0);
 };
 
+/*
+ * THE TWO FOR THE V2 ADDITIONS, painted 2026-10-22: the Magpie's Wing Ride and the Cat's Long
+ * Evening. Same hand as the seven above -- masses that fill the frame, light from the top-left, an
+ * outline in the object's own dark -- and each on a ramp the card was not already leaning on: the
+ * set had no near-black and no glass, and these two are the only icons with either.
+ */
+
+/** The magpie's own black, `bystanders.ts`'s PLUMAGE recipe: a cool near-black off `stone`. */
+const MAGPIE_BLACK = (t: number): RGBA =>
+  mix(keyline('stone', 64), keyline('stone', 30), clamp01(t));
+/** Her wing gloss, the sprite's GLOSS: `water` 0 taken most of the way down to the plumage. */
+const MAGPIE_GLOSS: RGBA = mix(keyline('stone', 64), shade('water', 0), 0.45);
+/** And her keyline, the sprite's MAGPIE_DARK, so the icon and the bird are ringed alike. */
+const MAGPIE_RING: RGBA = keyline('stone', 74);
+
+/**
+ * The Magpie's Wing Ride: the magpie herself from behind, wings flung wide, mid-swoop. "Hold on,
+ * I'll carry you."
+ *
+ * FROM BEHIND, ON PURPOSE. A bird seen from the front has a face, and a face staring out of the
+ * card at the player is a different icon; from behind she is all wing, and the two marks that
+ * make a magpie a magpie rather than a crow are exactly the ones a back view shows best -- the
+ * white scapular on each shoulder and the long tail with the blue gloss in it. The primaries are
+ * white with black tips, which is the third.
+ *
+ * The right wing is the left one's geometry mirrored about the centre line and NOT its lighting:
+ * every lit inset is offset up-left in screen space, so both wings are lit from the same sky.
+ */
+const wings: Painter = (img) => {
+  const C = 31.5;
+  /** A feather: its dark self, then a narrower lit inset up-left in the colour `face` gives. */
+  const feather = (
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    w0: number,
+    w1: number,
+    dark: RGBA,
+    face: RGBA,
+  ): void => {
+    limb(img, x0, y0, x1, y1, w0, w1, dark);
+    limb(img, x0 - 0.5, y0 - 0.6, x1 - 0.5, y1 - 0.6, w0 - 2.2, Math.max(1, w1 - 2), face);
+  };
+  for (const side of [-1, 1] as const) {
+    // Geometry is written for the LEFT wing and mirrored; the light is never mirrored.
+    const X = (x: number): number => (side < 0 ? x : 2 * C - x);
+    // Secondaries first, the trailing edge nearest the body, black with the gloss along them.
+    for (const [rx, ry, tx, ty] of [
+      [25, 29, 19, 41],
+      [22, 27, 13, 38],
+      [19, 25, 8, 34],
+    ] as const) {
+      feather(X(rx), ry, X(tx), ty, 6.4, 4.6, MAGPIE_BLACK(0.04), MAGPIE_BLACK(0.4));
+      limb(img, X(rx) - 0.4, ry + 1.6, X(tx) - 0.4, ty - 1.2, 1.6, 1.2, MAGPIE_GLOSS);
+    }
+    // Primaries over them: white, each with its black tip, the leading one longest and last.
+    for (const [rx, ry, tx, ty] of [
+      [17, 23, 4, 28],
+      [15, 21, 2, 20],
+      [14, 19, 2, 12],
+      [14, 17, 4, 4],
+    ] as const) {
+      feather(X(rx), ry, X(tx), ty, 6.0, 4.4, shade('fur', 0), shade('fur', 2));
+      const k = 0.8; // where the white ends and the tip begins: a magpie's primary is mostly white
+      const mx = X(rx + (tx - rx) * k);
+      const my = ry + (ty - ry) * k;
+      feather(mx, my, X(tx), ty, 4.8, 4.4, MAGPIE_BLACK(0.04), MAGPIE_BLACK(0.34));
+    }
+    // The arm and its coverts, from shoulder to wrist: the black the feathers spring out of.
+    limb(img, X(27), 29, X(14.5), 18, 9.6, 6.4, MAGPIE_BLACK(0.06));
+    limb(img, X(26.4), 28.2, X(14), 17.4, 7.2, 4.2, MAGPIE_BLACK(0.42));
+    limb(img, X(25.6), 26.4, X(15.2), 15.8, 2.2, 1.6, MAGPIE_BLACK(0.74)); // its lit leading edge
+    // The white scapular on the shoulder: THE magpie mark.
+    img.ellipse(X(24.6), 27.4, 3.6, 2.4, shade('fur', 1));
+    img.ellipse(X(24.6) - 0.8, 26.8, 2.2, 1.3, shade('fur', 3));
+  }
+
+  // The tail: long, narrow at the root and widening a little, glossed, graduated at the end.
+  limb(img, C, 37, C, 59, 5.2, 7.4, MAGPIE_BLACK(0.04));
+  limb(img, C - 0.5, 37, C - 0.5, 58, 3.4, 5.2, MAGPIE_GLOSS);
+  limb(img, C - 1.6, 40, C - 1.6, 55, 1.2, 1.4, MAGPIE_BLACK(0.74));
+  img.rect(29, 60, 6, 1, MAGPIE_BLACK(0.04));
+  img.rect(30, 61, 4, 1, MAGPIE_BLACK(0.2));
+
+  // The back, and the round of the head above it: no face, because she is flying away from you.
+  img.ellipse(C, 32, 5.4, 7.2, MAGPIE_BLACK(0.06));
+  img.ellipse(C - 0.6, 31.2, 4.4, 6.2, MAGPIE_BLACK(0.4));
+  img.ellipse(C - 2, 28, 1.6, 2.6, MAGPIE_BLACK(0.7));
+  img.ellipse(C, 21.6, 4.6, 4.3, MAGPIE_BLACK(0.06));
+  img.ellipse(C - 0.6, 21, 3.7, 3.4, MAGPIE_BLACK(0.46));
+  img.ellipse(C - 1.6, 19.6, 1.8, 1.3, MAGPIE_BLACK(0.8));
+
+  img.outline(MAGPIE_RING); // her own dark, as the sprite's
+};
+
+/**
+ * The Cat's Long Evening: an hourglass, and the evening is in it. "Stay a while; there's no
+ * hurry."
+ *
+ * Two turned plates and two posts in `wood`, and between them the glass -- the only glass in the
+ * set, drawn in the palette's palest cool (`water` 3) with a glint up its left side. The top bulb
+ * holds a dusk sky: Deep Purple at the top going down through Aubergine to a band of rose and a
+ * line of ember at its horizon, one star in it, and the last of the sand banked under the sunset.
+ * The thread of sand falls through the neck to a pile in the bottom bulb.
+ *
+ * `night` 2 and 3 are the seals' own two tokens (#441363, Aubergine), so the four items that carry
+ * a brand colour agree. The rose and ember are the board's flower families from `paint.ts`, world
+ * art rather than status colours, and they are here because a dusk sky without a warm band at its
+ * horizon is a night sky, which is a different card.
+ */
+const hourglass: Painter = (img) => {
+  const cx = 32;
+  const NECK = 32;
+  const TOP = 12;
+  const BOT = 52;
+  /** The glass's half-width at a row: pinched at the neck, widest high in each bulb. */
+  const half = (y: number): number => {
+    const u = Math.min(1, Math.abs(y + 0.5 - NECK) / (NECK - TOP));
+    return 1.4 + 12.6 * Math.sin(Math.PI * 0.62 * u);
+  };
+  const inGlass = (x: number, y: number): boolean =>
+    y >= TOP && y < BOT && Math.abs(x + 0.5 - cx) <= half(y);
+
+  // The two posts, behind the glass, lit down the left.
+  for (const px of [10, 50]) {
+    img.rect(px, 9, 4, 46, shade('trunk', 1));
+    img.rect(px, 9, 1, 46, shade('trunk', 2));
+    img.rect(px + 3, 9, 1, 46, shade('trunk', 0));
+    for (const by of [20, 31, 42]) img.rect(px - 1, by, 6, 2, shade('trunk', 0)); // the turnings
+    for (const by of [20, 31, 42]) img.rect(px - 1, by, 2, 1, shade('trunk', 2));
+  }
+
+  // The glass: its rim a step of `stone`, its body the palest cool in the palette.
+  for (let y = TOP; y < BOT; y++)
+    for (let x = 0; x < 64; x++) {
+      if (!inGlass(x, y)) continue;
+      const edge = !inGlass(x - 1, y) || !inGlass(x + 1, y);
+      img.px(x, y, edge ? shade('stone', 2) : shade('water', 3));
+    }
+
+  // The top bulb's dusk, in bands, inside the rim. Sand banks under it, down to the neck.
+  const SAND_TOP = 25;
+  for (let y = TOP + 1; y < NECK; y++)
+    for (let x = 0; x < 64; x++) {
+      if (!inGlass(x, y) || !inGlass(x - 1, y) || !inGlass(x + 1, y)) continue;
+      let c: RGBA;
+      if (y >= SAND_TOP + Math.abs(x + 0.5 - cx) * 0.35)
+        c = x < cx - 2 ? shade('path', 2) : shade('path', 1);
+      else if (y < 16) c = shade('night', 2);
+      else if (y < 20) c = shade('night', 3);
+      else if (y < 23) c = rose(0.3);
+      else c = ember(0.62);
+      img.px(x, y, c);
+    }
+  img.px(26, 15, shade('wall', 3)); // one star, high in the purple
+  img.px(37, 17, shade('cloak', 3)); // and a fainter one
+
+  // The thread of sand through the neck, and the pile it is building.
+  img.rect(31, NECK - 1, 2, 1, shade('path', 1));
+  img.rect(cx - 0.5, NECK, 1, 13, shade('path', 2));
+  for (let y = 44; y < BOT; y++) {
+    const w = Math.min(half(y) - 1, (y - 43) * 2.2);
+    img.rect(Math.round(cx - w), y, Math.round(w * 2), 1, shade('path', 1));
+    img.rect(Math.round(cx - w), y, Math.max(1, Math.round(w * 0.6)), 1, shade('path', 2));
+  }
+  img.px(31, 44, shade('path', 3)); // the lit top of the cone
+
+  // The glint up the left side of each bulb, which is all a reflection ever is in pixels.
+  for (const [x0, y0, x1, y1] of [
+    [22, 15, 20, 22],
+    [22, 37, 21, 45],
+  ] as const) {
+    const glint = new Img(img.w, img.h);
+    glint.line(x0, y0, x1, y1, shade('wall', 3));
+    // Only where there is glass: a reflection cannot sit on the air beside the bulb.
+    for (let y = 0; y < 64; y++)
+      for (let x = 0; x < 64; x++)
+        if (glint.get(x, y)[3] && inGlass(x - 1, y) && inGlass(x + 1, y))
+          img.px(x, y, shade('wall', 3));
+  }
+
+  // The plates: turned slabs, lit along the top, shaded underneath, a finial on each.
+  for (const py of [4, 52]) {
+    img.rect(8, py, 48, 8, shade('wood', 0));
+    img.rect(8, py, 47, 7, shade('wood', 1));
+    img.rect(8, py, 47, 1, shade('wood', 3));
+    img.rect(8, py + 1, 2, 6, shade('wood', 2));
+    img.rect(8, py + 4, 48, 1, shade('wood', 0)); // the groove the lathe left
+  }
+  // A knob on top to lift it by, and two feet under it to stand it on.
+  img.ellipse(32, 2.6, 4, 2, shade('wood', 0));
+  img.ellipse(31.4, 2.2, 3, 1.3, shade('wood', 2));
+  for (const fx of [12, 48]) {
+    img.rect(fx, 60, 5, 2, shade('wood', 0));
+    img.rect(fx, 60, 4, 1, shade('wood', 1));
+  }
+
+  img.outline(keyline('wood')); // the frame's own dark
+};
+
 // ----------------------------------------------------------------------------- effects
 
 /*
@@ -1749,6 +1950,152 @@ export function paintPawprintsFrame(img: Img, frame: 0 | 1 | 2): void {
   }
 }
 
+/** Fills a polygon: every pixel whose centre is inside it. For folded paper, which is all facets. */
+function poly(img: Img, pts: readonly (readonly [number, number])[], c: RGBA): void {
+  const ys = pts.map(([, y]) => y);
+  for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
+    for (let x = 0; x < img.w; x++) {
+      const px = x + 0.5;
+      const py = y + 0.5;
+      let inside = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const [xi, yi] = pts[i]!;
+        const [xj, yj] = pts[j]!;
+        if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      if (inside) img.px(x, y, c);
+    }
+}
+
+/**
+ * The paper bird, 16 x 16 x 4: a folded note flying, wings up, level, down, level. It is what a
+ * message looks like when it is on its way somewhere, which is the whole of the word-sending skills.
+ *
+ * FOLDED, SO IT IS FACETS. Every plane is one flat value of `wall` -- the letter's own paper -- with
+ * the lit faces at level 3 and the turned ones at 0 and 1, and a crease is simply where two values
+ * meet. No gradient anywhere, because paper does not have one. The far wing is a step darker than
+ * the near one and drawn first, behind the body.
+ *
+ * It is read AGAINST THE WORLD, like the speech bubble, and for the same reason it cannot outline
+ * in `wall` 0: that is luma 175 over a lawn at 160. Its ring is the paper's own hue taken right down,
+ * `keyline('wall', 130)`, a warm near-black about 45 luma, so it has an edge over grass, sand and
+ * water alike without borrowing the wolf's ink.
+ *
+ * The body rides a pixel on the downstroke, which is the one-pixel bob section 6 asks of a walk.
+ */
+export function paintPaperBirdFrame(img: Img, frame: 0 | 1 | 2 | 3): void {
+  const dy = frame === 2 ? -1 : 0;
+  const at = (x: number, y: number): readonly [number, number] => [x, y + dy];
+  // Each wing's tip per frame -- up, level, down, coming back up -- near wing first. The far wing
+  // trails the near one by a few pixels back and a row, which is the wing on the other side.
+  const tips: readonly (readonly [readonly [number, number], readonly [number, number]])[] = [
+    [
+      [6, 0],
+      [9, 1],
+    ],
+    [
+      [1, 4],
+      [5, 4],
+    ],
+    [
+      [5, 15],
+      [8, 14],
+    ],
+    [
+      [2, 2],
+      [6, 2],
+    ],
+  ];
+  const [near, far] = tips[frame]!;
+  // The far wing, behind the body, in the paper's shade.
+  poly(img, [at(7, 7), at(11, 6), [far[0], far[1]]], shade('wall', 0));
+  // The body: a folded keel with a pointed tail and a point of beak. Lit above the fold, shaded
+  // below it, and the fold itself is simply where the two meet.
+  poly(img, [at(1, 7), at(12, 6), at(15, 5), at(13, 7), at(8, 8)], shade('wall', 3));
+  poly(img, [at(1, 7), at(8, 8), at(13, 7), at(8, 10)], shade('wall', 1));
+  // The near wing, in front, its crease along the root.
+  poly(img, [at(5, 7), at(10, 7), [near[0], near[1]]], shade('wall', 2));
+  img.line(5, 7 + dy, 9, 7 + dy, shade('wall', 0));
+  img.outline(keyline('wall', 130));
+}
+
+/**
+ * The fork sign, 32 x 32 x 2: a small blank board on a post, frame 0 pointing LEFT and frame 1
+ * RIGHT, for the Way Teller to stand at a fork in the path. "Which way? Ask the sign."
+ *
+ * BLANK, AND THAT IS THE BRIEF: the game lays a face icon over the board, so the board's face is
+ * one flat field of `wood` 1 -- rows 6 to 13 and columns 11 to 22 on both frames, the same
+ * rectangle on both, so an overlay placed once is placed for either facing. No grain, no knot and
+ * no nail in it; the grain is on the post. It is the forest's own signpost hand (`arrowBoard`, from the signpost
+ * icon): lit top edge, shaded bottom two rows, the point bevelled, the post in `trunk` lit down its
+ * left with its cap catching the light.
+ *
+ * No baked ground. A sprite that carries a patch of lawn takes it onto the sand, which is the whole
+ * argument of `cast.ts`'s CONTACT note; the post stands on a bar of its own keyline instead.
+ */
+export function paintForkSignFrame(img: Img, frame: 0 | 1): void {
+  // The post, lit down the left, and its cap.
+  img.rect(14, 3, 4, 27, shade('trunk', 1));
+  img.rect(14, 3, 1, 27, shade('trunk', 2));
+  img.rect(17, 3, 1, 27, shade('trunk', 0));
+  img.rect(13, 2, 6, 2, shade('trunk', 0));
+  img.rect(13, 2, 5, 1, shade('trunk', 3));
+  img.rect(15, 20, 1, 4, shade('trunk', 0)); // a run of grain below the board
+  // The board, pointing the way the frame says, and the shadow it drops on the post.
+  if (frame === 0) arrowBoard(img, 9, 27, 5, 11, 5, false);
+  else arrowBoard(img, 4, 22, 5, 11, 5, true);
+  img.rect(14, 16, 4, 1, shade('trunk', 0));
+  // The contact: a bar of keyline under the foot, wider than the post.
+  img.rect(12, 30, 8, 1, keyline('wood'));
+  img.outline(keyline('wood'));
+}
+
+/**
+ * The lantern's glow, 64 x 64 x 1: a radial in hard rings, from the flame's `gold` at the core down
+ * the ramp and past its foot through `keyline('gold')` to a near-black rim.
+ *
+ * MADE FOR AN ADDITIVE BLEND, and that is how it stays inside the no-partial-alpha rule. A soft
+ * glow drawn the usual way is a disc of falling alpha, and every one of those pixels is a partly
+ * transparent pixel, which docs/ASSETS.md forbids. Laid with `Phaser.BlendModes.ADD` instead, each
+ * opaque ring ADDS its colour to whatever is under it -- the core adds a lot, the near-black rim
+ * almost nothing -- so the falloff is in the values, every pixel is solid, and the edge of the
+ * disc dissolves into the lawn rather than stopping on it. Drawn with a NORMAL blend it is a solid
+ * gold coin, which is not what it is for.
+ *
+ * PIXEL-STEPPED, NOT A GRADIENT: nine flat rings, each two to four pixels wide, so at zoom 2 the
+ * light falls in visible bands the way every other shaded mass in this game does. Each ring's edge
+ * is nudged a pixel in and out round the circle so the bands read as light and not as a target.
+ */
+export function paintLanternGlowFrame(img: Img): void {
+  const rings: readonly RGBA[] = [
+    tone('gold', 0.92),
+    tone('gold', 0.72),
+    tone('gold', 0.52),
+    tone('gold', 0.3),
+    shade('gold', 0),
+    keyline('gold', 36),
+    keyline('gold', 62),
+    keyline('gold', 86),
+    keyline('gold', 104),
+  ];
+  const R = 31.5;
+  for (let y = 0; y < 64; y++)
+    for (let x = 0; x < 64; x++) {
+      const dx = x + 0.5 - 32;
+      const dy = y + 0.5 - 32;
+      const d = Math.hypot(dx, dy);
+      // Under a pixel of wobble round the circle, at two incommensurate lobe counts, so no ring is
+      // a compass circle and none is a polygon either.
+      const a = Math.atan2(dy, dx);
+      const wob = Math.cos(a * 5) * 0.45 + Math.cos(a * 9 + 1.3) * 0.3;
+      const r = (d + wob) / R;
+      if (r > 1 || d > R) continue;
+      // The rings get wider towards the rim: light falls off fast near the flame and slowly far out.
+      const i = Math.min(rings.length - 1, Math.floor(r ** 0.75 * rings.length));
+      img.px(x, y, rings[i]!);
+    }
+}
+
 export const FACE_PAINTERS: Record<string, Painter> = {
   'portrait-purple': portraitPurple,
   'portrait-rabbit': portraitRabbit,
@@ -1766,6 +2113,8 @@ export const FACE_PAINTERS: Record<string, Painter> = {
   'item-shortcut': shortcut,
   'item-latch': latch,
   'item-weaver': weaver,
+  'item-wings': wings,
+  'item-hourglass': hourglass,
   'fx-dust': (img) => paintDustFrame(img, 0),
   'fx-interact-prompt': (img) => paintInteractPromptFrame(img, 0),
   'fx-pawprints': (img) => paintPawprintsFrame(img, 0),

@@ -173,10 +173,11 @@ that is deliberately not the game. Rewritten 2026-10-22 for the random deal.
 
 ### Content shape
 
-A skill is `{ id, name, icon, promise, realWorld, good, bad }`, and each variant is strictly
+A skill is `{ id, name, icon, promise, effect, realWorld, good, bad }`, and each variant is strictly
 `{ card: { take: string[], leave }, reveal }`. **There is one copy of everything before the card**,
-so a variant cannot differ there: the schema refuses a variant carrying a name, promise, icon or
-greeting. The lint refuses a bad card that is not the good card with exactly one line swapped, same
+so a variant cannot differ there: the schema refuses a variant carrying a name, promise, icon,
+greeting or effect -- so a good and a bad copy of a skill do exactly the same thing in the forest
+(section 11). The lint refuses a bad card that is not the good card with exactly one line swapped, same
 line count (`giveaway()` finds it; an added line is refused), a different leave line, a giveaway
 over `GIVEAWAY_WORDS` (10), two variants sharing a reveal, and a `realWorld.note` over
 `REAL_WORLD_WORDS` (25) or two sentences. `deal.good` says how many are good per run; a launch build
@@ -203,7 +204,9 @@ draws the seed with `crypto.getRandomValues` and passes it to `createState(conte
 - **`Verdict = 'take' | 'leave'`**, from the conversation or the card; reading is optional. A skill
   walked past counts as left.
 - **`TIME_LIMIT_MS = 180_000`**, a rule constant, injected as elapsed ms since BEGIN. An action at
-  or after the limit is not applied and the run ends `late`, stamped at the limit.
+  or after the run's deadline is not applied and the run ends `late`, stamped at the deadline. The
+  deadline is the limit plus whatever a `rewind` perk gave back (`deadlineMs`, perks.ts); stamps
+  stay real elapsed time (section 11).
 - **The run log is `{ rules: 2, content, seed, events }`.** The server deals from the seed and
   replays through the same reducer. **The seed is client-reported, like the timestamps**: a forger
   can post the one seed whose deal makes their basket careful. Closing that is the same fix as the
@@ -214,7 +217,8 @@ draws the seed with `crypto.getRandomValues` and passes it to `createState(conte
 `score(state, content)` is an integer 0 to 100; `result(state, content)` adds the ending, the
 reveal (every offer in walking order, with its dealt variant's line and, for a bad one, the
 giveaway line), the counts, and since 2026-10-22 the two parts of the total (`choices`, `speed`),
-the arrival time (`timeMs`) and the par it was measured against (`parMs`).
+the arrival time on the run clock (`timeMs`, the stamp less any rewind), what a rewind gave back
+(`rewoundMs`) and the par it was measured against (`parMs`).
 
 **The client's decision, 2026-10-22: "a combination of time and correct answers". Correctness
 first, then speed.**
@@ -227,21 +231,25 @@ first, then speed.**
 
 Shipped weights: `clean` 10, `good` 20, `speed` 30, so 10 + 60 + 30 = 100. **f(t)** is 1 at or
 under par, falls in a straight line to 0 at 3:00, and is never negative; t is the run's own
-`arrived` stamp, which the server bounds from above by its clock and from below by the walk the log
+`arrived` stamp less what a rewind gave back, the stamp itself being what the server bounds from above by its clock and from below by the walk the log
 describes (apps/api). The bonus is rounded to a whole point with integer arithmetic until the one
 division, so browser and server cannot round apart (`speedBonus`, scoring.ts).
 
-**Par is 1:45 (`scoring.parMs` 105000), derived, not chosen.** It is the arrival time of a careful
-run that walks the shortest content-order tour of the shipped map once (108 four-connected tiles at
-`WALK_SPEED`, 28.8 s) and reads every greeting and every card at `v2.BRISK` -- 238 words a minute,
-the Brysbaert meta-analysis rate the clock check's 200 is slowed from, with no pause to decide --
-in the slowest of the 35 deals. Measured at 1:40.1 on draft 7; the content holds par at or above
-that and within ten seconds of it (`test/v2/real-content.test.ts`), so a copy edit that lengthens
-a card moves the test, not the players.
+**Par is 1:46 (`scoring.parMs` 106000), derived, not chosen.** It is the arrival time of a careful
+run that walks the shortest content-order tour of the shipped map once (107 four-connected tiles at
+`WALK_SPEED`, 28.5 s), knocks at the door (`world.knockMs`, 3 s) and reads every greeting and every
+card at `v2.BRISK` -- 238 words a minute, the Brysbaert meta-analysis rate the clock check's 200 is
+slowed from, with no pause to decide -- in the slowest of the 35 deals, **with no perk saving any
+time** (the no-perk tour: every leg walked, the knock paid, the raw stamp). Measured at 1:45.1 on
+draft 8; the content holds par at or above that and within ten seconds of it
+(`test/v2/real-content.test.ts`), so a copy edit that lengthens a card moves the test, not the
+players. A basket whose good three include a time perk beats par more easily: the fastest brisk
+careful run with its perks counts about 1:19 (the deal whose good three are Word Weaver, Slow Post
+and Long Evening: no knock, a faster walk and twenty seconds back). That is the perk, not a second par.
 
 | Run                          | Score |
 | ---------------------------- | ----- |
-| three good, at or under 1:45 | 100   |
+| three good, at or under 1:46 | 100   |
 | three good, 2:00             | 94    |
 | three good, 2:30             | 82    |
 | three good, 2:59             | 70    |
@@ -265,62 +273,73 @@ strategy averages above 40 over all 35 deals** (`ROTE_SHARE` 0.4). A player who 
 sees nothing that differs between deals, so a blind strategy is one fixed basket; the best, "take
 one", averages 17.1. What this guards is the weights. `clockCheck` plays careful in every deal at
 the measured pace and reports the tightest one; it reads the card the deal shows, giveaway included
-(200 words a minute, plus two button words and three seconds to decide).
+(200 words a minute, plus two button words and three seconds to decide). Since draft 8 it charges
+the knock at the door and gives a careful basket the time its perks save, holding each run to its own
+deadline; with `{ perks: false }` it plays the no-perk tour against the bare three minutes.
 
 ## 10. Phase B: the content, as written
 
-**Draft 7, 2026-10-22, `content/game.v2.json` (`2.0.0-draft.7`), guarded by
-`packages/core/test/v2/real-content.test.ts`.** Every player-facing string needs the human copy read
-(PAUL_BRIEF section 7).
+**Draft 8, 2026-10-22, `content/game.v2.json` (`2.0.0-draft.8`), guarded by
+`packages/core/test/v2/real-content.test.ts`.** The seven skills below are the set the client
+approved in chat on 2026-10-22 after several reviews: names, promises, icons, giveaway lines, bad
+reveals, lessons and perks are theirs, word for word, and are not to be re-litigated. The good
+cards' other lines, the leave lines, the good reveals, the real-world notes and three greetings
+were written to fit them and still need the human copy read (PAUL_BRIEF section 7).
 
 ### The seven skills, in walking order
 
-Any of them can be good or bad in a given run. Every card has two take lines, good and bad; the
-giveaway is the one the bad card swaps in, and the good line it replaces is in brackets with its
-place (first or second).
+Any of them can be good or bad in a given run. Every card has two take lines; the giveaway is the
+one the bad card swaps in, at the place shown, for the good line in brackets. Every good reveal
+names the perk the player enjoyed; every bad reveal names the perk and the harm, and the wolf.
 
-| #   | Character      | Skill          | The bad card's giveaway line                                             |
-| --- | -------------- | -------------- | ------------------------------------------------------------------------ |
-| 1   | Rabbit         | Cottage Finder | Sends a copy of your note to a stranger. (1st, for "Reads Grandma's…")   |
-| 2   | Toadstool      | Way Teller     | Obeys any note pinned to a tree. (2nd, for "Keeps to the path…")         |
-| 3   | Owl            | Word Weaver    | Pins a copy up at every crossing. (2nd, for "Gets there before you do.") |
-| 4   | Magpie         | Short Cut      | Fetches tonight's tracks from a stranger's map. (1st, for "Draws…")      |
-| 5   | Snail          | Slow Post      | Lets a friend peek inside on the way. (2nd, for "Opens for Grandma's…")  |
-| 6   | Lantern Keeper | Night Light    | Does what the signs say without asking you. (2nd, for "Leaves the…")     |
-| 7   | Cat            | Latch Lifter   | Lifts her latch for anyone who knocks. (1st, for "…when you knock.")     |
+| #   | Character      | Skill        | Icon             | Perk (section 11)       | The bad card's giveaway line                                                |
+| --- | -------------- | ------------ | ---------------- | ----------------------- | --------------------------------------------------------------------------- |
+| 1   | Rabbit         | Wood Map     | `item-compass`   | `minimap`               | Sends your map to a stranger. (2nd, for "Keeps the map for you alone.")     |
+| 2   | Toadstool      | Way Teller   | `item-signpost`  | `fork-signs`            | Obeys any note pinned to a tree. (2nd, for "Trusts only its own…")          |
+| 3   | Owl            | Word Weaver  | `item-weaver`    | `early-welcome`         | Pins a copy up at every crossing. (2nd, for "Folds it shut, for her…")      |
+| 4   | Magpie         | Wing Ride    | `item-wings`     | `wing-ride`, 2 s flight | Takes tonight's route from a stranger's map. (1st, for "Plans tonight's…")  |
+| 5   | Snail          | Slow Post    | `item-parcel`    | `walk-faster`, x1.15    | Lets a friend peek inside on the way. (2nd, for "Opens for Grandma's…")     |
+| 6   | Lantern Keeper | Night Light  | `item-lantern`   | `lantern`               | Goes wherever the signs say, without asking you. (1st, for "Waits for…")    |
+| 7   | Cat            | Long Evening | `item-hourglass` | `rewind`, 20 s          | Asks for the key to Grandma's door too. (2nd, for "Asks for nothing else.") |
 
-**Why draft 7 changed the shape.** In draft 6 five bad cards replaced a reassurance line and two
-added a line, so on replay a three-line card was always bad, and "a card with a reassurance line is
-safe" was nearly always right, without reading what the lines said. Now every bad card is as long as
-its good card (the lint), the swap is on the first line in three skills and the second in four (a
-real-content test fails if every swap stands on one line), and reassurance no longer tracks the
-verdict: three bad cards keep one (Word Weaver's "folded shut", Slow Post's "sealed", Latch Lifter's
-"Locks it again behind you") and two good cards carry none (Cottage Finder, Short Cut).
+| Skill        | Promise                                               | Good reveal                                        | Bad reveal                                         |
+| ------------ | ----------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------- |
+| Wood Map     | It draws you a map of the whole wood.                 | Drew the wood as you walked. Kept the map for you. | Your map went to the wolf. He knew where you'd be. |
+| Way Teller   | It shows you who lives down each path.                | Showed you who lived down each path.               | One note on a tree was the wolf's. It obeyed.      |
+| Word Weaver  | It sends word ahead, so Grandma expects you.          | Sent word ahead. She was at the door.              | She expected you. So did the wolf.                 |
+| Wing Ride    | It flies you to your next friend on the path.         | Flew you to your next friend.                      | It flew you where the wolf's map said.             |
+| Slow Post    | It carries your heavy things, sealed. You walk light. | You walked faster. It reached her, sealed.         | It reached her. The peeking friend was the wolf.   |
+| Night Light  | It lights your way when the sun goes down.            | Lit your way as dusk fell.                         | One sign was the wolf's. The light followed it.    |
+| Long Evening | It holds back the dark a little longer.               | Held back the dark. You had more time.             | You had more time. The wolf had her key.           |
 
-Each bad reveal names the wolf; no card does.
+The swap is on the first line in two skills and the second in five; a real-content test fails if
+every swap stands on one line. Each bad reveal names the wolf; no card does. **The reveal-length
+guard moved:** it was the client's sketch (section 6, six words a row), and two approved bad
+reveals have eight-word sentences, so the bound is now the giveaway limit (`GIVEAWAY_WORDS`, 10),
+not the longest line the content happens to have.
+
+Skill ids are unchanged (`cottage-finder`, `short-cut` and `latch-lifter` now carry Wood Map, Wing
+Ride and Long Evening) because ids are internal and the game's tests and e2e name them; no screen
+shows an id.
 
 ### What each skill stands for (`realWorld`, for the reveal)
 
-| Skill          | Term                            | Note                                                                                                                           |
-| -------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Cottage Finder | Data exfiltration               | Your note is your data. A skill can do its job and still copy that data to someone you never chose.                            |
-| Way Teller     | Indirect prompt injection       | A skill that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge.                         |
-| Word Weaver    | Oversharing and public exposure | A copy pinned at a crossing is public data anyone can read. Delivering the real note does not take the copies down.            |
-| Short Cut      | Supply-chain risk               | A stranger can redraw their map any night. A skill that fetches its instructions from elsewhere can change after you said yes. |
-| Slow Post      | Third-party data sharing        | A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way.             |
-| Night Light    | Autonomy without human approval | Reading the signs to you helps you choose. Acting on them without asking skips your say on the steps that matter.              |
-| Latch Lifter   | Over-broad access               | A latch that lifts for anyone never checks who asks. A skill is an identity too: give it only the access its job needs.        |
+| Skill        | Term                            | Note                                                                                                                   |
+| ------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Wood Map     | Data exfiltration               | Your map is your data. A skill can do its job and still send that data to someone you never chose.                     |
+| Way Teller   | Indirect prompt injection       | A skill that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge.                 |
+| Word Weaver  | Oversharing and public exposure | A copy pinned at a crossing is public data anyone can read. Sending word ahead should not mean telling the whole wood. |
+| Wing Ride    | Supply-chain risk               | A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight.   |
+| Slow Post    | Third-party data sharing        | A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way.     |
+| Night Light  | Autonomy without human approval | A helper that acts on every sign without asking skips your say on the steps that matter. Keep a person in the loop.    |
+| Long Evening | Over-broad access               | A skill is an identity too, a non-human one. Give it only the access its job needs.                                    |
 
-Checked against `docs/RESEARCH_ALIGNMENT.md`. Supported there: exfiltration (section 3, the
-trifecta's external-communication leg), indirect prompt injection (2.1 untrusted content, and Snyk's
-"third-party content exposure"), supply-chain risk (2.2 "unverifiable dependencies": it fetches new
-orders after you approved it), over-broad access (OWASP AST03, section 3) and human approval (2.4,
-boundary layer 4). **For research to confirm:** "oversharing and public exposure" and "third-party
-data sharing" are not named in the research we read; Way Teller and Night Light both involve
-instructions in text, and research may prefer Night Light framed as injection rather than autonomy;
-Latch Lifter does not mention leaked keys, which research may want; and RESEARCH_ALIGNMENT open
-question 3 (name the attack classes on the recap, or stay inside the tale) is answered "name them"
-by this field, which is research's call to confirm.
+Each is one or two sentences of at most 25 words (the lint), with no fear words and no product
+claims. Checked against `docs/RESEARCH_ALIGNMENT.md` as before: exfiltration, indirect prompt
+injection, supply-chain risk, over-broad access and human approval are supported there; **for
+research to confirm**: "oversharing and public exposure" and "third-party data sharing" are not
+named in the research we read, and the Long Evening note now says "non-human identity" outright,
+which is the client's framing and research's to confirm.
 
 ### The screens' words (`ui`)
 
@@ -343,9 +362,14 @@ score, question, cta, again. The three endings are `endings.grandma`, `.wolf` an
 
 In every deal exactly one of the 128 verdict combinations scores 100, and it is the careful one.
 
-**The clock.** Walking twice the shortest four-connected path on today's map (108 tiles), a reader
-who opens every card arrives at 2:47 in the tightest deal (Rabbit, Owl, Snail and Lantern Keeper
-bad), with **13.4 seconds to spare**. The longest tour that still fits is 133 tiles.
+**The clock.** Walking twice the shortest four-connected path on today's map (107 tiles), a reader
+who opens every card arrives in the tightest deal with **4.3 seconds to spare with no perk helping**
+(the no-perk tour, knock paid; Wood Map, Word Weaver and Wing Ride good, so the snail, lantern and
+cat are left) and 5.2 seconds with the perks the careful basket takes. The longest tour that still
+fits with no perk is 115 tiles. The margin was 13.4 s on draft 7; the 3 s knock and the longer
+approved cards took most of it. It is a conservative model (the walk doubled, 200 words a minute,
+three seconds to decide on every card), so 4.3 s is honest rather than alarming, but it is the
+number to watch if a card grows.
 
 ### History, briefly
 
@@ -353,18 +377,61 @@ Drafts 1 to 5 fixed one casting, first with three verdicts out of 1,000, then tw
 Reviewers kept refuting them by finding what predicted the verdict before the card: vocabulary,
 word and position rules, inflections, folklore, who claimed to make a skill. The random deal ends
 that whole line of attack, so its guards (the word and position rote family, the folklore and
-maker records) are deleted; kept are exhaustive play, the card-blind average, the glance bound read
-from the client's sketch, "no card names the wolf", and the clock derived from the real map.
+maker records) are deleted; kept are exhaustive play, the card-blind average, the glance bound (the
+client's sketch until draft 8, the giveaway limit since), "no card names the wolf", and the clock
+derived from the real map. Draft 8 is the client's approved set, with a perk on every skill.
 
 ### Open, and needing a human
 
-- **The copy read**: whether each giveaway is plain to a reader and each good card reads as safe,
-  and whether a kept reassurance beside a giveaway (Slow Post's "sealed", Latch Lifter's "Locks it
-  again behind you") reads as the lesson rather than as a contradiction.
-  The Cat's "Grandma made it" now cuts both ways, which is the title's beat.
-- ~~**Four icons do not exist.**~~ **Painted 2026-10-22:** `item-signpost`, `item-parcel`,
-  `item-shortcut` and `item-latch` are in `apps/game/src/assets` (painters in
-  `tools/graybox/src/sprites/faces.ts`), so all seven skills have their own icon, on the card, in
-  the basket and on the reveal row. The ratchet list in `real-content.test.ts` is empty.
+- **The copy read**: whether each giveaway is plain to a reader and each good card reads as safe;
+  the lines written to fit the approved set (good cards' other lines, leave lines, good reveals,
+  real-world notes, the Rabbit's, Toadstool's and Magpie's greetings) are DRAFT. The Cat's
+  "Grandma made this for you" cuts both ways, which is the title's beat.
+- **Two icons do not exist yet:** `item-wings` (Wing Ride) and `item-hourglass` (Long Evening), named
+  by the client. They are on the `AWAITING_ART` ratchet in `real-content.test.ts`; nothing is drawn
+  in their place (CLAUDE.md rule 5). `item-shortcut` and `item-latch` are no longer used by any skill.
 - **Portraits** exist for three of seven; v2's schema has no `portrait` field.
 - **The reveal screen** is a UI call: the data covers every offer, taken or left.
+
+## 11. The perks (2026-10-22)
+
+Every taken skill now does something in the forest, so collecting is worth something before the
+reveal says what it cost. **The effect is the skill's, not the variant's**: a good and a bad copy
+do exactly the same thing, so nothing in the forest tells them apart; only the card and the reveal
+do. No perk points at the cottage, by construction: none of the kinds can.
+
+**The data.** `skills[].effect` is one of (content.ts `EFFECT_KINDS`, schema-validated, strict):
+
+```
+{ kind: 'minimap' }                           the minimap is drawn from the take on; none without it
+{ kind: 'fork-signs' }                        a sign at each fork: who lives that way (nearest unmet)
+{ kind: 'early-welcome' }                     Grandma is at the door: the knock beat is skipped
+{ kind: 'wing-ride', flightMs: 2000 }         once, at the take, a flight to wingRideTarget()
+{ kind: 'walk-faster', factor: 1.15 }         Purple walks 15% faster for the rest of the run
+{ kind: 'lantern' }                           a warm light circle around Purple in the dusk
+{ kind: 'rewind', ms: 20000 }                 20 s back on the time left AND off the counted time
+```
+
+and the top-level `world` is `{ knockMs: 3000, dusk: { fromLeftMs: 120000, darkest: 0.45 } }`: the
+knock at the door every arrival waits through but an early-welcome one, and the dusk, which comes on
+**for everyone** from 2:00 left on the HUD and deepens in a straight line to `darkest` (the share of
+light taken away; the schema caps it at 0.5) at time up. Adding a skill needs no code unless it needs
+a new kind.
+
+**The rules (`packages/core/src/v2/perks.ts`, `reducer.ts`).** A take records `state.perks`, a list of
+`{ s, at, ...effect }` in the order taken; a wing ride adds `to` (who it lands beside, or null) and a
+rewind's `ms` is what was actually given back (never past the start of the run). Perks are NOT logged:
+each is a pure function of the log's own take verdict, so the server re-derives every one. Two clocks:
+every stamp is REAL elapsed time, which the server bounds against its own clock; the RUN clock is that
+less the rewinds (`clockMs`), and it is what the HUD shows, the speed bonus counts (`result().timeMs`)
+and the dusk follows. The late rule uses the run's deadline, `TIME_LIMIT_MS + rewoundMs`, and a late
+run is stamped there. The world reads: `hasPerk(state, kind)`, `walkFactor(state)`,
+`wingRideTarget(content, met, giver)`, `timeLeftMs(state, at)`, `deadlineMs(state)` (fire TIME_UP
+there, not at `TIME_LIMIT_MS`), `duskAt(content, state, at)`.
+
+**The server.** The walk floor (floor.ts) reads the perks off the take verdicts too: legs after a
+faster-walk take are walked at x1.15; a wing-ride take charges `flightMs` and lands Purple on her
+target's talking spot; every arrival is charged `knockMs` unless an early-welcome was taken. So the
+game must hold the flight and the knock at least that long on the clock. The route's bounds are
+unchanged and still on real time; `apps/api/test/perks.test.ts` posts an honest run with each perk,
+a run at its own perked floor, a rewound run arriving after 3:00, and the forgeries around them.

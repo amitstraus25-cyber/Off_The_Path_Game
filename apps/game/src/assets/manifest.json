@@ -67,6 +67,91 @@
       "key": "fx-pawprints",
       "frameWidth": 32,
       "frameHeight": 32
+    },
+    {
+      "key": "fx-paperbird",
+      "frameWidth": 16,
+      "frameHeight": 16
+    },
+    {
+      "key": "prop-forksign",
+      "frameWidth": 32,
+      "frameHeight": 32
+    },
+    {
+      "key": "fx-lantern-glow",
+      "frameWidth": 64,
+      "frameHeight": 64
+    },
+    {
+      "key": "npc-rabbit-idle",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "npc-rabbit-hop",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "npc-owl-idle",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "npc-owl-hop",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "npc-lantern-keeper-idle",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "npc-lantern-keeper-hop",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-toadstool-idle",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-toadstool-hop",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-magpie-idle",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-magpie-hop",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-snail-idle",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-snail-hop",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-cat-idle",
+      "frameWidth": 32,
+      "frameHeight": 48
+    },
+    {
+      "key": "bystander-cat-hop",
+      "frameWidth": 32,
+      "frameHeight": 48
     }
   ],
   "images": [
@@ -85,6 +170,8 @@
     "item-parcel.png",
     "item-shortcut.png",
     "item-latch.png",
-    "item-weaver.png"
+    "item-weaver.png",
+    "item-wings.png",
+    "item-hourglass.png"
   ]
 }

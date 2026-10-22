@@ -607,7 +607,17 @@ for (const [width, height] of [
       } else {
         if (ending === 'wolf') {
           const { good } = await state(page);
-          const bad = (await cast(page)).find((c) => !good.includes(c.skillId))!;
+          /*
+           * Any bad skill lets the wolf in, but not the Wing Ride: its perk flies Purple on and
+           * opens the next friend's offer, so the door is not where the run stands afterwards
+           * (e2e/perks.spec.ts plays that one).
+           */
+          const rides = (await skills(page))
+            .filter((s) => (s as { effect?: { kind: string } }).effect?.kind === 'wing-ride')
+            .map((s) => s.id);
+          const bad = (await cast(page)).find(
+            (c) => !good.includes(c.skillId) && !rides.includes(c.skillId),
+          )!;
           await standBeside(page, bad.spawn);
           await page.keyboard.press('e');
           await page.waitForTimeout(320);

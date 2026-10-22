@@ -128,6 +128,9 @@ test('Keep looking puts Purple a step back off the step, and the door asks again
 }) => {
   await intoTheForest(page);
   await walkUpToTheDoor(page);
+  // A keyboard player cannot press Enter on Keep looking before it has focus either; waiting for
+  // it closes a race where the Enter landed before the panel took focus (flaked under load).
+  await expect(page.locator('[data-action="keep-looking"]')).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('[data-door]')).toHaveCount(0);
   expect(await phase(page)).toBe('forest');

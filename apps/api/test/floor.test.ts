@@ -39,7 +39,8 @@ const gap = (a: MapObject, b: MapObject): number =>
 
 describe('the shortest run the server accepts', () => {
   const rectMs = (gap(need('spawn-purple'), need('trigger-cottage')) / WALK_SPEED) * 1000;
-  const direct = v2.walkFloor(content, [{ e: 'arrived', at: 0 }]).floorMs;
+  // The knock at the door is charged on top of the walk (core floor.ts): it is not distance.
+  const direct = v2.walkFloor(content, [{ e: 'arrived', at: 0 }]).floorMs - content.world.knockMs;
 
   it('charges the walk straight to the door within a tile of the gap between the two rectangles', () => {
     expect(direct, `rectangle gap ${Math.round(rectMs)}ms`).toBeGreaterThanOrEqual(rectMs);

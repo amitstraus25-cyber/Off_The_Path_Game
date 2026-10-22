@@ -41,6 +41,10 @@ export function loadContent(raw: unknown, opts: LintOptions = {}): Content {
     issues.push(
       `scoring.parMs ${content.scoring.parMs} is not under the ${TIME_LIMIT_MS}ms limit, so no run earns a speed bonus`,
     );
+  if (content.world.dusk.fromLeftMs > TIME_LIMIT_MS)
+    issues.push(
+      `world.dusk.fromLeftMs ${content.world.dusk.fromLeftMs} is more than the ${TIME_LIMIT_MS}ms limit, so the forest would open in the dark`,
+    );
   if (issues.length > 0) throw new ContentError(issues);
   const trap = trapChecks(content);
   if (!trap.ok)

@@ -1,7 +1,7 @@
 import '../zod-config.ts';
 import { z } from 'zod';
 import { VERDICTS } from './content.ts';
-import type { CharacterId, Content, SkillId, Take, Verdict } from './content.ts';
+import type { CharacterId, Content, Effect, SkillId, Take, Verdict } from './content.ts';
 import { deal } from './deal.ts';
 
 /**
@@ -12,6 +12,11 @@ import { deal } from './deal.ts';
  * "in time" means for every run already played. Phase F's test-mode override for the e2e suite
  * belongs in the CLOCK the game injects -- slow the clock, not the limit -- so core keeps exactly
  * one limit and the shipped bundle cannot carry a second one.
+ *
+ * THE ONE THING THAT MOVES IT is a `rewind` perk (the Cat's Long Evening, 2026-10-22), and it moves
+ * the RUN's deadline, never this number: the stamps stay real elapsed time, which is what the
+ * server bounds against its own clock, and the deadline becomes this plus what was given back
+ * (`deadlineMs`, perks.ts). Read the deadline from there, not from this constant.
  */
 export const TIME_LIMIT_MS = 180_000;
 
@@ -49,6 +54,25 @@ export interface BasketEntry {
   v: Take;
 }
 
+/**
+ * A PERK THE RUN HAS: a taken skill's `effect` (content.ts), recorded by the reducer at the take,
+ * with `s` the skill and `at` the elapsed stamp of the verdict. Good and bad copies record the same
+ * perk; whether the wolf also got in is the score's business, not the forest's.
+ *
+ * NOT LOGGED. Every perk is a pure function of the log's own `verdict` events and the content, so
+ * the server re-derives each one by replaying, and the floor (floor.ts) by reading the verdicts.
+ * Two kinds carry what the reducer decided at the take:
+ *
+ *  - `wing-ride` `to`: who the flight lands beside (`wingRideTarget`), or null when nobody was
+ *    left unmet and the perk did nothing.
+ *  - `rewind` `ms`: what was actually GIVEN BACK, which is the content's `ms` unless the run was
+ *    younger than that -- a rewind never takes the clock past its start.
+ */
+export type Perk = { s: SkillId; at: number } & (
+  | Exclude<Effect, { kind: 'wing-ride' }>
+  | (Extract<Effect, { kind: 'wing-ride' }> & { to: CharacterId | null })
+);
+
 export interface State {
   phase: Phase;
   contentVersion: string;
@@ -66,6 +90,8 @@ export interface State {
   inspected: SkillId[];
   verdicts: Record<SkillId, Verdict>;
   basket: BasketEntry[];
+  /** Every perk the run has, in the order taken. Read through perks.ts, not by hand. */
+  perks: Perk[];
   /** Who Purple is talking to, in `talk` and `card`. */
   active: CharacterId | null;
   log: RunEvent[];
@@ -84,6 +110,7 @@ export function createState(content: Content, seed: number): State {
     inspected: [],
     verdicts: {},
     basket: [],
+    perks: [],
     active: null,
     log: [],
   };
@@ -102,7 +129,7 @@ export type Action =
   | { type: 'VERDICT'; s: SkillId; v: Verdict; at: number }
   | { type: 'BACK'; at: number }
   | { type: 'ENTER_COTTAGE'; at: number }
-  /** The game's timer firing. Legal only at or after the limit. */
+  /** The game's timer firing. Legal only at or after the run's deadline (`deadlineMs`). */
   | { type: 'TIME_UP'; at: number }
   /** Back to a fresh title, dealt again: "walk it again" meets a different set of bad skills. */
   | { type: 'RESET'; seed: number };

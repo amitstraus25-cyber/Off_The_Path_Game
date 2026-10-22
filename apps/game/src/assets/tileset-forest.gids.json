@@ -81,5 +81,13 @@
   "gate-n": 80,
   "gate-s": 81,
   "stall-counter-l": 82,
-  "stall-counter-r": 83
+  "stall-counter-r": 83,
+  "elder-tr-over-mc": 84,
+  "elder-tl-over-mc": 85,
+  "elder-mr-over-bc": 86,
+  "elder-ml-over-bc": 87,
+  "elder-tc-over-mr": 88,
+  "elder-tc-over-ml": 89,
+  "elder-tl-over-sapling-tr": 90,
+  "elder-tr-over-sapling-tl": 91
 }

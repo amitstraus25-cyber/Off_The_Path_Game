@@ -1,6 +1,7 @@
 import { findSkill, giveaway } from './content.ts';
 import type { Content, SkillId, Verdict } from './content.ts';
 import { variantOf } from './deal.ts';
+import { clockMs, rewoundMs } from './perks.ts';
 import { TIME_LIMIT_MS } from './state.ts';
 import type { State } from './state.ts';
 
@@ -81,13 +82,22 @@ export interface RunResult {
   choices: number;
   /** The part of the total the clock earned (`speedBonus`). 0 unless clean. */
   speed: number;
-  /** Elapsed milliseconds at the cottage door, or null for a run that never reached it. */
+  /**
+   * The RUN CLOCK at the cottage door -- the arrival stamp less whatever a rewind gave back -- or
+   * null for a run that never reached it. It is the time the speed bonus counted, so it is the
+   * time to show beside par.
+   */
   timeMs: number | null;
+  /** What the run's rewinds gave back, in ms: 0 without one (perks.ts `rewoundMs`). */
+  rewoundMs: number;
   /** The par the speed bonus was measured against, from the content. */
   parMs: number;
 }
 
-/** The run's elapsed time at the cottage door, read from its own log. Null if it never arrived. */
+/**
+ * The run's REAL elapsed time at the cottage door, read from its own log, which is the number the
+ * server bounds against its clock. Null if it never arrived. The score counts `result().timeMs`.
+ */
 export const arrivalMs = (state: State): number | null =>
   state.log.find((e) => e.e === 'arrived')?.at ?? null;
 
@@ -101,8 +111,8 @@ export const arrivalMs = (state: State): number | null =>
  * short can never outscore a full basket at any pace that arrives.
  *
  * Integer arithmetic until the one division, so the browser and the server -- the same function on
- * two machines -- round the same way. Pure: the time is the log's own `arrived` stamp, never a
- * clock read here.
+ * two machines -- round the same way. Pure: the time is the log's own `arrived` stamp on the run
+ * clock -- less what a `rewind` perk gave back (perks.ts `clockMs`) -- never a clock read here.
  */
 export function speedBonus(content: Content, good: number, timeMs: number): number {
   const { speed, parMs } = content.scoring;
@@ -133,7 +143,8 @@ export function result(state: State, content: Content): RunResult {
   const taken = entries.filter((r) => r.verdict === 'take');
   const good = taken.filter((r) => r.good).length;
   const { clean, good: each, outOf, parMs } = content.scoring;
-  const timeMs = arrivalMs(state);
+  const arrived = arrivalMs(state);
+  const timeMs = arrived === null ? null : clockMs(state, arrived);
   const clear = end === 'grandma';
   const choices = clear ? clean + each * good : 0;
   const speed = clear ? speedBonus(content, good, timeMs!) : 0;
@@ -147,6 +158,7 @@ export function result(state: State, content: Content): RunResult {
     choices,
     speed,
     timeMs,
+    rewoundMs: rewoundMs(state),
     parMs,
   };
 }

@@ -1,6 +1,7 @@
 import { VERDICTS, countWords } from './content.ts';
 import type { Content, Skill, Verdict } from './content.ts';
 import { bestVerdict, everySeed } from './deal.ts';
+import { deadlineMs, wingRideTarget } from './perks.ts';
 import { reduce } from './reducer.ts';
 import { result } from './scoring.ts';
 import type { Ending } from './scoring.ts';
@@ -105,6 +106,15 @@ export interface PlayOptions {
   seed?: number;
   /** How a card is read when the run is paced. Default `READING`. */
   reading?: Reading;
+  /**
+   * Whether a paced run gets the time its perks save (default true): after a `walk-faster` take
+   * every walk is that much shorter, the leg after a `wing-ride` take costs the flight instead of
+   * the walk, and an `early-welcome` take skips the knock at the door. False plays the NO-PERK
+   * tour -- every walk walked, every knock knocked -- which is what par is derived from
+   * (real-content.test.ts). A `rewind` is the reducer's, not the walk's, so it applies either way;
+   * `clockCheck` says how it is counted.
+   */
+  perks?: boolean;
 }
 
 export interface Played {
@@ -127,6 +137,7 @@ export function play(content: Content, strategy: string, opts: PlayOptions = {})
 function playWith(content: Content, strategy: string, decide: Strategy, opts: PlayOptions): Played {
   const seed = opts.seed ?? 0;
   const paced = opts.pace !== undefined;
+  const perks = opts.perks ?? true;
   const { walkMs, talkMs } = opts.pace ?? { walkMs: 0, talkMs: 0 };
   const rnd = mulberry32(seed);
   let at = 0;
@@ -134,6 +145,13 @@ function playWith(content: Content, strategy: string, decide: Strategy, opts: Pl
   // A step the run refuses -- because the clock ran out mid-walk -- is simply not taken. The run
   // has already ended late by then, and the reducer says so.
   const send = (a: Action): void => void (state = reduce(state, a, content));
+  /**
+   * What the walk to the next character costs, perks and all; a flight is used up by one leg. A
+   * faster walk is rounded UP to a whole millisecond, so a stamp is never sooner than the walk.
+   */
+  let factor = 1;
+  let flight: number | null = null;
+  let knockMs = content.world.knockMs;
 
   send({ type: 'START', runId: `sim-${strategy}` });
   send({ type: 'BEGIN' });
@@ -141,14 +159,27 @@ function playWith(content: Content, strategy: string, decide: Strategy, opts: Pl
     const skill = content.skills.find((s) => s.id === ch.skillId)!;
     const good = state.good.includes(skill.id);
     const { verdict, inspect } = decide(skill, good, rnd);
-    send({ type: 'MEET', c: ch.id, at: (at += walkMs) });
+    send({ type: 'MEET', c: ch.id, at: (at += flight ?? Math.ceil(walkMs / factor)) });
+    flight = null;
     if (inspect) {
       send({ type: 'INSPECT', s: skill.id, at: (at += talkMs) });
       const reading = paced ? readMs(skill, good, opts.reading) : 0;
       send({ type: 'VERDICT', s: skill.id, v: verdict, at: (at += reading) });
     } else send({ type: 'VERDICT', s: skill.id, v: verdict, at: (at += talkMs) });
+    /*
+     * The time a taken perk saves. The simulator meets the cast in walking order, so everybody
+     * before a wing ride's giver is met and its landing spot is always the NEXT character's: the
+     * flight replaces exactly the next walk. With nobody left unmet it does nothing.
+     */
+    const e = skill.effect;
+    if (perks && verdict === 'take') {
+      if (e.kind === 'walk-faster') factor *= e.factor;
+      if (e.kind === 'early-welcome') knockMs = 0;
+      if (e.kind === 'wing-ride' && wingRideTarget(content, state.met, ch.id) !== null)
+        flight = e.flightMs;
+    }
   }
-  send({ type: 'ENTER_COTTAGE', at: (at += walkMs) });
+  send({ type: 'ENTER_COTTAGE', at: (at += Math.ceil(walkMs / factor) + (paced ? knockMs : 0)) });
 
   const r = result(state, content);
   return { strategy, seed, state, ending: r.ending, total: r.total, elapsedMs: at };
@@ -265,19 +296,27 @@ export function trapChecks(content: Content): { ok: boolean; checks: Check[] } {
  * Whether a player who reads EVERY card can still make it, in EVERY deal, at the pace the world is
  * measured at. Honest cuts both ways: if reading every card cannot be done inside three minutes,
  * the ceiling is unreachable and "out of 100" is a lie on the board. Reports the tightest deal.
+ *
+ * WITH THE PERKS (the default) each run is held to its own deadline, rewinds included, and gets
+ * the walking its perks save. WITHOUT (`perks: false`) it is the no-perk tour held to the bare
+ * limit: every walk and knock paid, and no rewind counted even where the careful basket took one.
+ * That is the question "can a careful reader make it if no perk helps at all?", which is the one
+ * the map's layout has to answer.
  */
 export function clockCheck(
   content: Content,
   pace: Pace,
+  { perks = true }: { perks?: boolean } = {},
 ): { ok: boolean; seed: number; ending: Ending | null; elapsedMs: number; marginMs: number } {
-  const runs = everySeed(content).map((seed) => play(content, 'careful', { seed, pace }));
-  const worst = runs.reduce((w, p) => (p.elapsedMs > w.elapsedMs ? p : w));
+  const runs = everySeed(content).map((seed) => play(content, 'careful', { seed, pace, perks }));
+  const margin = (p: Played): number => (perks ? deadlineMs(p.state) : TIME_LIMIT_MS) - p.elapsedMs;
+  const worst = runs.reduce((w, p) => (margin(p) < margin(w) ? p : w));
   return {
-    ok: runs.every((p) => p.ending !== 'late'),
+    ok: runs.every((p) => margin(p) > 0),
     seed: worst.seed,
     ending: worst.ending,
     elapsedMs: worst.elapsedMs,
-    marginMs: TIME_LIMIT_MS - worst.elapsedMs,
+    marginMs: margin(worst),
   };
 }
 

@@ -11,10 +11,12 @@ import { ProblemScreen } from './ProblemScreen';
 import { Hud } from './Hud';
 import { Minimap } from './Minimap';
 import { DoorCheck } from './DoorCheck';
+import { ForkSigns } from './ForkSigns';
+import type { SignBoards } from './ForkSigns';
 import { NotationChip, WorldFrame } from './components';
 import { fill, strings } from './copy';
 import type { MapSketch } from '../world/minimap';
-import type { Vec } from '../world/logic';
+import type { Rect, Vec } from '../world/logic';
 
 export interface AppProps {
   store: Store;
@@ -50,9 +52,62 @@ export interface AppProps {
   doorAsking?: boolean;
   onDoorStay?(): void;
   onDoorGoIn?(): void;
+  /**
+   * The one line the toast is saying, or '': a perk just taken, or the knock at the door (main.ts
+   * holds it and empties it after a moment). Its region is polite and always mounted in the world.
+   */
+  toast?: string;
+  /**
+   * The forest's view of itself, for what the DOM lays over it: the fork boards the Way Teller's
+   * labels stand on, and where the cast stand so the minimap can step back from them. Null until
+   * the scene is built.
+   */
+  signs?: (SignBoards & { castOnCanvas(): readonly Rect[] }) | null;
 }
 
 const nowhere = (): Vec | null => null;
+
+/** How long the HUD shows the clock winding back after a rewind, in ms. */
+const WIND_MS = 1200;
+
+/**
+ * THE CLOCK WINDS BACK (the Cat's Long Evening): for a moment after a rewind is taken, the face
+ * counts up from the time it read to the time it now reads, easing out, under a calm ring. Under
+ * reduced motion the face jumps and only the ring says something changed. `remaining` is the true
+ * time left; the hook answers what the face should read, and whether it is still winding.
+ */
+function useWinding(perks: readonly v2.Perk[], remaining: number): { face: number; on: boolean } {
+  const [wind, setWind] = useState<{ from: number; ms: number } | null>(null);
+  const [, setTick] = useState(0);
+  const seen = useRef(perks.length);
+  useEffect(() => {
+    if (perks.length < seen.current) seen.current = 0;
+    const fresh = perks.slice(seen.current);
+    seen.current = perks.length;
+    const given = fresh.reduce((n, p) => n + (p.kind === 'rewind' ? p.ms : 0), 0);
+    if (given > 0) setWind({ from: performance.now(), ms: given });
+  }, [perks]);
+  useEffect(() => {
+    if (!wind) return;
+    let frame = 0;
+    const step = (): void => {
+      if (performance.now() - wind.from >= WIND_MS) {
+        setWind(null);
+        return;
+      }
+      setTick((n) => n + 1);
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [wind]);
+  if (!wind) return { face: remaining, on: false };
+  const still =
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const p = Math.min(1, (performance.now() - wind.from) / WIND_MS);
+  const eased = 1 - (1 - p) ** 3;
+  return { face: still ? remaining : remaining - wind.ms * (1 - eased), on: true };
+}
 
 function useStoreState(store: Store): v2.State {
   const [state, setState] = useState(store.getState());
@@ -176,6 +231,8 @@ export function App({
   doorAsking = false,
   onDoorStay = () => {},
   onDoorGoIn = () => {},
+  toast = '',
+  signs = null,
 }: AppProps) {
   const state = useStoreState(store);
   const { content } = store;
@@ -185,6 +242,8 @@ export function App({
   const skill = character ? v2.findSkill(content, character.skillId) : undefined;
 
   const inWorld = v2.RUNNING.has(state.phase);
+  const remaining = remainingMs(state, store.elapsed());
+  const winding = useWinding(state.perks, remaining);
   const inForest = state.phase === 'forest';
   const ended = state.phase === 'cottage' || state.phase === 'late';
 
@@ -242,21 +301,45 @@ export function App({
             {content.ui.world.title}
           </h1>
           <Hud
-            remainingMs={remainingMs(state, store.elapsed())}
+            remainingMs={remaining}
+            faceMs={winding.face}
+            winding={winding.on}
             basket={hudBasket(state, content)}
             labels={content.ui.hud}
           />
-          {sketch && (
+          {signs && v2.hasPerk(state, 'fork-signs') && (
+            <ForkSigns boards={signs} met={state.met} content={content} />
+          )}
+          {/*
+            THE MINIMAP IS THE WOOD MAP'S (the client, 2026-10-22): drawn only once a skill with the
+            `minimap` effect is taken, good copy or bad. The door's question stays the safety net for
+            everyone else.
+          */}
+          {sketch && v2.hasPerk(state, 'minimap') && (
             <Minimap
               sketch={sketch}
               met={state.met}
               where={wherePurple}
+              view={signs}
               summary={fill(strings['mapSummary'] ?? '', {
                 met: state.met.length,
                 total: content.characters.length,
               })}
             />
           )}
+        </div>
+      )}
+      {/*
+        THE TOAST: one line when a perk is taken or Purple knocks. In the existing notice style
+        (`.otp-toast`, tokens.css), polite, and mounted for the whole walk so its region is there
+        before its first line arrives (UX_REVIEW finding 14). Before the panels, so a modal paints
+        over it.
+      */}
+      {inWorld && (
+        <div class="otp-layer otp-layer--toast" key="world-toast">
+          <p class="otp-toast" role="status" aria-live="polite" aria-atomic="true" data-toast="">
+            {toast || null}
+          </p>
         </div>
       )}
       {/* Mounted BEFORE the panels so the modal layers paint over it (document order is stacking). */}
@@ -359,6 +442,16 @@ export function App({
             <Cottage
               ending={ending}
               words={content.endings[ending]}
+              /*
+                THE WORD WEAVER'S WELCOME: word went ahead, so Grandma is at the door already and
+                the knock was skipped. Said first, on any arrival that had the perk -- never on a
+                late run, which never reached the door.
+              */
+              welcome={
+                ending !== 'late' && v2.hasPerk(state, 'early-welcome')
+                  ? (strings['doorWelcome'] ?? '')
+                  : ''
+              }
               onFinish={() => setRevealing(true)}
             />
           );

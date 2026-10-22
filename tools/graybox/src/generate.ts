@@ -8,21 +8,31 @@ import { Img } from './paint.ts';
 import { TILE_NAMES, paintTileset } from './tiles.ts';
 import { generateForestMap } from './forest-map.ts';
 import {
+  FX_SHEETS,
   FX_SIZES,
   ITEM_PAINTERS,
+  LIFE_KEYS,
   NPC_PAINTERS,
   PORTRAIT_PAINTERS,
   PORTRAIT_SIZE,
-  paintDust,
-  paintInteractPrompt,
+  paintFxSheet,
+  paintHopSheet,
+  paintIdleSheet,
   paintNpcSheet,
-  paintPawprints,
   paintPurpleSheet,
   PURPLE_H,
   PURPLE_W,
 } from './sprites.ts';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '../../../apps/game/src/assets');
+/*
+ * `--out <dir>` writes the whole set somewhere else, so a painter can regenerate into a scratch
+ * directory and `cmp` it against the committed assets before the one regeneration that lands.
+ */
+const outAt = process.argv.indexOf('--out');
+const OUT =
+  outAt >= 0 && process.argv[outAt + 1]
+    ? process.argv[outAt + 1]!
+    : join(dirname(fileURLToPath(import.meta.url)), '../../../apps/game/src/assets');
 mkdirSync(OUT, { recursive: true });
 const write = (name: string, body: Buffer | string): void => writeFileSync(join(OUT, name), body);
 
@@ -69,9 +79,13 @@ for (const [name, painter] of Object.entries({ ...PORTRAIT_PAINTERS, ...ITEM_PAI
   write(`${name}.png`, img.png());
 }
 
-write('fx-dust.png', paintDust().png());
-write('fx-interact-prompt.png', paintInteractPrompt().png());
-write('fx-pawprints.png', paintPawprints().png());
+for (const key of Object.keys(FX_SHEETS)) write(`${key}.png`, paintFxSheet(key).png());
+
+// Character life: an idle loop and a hop per spawned character, at the static sprite's frame size.
+for (const key of LIFE_KEYS) {
+  write(`${key}-idle.png`, paintIdleSheet(key).png());
+  write(`${key}-hop.png`, paintHopSheet(key).png());
+}
 
 // The loader checks every entry and fails the boot if one is missing.
 write(
@@ -93,6 +107,13 @@ write(
           frameWidth: size,
           frameHeight: size,
         })),
+        ...LIFE_KEYS.flatMap((key) =>
+          ['idle', 'hop'].map((action) => ({
+            key: `${key}-${action}`,
+            frameWidth: PURPLE_W,
+            frameHeight: PURPLE_H,
+          })),
+        ),
       ],
       images: [...Object.keys(PORTRAIT_PAINTERS), ...Object.keys(ITEM_PAINTERS)].map(
         (k) => `${k}.png`,

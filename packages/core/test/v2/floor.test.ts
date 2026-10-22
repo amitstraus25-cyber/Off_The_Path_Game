@@ -11,7 +11,10 @@ import {
 } from '../../../../apps/game/src/world/logic.ts';
 import { WALK_WORLD, walkFloor } from '../../src/v2/floor.ts';
 import type { WalkWorld } from '../../src/v2/floor.ts';
+import { findSkill } from '../../src/v2/content.ts';
+import type { Content } from '../../src/v2/content.ts';
 import { parseContent } from '../../src/v2/load.ts';
+import { wingRideTarget } from '../../src/v2/perks.ts';
 import { play } from '../../src/v2/sim.ts';
 import type { RunEvent } from '../../src/v2/state.ts';
 import { content as fixture } from './helpers.ts';
@@ -63,14 +66,15 @@ const tourLog = (stamps: number[]): RunEvent[] => [
 ];
 
 describe('the floor of a log', () => {
-  it('straight to the door is the straight line from her feet to the door, at walking speed', () => {
+  it('straight to the door is the straight line from her feet to the door, at walking speed, then the knock', () => {
     const s = WALK_WORLD.start;
     const d = WALK_WORLD.door;
     const px = Math.hypot(d.x - s.x, Math.max(0, d.y - s.y, s.y - (d.y + d.height)));
     const { floorMs, tooFast } = walkFloor(content, [{ e: 'arrived', at: 60_000 }]);
-    expect(floorMs).toBeCloseTo((px / WALK_SPEED) * 1000, 6);
-    // About eleven seconds on today's map: the old single MIN_RUN_MS was 10 s.
-    expect(floorMs).toBeGreaterThan(10_000);
+    expect(content.world.knockMs).toBeGreaterThan(0);
+    expect(floorMs).toBeCloseTo((px / WALK_SPEED) * 1000 + content.world.knockMs, 6);
+    // About eleven seconds of walking on today's map, and the knock: the old MIN_RUN_MS was 10 s.
+    expect(floorMs - content.world.knockMs).toBeGreaterThan(10_000);
     expect(tooFast).toBeNull();
   });
 
@@ -93,7 +97,9 @@ describe('the floor of a log', () => {
   });
 
   it('only meeting and arriving move Purple: cards and verdicts cost no distance', () => {
-    const c = content.characters[2]!;
+    // The toadstool's fork signs: a perk that saves no time, so taking it changes no floor.
+    const c = content.characters[1]!;
+    expect(findSkill(content, c.skillId)!.effect.kind).toBe('fork-signs');
     const bare: RunEvent[] = [
       { e: 'met', c: c.id, at: 100_000 },
       { e: 'arrived', at: 120_000 },
@@ -119,13 +125,107 @@ describe('the floor of a log', () => {
 
   it('every honest simulated run on the shipped map is at or over its floor at every step', () => {
     // The api's paced runs: five seconds a walk, which the longest straight leg here is under.
-    for (let seed = 0; seed < 35; seed++) {
-      const p = play(content, 'careful', {
-        seed,
-        pace: { walkMs: 5_000, talkMs: 1_000 },
-        reading: { msPerWord: 0, buttonWords: 0, decideMs: 1_000 },
-      });
-      expect(walkFloor(content, p.state.log).tooFast, `deal ${seed}`).toBeNull();
-    }
+    // Careful and greedy both, so every perk is taken in some run: greedy takes all seven.
+    for (const strategy of ['careful', 'greedy'])
+      for (let seed = 0; seed < 35; seed++) {
+        const p = play(content, strategy, {
+          seed,
+          pace: { walkMs: 5_000, talkMs: 1_000 },
+          reading: { msPerWord: 0, buttonWords: 0, decideMs: 1_000 },
+        });
+        expect(walkFloor(content, p.state.log).tooFast, `${strategy} ${seed}`).toBeNull();
+      }
+  });
+});
+
+/*
+ * THE PERKS IN THE FLOOR (content.ts `effect`). Each is read off the log's own take verdict, so a
+ * run is charged for exactly the perks it took: an honest run that flew, walked faster or was
+ * welcomed is never refused for it, and a log that did none of those gets no discount.
+ */
+describe('the floor of a log that took a perk', () => {
+  const owner = (kind: string) => {
+    const s = content.skills.find((x) => x.effect.kind === kind)!;
+    return { s, c: content.characters.find((c) => c.skillId === s.id)! };
+  };
+  const take = (s: string, at: number): RunEvent => ({ e: 'verdict', s, v: 'take', at });
+  const leave = (s: string, at: number): RunEvent => ({ e: 'verdict', s, v: 'leave', at });
+  const late = 170_000;
+
+  it('early welcome: the arrival is not charged the knock; leaving it, it is', () => {
+    const { s, c } = owner('early-welcome');
+    const met: RunEvent = { e: 'met', c: c.id, at: late };
+    const arrived: RunEvent = { e: 'arrived', at: late };
+    const welcomed = walkFloor(content, [met, take(s.id, late), arrived]).floorMs;
+    const knocked = walkFloor(content, [met, leave(s.id, late), arrived]).floorMs;
+    expect(knocked - welcomed).toBeCloseTo(content.world.knockMs, 6);
+  });
+
+  it('walk faster: every leg after the take is walked at the faster speed, and none before it', () => {
+    const { s, c } = owner('walk-faster');
+    const factor = s.effect.kind === 'walk-faster' ? s.effect.factor : NaN;
+    const met: RunEvent = { e: 'met', c: c.id, at: late };
+    const arrived: RunEvent = { e: 'arrived', at: late };
+    const to = walkFloor(content, [met]).floorMs;
+    const slow = walkFloor(content, [met, leave(s.id, late), arrived]).floorMs;
+    const fast = walkFloor(content, [met, take(s.id, late), arrived]).floorMs;
+    const knock = content.world.knockMs;
+    expect(fast - to - knock).toBeCloseTo((slow - to - knock) / factor, 6);
+    expect(fast).toBeLessThan(slow);
+  });
+
+  it('wing ride: the take flies her to the next unmet friend for the flight time, and the meeting there costs nothing more', () => {
+    const { s, c } = owner('wing-ride');
+    const flightMs = s.effect.kind === 'wing-ride' ? s.effect.flightMs : NaN;
+    const order = content.characters.map((x) => x.id);
+    const before = order.slice(0, order.indexOf(c.id) + 1);
+    const to = wingRideTarget(content, before, c.id)!;
+    const tour = (verdict: RunEvent): RunEvent[] => [
+      ...before.map((id): RunEvent => ({ e: 'met', c: id, at: late })),
+      verdict,
+      { e: 'met', c: to, at: late },
+    ];
+    const upToGiver = walkFloor(content, tour(take(s.id, late)).slice(0, before.length)).floorMs;
+    const flown = walkFloor(content, tour(take(s.id, late)));
+    expect(flown.floorMs).toBeCloseTo(upToGiver + flightMs, 6);
+    // Stamped inside the flight, the landing meeting is faster than the map allows.
+    const early = tour(take(s.id, late)).map((e, i, all) =>
+      i === all.length - 1 ? { ...e, at: upToGiver + flightMs - 1 } : e,
+    );
+    expect(walkFloor(content, early).tooFast).toBe(before.length + 1);
+    // Left, it is a walk like any other.
+    expect(walkFloor(content, tour(leave(s.id, late))).floorMs).not.toBeCloseTo(flown.floorMs, 3);
+  });
+
+  it('wing ride with nobody left unmet flies nowhere and charges nothing', () => {
+    const { s, c } = owner('wing-ride');
+    const all = content.characters.map((x): RunEvent => ({ e: 'met', c: x.id, at: late }));
+    const giverLast = [
+      ...all.filter((e) => e.e === 'met' && e.c !== c.id),
+      all.find((e) => e.e === 'met' && e.c === c.id)!,
+    ];
+    const bare = walkFloor(content, giverLast).floorMs;
+    expect(walkFloor(content, [...giverLast, take(s.id, late)]).floorMs).toBe(bare);
+  });
+
+  it('a take the content cannot place -- an unknown skill, or a wing ride nobody offers -- moves nothing it should not', () => {
+    const bare: RunEvent[] = [{ e: 'arrived', at: late }];
+    expect(walkFloor(content, [take('nobody', 0), ...bare])).toEqual(walkFloor(content, bare));
+    // A wing ride offered by nobody (only a content the lint refused can say so) reads its
+    // giver as standing before the first character, so it lands by the first unmet one.
+    const orphan: Content = {
+      ...content,
+      characters: content.characters.filter((x) => x.id !== owner('wing-ride').c.id),
+    };
+    const { effect } = owner('wing-ride').s;
+    const flightMs = effect.kind === 'wing-ride' ? effect.flightMs : NaN;
+    const first = WALK_WORLD.spots[orphan.characters[0]!.spawn]!;
+    // The first character stands level with the door, so the walk on is the horizontal gap.
+    expect(first.y).toBeGreaterThanOrEqual(WALK_WORLD.door.y);
+    expect(first.y).toBeLessThanOrEqual(WALK_WORLD.door.y + WALK_WORLD.door.height);
+    expect(walkFloor(orphan, [take(owner('wing-ride').s.id, 0), ...bare]).floorMs).toBeCloseTo(
+      flightMs + ((WALK_WORLD.door.x - first.x) / WALK_SPEED) * 1000 + orphan.world.knockMs,
+      6,
+    );
   });
 });

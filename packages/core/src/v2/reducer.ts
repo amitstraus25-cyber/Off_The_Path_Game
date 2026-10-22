@@ -1,7 +1,8 @@
-import { findCharacter } from './content.ts';
+import { findCharacter, findSkill } from './content.ts';
 import type { Content } from './content.ts';
 import { isSeed } from './deal.ts';
-import { RUNNING, TIME_LIMIT_MS, createState } from './state.ts';
+import { deadlineMs, perkFor } from './perks.ts';
+import { RUNNING, createState } from './state.ts';
 import type { Action, RejectReason, RunEvent, State } from './state.ts';
 
 export type StepResult =
@@ -11,13 +12,16 @@ const ok = (state: State): StepResult => ({ ok: true, state });
 const no = (state: State, reason: RejectReason): StepResult => ({ ok: false, reason, state });
 const append = (s: State, e: RunEvent): RunEvent[] => [...s.log, e];
 
-/** The run ends where it stands, stamped at the limit -- not at whenever the news arrived. */
+/**
+ * The run ends where it stands, stamped at its deadline -- not at whenever the news arrived. The
+ * deadline is the limit plus whatever a rewind gave back (perks.ts), in real elapsed time.
+ */
 const late = (s: State): State => ({
   ...s,
   phase: 'late',
   active: null,
-  now: TIME_LIMIT_MS,
-  log: append(s, { e: 'late', at: TIME_LIMIT_MS }),
+  now: deadlineMs(s),
+  log: append(s, { e: 'late', at: deadlineMs(s) }),
 });
 
 /**
@@ -31,13 +35,17 @@ const late = (s: State): State => ({
  * do. Why the reducer does not simply wait for TIME_UP: a backgrounded tab throttles the game's
  * timer, so TIME_UP can arrive late or never, and a player returning at 3:40 to press Enter must
  * not arrive in time. The server replays the same rule, so a later stamp cannot buy time either.
+ *
+ * "THE LIMIT" IS THE RUN'S DEADLINE, `deadlineMs`: three minutes plus what a `rewind` perk gave
+ * back. The perk is taken at a verdict, so it moves the deadline for every action after that one
+ * and never for the verdict that took it, which was judged against the deadline it arrived under.
  */
 export function tryReduce(state: State, action: Action, content: Content): StepResult {
   if ('at' in action) {
     if (!Number.isFinite(action.at) || action.at < 0) return no(state, 'bad-time');
     if (RUNNING.has(state.phase)) {
       if (action.at < state.now) return no(state, 'time-went-backwards');
-      if (action.at >= TIME_LIMIT_MS)
+      if (action.at >= deadlineMs(state))
         return action.type === 'TIME_UP' ? ok(late(state)) : no(late(state), 'out-of-time');
     }
   }
@@ -87,13 +95,21 @@ export function tryReduce(state: State, action: Action, content: Content): StepR
       const c = findCharacter(content, state.active!)!;
       if (c.skillId !== action.s) return no(state, 'wrong-skill');
       // Take or leave, from the conversation or from the card. Reading is the player's choice.
+      // A take records the skill's perk, the same for both variants (state.ts `Perk`).
+      const take = action.v === 'take';
       return ok({
         ...state,
         phase: 'forest',
         now: action.at,
         active: null,
         verdicts: { ...state.verdicts, [action.s]: action.v },
-        basket: action.v === 'take' ? [...state.basket, { s: action.s, v: 'take' }] : state.basket,
+        basket: take ? [...state.basket, { s: action.s, v: 'take' }] : state.basket,
+        perks: take
+          ? [
+              ...state.perks,
+              perkFor(state, content, findSkill(content, action.s)!, c.id, action.at),
+            ]
+          : state.perks,
         log: append(state, { e: 'verdict', s: action.s, v: action.v, at: action.at }),
       });
     }

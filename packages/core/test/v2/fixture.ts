@@ -15,12 +15,19 @@
  *
  * A good skill taken is worth 60 at par and 40 at the buzzer; scoring.test.ts walks the clock.
  *
+ * EVERY PERK IS UNTIMED HERE (lantern, minimap, fork signs) and there is no knock, so time in a
+ * fixture run is only walking, talking and reading. perks.test.ts gives skills timed perks where
+ * it is testing them.
+ *
  * Every bad card SWAPS one line, the only shape the lint allows: the lantern's and the courier's
  * their second line, the locksmith's its only one. Those numbers are written here for the reader;
  * the tests recompute them.
  */
 import { CHROME_KEYS } from '../../src/v2/content.ts';
-import type { ChromeKey } from '../../src/v2/content.ts';
+import type { ChromeKey, Effect } from '../../src/v2/content.ts';
+
+/** Typed as any effect, so a suite can give a fixture skill a timed perk to test it. */
+type FixtureEffect = Effect;
 
 const realWorld = (term: string) => ({
   term: `Fixture ${term}`,
@@ -34,6 +41,8 @@ export const raw = {
   status: 'test fixture, not player copy',
   deal: { good: 1 },
   scoring: { outOf: 100, good: 40, clean: 40, speed: 20, parMs: 60_000 },
+  // No knock, so a paced fixture run costs exactly its walks, talks and cards (sim.test.ts).
+  world: { knockMs: 0, dusk: { fromLeftMs: 120_000, darkest: 0.4 } },
   characters: [
     {
       id: 'magpie',
@@ -63,6 +72,7 @@ export const raw = {
       name: 'Fixture Lantern',
       icon: 'item-lantern',
       promise: 'Fixture promise: lights a path.',
+      effect: { kind: 'lantern' } as FixtureEffect,
       realWorld: realWorld('signal'),
       good: {
         card: {
@@ -84,6 +94,7 @@ export const raw = {
       name: 'Fixture Courier',
       icon: 'item-letter',
       promise: 'Fixture promise: sends word ahead.',
+      effect: { kind: 'minimap' } as FixtureEffect,
       realWorld: realWorld('copy'),
       good: {
         card: {
@@ -105,6 +116,7 @@ export const raw = {
       name: 'Fixture Locksmith',
       icon: 'item-key',
       promise: 'Fixture promise: opens the door.',
+      effect: { kind: 'fork-signs' } as FixtureEffect,
       realWorld: realWorld('access'),
       good: {
         card: { take: ['Fixture: opens her door.'], leave: leave('knock') },
