@@ -1,5 +1,12 @@
 /*
- * The four bystanders, drawn at 32 x 48.
+ * The four bystanders, drawn at 32 x 48 -- three since 2026-10-25.
+ *
+ * THE TOADSTOOL LEFT THIS FILE ON 2026-10-25 (docs/GATEKEEPER.md): he is the Gatekeeper now, the
+ * same mushroom in a keeper's cap holding the bridge key, spawned as `npc-gatekeeper` and painted
+ * in `gatekeeper.ts`, which borrows `taper` and `base` from here. Everything below that still names
+ * "the toadstool" is the history of his drawing and of the cast's bands, and it holds for the
+ * gatekeeper, who keeps the toadstool's box: his row is in `GATEKEEPER_PLAN` and `cast.ts` measures
+ * him against these three exactly as it measured the toadstool.
  *
  * None of them offers a skill, none is ever scored, and nobody will stop to inspect one. They exist
  * so the forest reads as inhabited rather than as a test level with four quiz stations in it. That
@@ -79,14 +86,17 @@
  * 13-px-wide shadow ellipse under a 14-px-tall snail is most of his silhouette, and it was the
  * reason three of these four measured 31 px wide whatever was actually drawn.
  */
-import { clamp01, Img, keyline, mix, pull, rust as rustTone, shade } from '../paint.ts';
+import { clamp01, Img, keyline, mix, shade } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
 import { seat } from './seat.ts';
 
 // ----------------------------------------------------------------------------- shared brushes
 
-/** A thick line with round caps that tapers along its length: stalks, twigs, legs, tails, bills. */
-function taper(
+/**
+ * A thick line with round caps that tapers along its length: stalks, twigs, legs, tails, bills.
+ * Exported for `gatekeeper.ts`, whose twig arm was drawn with it when he was the toadstool here.
+ */
+export function taper(
   img: Img,
   x0: number,
   y0: number,
@@ -104,20 +114,8 @@ function taper(
   }
 }
 
-/**
- * The upper half of an ellipse, flat along `baseY`. A mushroom cap is a dome with a brim, and a
- * whole ellipse with its bottom hidden behind the stem is not the same shape -- the brim is where
- * the gills hang, so the flat edge has to be real.
- */
-function dome(img: Img, cx: number, baseY: number, rx: number, ry: number, c: RGBA): void {
-  for (let y = Math.floor(baseY - ry); y <= Math.floor(baseY); y++) {
-    const dy = (y + 0.5 - baseY) / ry;
-    if (dy < -1) continue;
-    const half = rx * Math.sqrt(1 - dy * dy);
-    for (let x = Math.floor(cx - half); x <= Math.ceil(cx + half); x++)
-      if (x + 0.5 >= cx - half && x + 0.5 <= cx + half) img.px(x, y, c);
-  }
-}
+// (`dome`, the mushroom cap's flat-bottomed half ellipse, moved to `gatekeeper.ts` with its only
+// caller on 2026-10-25.)
 
 /** A thick arc along an ellipse, for anything that wraps a round surface: string round a shell. */
 function arc(
@@ -142,14 +140,15 @@ function arc(
  * The contact the ground is owed, made out of the character's own keyline instead of out of the
  * lawn. The twin of `base()` in `cast.ts`, and deliberately duplicated rather than imported: that
  * module imports this one for the body-plan gate, and a cycle between two painters is a worse
- * trade than ten lines said twice.
+ * trade than ten lines said twice. Exported for `gatekeeper.ts`, which imports this module and is
+ * imported by `cast.ts`, so the gatekeeper borrows it without a cycle.
  *
  * Runs BEFORE `outline`, so the outline wraps it and the base reads as two dark pixels thick where
  * the feet touch and one everywhere else. It only paints transparent pixels with something of the
  * sprite within three rows above them, which closes the gaps between the toes into one planted line
  * without drawing a puddle out to the edges of the frame.
  */
-function base(img: Img, x0: number, x1: number, y: number, c: RGBA): void {
+export function base(img: Img, x0: number, x1: number, y: number, c: RGBA): void {
   for (let x = Math.round(x0); x <= Math.round(x1); x++) {
     if (x < 0 || x >= img.w || y < 0 || y >= img.h) continue;
     if (img.get(x, y)[3] !== 0) continue;
@@ -175,10 +174,11 @@ function base(img: Img, x0: number, x1: number, y: number, c: RGBA): void {
  *   band (+-6)" -- the rule fails on the table that states it. Two rows of crown and the bill in
  *   front of the 12 px body take him to dh 8 and dw 1, which clears it on height.
  * - **snail 26 -> 27 wide.** Against the toadstool at 22 x 18 the spec pair is dw 4, dh 4, inside
- *   the band on both axes. One pixel of eye stalk clears it on width.
+ *   the band on both axes. One pixel of eye stalk clears it on width. (The toadstool's row is the
+ *   gatekeeper's now, `GATEKEEPER_PLAN` in `gatekeeper.ts`, in the same box; the snail still clears
+ *   him on width.)
  */
 export const BYSTANDER_PLAN = {
-  'bystander-toadstool': { w: 22, h: 18, widest: 'the cap', breaks: 'the pointing twig' },
   'bystander-magpie': { w: 28, h: 22, widest: 'the tail', breaks: 'the horizontal wedge tail' },
   'bystander-snail': { w: 27, h: 15, widest: 'the shell', breaks: 'two eye stalks' },
   'bystander-cat': {
@@ -215,210 +215,6 @@ export interface Pose {
 export const REST: Pose = { blink: false, dip: 0, beat: 0 };
 /** Frame 1 of every two-frame sheet: the blink and the dip together, as the boolean drew them. */
 export const BLINK: Pose = { blink: true, dip: 1, beat: 0 };
-
-// ----------------------------------------------------------------------------- the toadstool
-
-/*
- * The cap's russet, and why it is no longer Cyera purple.
- *
- * This file's header used to argue the cap had to be `cloak` "because THE TILE IS THE REFERENCE":
- * `toadstoolRing` in `tiles/flora.ts` painted its three caps straight off `cloak`, so matching it
- * was the consistent choice. That argument expired. `tiles/flora.ts` is no longer shipped -- the
- * tileset is assembled from the `w-*`/`s-*` modules -- and the live `toadstoolRing`, now in
- * `tiles/w-undergrowth.ts`, paints its caps from a russet built off `wood`.
- *
- * These two lines are the live tile's own recipe at `tiles/w-undergrowth.ts` (`rust` and
- * `CAP_LINE`), restated against `shade()` because this sprite steps through discrete levels where
- * the tile sweeps a continuous `t`. Levels 0..3 land on #6b260e / #9a3a17 / #c04f24 / #dc6537,
- * inside the #6b2b12..#dc6e3a span the tile's dome actually covers, so the two read as one
- * mushroom at two sizes.
- *
- * THAT ASK HAS BEEN ANSWERED. This paragraph used to end "Kept deliberately duplicated rather than
- * exported from a tile module: a sprite reaching into `tiles/` would invert the layering. If a third
- * caller ever wants it, it belongs in `paint.ts`." Both `rust` and `pull` now live in `paint.ts`,
- * which every painter already imports and which imports nothing but `node:zlib`, so the sprite
- * reaches sideways rather than into `tiles/` and the layering is intact.
- *
- * The private copy is gone and the pixels did not move. `paint.ts`'s `rust(t)` sweeps the continuous
- * ramp where this sprite wants the four discrete stops, and `tone('wood', i / 3)` is exactly
- * `shade('wood', i)` -- i / 3 * 3 round-trips to each of 0, 1, 2 and 3 exactly in IEEE doubles, so
- * `Math.floor` lands on the stop itself and the interpolation term is zero. Checked rather than
- * assumed: all four levels come back [107,38,14], [154,58,23], [192,79,36], [220,101,55], which are
- * the RGBAs the two lines deleted here produced.
- */
-const rust = (level: 0 | 1 | 2 | 3): RGBA => rustTone(level / 3);
-const CAP_LINE = pull(keyline('wood'), 0.62, 0.52);
-
-/**
- * The toadstool's grounding shadow (`seat`, sprites/seat.ts): the cap's own russet line taken from
- * `wood`'s keyline at luma 50 rather than 35, pulled the same way, so it reads as shade beside it.
- */
-const CAP_SHADOW: RGBA = pull(keyline('wood', 25), 0.62, 0.52);
-
-/**
- * Convinced he is a signpost. A T: 22 px of cap over a 6 px stem, 18 px tall in all, which is the
- * lowest thing in the forest apart from the snail.
- *
- * He was 31 x 40 -- a mushroom the height of a wolf -- and the cost was not only that he broke his
- * own row in section 10.2 but that he broke the joke: a toadstool is funny because it is a small
- * thing with opinions, and at Purple's height he was a tree. Everything above the stem is still cap,
- * so the silhouette is a toadstool before the face is read at all, and the face plus the pointing
- * twig are what turn it into somebody with a view about where you should be going.
- *
- * At a six-pixel stem the face is two eyes and a brow bar and that is the whole budget
- * (docs/PIXEL_STANDARD.md section 6: two pixels of eye, no mouth). The spots drop from five to
- * three for the same reason -- five on a cap this size is gravel.
- *
- * He is rooted and never bobs. The blink moves the twig arm a pixel instead, which is the only tell
- * that the thing addressing you is the mushroom and not something behind it.
- *
- * HIS BEAT IS THE CAP, which wobbles a whole pixel sideways on the stem (`pose.beat`, signed). The
- * stem, the ring and the face stay planted, so it reads as a hat settling and not as the mushroom
- * sliding; the gills and the spots travel with the cap because they are on it.
- */
-function paintToadstool(img: Img, pose: Pose): void {
-  const blink = pose.blink;
-  const t = pose.dip;
-  const w = pose.beat;
-
-  /*
-   * --- stem: a short tapered column with a swollen base, lit down the left ---
-   *
-   * Eight columns wide rather than six. The face has to fit inside it with a clear column of stem
-   * down each side -- at six the two eyes took four of them and the pair sat against the silhouette
-   * edge, where `outline` crowds them and they read as two notches rather than as a face.
-   */
-  for (let y = 38; y <= 46; y++) {
-    const hw = 3.6 + (y > 43 ? (y - 43) * 0.45 : 0);
-    const left = Math.round(16 - hw);
-    const right = Math.round(16 + hw);
-    img.rect(left, y, right - left, 1, shade('wall', 1));
-    img.rect(left, y, 2, 1, shade('wall', 2));
-    img.rect(right - 1, y, 1, 1, shade('wall', 0));
-  }
-
-  // --- the ring: the torn veil, flared wider than the stem and catching light on its top face ---
-  for (let y = 39; y <= 40; y++) {
-    const hw = 5.0 - (y - 39) * 1.2;
-    const left = Math.round(16 - hw);
-    const right = Math.round(16 + hw);
-    img.rect(left, y, right - left, 1, y === 39 ? shade('wall', 3) : shade('wall', 1));
-    img.rect(right - 1, y, 1, 1, shade('wall', 0));
-  }
-
-  /*
-   * --- cap: full mass in shade, body inset up-left, the lit quarter kept to the top-left ---
-   *
-   * THE LEVELS MOVED UP ONE, because the claim that this cap and the tile's were "the same mushroom
-   * at two sizes" turned out to be measurably false. A value census of both: the keyline agrees
-   * exactly (#331408, luma 28 on each), and the deep shade agrees within three levels -- but the
-   * TILE's dome carries its body between luma 95 and 121, where this sprite's cap proper was `rust`
-   * 1 at luma 83, below everything the tile paints. One step darker over the cap's largest area, and
-   * on grass beside the tile the two did read as one species in two ages.
-   *
-   * So the cap proper is `rust` 2 at 108, which is inside the tile's band; the lit quarter is
-   * `rust` 3 at 131, a touch above it, which is what a sprite with twice the diameter is for; the
-   * shaded flank comes up off the keyline onto `rust` 1 at 83, which gives the dome a third step
-   * where it only had two; and `rust` 0 at 56 stays as the pixel proud of everything.
-   *
-   * The rim light is now the same value as the lit quarter. That is not a loss -- a rim and the lit
-   * face of the same dome under one light ARE the same value -- and with the body at 108 there is no
-   * step left above `rust` 3 that is not a pink.
-   */
-  dome(img, 16 + w, 38, 9.6, 7.0, rust(0));
-  dome(img, 15.4 + w, 37.4, 9.0, 6.4, rust(2)); // the cap proper
-  dome(img, 13.6 + w, 35.4, 5.6, 4.0, rust(3)); // the lit quarter only
-  // The shaded flank: a crescent down the low right, where the dome turns away from the light.
-  for (let y = 33; y <= 37; y++) {
-    const dy = (y + 0.5 - 37.4) / 6.4;
-    const half = 9.0 * Math.sqrt(Math.max(0, 1 - dy * dy));
-    const edge = Math.round(15.4 + w + half);
-    img.rect(edge - 2, y, 2, 1, rust(1));
-  }
-  // Rim light along the very top of the dome, one pixel thick and no more.
-  for (let x = 8 + w; x <= 19 + w; x++) {
-    const dx = (x + 0.5 - (15.4 + w)) / 9.0;
-    const y = Math.round(37.4 - 6.4 * Math.sqrt(Math.max(0, 1 - dx * dx)));
-    img.px(x, y + 1, rust(3));
-  }
-
-  /*
-   * Gills: the SHADOW under the brim, and three ticks in it. Not a comb.
-   *
-   * This used to be a dark tick every second pixel right across the brim, nineteen pixels of
-   * alternating dark and cream, and rendered at size it was a row of five white squares with gaps
-   * between them sitting directly above the two eyes -- which reads as a mouth full of teeth, on a
-   * face that is supposed to be friendly. A brim is a dark band with a little structure in it; the
-   * band does the work and the ticks only hint at what it is made of.
-   *
-   * CAP_LINE rather than `rust` 0: the tile takes its gills a full keyline under the cap's own
-   * darkest, and at this size the brim needs that gap or the band vanishes into the flank.
-   */
-  img.line(6 + w, 38, 25 + w, 38, CAP_LINE);
-  img.rect(9 + w, 39, 14, 1, CAP_LINE);
-
-  // Spots: a dark seat, a mid face, a cream core inset up-left, so each one sits on the curve.
-  // `wall` rather than `fur`, which is what the live tile spots this cap with: the cottage cream
-  // rather than a near-white, so the mushroom reads as one material at both sizes.
-  for (const [sx, sy, r] of [
-    [11, 34, 2.4],
-    [19, 33, 2.1],
-    [22, 36, 1.7],
-  ] as const) {
-    img.ellipse(sx + w, sy, r, r * 0.9, rust(0));
-    img.ellipse(sx + w - 0.3, sy - 0.4, r - 0.5, (r - 0.5) * 0.9, shade('wall', 1));
-    img.ellipse(sx + w - 0.7, sy - 0.8, r - 1.1, (r - 1.1) * 0.9, shade('wall', 2));
-  }
-
-  /*
-   * Face, well inside the stem so the outline never eats an eye.
-   *
-   * It did not read at all before this pass, and both reasons were measurable. The brow was
-   * `wall` 0 on a `wall` 1 stem -- 41 luma, which is nothing at six pixels -- and the eyes sat
-   * directly under it, so brow and eye were one 3-row dark mark that the brim's own shadow then
-   * swallowed. Now the brow is CAP_LINE, the same dark the brim is drawn in, and there is a clear
-   * row of lit stem between it and the eye: brow, stem, eye, then three rows of blank stem below.
-   * Those three rows are the toadstool's cheek and chin, and they are where the whole expression
-   * lives -- the same finding the design board made about the rabbit's missing chin.
-   */
-  for (const ex of [13, 17]) {
-    img.rect(ex, 41, 2, 1, CAP_LINE);
-    if (!blink) {
-      img.rect(ex, 43, 2, 2, CAP_LINE);
-      img.px(ex, 43, shade('wall', 3));
-    } else {
-      img.rect(ex, 44, 2, 1, CAP_LINE);
-    }
-  }
-
-  /*
-   * The twig arm, held out with great authority, pointing at nothing in particular.
-   *
-   * IT HAS TO BE IN CLEAR AIR, AND IT HAS TO START OUTSIDE THE STEM. It was drawn from inside the
-   * stem up and to the right into the rows the cap occupies, so every pixel after the first two was
-   * painted over the cap's own shaded flank, in `wood` against `rust`: what rendered was a brown
-   * smudge on the mushroom's right cheek -- no arm, no point, no gesture, and the one thing that
-   * makes him a character rather than scenery simply absent. Dropping it to the stem's own rows was
-   * worse, because at 1.8 px the root then landed on top of the right eye.
-   *
-   * So it is held LEVEL, at rows 41 to 42, leaving the stem's right edge at x 20 and running out to
-   * x 26 -- open sky from the cap's brim (row 39, out to x 22) all the way down. A level arm is also
-   * the funnier one: a signpost's arms are horizontal, and he is convinced he is a signpost.
-   *
-   * Thin. A twig drawn three pixels wide is a club: the shape that says "branch" is the taper plus
-   * the side shoot, not the mass. One shoot -- at this length two is a hand.
-   */
-  taper(img, 20.2, 42.4 - t, 26.0, 41.8 - t, 1.8, 0.9, shade('wood', 0));
-  taper(img, 20.2, 42.0 - t, 25.8, 41.5 - t, 1.0, 0.8, shade('wood', 2));
-  // The side shoot goes DOWN. Raised, it ran into the two rows directly under the brim, where the
-  // brim's own dark and the outline that follows it swallowed every pixel of it; below the arm it is
-  // in open grass and it is the mark that makes the limb a twig rather than a stick.
-  taper(img, 23.0, 42.2 - t, 24.2, 44.0 - t, 1.2, 0.8, shade('wood', 0));
-
-  base(img, 11, 21, 47, CAP_LINE);
-  img.outline(CAP_LINE);
-  seat(img, CAP_LINE, CAP_SHADOW);
-}
 
 // ----------------------------------------------------------------------------- the magpie
 
@@ -1100,8 +896,6 @@ function paintCat(img: Img, pose: Pose): void {
  * `-0` is the open-eyed frame, `-1` the blink.
  */
 export const BYSTANDER_FRAMES: Record<string, (img: Img) => void> = {
-  'bystander-toadstool-0': (img) => paintToadstool(img, REST),
-  'bystander-toadstool-1': (img) => paintToadstool(img, BLINK),
   'bystander-magpie-0': (img) => paintMagpie(img, REST),
   'bystander-magpie-1': (img) => paintMagpie(img, BLINK),
   'bystander-snail-0': (img) => paintSnail(img, REST),
@@ -1115,7 +909,6 @@ export type PosedPainter = (img: Img, pose: Pose) => void;
 
 /** The bystanders' painters by sprite key, posable. `BYSTANDER_FRAMES` is two poses of each. */
 export const BYSTANDER_POSED: Record<string, PosedPainter> = {
-  'bystander-toadstool': paintToadstool,
   'bystander-magpie': paintMagpie,
   'bystander-snail': paintSnail,
   'bystander-cat': paintCat,
@@ -1127,7 +920,6 @@ export const BYSTANDER_POSED: Record<string, PosedPainter> = {
  * painters' own constants, not copies, so the gate cannot drift from what is drawn.
  */
 export const BYSTANDER_SEATS: Record<string, { readonly line: RGBA; readonly shadow: RGBA }> = {
-  'bystander-toadstool': { line: CAP_LINE, shadow: CAP_SHADOW },
   'bystander-magpie': { line: MAGPIE_DARK, shadow: MAGPIE_SHADOW },
   'bystander-snail': { line: SNAIL_DARK, shadow: SNAIL_SHADOW },
   'bystander-cat': { line: CAT_DARK, shadow: CAT_SHADOW },

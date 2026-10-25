@@ -99,8 +99,10 @@ describe('the cast and its faces', () => {
    *     line a failure printed, while reading as the gate it was not.
    */
 
-  it('renders all ten cast frames', () => {
-    expect(Object.keys(CAST_FRAMES)).toHaveLength(10);
+  // Twelve since 2026-10-25: the Gatekeeper's two (`npc-gatekeeper-0`, `-1`, sprites/gatekeeper.ts)
+  // joined the cast when the toadstool became him and left `BYSTANDER_FRAMES` (docs/GATEKEEPER.md).
+  it('renders all twelve cast frames', () => {
+    expect(Object.keys(CAST_FRAMES)).toHaveLength(12);
   });
 });
 
@@ -295,13 +297,16 @@ describe('the sheets generate.ts writes for the spawned characters', () => {
    *
    * The wolf is deliberately absent -- he is never spawned from the map, he appears at the
    * cottage, and `generate.ts:60` names him by hand for that reason. This pins his absence too.
+   *
+   * 2026-10-25: `bystander-toadstool` is `npc-gatekeeper` (docs/GATEKEEPER.md), the contract's
+   * spawn name for him, so the key changed with the map object it is looked up by.
    */
   it('keys a two-frame painter for every character the map can spawn', () => {
     expect(Object.keys(NPC_PAINTERS).sort()).toEqual([
       'bystander-cat',
       'bystander-magpie',
       'bystander-snail',
-      'bystander-toadstool',
+      'npc-gatekeeper',
       'npc-lantern-keeper',
       'npc-owl',
       'npc-rabbit',
