@@ -335,6 +335,18 @@ export function usePanelCover(
 const MOUNT_SETTLE_MS = 300;
 
 /**
+ * The same rule for a FINGER, which the platform never calls a double-click (the client's review,
+ * 2026-10-25, P1). On a phone held upright the offer docks over the touch pad, and Leave it -- or,
+ * at the door, Go in -- opens exactly where the A button was. A player who taps A to talk and taps
+ * again, which is a habit, answered a card they had not read: reproduced with real touch input at
+ * 600ms and 1,200ms after the panel appeared, each a `detail` 1 click on the verdict.
+ *
+ * So a stationary touch must wait a full second. Nobody reads a card and answers it inside one;
+ * a finger that moved to the button it wants is never held back (the slop clause still applies).
+ */
+const TOUCH_SETTLE_MS = 1000;
+
+/**
  * How far the pointer must travel between opening a panel and clicking inside it before the click
  * counts as aimed rather than left over.
  *
@@ -370,11 +382,18 @@ export function activationIsDeliberate(
   detail: number,
   sinceMountMs: number,
   pointerMovedPx: number,
+  touch = false,
 ): boolean {
   if (detail === 0) return true;
   if (pointerMovedPx > POINTER_SLOP_PX) return true;
-  return sinceMountMs >= MOUNT_SETTLE_MS;
+  return sinceMountMs >= (touch ? TOUCH_SETTLE_MS : MOUNT_SETTLE_MS);
 }
+
+/** Whether a click came from a finger: the click's own pointer type, else a coarse-pointer device. */
+const isTouch = (event: { pointerType?: string }): boolean =>
+  event.pointerType
+    ? event.pointerType === 'touch'
+    : typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 /*
  * Where the pointer is, which a panel cannot ask for at the moment it mounts.
@@ -413,7 +432,12 @@ export interface FocusTrapRef {
    * True when `event` is an answer and not the leftover second click of the double-click that
    * mounted this panel. Only controls that COMMIT something irreversible need to ask.
    */
-  deliberate(event: { detail: number; clientX: number; clientY: number }): boolean;
+  deliberate(event: {
+    detail: number;
+    clientX: number;
+    clientY: number;
+    pointerType?: string;
+  }): boolean;
 }
 
 /**
@@ -450,6 +474,7 @@ export function useFocusTrap(onClose?: () => void): FocusTrapRef {
         event.detail,
         performance.now() - mountedAt.current,
         Math.hypot(event.clientX - openedX.current, event.clientY - openedY.current),
+        isTouch(event),
       ),
   });
   const ref = trap.current;

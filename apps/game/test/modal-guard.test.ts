@@ -92,4 +92,21 @@ describe('activationIsDeliberate', () => {
     expect(activationIsDeliberate(SINGLE, 40, Number.NaN)).toBe(false);
     expect(activationIsDeliberate(SINGLE, 900, Number.NaN)).toBe(true);
   });
+
+  /*
+   * A FINGER (the client's review, 2026-10-25, P1): on an upright phone Leave it opens where the A
+   * button was, and a second tap 600ms or 1.2s after the first answered the card. A stationary
+   * touch is held a full second; a moved finger, a keyboard and a mouse are not.
+   */
+  it('holds a stationary touch for the second after the panel opens', () => {
+    for (const age of [80, 600, 900])
+      expect(activationIsDeliberate(SINGLE, age, STILL, true), `touch at ${age}ms`).toBe(false);
+    expect(activationIsDeliberate(SINGLE, 1500, STILL, true)).toBe(true);
+  });
+
+  it('never holds a finger that moved, a keyboard, or a mouse past its own window', () => {
+    expect(activationIsDeliberate(SINGLE, 120, 60, true)).toBe(true);
+    expect(activationIsDeliberate(NO_POINTER, 0, STILL, true)).toBe(true);
+    expect(activationIsDeliberate(SINGLE, 600, STILL, false)).toBe(true);
+  });
 });

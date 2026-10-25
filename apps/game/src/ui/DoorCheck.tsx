@@ -70,7 +70,10 @@ export function DoorCheck({ unmet, total, title, words, onStay, onGoIn }: DoorCh
               type="button"
               class="otp-button otp-button--quiet"
               data-action="go-in"
-              onClick={onGoIn}
+              onClick={(e) => {
+                // Go in ends the run, and on an upright phone it opens where the A button was.
+                if (trap.deliberate(e)) onGoIn();
+              }}
             >
               {words.goIn}
             </button>

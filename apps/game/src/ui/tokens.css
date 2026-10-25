@@ -454,6 +454,21 @@ body::before {
   background: var(--cyera-lime);
 }
 
+/* One letter shows: A on touch, E with a keyboard and a mouse (touch-controls.ts says why). */
+.otp-a-button__key--keys {
+  display: none;
+}
+
+@media (pointer: fine) and (hover: hover) {
+  .otp-a-button__key--touch {
+    display: none;
+  }
+
+  .otp-a-button__key--keys {
+    display: inline;
+  }
+}
+
 .otp-a-button:disabled {
   cursor: default;
 }

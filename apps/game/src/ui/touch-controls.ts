@@ -199,7 +199,22 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'otp-a-button';
-  button.textContent = 'A';
+  /*
+   * "A" on a touch screen, "E" where there is a keyboard and a mouse (the client's review,
+   * 2026-10-25, P12): on a keyboard A walks LEFT, so a newcomer who pressed the letter on the
+   * button watched Purple walk away from the character. Both letters are in the DOM and CSS shows
+   * one (tokens.css `.otp-a-button__key`), on the same media test the world hint uses.
+   */
+  for (const [key, where] of [
+    ['A', 'touch'],
+    ['E', 'keys'],
+  ] as const) {
+    const letter = document.createElement('span');
+    letter.className = `otp-a-button__key otp-a-button__key--${where}`;
+    letter.setAttribute('aria-hidden', 'true');
+    letter.textContent = key;
+    button.append(letter);
+  }
   button.setAttribute('aria-label', labels.interact);
 
   /*
