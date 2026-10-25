@@ -106,11 +106,18 @@ export function Dialogue({
                 <span class="otp-verdict__label">{words.leave}</span>
               </button>
             </div>
-            {/* The quiet way past: no answer, no cost, and the character waits. */}
-            <button type="button" class="otp-link" data-action="walk-on" onClick={onWalkOn}>
-              {words.walkOn}
-            </button>
           </div>
+          {/*
+            The quiet way past: no answer, no cost, and the character waits. Drawn as the panel's
+            close control in the header's top right (the client, 2026-10-25), but LAST in the DOM,
+            so a keyboard still meets Take it, Leave it and Walk on in that order.
+          */}
+          <button type="button" class="otp-offer__walk-on" data-action="walk-on" onClick={onWalkOn}>
+            <span class="otp-offer__walk-on-label">{words.walkOn}</span>
+            <span class="otp-offer__walk-on-x" aria-hidden="true">
+              <LeaveGlyph />
+            </span>
+          </button>
         </div>
       </Panel>
     </div>

@@ -316,7 +316,8 @@
  */
 @media (min-width: 1000px) and (orientation: landscape) {
   .otp-arrive {
-    max-width: 52rem;
+    /* 46rem since 2026-10-25 (the client: "less wide"), with the control centred beside the text. */
+    max-width: 46rem;
     margin-inline: auto;
   }
 }
@@ -360,7 +361,8 @@
 
 .otp-arrive__control {
   grid-area: control;
-  align-self: end;
+  /* Centred on the box's height, not in its corner (the client, 2026-10-25). */
+  align-self: center;
   display: grid;
   justify-items: end;
   align-items: end;

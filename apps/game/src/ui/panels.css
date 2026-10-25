@@ -1111,10 +1111,70 @@
   margin-top: 0;
 }
 
-.otp-offer__answers .otp-link {
-  margin-top: 0;
-  /* Beside the pills, its words end on the content edge the rows end on (Paul's item 24). */
-  margin-right: calc(-6px * var(--otp-ui));
+/*
+ * WALK ON IS THE PANEL'S CLOSE CONTROL (the client, 2026-10-25): its words and a ringed cross in the
+ * header's top right, where a player looks to put a panel away. Positioned against the panel, not
+ * the body, so the body's scroll never carries it off. The ring is Lilac on the Black header -- a
+ * shape and a word, never a red one (no status colours). The hit area is the 44px touch minimum,
+ * top-aligned so the ring sits centred in the header even where the header is shorter than that;
+ * the few pixels it reaches into the body are the body's own top padding.
+ */
+[data-offer] > .otp-panel {
+  position: relative;
+}
+
+.otp-offer__walk-on {
+  position: absolute;
+  top: 0;
+  right: calc(6px * var(--otp-ui));
+  min-width: var(--otp-touch-min);
+  height: max(var(--otp-touch-min), calc(var(--otp-header-h) * var(--otp-ui)));
+  display: flex;
+  align-items: flex-start;
+  gap: calc(8px * var(--otp-ui));
+  padding: calc((var(--otp-header-h) * var(--otp-ui) - 28px) / 2) calc(8px * var(--otp-ui)) 0;
+  border: 0;
+  border-radius: var(--otp-r-pill);
+  background: transparent;
+  color: var(--cyera-offwhite);
+  font: 500 max(11px, calc(13px * var(--otp-ui))) / 28px var(--cyera-font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.otp-offer__walk-on-x {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  box-sizing: border-box;
+  border: 2px solid var(--cyera-lilac);
+  border-radius: 50%;
+  color: var(--cyera-lilac);
+}
+
+.otp-offer__walk-on-x svg {
+  width: 12px;
+  height: 12px;
+}
+
+@media (hover: hover) {
+  .otp-offer__walk-on:hover .otp-offer__walk-on-x {
+    background: var(--cyera-deep-purple);
+  }
+}
+
+.otp-offer__walk-on:active .otp-offer__walk-on-x {
+  background: var(--cyera-deep-purple);
+}
+
+/* A little narrower than the other panels in a landscape window, so the card reads as one card. */
+@media (orientation: landscape) {
+  [data-offer] > .otp-panel {
+    width: min(var(--otp-panel-w), 640px);
+  }
 }
 
 @media (max-width: 420px) {
@@ -1122,12 +1182,6 @@
     flex-direction: column;
     align-items: stretch;
     gap: calc(4px * var(--otp-ui));
-  }
-
-  /* Centred under the stacked pills (Paul's item 24): hung at the start it read as orphaned. */
-  .otp-offer__answers .otp-link {
-    align-self: center;
-    margin-right: 0;
   }
 }
 
@@ -1667,6 +1721,13 @@
  * ring crosses from the Black header onto the world and needs both colours to read on both; it is
  * given a radius (above) so the ring is a rounded shape, not a box.
  */
+/* Walk on lives on the Black header, where Deep Purple would vanish: a Lilac ring on its box. */
+.otp-ui .otp-offer__walk-on:focus-visible {
+  outline: 2px solid var(--cyera-lilac);
+  outline-offset: 0;
+  box-shadow: none;
+}
+
 .otp-ui .otp-link:focus-visible {
   outline: 2px solid var(--cyera-deep-purple);
   /* On the link's own pill-shaped box (Paul's item 24), so the ring hugs the word and stays inside

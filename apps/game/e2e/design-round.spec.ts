@@ -401,7 +401,7 @@ for (const [width, height] of [
 
 /* --------------------------------------------- 9, 11, 24, 25, 26: the offer on a phone */
 
-test('at 375x812 the offer sits on the canvas edges, steps its type and centres Walk on', async ({
+test('at 375x812 the offer sits on the canvas edges, steps its type and puts Walk on in its header', async ({
   browser,
 }) => {
   const page = await pageAt(browser, 375, 812);
@@ -430,7 +430,17 @@ test('at 375x812 the offer sits on the canvas edges, steps its type and centres 
         edges: [panel.left - canvas.left, panel.right - canvas.right],
         title: root.querySelector('.otp-card__title')!.getBoundingClientRect().top,
         height: panel.height,
-        walkOn: link.left + link.width / 2 - (pills.left + pills.width / 2),
+        // Walk on is the panel's close control since 2026-10-25: top right, in the header.
+        walkOn: {
+          right: panel.right - link.right,
+          top: link.top - panel.top,
+          ring: (() => {
+            const x = root.querySelector('.otp-offer__walk-on-x')!.getBoundingClientRect();
+            const head = root.querySelector('.otp-panel__header')!.getBoundingClientRect();
+            return x.top + x.height / 2 - (head.top + head.height / 2);
+          })(),
+          below: link.bottom <= pills.top,
+        },
         pitch:
           lines.length > 1
             ? lines[1]!.getBoundingClientRect().top - lines[0]!.getBoundingClientRect().top
@@ -442,7 +452,11 @@ test('at 375x812 the offer sits on the canvas edges, steps its type and centres 
     expect(m.promise).toBeGreaterThan(m.row);
     expect(m.row).toBeGreaterThan(m.eyebrow);
     for (const e of m.edges) expect(Math.abs(e)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(m.walkOn)).toBeLessThanOrEqual(1);
+    expect(m.walkOn.right).toBeGreaterThanOrEqual(0);
+    expect(m.walkOn.right).toBeLessThanOrEqual(24);
+    expect(m.walkOn.top).toBeGreaterThanOrEqual(0);
+    expect(Math.abs(m.walkOn.ring), 'the ring is centred on the header').toBeLessThanOrEqual(1.5);
+    expect(m.walkOn.below, 'above the answers, not beside them').toBe(true);
     expect(Math.abs(m.pitch - 1.3 * m.rowSize)).toBeLessThanOrEqual(1);
     tops.push(m.title);
     heights.push(m.height);
