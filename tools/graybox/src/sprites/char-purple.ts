@@ -770,26 +770,18 @@ const MOTIF = 11;
  * was not picked. The hem gathers step out with the mark, and the right-hand pair is left off any row
  * where it would sit closer than two columns to the cloth's edge.
  */
-/*
- * FIFTEENTH PASS, 2026-10-25, later: REDRAWN, NOT TRACED (the client: "you can redraw it so it's
- * perfect on her... it doesn't have to be what the original one looks like"). The traced A3 ring
- * was eight lumps with gaps between them, which read on her back as a cog. This is the symbol as
- * an icon at eleven pixels: one smooth ring two pixels thick, open at the top right where the
- * symbol's dot stands, and the dot itself, 2 x 2, two pixels clear of the ring -- the guard below
- * holds every one of those facts on the rendered frame.
- */
 const MARK_ROWS = [
-  '...XXX.....',
-  '.XXXXX..XX.',
-  '.XXX....XX.',
-  'XXX........',
-  'XX.......XX',
-  'XX.......XX',
-  'XX.......XX',
+  '...XX.XX...',
+  '..XXX.XX...',
+  '.XXXX.XX.X.',
+  'XXX......XX',
   'XXX.....XXX',
-  '.XXX...XXX.',
-  '.XXXXXXXXX.',
-  '...XXXXX...',
+  '.X.......X.',
+  'XXX.....XXX',
+  'XXX.....XXX',
+  '.XXXX.XXXX.',
+  '..XXXXXXX..',
+  '...XX.XX...',
 ] as const;
 
 /** The mark's body: Lilac, the brand token, which the official symbol ships in on dark. */

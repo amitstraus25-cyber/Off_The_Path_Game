@@ -2010,96 +2010,18 @@ function tufts(img: Img, at: readonly (readonly [number, number])[], slot = 0): 
  * reach past that line (forest-map.ts, "THE NOTICE'S EAST HALF"). The stakes keep the logo board's
  * eight-pixel inset from each end.
  */
-/*
- * THE VILLAGE BOARD, ONE BUILD FOR BOTH SIGNS (the client, 2026-10-25, later: "make sure they speak
- * the same language, and make them nicer"). The notice and the logo board are now the same object:
- * a small peaked roof over a bevelled timber frame, the same two stakes at the same inset, the same
- * pools and tufts, at the same size on the same two tiles -- and only the FACE differs, a nailed
- * paper sheet on one and the dark recess the white logo is laid over on the other. 52 wide at x 2,
- * and the roof's eave overhangs it by one pixel a side, so nothing drawn reaches past x 54: the
- * phone's payoff camera opens three quarters of the way across the east tile (forest-map.ts).
- */
-const SIGN_BOARD = { x: 2, y: 5, w: 52, h: 21 } as const;
+const NOTICE_PAGE = { x: 4, y: 5, w: 48, h: 17 } as const;
 
-/** The face inside the frame: 48 x 17, where the notice's page and the logo's recess go. */
-const SIGN_FACE = {
-  x: SIGN_BOARD.x + 2,
-  y: SIGN_BOARD.y + 2,
-  w: SIGN_BOARD.w - 4,
-  h: SIGN_BOARD.h - 4,
+/** The board the page is nailed into: a two-pixel lit frame all round, as on the logo board. */
+const NOTICE_BOARD = {
+  x: NOTICE_PAGE.x - 2,
+  y: NOTICE_PAGE.y - 2,
+  w: NOTICE_PAGE.w + 4,
+  h: NOTICE_PAGE.h + 4,
 } as const;
 
-/** The two stakes, left edge each: eight pixels in from each end of the board. */
-const SIGN_STAKES = [SIGN_BOARD.x + 8, SIGN_BOARD.x + SIGN_BOARD.w - 8 - 4] as const;
-
-/** The roof, eave first: four rows of shingle narrowing to a lit ridge, each row's span on the sheet. */
-const SIGN_ROOF = [
-  {
-    y: SIGN_BOARD.y - 1,
-    x0: SIGN_BOARD.x - 1,
-    x1: SIGN_BOARD.x + SIGN_BOARD.w,
-    ramp: 'trunk',
-    t: 0.05,
-  },
-  {
-    y: SIGN_BOARD.y - 2,
-    x0: SIGN_BOARD.x + 1,
-    x1: SIGN_BOARD.x + SIGN_BOARD.w - 2,
-    ramp: 'trunk',
-    t: 0.28,
-  },
-  {
-    y: SIGN_BOARD.y - 3,
-    x0: SIGN_BOARD.x + 5,
-    x1: SIGN_BOARD.x + SIGN_BOARD.w - 6,
-    ramp: 'trunk',
-    t: 0.5,
-  },
-  {
-    y: SIGN_BOARD.y - 4,
-    x0: SIGN_BOARD.x + 11,
-    x1: SIGN_BOARD.x + SIGN_BOARD.w - 12,
-    ramp: 'wood',
-    t: 0.62,
-  },
-] as const;
-
-/**
- * Everything the two signs share: stakes, roof, frame, the four nail heads at the frame's corners
- * and the board's line falling onto the stakes. `face` paints what goes inside.
- */
-function villageBoard(s: Img, face_: (f: typeof SIGN_FACE) => void): void {
-  const b = SIGN_BOARD;
-  for (const sx of SIGN_STAKES) postV(s, sx, b.y + 2, STAKE_W, TILE - b.y - 2);
-  // The roof: lit at the ridge, darkest at the eave, which shades the frame's top edge below it.
-  for (const row of SIGN_ROOF)
-    for (let x = row.x0; x <= row.x1; x++) s.px(x, row.y, tone(row.ramp, row.t));
-  face(s, b.x, b.y, b.w, b.h, 'wood', 0.3, 0.3 + SPAN * 0.7);
-  sinkRun(s, b.x, b.y, b.w, 1, 36);
-  face_(SIGN_FACE);
-  for (const [nx, ny] of [
-    [b.x + 1, b.y + 1],
-    [b.x + b.w - 2, b.y + 1],
-    [b.x + 1, b.y + b.h - 2],
-    [b.x + b.w - 2, b.y + b.h - 2],
-  ] as const)
-    nail(s, nx, ny);
-  for (const sx of SIGN_STAKES) {
-    sinkRun(s, sx, b.y + b.h, STAKE_W, 1, 48);
-    sinkRun(s, sx, b.y + b.h + 1, STAKE_W, 1, 22);
-  }
-}
-
-/** The tufts at both signs' stakes, at sheet coordinates. */
-const SIGN_TUFTS = [
-  [6, 29],
-  [15, 30],
-  [38, 30],
-  [47, 29],
-] as const;
-
-/** The notice's page is the board's face. */
-const NOTICE_PAGE = SIGN_FACE;
+/** The two stakes, on the sheet: left edge each, eight pixels in from each end as on the logo board. */
+const NOTICE_STAKES = [NOTICE_BOARD.x + 8, NOTICE_BOARD.x + NOTICE_BOARD.w - 8 - 4] as const;
 
 /** The notice's two lines, laid in the brush hand down its page. */
 const NOTICE_LINES = layOn(NOTICE_PAGE, ['I ♥ CYERA', 'RESEARCH']);
@@ -2108,38 +2030,59 @@ const NOTICE_LINES = layOn(NOTICE_PAGE, ['I ♥ CYERA', 'RESEARCH']);
 const NOTICE_INK: Record<Role, RGBA> = { ink: LINE.cloth, dry: shade('wood', 0), ...HEART_INK };
 
 function paintNoticeSheet(): Img {
-  return standSheet(2, (s) =>
-    villageBoard(s, ({ x, y, w, h }) => {
-      paper(s, x, y, w, h);
-      // The frame's shadow falling into the recess from the top-left light.
-      sinkRun(s, x, y, w, 1, 40);
-      // Two pins at the sheet's top corners: it is paper pinned to the board.
-      nail(s, x + 2, y + 1);
-      nail(s, x + w - 3, y + 1);
-      paintLettering(s, NOTICE_LINES, NOTICE_INK);
-      /*
-       * The dog ear: the sheet's own back, folded up at the foot, with the fold in near-black. It
-       * is a handful of pixels and it is the difference between paper and a painted panel.
-       */
-      const EAR = 4;
-      for (let j = 0; j < EAR; j++)
-        for (let i = 0; i + j < EAR; i++) s.px(x + w - 1 - i, y + h - 1 - j, band('wall', 0.08, 4));
-      for (let k = 0; k < EAR; k++) s.px(x + w - EAR + k, y + h - 1 - k, LINE.cloth);
-    }),
-  );
+  return standSheet(2, (s) => {
+    const b = NOTICE_BOARD;
+    // The logo board's stakes and frame: the two signs are one family.
+    for (const sx of NOTICE_STAKES) postV(s, sx, b.y + 2, STAKE_W, TILE - b.y - 2);
+    face(s, b.x, b.y, b.w, b.h, 'wood', 0.3, 0.3 + SPAN * 0.7);
+
+    const { x, y, w, h } = NOTICE_PAGE;
+    paper(s, x, y, w, h);
+    // The frame's shadow falling into the recess from the top-left light, as on the logo board.
+    sinkRun(s, x, y, w, 1, 40);
+
+    nail(s, x + 2, y + 1);
+    nail(s, x + w - 3, y + 1);
+
+    paintLettering(s, NOTICE_LINES, NOTICE_INK);
+
+    /*
+     * The dog ear: the sheet's own back, folded up at the foot, with the fold in near-black. It is a
+     * handful of pixels and it is the difference between paper and a painted panel.
+     */
+    const EAR = 4;
+    for (let j = 0; j < EAR; j++)
+      for (let i = 0; i + j < EAR; i++) s.px(x + w - 1 - i, y + h - 1 - j, band('wall', 0.08, 4));
+    for (let k = 0; k < EAR; k++) s.px(x + w - EAR + k, y + h - 1 - k, LINE.cloth);
+
+    // The board throws its line onto the stakes below it, which `ring()` cannot see.
+    for (const sx of NOTICE_STAKES) {
+      sinkRun(s, sx, b.y + b.h, STAKE_W, 1, 48);
+      sinkRun(s, sx, b.y + b.h + 1, STAKE_W, 1, 22);
+    }
+  });
 }
 
 let noticeSheet: Img | undefined;
 
-/** One half of the notice. The pools and the tufts are the village board's, per tile. */
+/** One half of the notice. The pools and the tufts are the logo board's, per tile. */
 const noticeHalf =
   (slot: 0 | 1): Painter =>
   (img) => {
     noticeSheet ??= paintNoticeSheet();
     groundUnder(img, POST_GROUND['notice-board']);
-    for (const sx of SIGN_STAKES) cast(img, sx + STAKE_W / 2 - slot * TILE, 30.5, 5.4, 2.5);
+    for (const sx of NOTICE_STAKES) cast(img, sx + STAKE_W / 2 - slot * TILE, 30.5, 5.4, 2.5);
     cutColumn(img, noticeSheet, slot);
-    tufts(img, SIGN_TUFTS, slot);
+    tufts(
+      img,
+      [
+        [6, 29],
+        [15, 30],
+        [38, 30],
+        [47, 29],
+      ],
+      slot,
+    );
   };
 
 const noticeBoard: Painter = noticeHalf(0);
@@ -2234,33 +2177,38 @@ const signSpeed: Painter = (img) => {
  * in art pixels. Published on the map's `sign-logo` object (forest-map.ts), which is how the game
  * learns it -- one number, written once, here.
  */
-/*
- * The logo's recess: the board's face, one row shorter at the top and two at the foot, so it keeps
- * the wide shape the 734 x 176 mark needs to read (apps/game/test/signs.test.ts) inside the same
- * frame the notice uses.
- */
-export const LOGO_FACE = {
-  x: SIGN_FACE.x,
-  y: SIGN_FACE.y + 1,
-  w: SIGN_FACE.w,
-  h: SIGN_FACE.h - 3,
+export const LOGO_FACE = { x: 6, y: 5, w: 52, h: 14 } as const;
+
+/** The board the face is inset into: a two-pixel lit frame all round. */
+const LOGO_BOARD = {
+  x: LOGO_FACE.x - 2,
+  y: LOGO_FACE.y - 2,
+  w: LOGO_FACE.w + 4,
+  h: LOGO_FACE.h + 4,
 } as const;
 
+/** The two stakes, on the sheet: left edge each. */
+const LOGO_STAKES = [12, 48] as const;
+
 function paintLogoSheet(): Img {
-  return standSheet(2, (s) =>
-    villageBoard(s, () => {
-      const f = LOGO_FACE;
-      /*
-       * The face: flat and dark, in two tones of `trunk` a few luma apart. Its top row and left
-       * column are the darker one -- the frame's own shadow falling into the recess from the
-       * top-left light -- and the rest is one flat tone, so there is nothing under the logo for it
-       * to fight.
-       */
-      for (let j = 0; j < f.h; j++)
-        for (let i = 0; i < f.w; i++)
-          s.px(f.x + i, f.y + j, tone('trunk', i === 0 || j === 0 ? 0.0 : 0.18));
-    }),
-  );
+  return standSheet(2, (s) => {
+    for (const sx of LOGO_STAKES) postV(s, sx, LOGO_BOARD.y + 2, STAKE_W, TILE - LOGO_BOARD.y - 2);
+    const b = LOGO_BOARD;
+    face(s, b.x, b.y, b.w, b.h, 'wood', 0.3, 0.3 + SPAN * 0.7);
+    const f = LOGO_FACE;
+    /*
+     * The face: flat and dark, in two tones of `trunk` a few luma apart. Its top row and left column
+     * are the darker one -- the frame's own shadow falling into the recess from the top-left light --
+     * and the rest is one flat tone, so there is nothing under the logo for it to fight.
+     */
+    for (let j = 0; j < f.h; j++)
+      for (let i = 0; i < f.w; i++)
+        s.px(f.x + i, f.y + j, tone('trunk', i === 0 || j === 0 ? 0.0 : 0.18));
+    for (const sx of LOGO_STAKES) {
+      sinkRun(s, sx, b.y + b.h, STAKE_W, 1, 48);
+      sinkRun(s, sx, b.y + b.h + 1, STAKE_W, 1, 22);
+    }
+  });
 }
 
 let logoSheet: Img | undefined;
@@ -2270,9 +2218,18 @@ const logoHalf =
   (img) => {
     logoSheet ??= paintLogoSheet();
     groundUnder(img, slot === 0 ? 2 : 0);
-    for (const sx of SIGN_STAKES) cast(img, sx + STAKE_W / 2 - slot * TILE, 30.5, 5.4, 2.5);
+    for (const sx of LOGO_STAKES) cast(img, sx + STAKE_W / 2 - slot * TILE, 30.5, 5.4, 2.5);
     cutColumn(img, logoSheet, slot);
-    tufts(img, SIGN_TUFTS, slot);
+    tufts(
+      img,
+      [
+        [8, 29],
+        [17, 30],
+        [44, 30],
+        [53, 29],
+      ],
+      slot,
+    );
   };
 
 /*
