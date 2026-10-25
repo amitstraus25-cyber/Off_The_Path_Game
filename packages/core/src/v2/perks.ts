@@ -1,4 +1,4 @@
-import type { CharacterId, Content, EffectKind, Skill } from './content.ts';
+import type { Content, EffectKind, Skill } from './content.ts';
 import { TIME_LIMIT_MS } from './state.ts';
 import type { Perk, State } from './state.ts';
 
@@ -55,41 +55,29 @@ export const duskAt = (content: Content, state: Perks, at: number): number =>
   duskLevel(content, timeLeftMs(state, at));
 
 /**
- * WHERE A WING RIDE LANDS: the next character in walking order (content order) after the one who
- * gave it that has not been met, wrapping round to the start; null if everybody has been met. Never
- * the cottage -- the door is not a character -- which is the client's rule for every perk. A giver
- * the content does not have (only a forged log can name one) is read as standing before the first.
+ * WHETHER PURPLE IS OVER THE RIVER (rules 3, docs/GATEKEEPER.md): the run took a skill whose
+ * effect is one of `world.crossing`'s kinds -- the Bridge Key's open gate, or the Wing Ride's
+ * flight to the far bank. Content without a river is always across. The reducer refuses the
+ * arrival of a run that is not, so a log that reached the door without crossing is not a run.
  */
-export function wingRideTarget(
-  content: Content,
-  met: readonly CharacterId[],
-  giver: CharacterId | undefined,
-): CharacterId | null {
-  const order = content.characters.map((c) => c.id);
-  const from = giver === undefined ? -1 : order.indexOf(giver);
-  for (let k = 1; k <= order.length; k++) {
-    const c = order[(from + k) % order.length]!;
-    if (!met.includes(c)) return c;
-  }
-  return null;
+export function across(content: Content, state: Perks): boolean {
+  const crossing = content.world.crossing;
+  return crossing === undefined || state.perks.some((p) => crossing.includes(p.kind));
 }
 
 /**
- * The perk a take of `skill`, from `giver`, records at real elapsed `at`. A rewind gives back its
- * `ms` or as much of the run clock as there is, whichever is less, so the clock never runs below
- * zero and the HUD never shows more than the limit.
+ * The perk a take of `skill` records at real elapsed `at`. A rewind gives back its `ms` or as much
+ * of the run clock as there is, whichever is less, so the clock never runs below zero and the HUD
+ * never shows more than the limit.
+ *
+ * A WING RIDE CARRIES ITS EFFECT AS IT IS: `lands`, the map point it flies to. Until rules 3 it
+ * also carried `to`, the next unmet character it landed beside (`wingRideTarget`, now gone), and
+ * a null `to` when nobody was left. The flight now always lands on the far bank, so there is no
+ * nobody-left case and nothing to decide at the take.
  */
-export function perkFor(
-  state: Pick<State, 'perks' | 'met'>,
-  content: Content,
-  skill: Skill,
-  giver: CharacterId,
-  at: number,
-): Perk {
+export function perkFor(state: Pick<State, 'perks'>, skill: Skill, at: number): Perk {
   const e = skill.effect;
   const base = { s: skill.id, at };
-  if (e.kind === 'wing-ride')
-    return { ...base, ...e, to: wingRideTarget(content, state.met, giver) };
   if (e.kind === 'rewind') return { ...base, ...e, ms: Math.min(e.ms, clockMs(state, at)) };
   return { ...base, ...e };
 }

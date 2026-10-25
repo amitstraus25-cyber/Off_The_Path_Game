@@ -9,14 +9,15 @@ import { createState, runEventSchema } from './state.ts';
 import type { Action, RunEvent, State } from './state.ts';
 
 /** The rules version a v2 log is tagged with. */
-export const RULES = 2;
+export const RULES = 3;
 
 /**
  * The v2 run log: what the browser posts and the server replays (golden rule 6).
  *
  * VERSIONED, so a v1 log can never be scored as a v2 run and a v2 log never as a v1 run. A v1 log
- * is a bare array of events; this is an object tagged `rules: 2`, and both parsers are strict about
- * their outer shape. The events inside are keyed differently too (state.ts), so stripping the
+ * is a bare array of events; this is an object tagged `rules: 3` (2 before the river), and both
+ * parsers are strict about their outer shape. A rules-2 log is refused too: it was dealt from 35
+ * deals and could arrive without crossing, so it cannot be replayed into these rules. The events inside are keyed differently too (state.ts), so stripping the
  * envelope does not get a log past the other version either.
  *
  * `content` names the content version the run was played under. The server refuses a log played

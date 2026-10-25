@@ -1,5 +1,4 @@
 import type { Content } from './content.ts';
-import { wingRideTarget } from './perks.ts';
 import type { RunEvent } from './state.ts';
 
 /*
@@ -49,6 +48,11 @@ export interface WalkWorld {
   door: { x: number; y: number; width: number; height: number };
   /** The point each character is talked to from, by spawn object name. */
   spots: Readonly<Record<string, Point>>;
+  /**
+   * Where a wing ride sets Purple's feet down, by the map object its effect `lands` on (the far
+   * bank's `wing-landing`). A landing not listed here costs the leg after the flight nothing.
+   */
+  landings: Readonly<Record<string, Point>>;
 }
 
 export const WALK_WORLD: WalkWorld = {
@@ -56,15 +60,23 @@ export const WALK_WORLD: WalkWorld = {
   reach: { start: 0, character: 48, door: 0 },
   start: { x: 176, y: 672 },
   door: { x: 1600, y: 608, width: 64, height: 96 },
+  /*
+   * RULES 3 IS AHEAD OF THE MAP HERE, on purpose and for one merge (2026-10-25). The Gatekeeper's
+   * `npc-gatekeeper` and the far bank's `wing-landing` are not on the map this was derived from, so
+   * neither is listed and the legs to and from them cost nothing -- a weaker floor, never a wrong
+   * one. The Owl and the Magpie are where that map has them. When the map that moves them lands,
+   * test/v2/floor.test.ts derives this again (its AWAITING_MAP ratchet turns the check back on)
+   * and fails until every number here is the new map's.
+   */
   spots: {
     'npc-rabbit': { x: 432, y: 640 },
-    'bystander-toadstool': { x: 496, y: 736 },
     'npc-owl': { x: 592, y: 416 },
     'bystander-magpie': { x: 976, y: 736 },
     'bystander-snail': { x: 1232, y: 768 },
     'npc-lantern-keeper': { x: 1200, y: 1088 },
     'bystander-cat': { x: 1264, y: 544 },
   },
+  landings: {},
 };
 
 /** Straight-line distance from a point to the nearest point of a rectangle: 0 inside it. */
@@ -91,9 +103,10 @@ export interface WalkFloor {
  * refuses an honest run that used one -- and never charges a run for a perk it did not take:
  *
  *  - `walk-faster`: every leg after the take is walked at `walkSpeed` x `factor`.
- *  - `wing-ride`: the take flies Purple to the talking spot of `wingRideTarget` (perks.ts) at the
- *    flight's cost, `flightMs`, instead of any walk; she lands ON the spot, so the meeting after
- *    it costs no further distance. Nobody unmet: no flight, nothing charged.
+ *  - `wing-ride`: the take flies Purple to the map point its effect `lands` on (`landings`) at the
+ *    flight's cost, `flightMs`, instead of any walk, and the next leg is walked from where she is
+ *    set down. Until rules 3 she landed beside the next unmet character, and the meeting there
+ *    cost nothing more; the far bank is not a character, so now the walk on from it is charged.
  *  - `early-welcome`: the arrival is not charged the knock (`content.world.knockMs`), which every
  *    other arrival is, because the game holds the knock on the clock before stamping `arrived`.
  *
@@ -110,7 +123,6 @@ export function walkFloor(
     const spawn = content.characters.find((x) => x.id === c)?.spawn;
     return spawn === undefined ? undefined : world.spots[spawn];
   };
-  const met: string[] = [];
   let from: Point | null = world.start;
   let reach = world.reach.start;
   let welcome = false;
@@ -123,23 +135,18 @@ export function walkFloor(
         floorMs += msFor(Math.hypot(to.x - from.x, to.y - from.y) - reach - world.reach.character);
       from = to ?? null;
       reach = world.reach.character;
-      met.push(e.c);
     } else if (e.e === 'arrived') {
       if (from) floorMs += msFor(toRect(from, world.door) - reach - world.reach.door);
       if (!welcome) floorMs += content.world.knockMs;
     } else {
       if (e.e === 'verdict' && e.v === 'take') {
         const effect = content.skills.find((s) => s.id === e.s)?.effect;
-        const giver = content.characters.find((c) => c.skillId === e.s)?.id;
         if (effect?.kind === 'walk-faster') speed *= effect.factor;
         if (effect?.kind === 'early-welcome') welcome = true;
         if (effect?.kind === 'wing-ride') {
-          const to = wingRideTarget(content, met, giver);
-          if (to !== null) {
-            floorMs += effect.flightMs;
-            from = spotOf(to) ?? null;
-            reach = 0;
-          }
+          floorMs += effect.flightMs;
+          from = world.landings[effect.lands] ?? null;
+          reach = 0;
         }
       }
       return;

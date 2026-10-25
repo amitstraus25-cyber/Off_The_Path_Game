@@ -184,6 +184,21 @@ describe('the clock is honest: a reader can make it, in every deal, at the pace 
     expect(c.marginMs).toBe(TIME_LIMIT_MS - worst);
   });
 
+  // Wherever the tightest deal falls in seed order -- first or later -- it is the one named.
+  it('names the tightest deal wherever it falls among the seeds', () => {
+    // The courier's good card made long, so its deal (seed 1, the middle one) is the slowest read.
+    const v = variant();
+    v.skills.find((x) => x.id === 'courier')!.good.card.take[1] =
+      'Fixture: to her alone, and to nobody else in the whole fixture wood.';
+    const middle = parseContent(v);
+    const times = everySeed(middle).map(
+      (seed) => play(middle, 'careful', { seed, pace: brisk }).elapsedMs,
+    );
+    expect(Math.max(...times)).toBe(times[1]);
+    expect(times[1]).toBeGreaterThan(Math.max(times[0]!, times[2]!));
+    expect(clockCheck(middle, brisk)).toMatchObject({ seed: 1, elapsedMs: times[1] });
+  });
+
   it('fails when reading every card at that pace cannot be done inside three minutes', () => {
     const c = clockCheck(content, { walkMs: 60_000, talkMs: 5_000 });
     expect(c).toMatchObject({ ok: false, ending: 'late' });

@@ -42,8 +42,8 @@ describe('legal logs', () => {
 
   it('toRunLog tags the log with the rules and the content it was played under', () => {
     const live = fullRun(careful);
-    expect(toRunLog(live)).toEqual({ rules: 2, content: 'fixture-2', seed: 0, events: live.log });
-    expect(RULES).toBe(2);
+    expect(toRunLog(live)).toEqual({ rules: 3, content: 'fixture-2', seed: 0, events: live.log });
+    expect(RULES).toBe(3);
   });
 
   it('an empty log and a partial run are legal and not ended', () => {
@@ -182,11 +182,11 @@ describe('forged logs', () => {
       'log',
       42,
       {},
-      { rules: 2, content: 'fixture-2', seed: 0 },
+      { rules: 3, content: 'fixture-2', seed: 0 },
       envelope([], -1),
       envelope([], 2 ** 32),
       envelope([], 0.5),
-      { rules: 2, content: 'fixture-2', events: [] },
+      { rules: 3, content: 'fixture-2', events: [] },
     ])
       expect(checkRunLog(bad, content)).toEqual({ legal: false, reason: 'malformed log' });
     const long = Array.from({ length: MAX_LOG_EVENTS + 1 }, () => ({ e: 'arrived', at: 1 }));
@@ -199,7 +199,7 @@ describe('forged logs', () => {
  * BOTH are tested, because either alone has a hole:
  *
  *  1. The ENVELOPE. The retired rulebook's log was a bare array; a v2 log is an object tagged
- *     `rules: 2`. The parser accepts neither a bare array nor another version's tag.
+ *     `rules: 3` (2 before the river). The parser accepts neither a bare array nor another version's tag.
  *  2. The EVENTS. Stripping the envelope must not help: v2 events are keyed `e` where the retired
  *     ones were keyed `t`, and the schema is strict, so a retired event does not parse.
  */
@@ -222,7 +222,8 @@ describe('only a v2 log is a v2 run', () => {
 
   it('refuses an envelope that claims any other rules version', () => {
     expect(checkRunLog(v2Log, content)).toMatchObject({ legal: true, ended: true });
-    for (const rules of [1, 3, '2', null])
+    // Rules 2 included: a log from before the river was dealt from 35 deals and need not cross.
+    for (const rules of [1, 2, 4, '3', null])
       expect(checkRunLog({ ...v2Log, rules }, content), String(rules)).toEqual({
         legal: false,
         reason: 'malformed log',

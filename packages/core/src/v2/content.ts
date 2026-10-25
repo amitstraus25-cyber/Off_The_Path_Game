@@ -70,11 +70,15 @@ const variant = z.strictObject({
  * a promise per skill: a kind that led Purple to the door would be a new kind, reviewed as one.
  *
  *  - `minimap`        the minimap is drawn, from the take on; without it there is none.
- *  - `fork-signs`     at each fork, a sign: who lives down that branch (the nearest unmet one).
+ *  - `bridge-gate`    the bridge gate opens at the take, and stays open: the bridge is walkable.
+ *                     One of the two ways over the river (`world.crossing`).
  *  - `early-welcome`  word went ahead (`chrome.doorWelcome`): the knock beat (`world.knockMs`)
  *                     is skipped.
- *  - `wing-ride`      once, at the take, a flight to the next unmet character's talking spot
- *                     (`wingRideTarget`, perks.ts), lasting `flightMs`. Nobody unmet: nothing.
+ *  - `wing-ride`      once, at the take, a flight to the map point `lands` names (the far bank's
+ *                     `wing-landing` in the shipped content), lasting `flightMs`. The other way
+ *                     over the river. It used to land beside the next unmet character; rules 3
+ *                     re-aimed it (docs/GATEKEEPER.md), and the landing is a map point, not a
+ *                     person, so it is never the cottage either.
  *  - `walk-faster`    Purple walks `factor` times as fast for the rest of the run.
  *  - `lantern`        a warm light around Purple as the dusk comes on (`world.dusk`).
  *  - `rewind`         `ms` given back to the clock: to the time left, and off the time the
@@ -82,7 +86,7 @@ const variant = z.strictObject({
  */
 export const EFFECT_KINDS = [
   'minimap',
-  'fork-signs',
+  'bridge-gate',
   'early-welcome',
   'wing-ride',
   'walk-faster',
@@ -96,12 +100,14 @@ export const EFFECT_MAX_MS = 30_000;
 
 const effect = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('minimap') }),
-  z.strictObject({ kind: z.literal('fork-signs') }),
+  z.strictObject({ kind: z.literal('bridge-gate') }),
   z.strictObject({ kind: z.literal('early-welcome') }),
   z.strictObject({
     kind: z.literal('wing-ride'),
     /** How long the flight takes, in ms, during which the clock runs and Purple cannot act. */
     flightMs: z.number().int().min(0).max(EFFECT_MAX_MS),
+    /** The map object the flight lands on: a point, never a character and never the cottage. */
+    lands: slug,
   }),
   z.strictObject({ kind: z.literal('walk-faster'), factor: z.number().gt(1).max(2) }),
   z.strictObject({ kind: z.literal('lantern') }),
@@ -283,16 +289,20 @@ export const CHROME_KEYS = [
   /*
    * THE PERKS, as the forest says them (the client, 2026-10-22). One line per effect KIND, never per
    * skill, so a new skill that picks an existing kind needs no new words; `perkRewind` carries
-   * {seconds}, the time the rewind gave back. `perkWingRideNobody` is the ride with nobody left to
-   * fly to. `doorKnock` and `doorWelcome` are the knock beat and its skip (`early-welcome`), and
+   * {seconds}, the time the rewind gave back. `doorKnock` and `doorWelcome` are the knock beat and its skip (`early-welcome`), and
    * `revealWatchFor` labels a SAFE tile's real-world note, which must not read as if the skill had
    * done the harmful thing.
    */
   'revealWatchFor',
   'perkMinimap',
-  'perkForkSigns',
+  'perkBridgeGate',
   'perkEarlyWelcome',
   'perkWingRide',
+  /*
+   * The ride with nobody left to fly to, from before rules 3. No run can reach it now -- the
+   * flight always lands on the far bank -- and it is kept, at the lead's word (2026-10-25), only
+   * because the game still reads it. It goes when the game stops.
+   */
   'perkWingRideNobody',
   'perkWalkFaster',
   'perkLantern',
@@ -314,6 +324,12 @@ export const CHROME_KEYS = [
   'arriveAskLate',
   'arriveChipLabel',
   'arriveSpeaker',
+  /*
+   * The Gatekeeper and the river (rules 3, docs/GATEKEEPER.md): `gateLocked` is the notice at the
+   * shut bridge gate, walked up to without the Bridge Key. (`perkBridgeGate`, the gate opening, is
+   * with the other perks above; `perkForkSigns` went with the fork signs.)
+   */
+  'gateLocked',
 ] as const;
 export type ChromeKey = (typeof CHROME_KEYS)[number];
 
@@ -363,7 +379,7 @@ const ui = z.strictObject({
     title: text,
     signs: z.strictObject({
       research: z.strictObject({ caption: text, spoken: text.optional() }),
-      speed: z.strictObject({ caption: text, spoken: text.optional() }),
+      'dead-end': z.strictObject({ caption: text, spoken: text.optional() }),
       logo: z.strictObject({ caption: text, spoken: text.optional() }),
     }),
   }),
@@ -461,11 +477,20 @@ export const contentSchema = z.strictObject({
    * Which rules this content is written for. v1 content has no such key and v1's schema is strict,
    * so neither version's content can load as the other's.
    */
-  rules: z.literal(2),
+  rules: z.literal(3),
   version: text,
   status: text,
-  /** How many skills each run deals good. The rest are dealt bad. */
-  deal: z.strictObject({ good: z.number().int().min(1) }),
+  /**
+   * How many skills each run deals good; the rest are dealt bad (deal.ts). `always` names skills
+   * dealt good in every run, and each `oneOf` group has exactly one good member; the rest of `good`
+   * is drawn from the skills named in neither. Both optional, and absent means no constraint. The
+   * lint holds every id to a skill, no skill to two places, and the counts to a deal that exists.
+   */
+  deal: z.strictObject({
+    good: z.number().int().min(1),
+    always: z.array(slug).optional(),
+    oneOf: z.array(z.array(slug).min(2)).optional(),
+  }),
   /**
    * Every run that ENDS -- at Grandma's, with the wolf, or late -- scores `played` for playing (the
    * client, 2026-10-25: "anyone who starts playing gets 25, so they can at least leave their
@@ -500,6 +525,14 @@ export const contentSchema = z.strictObject({
    */
   world: z.strictObject({
     knockMs: z.number().int().min(0).max(EFFECT_MAX_MS),
+    /**
+     * THE RIVER (rules 3, docs/GATEKEEPER.md). Present, the walk to the cottage crosses a river,
+     * and these are the effect kinds that carry Purple over it: the reducer refuses the arrival of
+     * a run that took no skill of one of them (`ENTER_COTTAGE`, 'not-across'), so a log that
+     * reached the door without crossing is not a run. Such a run stays on the near bank until the
+     * clock runs out, which is the late ending. Absent, there is no river.
+     */
+    crossing: z.array(z.enum(EFFECT_KINDS)).min(1).optional(),
     dusk: z.strictObject({
       fromLeftMs: z.number().int().min(1),
       darkest: z.number().gt(0).max(0.5),
@@ -656,6 +689,41 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
   const n = content.skills.length;
   if (content.deal.good >= n)
     add(`a deal of ${content.deal.good} good among ${n} skills leaves nothing bad`);
+
+  /*
+   * THE DEAL'S CONSTRAINTS (rules 3): every id a skill, no skill in two places -- always and a
+   * group, two groups, or twice in one -- and counts that make at least one deal. A skill in two
+   * places would make "exactly one of this group" and "always" disagree, and deal.ts would quietly
+   * deal one of them.
+   */
+  const always = content.deal.always ?? [];
+  const groups = content.deal.oneOf ?? [];
+  for (const id of always) if (!skillIds.has(id)) add(`deal.always names unknown skill "${id}"`);
+  groups.forEach((g, i) => {
+    for (const id of g) if (!skillIds.has(id)) add(`deal.oneOf[${i}] names unknown skill "${id}"`);
+  });
+  const named = [...always, ...groups.flat()];
+  for (const d of new Set(duplicates(named)))
+    add(`deal: skill "${d}" is named more than once across always and oneOf`);
+  const fixed = always.length + groups.length;
+  const others = content.skills.filter((s) => !named.includes(s.id)).length;
+  if (fixed > content.deal.good)
+    add(
+      `a deal of ${content.deal.good} good has no room for ${always.length} always-good skills and ${groups.length} oneOf groups`,
+    );
+  else if (content.deal.good - fixed > others)
+    add(
+      `a deal of ${content.deal.good} good must draw ${content.deal.good - fixed} more from the ${others} skills outside always and oneOf`,
+    );
+
+  /*
+   * THE RIVER NEEDS A WAY OVER. With `world.crossing`, a run that took no crossing skill cannot
+   * arrive, so content with none of those kinds is content nobody can finish. Whether a CAREFUL
+   * run can cross in every deal is the trap check's question (sim.ts): it is measured by playing.
+   */
+  const crossing = content.world.crossing;
+  if (crossing && !content.skills.some((s) => crossing.includes(s.effect.kind)))
+    add(`world.crossing: no skill has an effect that crosses the river (${crossing.join(', ')})`);
 
   // "Out of 100" is a promise to the player. If no run can reach it, the denominator is a lie.
   const best = ceiling(content);

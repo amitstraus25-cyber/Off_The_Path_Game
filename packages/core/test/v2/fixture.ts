@@ -15,7 +15,7 @@
  *
  * A good skill taken is worth 60 at par and 40 at the buzzer; scoring.test.ts walks the clock.
  *
- * EVERY PERK IS UNTIMED HERE (lantern, minimap, fork signs) and there is no knock, so time in a
+ * EVERY PERK IS UNTIMED HERE (lantern, minimap, bridge gate) and there is no knock, so time in a
  * fixture run is only walking, talking and reading. perks.test.ts gives skills timed perks where
  * it is testing them.
  *
@@ -36,7 +36,7 @@ const realWorld = (term: string) => ({
 const leave = (what: string) => `Fixture card: ${what}.`;
 
 export const raw = {
-  rules: 2,
+  rules: 3,
   version: 'fixture-2',
   status: 'test fixture, not player copy',
   deal: { good: 1 },
@@ -116,7 +116,7 @@ export const raw = {
       name: 'Fixture Locksmith',
       icon: 'item-key',
       promise: 'Fixture promise: opens the door.',
-      effect: { kind: 'fork-signs' } as FixtureEffect,
+      effect: { kind: 'bridge-gate' } as FixtureEffect,
       realWorld: realWorld('access'),
       good: {
         card: { take: ['Fixture: opens her door.'], leave: leave('knock') },
@@ -151,7 +151,7 @@ export const raw = {
       title: 'Fixture world',
       signs: {
         research: { caption: 'Fixture research sign', spoken: 'Fixture research sign, spoken' },
-        speed: { caption: 'Fixture speed sign' },
+        'dead-end': { caption: 'Fixture dead-end sign' },
         logo: { caption: 'Fixture logo sign' },
       },
     },

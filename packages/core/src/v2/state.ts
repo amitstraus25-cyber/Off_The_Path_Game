@@ -61,17 +61,15 @@ export interface BasketEntry {
  *
  * NOT LOGGED. Every perk is a pure function of the log's own `verdict` events and the content, so
  * the server re-derives each one by replaying, and the floor (floor.ts) by reading the verdicts.
- * Two kinds carry what the reducer decided at the take:
+ * One kind carries what the reducer decided at the take:
  *
- *  - `wing-ride` `to`: who the flight lands beside (`wingRideTarget`), or null when nobody was
- *    left unmet and the perk did nothing.
  *  - `rewind` `ms`: what was actually GIVEN BACK, which is the content's `ms` unless the run was
  *    younger than that -- a rewind never takes the clock past its start.
+ *
+ * (A `wing-ride` carried `to`, the character it landed beside, until rules 3 re-aimed the flight
+ * at a map point: it now carries the content's `lands` like any other field of its effect.)
  */
-export type Perk = { s: SkillId; at: number } & (
-  | Exclude<Effect, { kind: 'wing-ride' }>
-  | (Extract<Effect, { kind: 'wing-ride' }> & { to: CharacterId | null })
-);
+export type Perk = { s: SkillId; at: number } & Effect;
 
 export interface State {
   phase: Phase;
@@ -147,4 +145,6 @@ export type RejectReason =
   /** TIME_UP before the limit: a fast timer cannot end a run early. */
   | 'time-not-up'
   /** The action arrived at or after the limit. It was not applied, and the run has ended late. */
-  | 'out-of-time';
+  | 'out-of-time'
+  /** ENTER_COTTAGE by a run that never crossed the river (`world.crossing`, perks.ts `across`). */
+  | 'not-across';

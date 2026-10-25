@@ -1,7 +1,7 @@
 import { findCharacter, findSkill } from './content.ts';
 import type { Content } from './content.ts';
 import { isSeed } from './deal.ts';
-import { deadlineMs, perkFor } from './perks.ts';
+import { across, deadlineMs, perkFor } from './perks.ts';
 import { RUNNING, createState } from './state.ts';
 import type { Action, RejectReason, RunEvent, State } from './state.ts';
 
@@ -105,10 +105,7 @@ export function tryReduce(state: State, action: Action, content: Content): StepR
         verdicts: { ...state.verdicts, [action.s]: action.v },
         basket: take ? [...state.basket, { s: action.s, v: 'take' }] : state.basket,
         perks: take
-          ? [
-              ...state.perks,
-              perkFor(state, content, findSkill(content, action.s)!, c.id, action.at),
-            ]
+          ? [...state.perks, perkFor(state, findSkill(content, action.s)!, action.at)]
           : state.perks,
         log: append(state, { e: 'verdict', s: action.s, v: action.v, at: action.at }),
       });
@@ -122,6 +119,9 @@ export function tryReduce(state: State, action: Action, content: Content): StepR
 
     case 'ENTER_COTTAGE':
       if (state.phase !== 'forest') return no(state, 'wrong-phase');
+      // The cottage is over the river (rules 3): no crossing taken, no door. The run stays on the
+      // near bank, and the clock ends it late.
+      if (!across(content, state)) return no(state, 'not-across');
       return ok({
         ...state,
         phase: 'cottage',

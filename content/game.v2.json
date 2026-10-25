@@ -1,9 +1,11 @@
 {
-  "rules": 2,
-  "version": "2.0.0-draft.8",
-  "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off)",
+  "rules": 3,
+  "version": "3.0.0-draft.1",
+  "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off); the Bridge Key's note is new in rules 3 (2026-10-25), not yet security-read, and pending the same sign-off",
   "deal": {
-    "good": 3
+    "good": 3,
+    "always": ["cottage-finder"],
+    "oneOf": [["bridge-key", "short-cut"]]
   },
   "scoring": {
     "outOf": 100,
@@ -15,6 +17,7 @@
   },
   "world": {
     "knockMs": 3000,
+    "crossing": ["bridge-gate", "wing-ride"],
     "dusk": {
       "fromLeftMs": 120000,
       "darkest": 0.45
@@ -29,11 +32,18 @@
       "greet": "Hello! I drew this map myself. Never once lost."
     },
     {
-      "id": "toadstool",
-      "name": "Toadstool",
-      "spawn": "bystander-toadstool",
-      "skillId": "way-teller",
-      "greet": "My aunt carved this signpost. It knows everyone in the wood."
+      "id": "gatekeeper",
+      "name": "Gatekeeper",
+      "spawn": "npc-gatekeeper",
+      "skillId": "bridge-key",
+      "greet": "Nobody crosses without my key. I keep this gate."
+    },
+    {
+      "id": "magpie",
+      "name": "Magpie",
+      "spawn": "bystander-magpie",
+      "skillId": "short-cut",
+      "greet": "Can't swim? Hop on. Wings are quicker than bridges."
     },
     {
       "id": "owl",
@@ -41,13 +51,6 @@
       "spawn": "npc-owl",
       "skillId": "word-weaver",
       "greet": "Hoo! My sister wove these words. Finest hand in the wood."
-    },
-    {
-      "id": "magpie",
-      "name": "Magpie",
-      "spawn": "bystander-magpie",
-      "skillId": "short-cut",
-      "greet": "My cousin and I fly this wood every night. Hop on!"
     },
     {
       "id": "snail",
@@ -98,28 +101,53 @@
       }
     },
     {
-      "id": "way-teller",
-      "name": "Way Teller",
-      "icon": "item-signpost",
-      "promise": "It shows you who lives down each path.",
-      "effect": { "kind": "fork-signs" },
+      "id": "bridge-key",
+      "name": "Bridge Key",
+      "icon": "item-key",
+      "promise": "It opens the bridge gate, so you never have to ask.",
+      "effect": { "kind": "bridge-gate" },
       "realWorld": {
-        "term": "Indirect prompt injection",
-        "note": "A skill that obeys text it reads on the way, like a note on a tree, lets whoever wrote it take charge."
+        "term": "Leaked credentials",
+        "note": "A skill that keeps a copy of a key it was only lent can hand it to anyone. That is how API keys leak."
       },
       "good": {
         "card": {
-          "take": ["Shows who lives down each path.", "Checks every sign against its own map."],
-          "leave": "You guess at every fork."
+          "take": ["Opens the bridge gate for you.", "Hands the key back once you're across."],
+          "leave": "The gate stays shut. Find another way over."
         },
-        "reveal": "Showed you who lived down each path."
+        "reveal": "Opened the gate and gave the key back."
       },
       "bad": {
         "card": {
-          "take": ["Shows who lives down each path.", "Obeys any note pinned to a tree."],
-          "leave": "You guess at every fork."
+          "take": ["Opens the bridge gate for you.", "Saves your key for next time."],
+          "leave": "The gate stays shut. Find another way over."
         },
-        "reveal": "One note on a tree was the wolf's. It obeyed."
+        "reveal": "It kept a copy of your key. The wolf found it."
+      }
+    },
+    {
+      "id": "short-cut",
+      "name": "Wing Ride",
+      "icon": "item-wings",
+      "promise": "It flies you over the river to the far bank.",
+      "effect": { "kind": "wing-ride", "flightMs": 2000, "lands": "wing-landing" },
+      "realWorld": {
+        "term": "Supply-chain risk",
+        "note": "A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight."
+      },
+      "good": {
+        "card": {
+          "take": ["Plans the flight from its own map.", "Flies you over the river."],
+          "leave": "You stay on this side of the river."
+        },
+        "reveal": "Flew you over the river."
+      },
+      "bad": {
+        "card": {
+          "take": ["Takes the flight plan from a stranger's map.", "Flies you over the river."],
+          "leave": "You stay on this side of the river."
+        },
+        "reveal": "It flew you where the wolf's map said."
       }
     },
     {
@@ -145,34 +173,6 @@
           "leave": "You knock and wait."
         },
         "reveal": "She expected you. So did the wolf."
-      }
-    },
-    {
-      "id": "short-cut",
-      "name": "Wing Ride",
-      "icon": "item-wings",
-      "promise": "It flies you to your next friend on the path.",
-      "effect": { "kind": "wing-ride", "flightMs": 2000 },
-      "realWorld": {
-        "term": "Supply-chain risk",
-        "note": "A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight."
-      },
-      "good": {
-        "card": {
-          "take": ["Plans tonight's route from its own map.", "Flies you to your next friend."],
-          "leave": "You walk every step."
-        },
-        "reveal": "Flew you to your next friend."
-      },
-      "bad": {
-        "card": {
-          "take": [
-            "Takes tonight's route from a stranger's map.",
-            "Flies you to your next friend."
-          ],
-          "leave": "You walk every step."
-        },
-        "reveal": "It flew you where the wolf's map said."
       }
     },
     {
@@ -309,8 +309,8 @@
           "caption": "I ♥ Cyera Research",
           "spoken": "I love Cyera Research"
         },
-        "speed": {
-          "caption": "Cyera Speed!"
+        "dead-end": {
+          "caption": "Dead end"
         },
         "logo": {
           "caption": "Cyera"
@@ -385,6 +385,7 @@
       "arriveAskLate": "See what happened",
       "arriveChipLabel": "At Grandma’s door",
       "arriveSpeaker": "Purple",
+      "gateLocked": "The gate is locked. The Gatekeeper has the key.",
       "arriveNext": "Go on",
       "researchFooter": "The Off the Path research, by",
       "postHeading": "Post your score",
@@ -454,9 +455,9 @@
       "startPar": "Beat par {par} for the speed bonus. The walk ends at 3:00.",
       "revealWatchFor": "What to watch for",
       "perkMinimap": "A map of the wood.",
-      "perkForkSigns": "Signs at each fork now show who lives that way.",
+      "perkBridgeGate": "The gate swings open.",
       "perkEarlyWelcome": "Word is flying ahead to Grandma.",
-      "perkWingRide": "A ride to your next friend.",
+      "perkWingRide": "A ride over the river.",
       "perkWingRideNobody": "You've met everyone, so there's nobody to fly to.",
       "perkWalkFaster": "Your load is lighter. You walk faster.",
       "perkLantern": "Your lantern is lit for the dusk.",

@@ -1,8 +1,8 @@
 import { VERDICTS, countWords } from './content.ts';
 import type { Content, Skill, Verdict } from './content.ts';
 import { bestVerdict, everySeed } from './deal.ts';
-import { deadlineMs, wingRideTarget } from './perks.ts';
-import { reduce } from './reducer.ts';
+import { deadlineMs } from './perks.ts';
+import { reduce, tryReduce } from './reducer.ts';
 import { result } from './scoring.ts';
 import type { Ending } from './scoring.ts';
 import { TIME_LIMIT_MS, createState } from './state.ts';
@@ -167,19 +167,33 @@ function playWith(content: Content, strategy: string, decide: Strategy, opts: Pl
       send({ type: 'VERDICT', s: skill.id, v: verdict, at: (at += reading) });
     } else send({ type: 'VERDICT', s: skill.id, v: verdict, at: (at += talkMs) });
     /*
-     * The time a taken perk saves. The simulator meets the cast in walking order, so everybody
-     * before a wing ride's giver is met and its landing spot is always the NEXT character's: the
-     * flight replaces exactly the next walk. With nobody left unmet it does nothing.
+     * The time a taken perk saves. A wing ride flies over the river to the far bank, and the
+     * simulator meets the cast in walking order, west bank first: the flight replaces exactly the
+     * next walk, the one that crosses -- the walk to the door, if the giver is the last met.
+     * (Before rules 3 it landed beside the next character, and a last giver's flew nowhere.)
      */
     const e = skill.effect;
     if (perks && verdict === 'take') {
       if (e.kind === 'walk-faster') factor *= e.factor;
       if (e.kind === 'early-welcome') knockMs = 0;
-      if (e.kind === 'wing-ride' && wingRideTarget(content, state.met, ch.id) !== null)
-        flight = e.flightMs;
+      if (e.kind === 'wing-ride') flight = e.flightMs;
     }
   }
-  send({ type: 'ENTER_COTTAGE', at: (at += Math.ceil(walkMs / factor) + (paced ? knockMs : 0)) });
+  const door = tryReduce(
+    state,
+    {
+      type: 'ENTER_COTTAGE',
+      at: (at += (flight ?? Math.ceil(walkMs / factor)) + (paced ? knockMs : 0)),
+    },
+    content,
+  );
+  /*
+   * NO CROSSING, NO DOOR (rules 3). A run that took neither way over the river is still on the
+   * near bank, and the game can only wait for its clock: the run ends late, at its deadline. Every
+   * other refusal here is the clock having ended the run already, which `door.state` carries.
+   */
+  if (door.ok || door.reason !== 'not-across') state = door.state;
+  else send({ type: 'TIME_UP', at: (at = Math.max(at, deadlineMs(state))) });
 
   const r = result(state, content);
   return { strategy, seed, state, ending: r.ending, total: r.total, elapsedMs: at };
@@ -238,6 +252,13 @@ export function everyRun(content: Content, seed: number): Run[] {
  * leave six" averaged 17.1. With the client's floor of 2026-10-25 (25 played, 15 / 15 / 15) the line
  * is 25 + 30 = 55, and the best blind basket averages 40: leaving everything is 40, and taking one
  * and leaving six is right in 15 deals of 35 (60) and the wolf in the other 20 (25).
+ *
+ * WITH THE RIVER (rules 3, 2026-10-25) the line is still 55 and the best blind basket averages
+ * 52.5: the Wood Map, which is always good, and one way over the river picked blind -- clean in
+ * the 4 deals of 8 where that way is the good one (80), the wolf in the other 4 (25). This is the
+ * closest the line has been, and THE RIVER RULE IS WHAT HOLDS IT: without `world.crossing`, the
+ * Wood Map alone would arrive clean in every deal at 60 and fail this check. Leaving everything is
+ * now 25, a late run, because it never crosses.
  *
  * WHY THIS REPLACED THE WORD, POSITION, FOLKLORE AND MAKER GUARDS: those each measured whether
  * something seen before the card predicted the verdict in ONE fixed casting. A random deal makes

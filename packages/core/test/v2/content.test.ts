@@ -28,11 +28,28 @@ import {
   kindOf,
   variantOf,
 } from '../../src/v2/deal.ts';
-import { loadContent } from '../../src/v2/load.ts';
+import { loadContent, parseContent } from '../../src/v2/load.ts';
 import { raw, variant } from './fixture.ts';
 
 const parsed = (): Content => contentSchema.parse(variant());
 const skill = (c: Content, id: string) => c.skills.find((s) => s.id === id)!;
+/** The fixture grown to seven skills, three dealt good, each offered by its own character. */
+const sevenSkills = (): Content => {
+  const c = parsed();
+  for (let i = 0; i < 4; i++) {
+    const id = `extra-${i}`;
+    c.skills.push({ ...structuredClone(c.skills[0]!), id });
+    c.characters.push({
+      ...structuredClone(c.characters[0]!),
+      id: `extra-c-${i}`,
+      spawn: `spawn-extra-${i}`,
+      skillId: id,
+    });
+  }
+  c.deal.good = 3;
+  c.scoring.outOf = ceiling(c);
+  return c;
+};
 
 describe('v2 fixture', () => {
   it('loads, lints clean and finds what it holds', () => {
@@ -55,6 +72,38 @@ describe('schema', () => {
     const untagged = variant() as Record<string, unknown>;
     delete untagged['rules'];
     expect(() => loadContent(untagged)).toThrow(/rules/);
+  });
+
+  it('holds the deal to its shape: a count, skill ids to always deal good, and groups of two or more', () => {
+    const refused: [string, unknown][] = [
+      ['a bare id for always', { good: 1, always: 'lantern' }],
+      ['a flat list for oneOf', { good: 1, oneOf: ['lantern', 'courier'] }],
+      ['a group of one', { good: 1, oneOf: [['lantern']] }],
+      ['an id that is not a slug', { good: 1, always: ['Lantern!'] }],
+      ['a stray key', { good: 1, never: ['lantern'] }],
+    ];
+    for (const [name, deal] of refused) {
+      const v = variant() as Record<string, unknown>;
+      v['deal'] = deal;
+      expect(() => loadContent(v), name).toThrow(/deal/);
+    }
+    const v = variant() as Record<string, unknown>;
+    v['deal'] = { good: 1, always: [], oneOf: [['lantern', 'courier', 'locksmith']] };
+    expect(loadContent(v).deal).toEqual(v['deal']);
+  });
+
+  it('names a river by the effect kinds that cross it, at least one and each a kind the game has', () => {
+    for (const crossing of [[], ['swim'], 'bridge-gate']) {
+      const v = variant() as { world: Record<string, unknown> };
+      v.world['crossing'] = crossing;
+      expect(() => loadContent(v), JSON.stringify(crossing)).toThrow(/world\.crossing/);
+    }
+    // The fixture's locksmith opens a gate; a river it alone can cross parses. (Whether careful
+    // can cross in every deal is the trap check's, and seed 0 deals the locksmith bad.)
+    const v = variant() as { world: Record<string, unknown> };
+    v.world['crossing'] = ['bridge-gate'];
+    expect(parseContent(v).world.crossing).toEqual(['bridge-gate']);
+    expect(() => loadContent(v)).toThrow(/trap: careful reaches the ceiling/);
   });
 
   it('rejects unknown keys, empty text, and a third verdict', () => {
@@ -103,7 +152,9 @@ describe('schema', () => {
       { kind: 'rewind', ms: EFFECT_MAX_MS + 1 },
       { kind: 'rewind', ms: 1.5 },
       { kind: 'wing-ride' },
-      { kind: 'wing-ride', flightMs: -1 },
+      { kind: 'wing-ride', flightMs: -1, lands: 'fixture-landing' },
+      { kind: 'wing-ride', flightMs: 1, lands: 'Not A Slug' },
+      { kind: 'wing-ride', flightMs: 1 },
       { kind: 'minimap', ms: 5 },
     ];
     for (const effect of refused) {
@@ -113,9 +164,9 @@ describe('schema', () => {
     }
     const kinds = [
       { kind: 'minimap' },
-      { kind: 'fork-signs' },
+      { kind: 'bridge-gate' },
       { kind: 'early-welcome' },
-      { kind: 'wing-ride', flightMs: 0 },
+      { kind: 'wing-ride', flightMs: 0, lands: 'fixture-landing' },
       { kind: 'walk-faster', factor: 2 },
       { kind: 'lantern' },
       { kind: 'rewind', ms: EFFECT_MAX_MS },
@@ -247,6 +298,97 @@ describe('the deal', () => {
     expect(hands).toHaveLength(35);
     expect(new Set(hands).size).toBe(35);
     expect(hands.every((h) => h.split(',').length === 3)).toBe(true);
+  });
+
+  /*
+   * BACK-COMPATIBLE BY CONSTRUCTION: a deal with no `always` and no `oneOf` is the plain
+   * lexicographic unranking it always was. The 35 hands are rebuilt here by three nested loops,
+   * independently of deal.ts, and every seed must name the same hand it named before rules 3.
+   */
+  it('without always or oneOf, seed n is still the n-th hand in lexicographic order', () => {
+    const c = sevenSkills();
+    const ids = c.skills.map((s) => s.id);
+    const lexicographic: string[][] = [];
+    for (let a = 0; a < 7; a++)
+      for (let b = a + 1; b < 7; b++)
+        for (let d = b + 1; d < 7; d++) lexicographic.push([ids[a]!, ids[b]!, ids[d]!]);
+    expect(dealCount(c)).toBe(35);
+    expect(everySeed(c).map((s) => deal(c, s))).toEqual(lexicographic);
+    // Empty constraints are no constraints.
+    c.deal.always = [];
+    c.deal.oneOf = [];
+    expect(everySeed(c).map((s) => deal(c, s))).toEqual(lexicographic);
+  });
+
+  /*
+   * THE GATEKEEPER'S DEAL (docs/GATEKEEPER.md): one skill always good, exactly one of a pair good,
+   * and the third good drawn from the other four. 1 x 2 x 4 = 8 deals, each exactly once.
+   */
+  it('always and oneOf: the always skill in every hand, one of each group, the rest drawn from the others', () => {
+    const c = sevenSkills();
+    const [a, b, d, ...rest] = c.skills.map((s) => s.id) as [string, string, string, ...string[]];
+    c.deal.always = [a];
+    c.deal.oneOf = [[b, d]];
+    expect(dealCount(c)).toBe(8);
+    const hands = everySeed(c).map((s) => deal(c, s));
+    expect(hands).toHaveLength(8);
+    expect(new Set(hands.map((h) => h.join(','))).size).toBe(8);
+    const order = c.skills.map((s) => s.id);
+    for (const h of hands) {
+      expect(h).toHaveLength(3);
+      expect(h).toContain(a);
+      expect([b, d].filter((x) => h.includes(x))).toHaveLength(1);
+      expect(rest.filter((x) => h.includes(x))).toHaveLength(1);
+      // In content order, like every hand.
+      expect([...h].sort((x, y) => order.indexOf(x) - order.indexOf(y))).toEqual(h);
+    }
+    // Every free skill is good in a quarter of the deals, each of the pair in half.
+    for (const x of rest)
+      expect(
+        hands.filter((h) => h.includes(x)),
+        x,
+      ).toHaveLength(2);
+    for (const x of [b, d])
+      expect(
+        hands.filter((h) => h.includes(x)),
+        x,
+      ).toHaveLength(4);
+    // Seed modulo the deal count: it wraps.
+    expect(deal(c, 8)).toEqual(deal(c, 0));
+    expect(deal(c, SEED_LIMIT - 1)).toEqual(deal(c, (SEED_LIMIT - 1) % 8));
+    // The low digit is the free draw, then the groups: seeds 0 to 3 keep the pair's first member.
+    expect(hands.slice(0, 4).every((h) => h.includes(b))).toBe(true);
+    expect(hands.slice(4).every((h) => h.includes(d))).toBe(true);
+  });
+
+  it('several groups, and a deal the groups fill on their own', () => {
+    const c = sevenSkills();
+    const ids = c.skills.map((s) => s.id);
+    c.deal.always = [ids[6]!];
+    c.deal.oneOf = [
+      [ids[0]!, ids[1]!],
+      [ids[2]!, ids[3]!, ids[4]!],
+    ];
+    // 2 x 3 x (one other skill, none to draw) = 6.
+    expect(dealCount(c)).toBe(6);
+    const hands = everySeed(c).map((s) => deal(c, s).join(','));
+    expect(new Set(hands).size).toBe(6);
+    expect(hands.every((h) => !h.includes(ids[5]!))).toBe(true);
+  });
+
+  it('content that cannot be dealt has no deals, and dealing it says so', () => {
+    const c = sevenSkills();
+    c.deal.always = c.skills.slice(0, 4).map((s) => s.id);
+    expect(dealCount(c)).toBe(0);
+    expect(everySeed(c)).toEqual([]);
+    expect(() => deal(c, 0)).toThrow(/no deals/);
+    const thin = sevenSkills();
+    thin.deal.good = 6;
+    thin.deal.oneOf = [thin.skills.slice(0, 2).map((s) => s.id)];
+    // Five to draw from the five others is one deal; six would be none.
+    expect(dealCount(thin)).toBe(2);
+    thin.deal.oneOf = [thin.skills.slice(0, 3).map((s) => s.id)];
+    expect(dealCount(thin)).toBe(0);
   });
 
   it('reads the dealt variant and the careful verdict off the good set', () => {
@@ -418,6 +560,62 @@ describe('lint rules', () => {
       'a deal with nothing bad in it',
       (c) => void (c.deal.good = 3),
       /a deal of 3 good among 3 skills leaves nothing bad/,
+    ],
+    [
+      'an always-good skill the content does not have',
+      (c) => void (c.deal.always = ['ghost']),
+      /deal\.always names unknown skill "ghost"/,
+    ],
+    [
+      'a oneOf group naming a skill the content does not have',
+      (c) => void (c.deal.oneOf = [['lantern', 'ghost']]),
+      /deal\.oneOf\[0\] names unknown skill "ghost"/,
+    ],
+    [
+      'a skill both always good and in a oneOf group',
+      (c) => {
+        c.deal.good = 2;
+        c.deal.always = ['lantern'];
+        c.deal.oneOf = [['lantern', 'courier']];
+      },
+      /deal: skill "lantern" is named more than once across always and oneOf/,
+    ],
+    [
+      'two oneOf groups that overlap',
+      (c) => {
+        c.deal.good = 2;
+        c.deal.oneOf = [
+          ['lantern', 'courier'],
+          ['courier', 'locksmith'],
+        ];
+      },
+      /deal: skill "courier" is named more than once across always and oneOf/,
+    ],
+    [
+      'a skill named twice in one group',
+      (c) => void (c.deal.oneOf = [['lantern', 'lantern']]),
+      /deal: skill "lantern" is named more than once across always and oneOf/,
+    ],
+    [
+      'more always-good skills and groups than the deal has good places',
+      (c) => {
+        c.deal.always = ['lantern'];
+        c.deal.oneOf = [['courier', 'locksmith']];
+      },
+      /a deal of 1 good has no room for 1 always-good skills and 1 oneOf groups/,
+    ],
+    [
+      'too few other skills to draw the rest of the good from',
+      (c) => {
+        c.deal.good = 3;
+        c.deal.oneOf = [['lantern', 'courier']];
+      },
+      /a deal of 3 good must draw 2 more from the 1 skills outside always and oneOf/,
+    ],
+    [
+      'a river nothing in the content can cross',
+      (c) => void (c.world.crossing = ['wing-ride']),
+      /world\.crossing: no skill has an effect that crosses the river \(wing-ride\)/,
     ],
     [
       'a ceiling that is not the score the player is told it is out of',

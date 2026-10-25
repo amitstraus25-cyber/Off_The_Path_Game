@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Content, Effect, Verdict } from '../../src/v2/content.ts';
 import { walkFloor } from '../../src/v2/floor.ts';
-import { loadContent } from '../../src/v2/load.ts';
+import { loadContent, parseContent } from '../../src/v2/load.ts';
 import {
   clockMs,
   deadlineMs,
@@ -10,8 +10,8 @@ import {
   hasPerk,
   rewoundMs,
   timeLeftMs,
+  across,
   walkFactor,
-  wingRideTarget,
 } from '../../src/v2/perks.ts';
 import { tryReduce } from '../../src/v2/reducer.ts';
 import { checkRunLog, toRunLog } from '../../src/v2/runlog.ts';
@@ -37,7 +37,7 @@ const withPerks = (perks: Record<string, Effect>, knockMs = 0): Content => {
 };
 
 const REWIND: Effect = { kind: 'rewind', ms: 20_000 };
-const WINGS: Effect = { kind: 'wing-ride', flightMs: 1_500 };
+const WINGS: Effect = { kind: 'wing-ride', flightMs: 1_500, lands: 'fixture-landing' };
 const FASTER: Effect = { kind: 'walk-faster', factor: 1.25 };
 const timed = withPerks({ lantern: REWIND, courier: WINGS, locksmith: FASTER });
 
@@ -78,24 +78,21 @@ describe('the reducer records a perk at the take, and only at the take', () => {
     expect(bad.perks).toEqual(good.perks);
   });
 
-  it('a wing ride records where it lands: the next unmet character after its giver, or nobody', () => {
+  /*
+   * RULES 3: the flight lands on a map point, the content's `lands`, whoever has been met. Before,
+   * it carried `to`, the next unmet character, and null when everybody had been met.
+   */
+  it('a wing ride records the point it lands on, the same whoever has been met', () => {
     const first = drive(timed, decide(timed, 'courier', 'take', 5_000));
     expect(first.perks).toEqual([
-      { s: 'courier', at: 5_000, kind: 'wing-ride', flightMs: 1_500, to: 'glowworm' },
+      { s: 'courier', at: 5_000, kind: 'wing-ride', flightMs: 1_500, lands: 'fixture-landing' },
     ]);
     const last = drive(timed, [
       ...decide(timed, 'lantern', 'leave', 1_000),
       ...decide(timed, 'locksmith', 'leave', 2_000),
       ...decide(timed, 'courier', 'take', 3_000),
     ]);
-    expect(last.perks[0]).toMatchObject({ kind: 'wing-ride', to: null });
-  });
-
-  it('wingRideTarget wraps round to the start, and reads an unknown giver as standing before the first', () => {
-    expect(wingRideTarget(timed, ['fox'], 'fox')).toBe('magpie');
-    expect(wingRideTarget(timed, ['magpie'], 'magpie')).toBe('glowworm');
-    expect(wingRideTarget(timed, [], undefined)).toBe('magpie');
-    expect(wingRideTarget(timed, ['magpie', 'glowworm', 'fox'], 'fox')).toBeNull();
+    expect(last.perks[0]).toEqual({ ...first.perks[0], at: 3_000 });
   });
 
   it('hasPerk and walkFactor read the run: factors multiply, and a run with none walks at 1', () => {
@@ -193,15 +190,35 @@ describe('the rewind: time given back to the clock, and taken off the time the s
   });
 });
 
-describe('the walk floor reads a wing ride the map cannot place', () => {
-  it('a flight to a character with no talking spot charges the flight and constrains nothing after it', () => {
-    // The fixture's spawns are not on the shipped map, so the landing spot is unknown.
-    const events = [
-      { e: 'met', c: 'magpie', at: 0 },
-      { e: 'verdict', s: 'courier', v: 'take', at: 0 },
-      { e: 'arrived', at: 0 },
-    ] as const;
+describe('the walk floor reads a wing ride by where it lands', () => {
+  const events = [
+    { e: 'met', c: 'magpie', at: 0 },
+    { e: 'verdict', s: 'courier', v: 'take', at: 0 },
+    { e: 'met', c: 'fox', at: 0 },
+    { e: 'arrived', at: 0 },
+  ] as const;
+  const world = {
+    walkSpeed: 100,
+    reach: { start: 0, character: 10, door: 0 },
+    start: { x: 0, y: 0 },
+    door: { x: 1_000, y: 0, width: 10, height: 10 },
+    spots: { 'spawn-magpie': { x: 0, y: 0 }, 'spawn-fox': { x: 600, y: 0 } },
+    landings: { 'fixture-landing': { x: 500, y: 0 } },
+  };
+
+  it('a landing the map cannot place charges the flight and constrains nothing after it', () => {
+    // The fixture's spawns and landing are not on the shipped map, so nothing is placed.
     expect(walkFloor(timed, events)).toEqual({ floorMs: 1_500, tooFast: 2 });
+  });
+
+  it('a landing it can place: the flight, then the walk on from where she is set down', () => {
+    // 1.5 s of flight, then 500 px to 600 less the fox's 10 px reach at 100 px/s is 0.9 s, then
+    // the fox's spot to the door, 400 px less 10, 3.9 s. No walk from the magpie to the landing.
+    const { floorMs } = walkFloor(timed, events, world);
+    expect(floorMs).toBeCloseTo(1_500 + 900 + 3_900, 6);
+    // Without the take, the same meetings are a walk from the magpie: 6 s less 20 px, and 3.9.
+    const left = events.map((e) => (e.e === 'verdict' ? { ...e, v: 'leave' as const } : e));
+    expect(walkFloor(timed, left, world).floorMs).toBeCloseTo(5_800 + 3_900, 6);
   });
 });
 
@@ -230,16 +247,16 @@ describe('the simulator gives a careful basket the time its perks save', () => {
   const greedy = (c: Content, perks?: boolean) =>
     play(c, 'greedy', { pace, reading, ...(perks === undefined ? {} : { perks }) });
 
-  it('a wing ride replaces the next walk with the flight; with nobody left unmet it saves nothing', () => {
+  it('a wing ride replaces the next walk with the flight, whoever is met next', () => {
     const c = withPerks({ courier: WINGS });
-    // magpie walks 10 s, talks 1 s, flies 1.5 s to the glowworm, then walks on.
+    // magpie walks 10 s, talks 1 s, flies 1.5 s over to the glowworm, then walks on.
     expect(greedy(c).state.log.find((e) => e.e === 'met' && e.c === 'glowworm')!.at).toBe(12_500);
     expect(greedy(c, false).state.log.find((e) => e.e === 'met' && e.c === 'glowworm')!.at).toBe(
       21_000,
     );
-    // The fox's wing ride is the last meeting: nobody to fly to.
+    // The fox's wing ride is the last meeting: the flight replaces the walk to the door.
     const last = withPerks({ locksmith: WINGS });
-    expect(greedy(last).elapsedMs).toBe(greedy(last, false).elapsedMs);
+    expect(greedy(last, false).elapsedMs - greedy(last).elapsedMs).toBe(10_000 - 1_500);
   });
 
   it('a faster walk shortens every walk after it; an early welcome skips the knock', () => {
@@ -263,5 +280,75 @@ describe('the simulator gives a careful basket the time its perks save', () => {
     expect(withThem).toMatchObject({ ok: true, ending: 'grandma' });
     expect(without.ok).toBe(false);
     expect(withThem.marginMs - without.marginMs).toBe(REWIND.kind === 'rewind' ? REWIND.ms : NaN);
+  });
+});
+
+/*
+ * THE RIVER (rules 3, docs/GATEKEEPER.md). With `world.crossing`, the cottage is over a river and
+ * only a taken skill of a crossing kind gets Purple there. Here the fixture's locksmith opens the
+ * bridge gate and the courier flies over; the lantern crosses nothing.
+ */
+describe('the river: no crossing taken, no door', () => {
+  const river = (() => {
+    const v = variant();
+    v.skills.find((s) => s.id === 'courier')!.effect = WINGS;
+    (v.world as Record<string, unknown>)['crossing'] = ['bridge-gate', 'wing-ride'];
+    // Schema only: seed 0 deals the lantern good, so careful cannot cross in that deal and the
+    // trap check (rightly) refuses this content at load. The mechanics are what is tested here.
+    return parseContent(v);
+  })();
+  const door: Action = { type: 'ENTER_COTTAGE', at: 9_000 };
+
+  it('without a river, every run is across; with one, only a run that took a crossing skill is', () => {
+    expect(across(timed, createState(timed, 0))).toBe(true);
+    expect(across(river, createState(river, 0))).toBe(false);
+    for (const [skill, crossed] of [
+      ['lantern', false],
+      ['locksmith', true],
+      ['courier', true],
+    ] as const)
+      expect(across(river, drive(river, decide(river, skill, 'take', 1_000))), skill).toBe(crossed);
+    // Met and left is not crossed.
+    expect(across(river, drive(river, decide(river, 'locksmith', 'leave', 1_000)))).toBe(false);
+  });
+
+  it('the reducer refuses the arrival of a run that never crossed, and moves nothing', () => {
+    const stuck = drive(river, decide(river, 'lantern', 'take', 1_000));
+    expect(tryReduce(stuck, door, river)).toEqual({
+      ok: false,
+      reason: 'not-across',
+      state: stuck,
+    });
+    const gate = drive(river, [...decide(river, 'locksmith', 'take', 1_000), door]);
+    expect(gate.phase).toBe('cottage');
+    const flown = drive(river, [...decide(river, 'courier', 'take', 1_000), door]);
+    expect(flown.phase).toBe('cottage');
+  });
+
+  it('a log that arrives without crossing does not replay', () => {
+    const crossed = drive(river, [...decide(river, 'locksmith', 'take', 1_000), door], 2);
+    const log = toRunLog(crossed);
+    expect(checkRunLog(log, river).legal).toBe(true);
+    const forged = {
+      ...log,
+      events: log.events.map((e) => (e.e === 'verdict' ? { ...e, v: 'leave' as const } : e)),
+    };
+    expect(checkRunLog(forged, river)).toEqual({
+      legal: false,
+      reason: expect.stringMatching(/not-across/),
+    });
+  });
+
+  it('the simulator waits out the clock for a run that took no way over: late, at its deadline', () => {
+    const pace = { walkMs: 1_000, talkMs: 0 };
+    const left = play(river, 'leave-all', { pace });
+    expect(left.ending).toBe('late');
+    expect(left.elapsedMs).toBe(TIME_LIMIT_MS);
+    expect(left.state.log.at(-1)).toEqual({ e: 'late', at: TIME_LIMIT_MS });
+    expect(left.total).toBe(river.scoring.played);
+    // Greedy took both ways over and arrives (with the wolf: it took everything).
+    expect(play(river, 'greedy', { pace }).ending).toBe('wolf');
+    // Unpaced, the same: the clock is waited out from a standing start.
+    expect(play(river, 'leave-all').ending).toBe('late');
   });
 });
