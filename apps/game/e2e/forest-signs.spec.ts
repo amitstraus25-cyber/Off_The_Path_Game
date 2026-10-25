@@ -308,16 +308,79 @@ for (const size of SIZES) {
       expect(placed.box.height).toBeCloseTo(published.height * here.zoom, 1);
       await shoot(page, 'logo-board');
 
-      // ...and after the camera has moved: a few steps east along the road.
+      /*
+       * ...and WHILE the camera moves: a real walk east along the road, watched on every frame.
+       *
+       * This test used to walk for a timed 500ms and then measure the edges if the logo was
+       * "visible". It failed 2 runs in 3 at 375x812 under load, and the cause was the measurement,
+       * not the overlay (2026-10-25, measured in a copy of the tree). A held key walks for as long
+       * as the key is down in wall time, and under load the key-up lands late, so Purple walked on:
+       * at that size the board sits 166 px in from the camera's left edge at the stand, a hold of
+       * 1.6 s walks it to x = -2, and a board the camera has CUT is still `isVisible()` -- so the
+       * left step was read off the stage beside the canvas and came back 0. Across fifteen walk
+       * lengths the box sat exactly on the face every time the face was whole.
+       *
+       * The overlay lagging the camera by a frame -- the logo sliding off its board as she walks --
+       * was the other possibility, and it is asserted directly here rather than inferred: this
+       * callback is registered after both the game's frame loop and the logo's own, so it runs
+       * after both in every frame, and on every frame of the walk the logo must be where the face
+       * is at the scroll Phaser has just drawn. It measured 0 frames out of 90 out of place.
+       */
+      const watch = page.evaluate(
+        () =>
+          new Promise<string[]>((resolve) => {
+            const scene = window.__otp!.scene as unknown as {
+              signFace(k: string): { x: number; y: number } | null;
+              canvasWidth: number;
+            };
+            const layer = document.querySelector<HTMLElement>('[data-world-signs]')!;
+            const el = layer.querySelector<HTMLElement>('[data-sign="logo"]')!;
+            const off: string[] = [];
+            let n = 0;
+            const tick = (): void => {
+              const z = layer.clientWidth / scene.canvasWidth;
+              const f = scene.signFace('logo');
+              const want = f ? `translate(${f.x * z}px, ${f.y * z}px)` : 'hidden';
+              const got = el.hidden ? 'hidden' : el.style.transform;
+              if (want !== got) off.push(`frame ${n}: drawn at ${want}, logo at ${got}`);
+              if (++n < 60) requestAnimationFrame(tick);
+              else resolve(off);
+            };
+            requestAnimationFrame(tick);
+          }),
+      );
       await page.keyboard.down('ArrowRight');
       await page.waitForTimeout(500);
       await page.keyboard.up('ArrowRight');
-      await settle(page);
-      if (await logo.isVisible()) {
-        const there = await edgeSteps(page);
-        for (const [side, step] of Object.entries(there.steps))
-          expect(step, `${side} edge, after the camera moved`).toBeGreaterThan(20);
-      }
+      expect(await watch, 'the logo trails the board it sits on').toEqual([]);
+
+      // And at rest a few steps further on, placed rather than held, so the board is whole in frame.
+      const before = await page.evaluate(() => {
+        const main = (window.__otp!.scene as unknown as { cameras: { main: { scrollX: number } } })
+          .cameras.main;
+        return main.scrollX;
+      });
+      const stand = STAND['logo']!(o);
+      await standAt(page, { x: stand.x + TILE * 3, y: stand.y });
+      const there = await page.evaluate(() => {
+        const scene = window.__otp!.scene as unknown as {
+          signFace(k: string): { x: number; y: number; width: number; height: number } | null;
+          cameras: { main: { scrollX: number; width: number } };
+        };
+        const main = scene.cameras.main;
+        return { face: scene.signFace('logo'), cam: { scrollX: main.scrollX, width: main.width } };
+      });
+      expect(there.cam.scrollX, 'the camera did not move, so nothing moved with it').not.toBe(
+        before,
+      );
+      // The whole face in frame, or the steps below would read the stage beside the canvas.
+      const f2 = there.face!;
+      expect(f2, 'the board left the camera').not.toBeNull();
+      expect(f2.x).toBeGreaterThanOrEqual(0);
+      expect(f2.x + f2.width).toBeLessThanOrEqual(there.cam.width);
+      const steps = await edgeSteps(page);
+      for (const [side, step] of Object.entries(steps.steps))
+        expect(step, `${side} edge, after the camera moved`).toBeGreaterThan(20);
 
       // Off the camera it is hidden, not left hanging at its last place.
       const spawn = await mapObject(page, 'spawn-purple');

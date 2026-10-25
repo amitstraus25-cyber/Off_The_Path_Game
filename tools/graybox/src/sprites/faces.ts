@@ -1888,6 +1888,42 @@ export function paintInteractPromptFrame(img: Img, frame: 0 | 1): void {
 }
 
 /**
+ * The "!" over a character the player has not met yet. 32 x 32 x 2 frames, the bob drawn into the
+ * frames exactly as the talk bubble's is (the client's round, 2026-10-25: "players found it hard to
+ * find the characters on the map").
+ *
+ * THE TALK BUBBLE'S OWN HAND, ON PURPOSE. Same cream bubble lit up-left and seated down-right, same
+ * tail, the same Deep Purple mark on its own `wall` 0 seat, the same `ink` 0 ring that gives it an
+ * edge on grass, sand and planks (`paintInteractPromptFrame` says why that ring is the exception).
+ * The two say two halves of one sentence -- "somebody here you have not met", then "you can talk
+ * now" -- so they must look like one family, and the scene never shows both over one head.
+ *
+ * SMALLER AND TALLER than the talk bubble: 17 across against 25, so the "!" reads as the lighter
+ * of the two and the eye can tell from a distance which one is up. One mark, a stroke and a dot, and
+ * never a colour that could say good or bad -- every unmet character wears the same one.
+ */
+export function paintUnmetMarkFrame(img: Img, frame: 0 | 1): void {
+  const y = frame;
+  // Bubble: dark edge, lit crescent up-left, base inset back over it.
+  img.ellipse(16, 13 + y, 8, 9.4, shade('wall', 0));
+  img.ellipse(15.4, 12.2 + y, 7.4, 8.8, shade('wall', 3));
+  img.ellipse(16.6, 13.8 + y, 6.4, 7.8, shade('wall', 2));
+  // Tail, down-left, with its own shaded side, shorter than the talk bubble's.
+  for (let i = 0; i < 4; i++) {
+    img.rect(14 - Math.round(i * 0.4), 21 + i + y, Math.max(1, 4 - i), 1, shade('wall', 2));
+    img.px(14 - Math.round(i * 0.4) + Math.max(0, 3 - i), 21 + i + y, shade('wall', 0));
+  }
+  // The "!": a stroke narrowing to its foot, and the dot, each on a seat a pixel down-right.
+  img.rect(16, 7 + y, 3, 7, shade('wall', 0));
+  img.rect(17, 18 + y, 2, 2, shade('wall', 0));
+  img.rect(15, 6 + y, 3, 4, shade('night', 2));
+  img.rect(15, 10 + y, 2, 3, shade('night', 2));
+  img.rect(16, 13 + y, 1, 1, shade('night', 2));
+  img.rect(16, 17 + y, 2, 2, shade('night', 2));
+  img.outline(shade('ink', 0));
+}
+
+/**
  * The paw prints outside the cottage door. 32 x 32 x 3.
  *
  * The smallest sprite in the game and the one that carries the ending: by the time you can read
@@ -2103,6 +2139,67 @@ export function paintLanternGlowFrame(img: Img): void {
       const i = Math.min(rings.length - 1, Math.floor(r ** 0.75 * rings.length));
       img.px(x, y, rings[i]!);
     }
+}
+
+/**
+ * The ground glow under a character not yet met, 48 x 48 x 2 (the client's round, 2026-10-25:
+ * "players found it hard to find the characters on the map").
+ *
+ * A RING ON THE GROUND, seen from this camera: an ellipse three times as wide as it is deep, 46
+ * across -- wide enough to stand round the broadest pair of feet in the cast, the snail's 25, with
+ * the scene's own pool of shade left dark in the middle of it -- centred in the frame, so the scene
+ * lays its middle on the feet. Frame 0 is the whole ring. Frame 1 is its FRONT ARC only, the half
+ * nearer the camera, and it is what the scene lays over a tree crown that hides a character's feet
+ * (`forest-scene.ts`): the back arc runs behind the figure, and drawn over the canopy it would be
+ * drawn over the figure too.
+ *
+ * WARM, NOT LILAC, and not additive. Purple's own hue under seven other figures is the scatter
+ * PIXEL_STANDARD section 2 moved the toadstools and the flowers off, and the protagonist and the
+ * attacker are meant to be the only saturated purple in frame. Gold is the lantern's light, already
+ * world colour, and it reads against both the lawn and the dusk wash. It is laid with a NORMAL blend:
+ * additive light on this lawn saturates its green channel and comes out lime, which is the brand's
+ * call to action and appears nowhere in the world (the lantern glow's note records falling for it).
+ *
+ * PIXEL-STEPPED, NOT A BLUR. The ring peaks in `gold` 3 and falls away inward and outward through
+ * `gold` 2, then through two DITHER steps -- every other pixel, then one in four -- which is how a
+ * pixel drawing goes soft without a partly transparent pixel in the file (docs/ASSETS.md). The
+ * dither is laid on the frame's own grid and the scene places the frame on whole pixels, so at
+ * zoom 2 it reads as a soft edge and never shimmers. The scene does the pulse, with the sprite's
+ * alpha, and holds it steady under reduced motion.
+ *
+ * It never says good or bad: every character gets the same ring, and it goes when they are met.
+ */
+export const GROUND_GLOW_SIZE = 48;
+
+export function paintGroundGlowFrame(img: Img, frame: 0 | 1): void {
+  const c = GROUND_GLOW_SIZE / 2;
+  const rx = 23;
+  const ry = rx / 3;
+  /** Inner edge to outer edge, by elliptical radius: what is drawn there, and how densely. */
+  const bands: readonly { from: number; colour: RGBA; every: 1 | 2 | 4 }[] = [
+    { from: 0.5, colour: shade('gold', 2), every: 4 },
+    { from: 0.6, colour: shade('gold', 2), every: 2 },
+    { from: 0.7, colour: shade('gold', 2), every: 1 },
+    { from: 0.78, colour: shade('gold', 3), every: 1 },
+    { from: 0.9, colour: shade('gold', 2), every: 2 },
+    { from: 0.96, colour: shade('gold', 2), every: 4 },
+  ];
+  for (let y = 0; y < img.h; y++) {
+    // The front arc is the near half: every row from the middle down.
+    if (frame === 1 && y < c) continue;
+    for (let x = 0; x < img.w; x++) {
+      const r = Math.hypot((x + 0.5 - c) / rx, (y + 0.5 - c) / ry);
+      if (r > 1) continue;
+      let band: (typeof bands)[number] | undefined;
+      for (const b of bands) if (r >= b.from) band = b;
+      if (!band) continue;
+      const on =
+        band.every === 1 ||
+        (band.every === 2 && (x + y) % 2 === 0) ||
+        (band.every === 4 && x % 2 === 0 && y % 2 === 0);
+      if (on) img.px(x, y, band.colour);
+    }
+  }
 }
 
 export const FACE_PAINTERS: Record<string, Painter> = {

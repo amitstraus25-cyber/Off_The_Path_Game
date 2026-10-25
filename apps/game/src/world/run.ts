@@ -36,6 +36,14 @@ export interface WorldRun {
   /** Whether this character still talks: false once their offer has a verdict. */
   stillOffering(characterId: string): boolean;
   /**
+   * Whether the player has met this character this run: true from the MEET on, whatever the
+   * verdict, and false again on a replay. The ground glow and the "!" over a character's head
+   * stand for exactly as long as this is false (forest-scene.ts `drawBeckons`). Not
+   * `stillOffering`: a player who meets someone and walks on without answering HAS found them,
+   * and finding them is all the beckon is for.
+   */
+  met(characterId: string): boolean;
+  /**
    * Who the run is talking to right now, or null. The scene hops that character once when this
    * changes to them, whatever sent the MEET -- a press of A, a wing ride landing, or a spec.
    */
@@ -77,6 +85,7 @@ export function gameRun(store: Store): WorldRun {
       const c = v2.findCharacter(content, characterId);
       return c !== undefined && store.getState().verdicts[c.skillId] === undefined;
     },
+    met: (characterId) => store.getState().met.includes(characterId),
     talkingTo: () => store.getState().active,
     walkFactor: () => v2.walkFactor(store.getState()),
     forkSigns: () => v2.hasPerk(store.getState(), 'fork-signs'),

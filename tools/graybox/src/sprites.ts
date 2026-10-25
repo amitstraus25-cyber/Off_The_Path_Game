@@ -18,12 +18,15 @@ import type { Pose } from './sprites/bystanders.ts';
 import {
   FACE_PAINTERS,
   FACE_SIZE,
+  GROUND_GLOW_SIZE,
   paintDustFrame,
   paintForkSignFrame,
+  paintGroundGlowFrame,
   paintInteractPromptFrame,
   paintLanternGlowFrame,
   paintPaperBirdFrame,
   paintPawprintsFrame,
+  paintUnmetMarkFrame,
 } from './sprites/faces.ts';
 import { WINDOW_WOLF } from './tiles/s-cottage.ts';
 
@@ -270,6 +273,8 @@ export const FX_SHEETS: Record<
     frames: 2,
     paint: (img, f) => paintInteractPromptFrame(img, f as 0 | 1),
   },
+  // The "!" over a character not yet met: two frames of 32x32, bobbing like the talk bubble.
+  'fx-unmet-mark': { size: 32, frames: 2, paint: (img, f) => paintUnmetMarkFrame(img, f as 0 | 1) },
   // The paw prints outside the door: three frames of 32x32, left, right, and fading.
   'fx-pawprints': {
     size: 32,
@@ -286,6 +291,16 @@ export const FX_SHEETS: Record<
   'prop-forksign': { size: 32, frames: 2, paint: (img, f) => paintForkSignFrame(img, f as 0 | 1) },
   // The lantern's glow, for an additive blend: one frame of 64x64.
   'fx-lantern-glow': { size: 64, frames: 1, paint: (img) => paintLanternGlowFrame(img) },
+  /*
+   * The ring on the ground under a character not yet met: two frames of 48x48, the whole ring and
+   * its front arc, which the scene lays over a crown that hides the feet. Painted in
+   * sprites/faces.ts beside the lantern's glow; the scene pulses it and takes it away on meeting.
+   */
+  'fx-ground-glow': {
+    size: GROUND_GLOW_SIZE,
+    frames: 2,
+    paint: (img, f) => paintGroundGlowFrame(img, f as 0 | 1),
+  },
   /*
    * The wolf in Grandma's lit window: one frame of 32x32, the size of the window's own cell, and
    * transparent everywhere but the pixels he adds to it. Painted by the cottage's own window

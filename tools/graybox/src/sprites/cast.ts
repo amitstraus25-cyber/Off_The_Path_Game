@@ -60,8 +60,9 @@
  */
 import { ember, Img, keyline, lumaOf, pull, rose, shade, tone } from '../paint.ts';
 import type { Ramp, RGBA } from '../paint.ts';
-import { BLINK, BYSTANDER_FRAMES, BYSTANDER_PLAN, REST } from './bystanders.ts';
+import { BLINK, BYSTANDER_FRAMES, BYSTANDER_PLAN, BYSTANDER_SEATS, REST } from './bystanders.ts';
 import type { Pose, PosedPainter } from './bystanders.ts';
+import { seat } from './seat.ts';
 
 /**
  * How many values a shaded mass is allowed to use between `lo` and `hi`.
@@ -231,6 +232,12 @@ export const CAST_PLAN = {
 
 /** The rabbit's own near-black: the keyline, the grooves and the contact bar. `fur` starts at luma 195. */
 const RABBIT_DARK: RGBA = keyline('fur', 165);
+
+/**
+ * His grounding shadow (`seat`, sprites/seat.ts): `fur`'s own keyline, held at luma 50 -- a step
+ * lighter than `RABBIT_DARK` at 29, so the line and the shade under it read as two things.
+ */
+const RABBIT_SHADOW: RGBA = keyline('fur', 144);
 
 /**
  * The eye, and it is deliberately NOT `RABBIT_DARK`.
@@ -643,6 +650,7 @@ function paintRabbit(img: Img, pose: Pose): void {
 
   base(img, 7, 25, 47, RABBIT_DARK);
   img.outline(RABBIT_DARK);
+  seat(img, RABBIT_DARK, RABBIT_SHADOW);
 }
 
 // ----------------------------------------------------------------------------- the owl
@@ -657,6 +665,12 @@ function paintRabbit(img: Img, pose: Pose): void {
  * thing in the face, and no longer the same ink as its own silhouette.
  */
 const OWL_PUPIL: RGBA = keyline('trunk', 24);
+
+/**
+ * His grounding shadow (`seat`, sprites/seat.ts): `trunk`'s keyline at luma 50, a step lighter than
+ * the line at 17 and clear of the pupil at 34, which is a different place and a different job.
+ */
+const OWL_SHADOW: RGBA = keyline('trunk', 8);
 
 /**
  * The glint, and WHERE it goes is the whole of it (2026-10-20, design board section 3).
@@ -887,12 +901,19 @@ function paintOwl(img: Img, pose: Pose): void {
 
   base(img, 7, 25, 47, keyline('trunk'));
   img.outline(keyline('trunk'));
+  seat(img, keyline('trunk'), OWL_SHADOW);
 }
 
 // ----------------------------------------------------------------------------- the lantern keeper
 
 /** His near-black: the hood's inside, the badger's mask, the grip, and the keyline. */
 const KEEPER_DARK: RGBA = keyline('roof');
+
+/**
+ * His grounding shadow (`seat`, sprites/seat.ts): `roof`'s keyline at luma 50, a step lighter than
+ * `KEEPER_DARK` at 29.
+ */
+const KEEPER_SHADOW: RGBA = keyline('roof', 19);
 
 /**
  * The eye, and the two values of the lantern caught in it.
@@ -1250,6 +1271,7 @@ function paintKeeper(img: Img, pose: Pose): void {
 
   base(img, 13, 28, 47, KEEPER_DARK);
   img.outline(KEEPER_DARK);
+  seat(img, KEEPER_DARK, KEEPER_SHADOW);
 }
 
 // ----------------------------------------------------------------------------- the wolf
@@ -1699,6 +1721,128 @@ export function assertBodyPlans(): void {
     );
 }
 
+// ------------------------------------------------------- the seat (the client's round, 2026-10-25)
+
+/** The line and the grounding shadow each spawned member of the cast is seated with. */
+const CAST_SEATS: Record<string, { readonly line: RGBA; readonly shadow: RGBA }> = {
+  'npc-rabbit': { line: RABBIT_DARK, shadow: RABBIT_SHADOW },
+  'npc-owl': { line: keyline('trunk'), shadow: OWL_SHADOW },
+  'npc-lantern-keeper': { line: KEEPER_DARK, shadow: KEEPER_SHADOW },
+};
+
+/** What `assertSeats()` reads back off one painted frame. */
+export interface SeatMetrics {
+  /** Of the rows whose rightmost pixel is the line, the share where the pixel inside it is too. */
+  right: number;
+  /** The same on the left, the lit side, which must stay a one-pixel line. */
+  left: number;
+  /** Of the columns standing on the contact bar, the share whose foot row is the line as well. */
+  foot: number;
+  /** Pixels of the character's own grounding shadow in the bottom three rows. */
+  shadow: number;
+}
+
+/**
+ * Measured off the frame, never off `seat.ts`: what a player sees is a band down the right and
+ * along the foot, a single pixel on the left, and a dark wedge under the heel.
+ */
+export function measureSeat(name: string): SeatMetrics {
+  const seatOf = { ...CAST_SEATS, ...BYSTANDER_SEATS }[name];
+  const paint = ({ ...CAST_FRAMES, ...BYSTANDER_FRAMES } as Record<string, (img: Img) => void>)[
+    `${name}-0`
+  ];
+  if (!seatOf || !paint) throw new Error(`${name}: no seat, or no frame to measure`);
+  const img = new Img(32, 48);
+  paint(img);
+  const is = (x: number, y: number, c: RGBA): boolean => sameColour(img.get(x, y), c);
+  const { line, shadow } = seatOf;
+  let rightRows = 0;
+  let rightTwo = 0;
+  let leftRows = 0;
+  let leftTwo = 0;
+  for (let y = 0; y < img.h - 2; y++) {
+    let a = -1;
+    let b = -1;
+    for (let x = 0; x < img.w; x++)
+      if (img.get(x, y)[3] !== 0) {
+        if (a < 0) a = x;
+        b = x;
+      }
+    if (b <= a) continue;
+    if (is(b, y, line)) {
+      rightRows++;
+      if (is(b - 1, y, line)) rightTwo++;
+    }
+    if (is(a, y, line)) {
+      leftRows++;
+      if (is(a + 1, y, line)) leftTwo++;
+    }
+  }
+  let standing = 0;
+  let footLine = 0;
+  let dark = 0;
+  const bottom = img.h - 1;
+  for (let x = 0; x < img.w; x++) {
+    if (is(x, bottom, line) && img.get(x, bottom - 1)[3] !== 0) {
+      standing++;
+      if (is(x, bottom - 1, line)) footLine++;
+    }
+    for (let y = bottom - 2; y <= bottom; y++) if (is(x, y, shadow)) dark++;
+  }
+  return {
+    right: rightRows ? rightTwo / rightRows : 0,
+    left: leftRows ? leftTwo / leftRows : 0,
+    foot: standing ? footLine / standing : 0,
+    shadow: dark,
+  };
+}
+
+/**
+ * The gate for the client's "make them stand out from the grass" (2026-10-25), beside the other two
+ * and armed the same way: at module scope, so `pnpm graybox` cannot bake a character without its
+ * seat and `tools/graybox/test/art-guards.test.ts` fails in CI if one goes.
+ *
+ * THE BOUNDS ARE THE SHIPPED FRAMES' WITH HEADROOM, and each is set where the art WITHOUT the seat
+ * fails it. Measured on 2026-10-25, without the seat and then with it:
+ *
+ *   right - left  -0.04..0.17 without (one pixel all round: the two sides nearly match), 0.39..0.86
+ *                 with, the cat lowest
+ *   foot          0.00..1.00 without -- the snail was already planted on two rows -- 0.90..1.00 with
+ *   shadow        0 without: nothing else in the frame is painted in that colour; 3..8 with
+ *
+ * So a seat taken off any one painter trips the first and the third for that character by name, and
+ * taking off only the band or only the shadow trips the one that belongs to it -- both were done by
+ * hand on 2026-10-25 and watched to fire for all seven. The foot is held at 0.8, under the lowest
+ * shipped figure with room for a pixel of redraw: a foot row that is mostly NOT the line is a figure
+ * the band no longer seats, which is the half of the band the first check cannot see.
+ */
+export function assertSeats(): void {
+  const faults: string[] = [];
+  for (const name of Object.keys({ ...CAST_SEATS, ...BYSTANDER_SEATS })) {
+    const got = measureSeat(name);
+    if (got.right - got.left < 0.25)
+      faults.push(
+        `${name}: the right edge is two pixels deep on ${(got.right * 100).toFixed(0)}% of its rows ` +
+          `and the left on ${(got.left * 100).toFixed(0)}%; the shade side has lost its band ` +
+          `(ART_DIRECTION section 3.2)`,
+      );
+    if (got.foot < 0.8)
+      faults.push(
+        `${name}: only ${(got.foot * 100).toFixed(0)}% of the foot row is the line, under 80%; ` +
+          `the figure is no longer seated on two pixels`,
+      );
+    if (got.shadow < 1)
+      faults.push(
+        `${name}: no grounding shadow in the bottom three rows (PIXEL_STANDARD section 3)`,
+      );
+  }
+  if (faults.length)
+    throw new Error(
+      `The cast has come off its seat -- the client's 2026-10-25 round, "players cannot find ` +
+        `the characters":\n  ${faults.join('\n  ')}`,
+    );
+}
+
 // ------------------------------------------------- the face plan (design board sections 2 and 3)
 
 /**
@@ -1948,3 +2092,4 @@ export function assertFaceMetrics(): void {
 
 assertBodyPlans();
 assertFaceMetrics();
+assertSeats();

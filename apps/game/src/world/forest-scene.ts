@@ -103,6 +103,46 @@ const HOP = { crouchMs: 90, upMs: 160, lift: 4 } as const;
 const FACE_RADIUS = TILE * 3;
 
 /**
+ * THE BECKON (the client's round, 2026-10-25: "players found it hard to find the characters on the
+ * map"). Every character the player has not met yet stands in a slowly pulsing ring of light on the
+ * ground (`fx-ground-glow`) under a small bobbing "!" (`fx-unmet-mark`), both painted in
+ * tools/graybox. Both go the moment the character is met (`WorldRun.met`) and come back on a replay,
+ * and neither ever differs between a good offer and a bad one: every character wears the same two.
+ *
+ * WHERE EACH IS DRAWN, which is most of the design:
+ *
+ * - The ring is ON THE GROUND, a step under the figure and under the figure's own pool of shade
+ *   (`SHADOW.behind`), so the figure stands in it and the pool stays dark in its middle.
+ * - A tree crown in front of a character hides their feet and the ring with them -- the toadstool's
+ *   and the cat's do on the shipped map. For those the ring's FRONT ARC (frame 1, the half nearer
+ *   the camera, which never touches the figure) is laid a second time OVER the canopy, so it shows
+ *   through the leaves. Only the front arc: the back arc runs behind the figure, and over the canopy
+ *   it would be drawn over the figure too. And never over Purple: if her drawing reaches it, it waits.
+ * - The "!" is OVER the canopy as well, so a character under a crown is still marked. It is hidden
+ *   while that character's talk bubble is up -- the two are one sentence in two halves, "somebody
+ *   you have not met", then "you can talk now" -- and while it would cover Purple.
+ *
+ * All of it is world layer and sits under the dusk wash and every DOM panel. Under
+ * prefers-reduced-motion the ring holds still at `still` and the "!" does not bob.
+ */
+const BECKON = {
+  /** Half a pulse: bright to dim, then back. A slow breath, not a blink. */
+  pulseMs: 1400,
+  /** The dimmest the ring gets mid-pulse, and the brightest. */
+  least: 0.7,
+  most: 1,
+  /** The steady ring under reduced motion. */
+  still: 0.9,
+  /** Over `decor-above` (10_000) and under the dusk wash. */
+  overCrown: 10_001,
+  /** The "!"'s bob: the two painted frames, at the talk bubble's own cadence. */
+  bobKey: 'fx-unmet-bob',
+  bobRate: 2,
+  /** Between the top of a character's drawing and the bottom of the "!"'s, in game pixels. */
+  gap: 4,
+} as const;
+
+/**
  * THE FOREST AFTER DARK, drawn over the world layer only: a camera-fixed wash in the brand's Deep
  * Purple at the share of the light core's `duskAt` takes away -- never past the content's cap, so
  * the path and the cast always read. It sits above the canopy and under nothing but the lantern's
@@ -327,6 +367,12 @@ interface Npc extends Interactable {
   ink: Rect;
   /** Which side of their head the bubble stands on while it is up (`placePrompt`), else null. */
   bubbleSide: BubbleSide | null;
+  /** The ring of light on the ground while they are unmet (`BECKON`). */
+  glow: Phaser.GameObjects.Sprite;
+  /** Its front arc, over the canopy, for a character whose feet a crown hides; else null. */
+  glowOverCrown: Phaser.GameObjects.Sprite | null;
+  /** The "!" over their head while they are unmet. */
+  mark: Phaser.GameObjects.Sprite;
 }
 
 /** One wing ride in progress (`flyTo`). */
@@ -471,6 +517,10 @@ function unionOf(boxes: readonly (Rect | null)[], frame: { width: number; height
   return { x, y, width: right - x, height: bottom - y };
 }
 
+/** Whether two boxes share any pixel. */
+const touches = (a: Rect, b: Rect): boolean =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
 /**
  * How wide the part of a figure that touches the ground is, in pixels, off the same frame.
  *
@@ -589,6 +639,10 @@ export class ForestScene extends Phaser.Scene {
   private purpleInk: Rect = { x: 0, y: 0, width: 0, height: 0 };
   /** The talk bubble's drawing in its frame, over both bob frames. */
   private bubbleInk: Rect = { x: 0, y: 0, width: 0, height: 0 };
+  /** The "!"'s drawing in its frame, over both bob frames. */
+  private markInk: Rect = { x: 0, y: 0, width: TILE, height: TILE };
+  /** The canopy layer, which a character's feet can stand under (`BECKON`). */
+  private decorAbove: Phaser.Tilemaps.TilemapLayer | null = null;
   /** Purple's own pool of shade. Moves and re-tints with her, because she is the one who walks. */
   private purpleShadow!: Phaser.GameObjects.Ellipse;
   /** The tile layer the figures stand on, which is what their shadows take their colour from. */
@@ -719,9 +773,14 @@ export class ForestScene extends Phaser.Scene {
     this.ground = phaserMap.createLayer('ground', tiles)?.setDepth(0) ?? null;
     this.decorBelow = phaserMap.createLayer('decor-below', tiles)?.setDepth(1) ?? null;
     // The canopy layer always draws over Purple, so she walks behind tree tops.
-    phaserMap.createLayer('decor-above', tiles)?.setDepth(10_000);
+    this.decorAbove = phaserMap.createLayer('decor-above', tiles)?.setDepth(10_000) ?? null;
     // Read before anybody is placed: every figure asks for the colour of their own tile on arrival.
     this.inks = tileInks(tiles);
+    if (this.textures.exists('fx-unmet-mark'))
+      this.markInk = unionOf(
+        [0, 1].map((i) => inkOf(this.textures.getFrame('fx-unmet-mark', i))),
+        { width: TILE, height: TILE },
+      );
 
     this.createNpcs();
 
@@ -762,6 +821,7 @@ export class ForestScene extends Phaser.Scene {
     this.lastOutside.y = this.position.y;
     this.createAnimations();
     this.startIdles();
+    this.startBeckons();
     this.createDust();
 
     const cottage = findObject(this.map, 'trigger-cottage');
@@ -1462,6 +1522,23 @@ export class ForestScene extends Phaser.Scene {
       width: sprite.width,
       height: sprite.height,
     });
+    // The beckon, laid hidden; `drawBeckons` shows it every frame the character is unmet. Whole
+    // pixels, so the ring's dither lands on the game's own pixel grid.
+    const glow = this.add
+      .sprite(Math.round(spawn.x), Math.round(sprite.y) - 1, 'fx-ground-glow', 0)
+      .setDepth(Math.round(sprite.y) + SHADOW.behind - 0.25)
+      .setVisible(false);
+    const glowOverCrown = this.crownOver(glow)
+      ? this.add
+          .sprite(glow.x, glow.y, 'fx-ground-glow', 1)
+          .setDepth(BECKON.overCrown)
+          .setVisible(false)
+      : null;
+    const mark = this.add
+      .sprite(spawn.x, sprite.y, 'fx-unmet-mark', 0)
+      .setOrigin(0.5, 1)
+      .setDepth(BECKON.overCrown)
+      .setVisible(false);
     return {
       kind,
       id: spawn.id,
@@ -1474,7 +1551,25 @@ export class ForestScene extends Phaser.Scene {
       sheet: key,
       ink,
       bubbleSide: null,
+      glow,
+      glowOverCrown,
+      mark,
     };
+  }
+
+  /**
+   * Whether a crown in `decor-above` lies over the near half of a ring: the front arc, from the
+   * feet down, where the canopy would hide it. Read off the loaded layer, never a list of who
+   * stands where, so a replanted tree moves the answer with it.
+   */
+  private crownOver(glow: Phaser.GameObjects.Sprite): boolean {
+    const layer = this.decorAbove;
+    if (!layer) return false;
+    const half = glow.width / 2;
+    return (
+      layer.getTilesWithinWorldXY(glow.x - half, glow.y, glow.width, half, { isNotEmpty: true })
+        .length > 0
+    );
   }
 
   private createAnimations(): void {
@@ -1496,6 +1591,14 @@ export class ForestScene extends Phaser.Scene {
         key: PROMPT_BOB.key,
         frames: [0, 1].map((frame) => ({ key: 'fx-interact-prompt', frame })),
         frameRate: PROMPT_BOB.frameRate,
+        repeat: -1,
+      });
+
+    if (!this.anims.exists(BECKON.bobKey))
+      this.anims.create({
+        key: BECKON.bobKey,
+        frames: [0, 1].map((frame) => ({ key: 'fx-unmet-mark', frame })),
+        frameRate: BECKON.bobRate,
         repeat: -1,
       });
 
@@ -1616,6 +1719,139 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
+   * Sets the rings pulsing and the "!"s bobbing, out of step the way the idles are. Under
+   * prefers-reduced-motion neither moves: the ring holds at `BECKON.still` and the "!" stays on its
+   * first frame. Whether they SHOW is `drawBeckons`'s, every frame; a hidden sprite tweens for free.
+   */
+  private startBeckons(): void {
+    const rings = this.npcs.flatMap((n) =>
+      n.glowOverCrown ? [n.glow, n.glowOverCrown] : [n.glow],
+    );
+    if (this.reducedMotion) {
+      for (const ring of rings) ring.setAlpha(BECKON.still);
+      for (const npc of this.npcs) npc.mark.setFrame(0);
+      return;
+    }
+    for (const ring of rings) ring.setAlpha(BECKON.most);
+    this.tweens.add({
+      targets: rings,
+      alpha: BECKON.least,
+      duration: BECKON.pulseMs,
+      ease: 'Sine.easeInOut',
+      yoyo: true,
+      repeat: -1,
+    });
+    this.npcs.forEach((npc, i) =>
+      npc.mark.play({ key: BECKON.bobKey, delay: i * IDLE.startStepMs }),
+    );
+  }
+
+  /**
+   * THE BECKON, every frame (see `BECKON`): ring, front arc and "!" up for every character who is
+   * unmet and on their spot, the arc and the "!" stood down wherever they would cover Purple, and
+   * the "!" stood down while that character's own talk bubble is up. Edge-triggered writes only, as
+   * the prompts are, because this runs for every character on every frame.
+   */
+  private drawBeckons(): void {
+    const purple = this.drawingOf(this.purple, this.purpleInk);
+    for (const npc of this.npcs) {
+      const unmet = npc.sprite.visible && !this.run.met(npc.id);
+      if (npc.glow.visible !== unmet) npc.glow.setVisible(unmet);
+
+      const arc = npc.glowOverCrown;
+      if (arc) {
+        const show = unmet && !touches(this.boxOf(arc), purple);
+        if (arc.visible !== show) arc.setVisible(show);
+      }
+
+      const head = this.drawingOf(npc.sprite, npc.ink);
+      const x = Math.round(head.x + head.width / 2);
+      // The frame's bottom edge, placed so the drawing's own bottom row stands `gap` over the head.
+      const y = Math.round(
+        head.y - BECKON.gap + (npc.mark.height - this.markInk.y - this.markInk.height),
+      );
+      if (npc.mark.x !== x || npc.mark.y !== y) npc.mark.setPosition(x, y);
+      const show = unmet && !npc.prompt.visible && !touches(this.markOnWorld(npc), purple);
+      if (npc.mark.visible !== show) npc.mark.setVisible(show);
+    }
+  }
+
+  /** A sprite's whole frame in world pixels. */
+  private boxOf(sprite: Phaser.GameObjects.Sprite): Rect {
+    return {
+      x: sprite.x - sprite.width * sprite.originX,
+      y: sprite.y - sprite.height * sprite.originY,
+      width: sprite.width,
+      height: sprite.height,
+    };
+  }
+
+  /** The "!"'s drawing in world pixels, wherever it stands this frame. */
+  private markOnWorld(npc: Npc): Rect {
+    const box = this.boxOf(npc.mark);
+    return {
+      x: box.x + this.markInk.x,
+      y: box.y + this.markInk.y,
+      width: this.markInk.width,
+      height: this.markInk.height,
+    };
+  }
+
+  /**
+   * Every character's beckon as it stands this frame, for the specs: the ring, its arc over the
+   * canopy, and the "!" with its drawing in world pixels, beside the talk bubble's.
+   */
+  get beckons(): readonly {
+    id: string;
+    feet: Vec;
+    glow: { visible: boolean; alpha: number; x: number; y: number; depth: number };
+    overCrown: { visible: boolean; depth: number } | null;
+    mark: { visible: boolean; frame: number; depth: number; ink: Rect };
+    figureDepth: number;
+    canopyDepth: number;
+    prompt: { visible: boolean; ink: Rect };
+  }[] {
+    return this.npcs.map((npc) => {
+      const p = this.boxOf(npc.prompt);
+      return {
+        id: npc.id,
+        feet: { x: npc.sprite.x, y: npc.sprite.y },
+        glow: {
+          visible: npc.glow.visible,
+          alpha: npc.glow.alpha,
+          x: npc.glow.x,
+          y: npc.glow.y,
+          depth: npc.glow.depth,
+        },
+        overCrown: npc.glowOverCrown
+          ? { visible: npc.glowOverCrown.visible, depth: npc.glowOverCrown.depth }
+          : null,
+        mark: {
+          visible: npc.mark.visible,
+          frame: Number(npc.mark.frame.name),
+          depth: npc.mark.depth,
+          ink: this.markOnWorld(npc),
+        },
+        figureDepth: npc.sprite.depth,
+        canopyDepth: this.decorAbove?.depth ?? 0,
+        prompt: {
+          visible: npc.prompt.visible,
+          ink: {
+            x:
+              p.x +
+              (npc.prompt.flipX
+                ? p.width - this.bubbleInk.x - this.bubbleInk.width
+                : this.bubbleInk.x),
+            y: p.y + this.bubbleInk.y,
+            width: this.bubbleInk.width,
+            height: this.bubbleInk.height,
+          },
+        },
+      };
+    });
+  }
+
+  /**
    * A pool of six puffs. Six is enough: at one puff per stride a puff has faded long before its
    * slot comes round again. Pooling keeps walking allocation-free.
    */
@@ -1698,6 +1934,8 @@ export class ForestScene extends Phaser.Scene {
       this.stopWalking();
       this.clearReach();
     }
+    // After the prompts, so the "!" knows whether the talk bubble is up this frame.
+    this.drawBeckons();
     this.syncCamera(deltaMs);
   }
 

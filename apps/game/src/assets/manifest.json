@@ -64,6 +64,11 @@
       "frameHeight": 32
     },
     {
+      "key": "fx-unmet-mark",
+      "frameWidth": 32,
+      "frameHeight": 32
+    },
+    {
       "key": "fx-pawprints",
       "frameWidth": 32,
       "frameHeight": 32
@@ -82,6 +87,11 @@
       "key": "fx-lantern-glow",
       "frameWidth": 64,
       "frameHeight": 64
+    },
+    {
+      "key": "fx-ground-glow",
+      "frameWidth": 48,
+      "frameHeight": 48
     },
     {
       "key": "fx-window-wolf",

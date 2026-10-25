@@ -81,6 +81,7 @@
  */
 import { clamp01, Img, keyline, mix, pull, rust as rustTone, shade } from '../paint.ts';
 import type { RGBA } from '../paint.ts';
+import { seat } from './seat.ts';
 
 // ----------------------------------------------------------------------------- shared brushes
 
@@ -249,6 +250,12 @@ const rust = (level: 0 | 1 | 2 | 3): RGBA => rustTone(level / 3);
 const CAP_LINE = pull(keyline('wood'), 0.62, 0.52);
 
 /**
+ * The toadstool's grounding shadow (`seat`, sprites/seat.ts): the cap's own russet line taken from
+ * `wood`'s keyline at luma 50 rather than 35, pulled the same way, so it reads as shade beside it.
+ */
+const CAP_SHADOW: RGBA = pull(keyline('wood', 25), 0.62, 0.52);
+
+/**
  * Convinced he is a signpost. A T: 22 px of cap over a 6 px stem, 18 px tall in all, which is the
  * lowest thing in the forest apart from the snail.
  *
@@ -410,6 +417,7 @@ function paintToadstool(img: Img, pose: Pose): void {
 
   base(img, 11, 21, 47, CAP_LINE);
   img.outline(CAP_LINE);
+  seat(img, CAP_LINE, CAP_SHADOW);
 }
 
 // ----------------------------------------------------------------------------- the magpie
@@ -446,6 +454,12 @@ function paintToadstool(img: Img, pose: Pose): void {
  * one real constraint the `night` choice was serving.
  */
 const MAGPIE_DARK: RGBA = keyline('stone', 74);
+
+/**
+ * The magpie's grounding shadow (`seat`, sprites/seat.ts): `stone`'s keyline at luma 50, against the
+ * line at 21, so the dark wedge under his tail is shade and not more bird.
+ */
+const MAGPIE_SHADOW: RGBA = keyline('stone', 45);
 
 /** The plumage, cool near-black, nowhere near Purple's purple. */
 const PLUMAGE = (t: number): RGBA => mix(keyline('stone', 64), keyline('stone', 30), clamp01(t));
@@ -676,6 +690,7 @@ function paintMagpie(img: Img, pose: Pose): void {
 
   base(img, 11, 16, 47, MAGPIE_DARK);
   img.outline(MAGPIE_DARK);
+  seat(img, MAGPIE_DARK, MAGPIE_SHADOW);
 }
 
 // ----------------------------------------------------------------------------- the snail
@@ -686,6 +701,12 @@ function paintMagpie(img: Img, pose: Pose): void {
  * on the path; a warm dark edge belongs to the amber shell it now goes round.
  */
 const SNAIL_DARK: RGBA = keyline('wall', 140);
+
+/**
+ * The snail's grounding shadow (`seat`, sprites/seat.ts): `wall`'s keyline at luma 50, a step
+ * lighter than `SNAIL_DARK` at 34.
+ */
+const SNAIL_SHADOW: RGBA = keyline('wall', 124);
 
 /**
  * The groove the shell's coil is cut with: `stone` 0 taken two thirds of the way down to the
@@ -866,12 +887,19 @@ function paintSnail(img: Img, pose: Pose): void {
 
   base(img, 8, 25, 47, SNAIL_DARK);
   img.outline(SNAIL_DARK);
+  seat(img, SNAIL_DARK, SNAIL_SHADOW);
 }
 
 // ----------------------------------------------------------------------------- the cat
 
 /** Her keyline: `wood` 0 is luma 76, which section 13 item 16 rules out. This is luma 32. */
 const CAT_DARK: RGBA = keyline('wood');
+
+/**
+ * The cat's grounding shadow (`seat`, sprites/seat.ts): `wood`'s keyline at luma 50, a step lighter
+ * than `CAT_DARK` at 35.
+ */
+const CAT_SHADOW: RGBA = keyline('wood', 25);
 
 /**
  * A filled triangle, sampled at pixel centres. The cat's ears are the one shape in this file that
@@ -1063,6 +1091,7 @@ function paintCat(img: Img, pose: Pose): void {
 
   base(img, 9, 19, 47, CAT_DARK);
   img.outline(CAT_DARK);
+  seat(img, CAT_DARK, CAT_SHADOW);
 }
 
 /**
@@ -1090,4 +1119,16 @@ export const BYSTANDER_POSED: Record<string, PosedPainter> = {
   'bystander-magpie': paintMagpie,
   'bystander-snail': paintSnail,
   'bystander-cat': paintCat,
+};
+
+/**
+ * The line and the grounding shadow each bystander is seated with (`seat`, sprites/seat.ts), by
+ * sprite key, for `assertSeats()` in `cast.ts` to find in the painted frame. The values are the
+ * painters' own constants, not copies, so the gate cannot drift from what is drawn.
+ */
+export const BYSTANDER_SEATS: Record<string, { readonly line: RGBA; readonly shadow: RGBA }> = {
+  'bystander-toadstool': { line: CAP_LINE, shadow: CAP_SHADOW },
+  'bystander-magpie': { line: MAGPIE_DARK, shadow: MAGPIE_SHADOW },
+  'bystander-snail': { line: SNAIL_DARK, shadow: SNAIL_SHADOW },
+  'bystander-cat': { line: CAT_DARK, shadow: CAT_SHADOW },
 };
