@@ -195,6 +195,11 @@ for (const variant of ['good', 'bad'] as const) {
       expect(sign.x).toBeGreaterThanOrEqual(world.x - 0.5);
       expect(sign.y + sign.height).toBeLessThanOrEqual(world.y + world.height + 0.5);
       await expect(page.locator('[data-fork-signs]')).toHaveAttribute('aria-hidden', 'true');
+
+      // With everyone met the signs name nobody, and an empty bubble draws nothing, tail and all.
+      await meetAllBut(page, []);
+      await expect(page.locator('.otp-forksign__chip')).toHaveCount(0);
+      await expect(page.locator('[data-fork="fork-1"] .otp-forksign__list')).toBeHidden();
     });
 
     test(`the Word Weaver's bird flies towards Grandma, her door stands open, and there is no knock (${variant})`, async ({

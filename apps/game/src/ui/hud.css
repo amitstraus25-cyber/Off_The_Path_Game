@@ -396,8 +396,8 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
  * wooden board at each fork and moved with it by a transform the component writes. The layer is the
  * world's own box and clips to it, so a board scrolled off the canvas takes its chips along.
  *
- * Tokens only and no Lime (Explore spends none). The chip is the HUD pills' own translucent Black
- * with Offwhite type; the arrow is a CSS triangle -- a shape, not a glyph -- turned by heading.
+ * Tokens only and no Lime (Explore spends none). The bubble is Offwhite with Black type and a Black
+ * rim; the arrow is a CSS triangle -- a shape, not a glyph -- turned by heading.
  */
 .otp-forksigns {
   position: absolute;
@@ -415,10 +415,17 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   height: 0;
 }
 
+/*
+ * One bubble per board, the way the "!" over an unmet character is one (fx-unmet-mark): Offwhite with
+ * a Black rim and a tail down onto the board, so it reads as the sign speaking rather than as HUD
+ * chrome dropped on the wood. Two black pills side by side over a 46px board read as UI floating
+ * over the forest, and on a phone as two dark discs (the client, 2026-10-25).
+ */
 .otp-forksign__list {
   position: absolute;
   left: 0;
-  bottom: 2px;
+  /* The tail's own height, so its point lands on the board's top. */
+  bottom: 8px;
   transform: translateX(-50%);
   display: flex;
   /* Wraps rather than running off the world on a phone (Paul's item 18). */
@@ -426,32 +433,70 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   justify-content: center;
   width: max-content;
   max-width: calc(var(--otp-canvas-w, 100vw) - 28px);
-  gap: 4px;
+  gap: 2px;
   margin: 0;
-  padding: 0;
+  padding: 2px 4px;
   list-style: none;
+  border: 2px solid var(--cyera-black);
+  border-radius: var(--otp-r-inset);
+  background: var(--cyera-offwhite);
+}
+
+.otp-forksign__list:empty {
+  display: none;
+}
+
+/* The tail: a Black triangle with an Offwhite one inside it, pointing down at the board. */
+.otp-forksign__list::before,
+.otp-forksign__list::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-style: solid;
+  border-color: transparent;
+}
+
+.otp-forksign__list::before {
+  top: 100%;
+  border-width: 8px 7px 0;
+  border-top-color: var(--cyera-black);
+}
+
+.otp-forksign__list::after {
+  top: calc(100% - 1px);
+  border-width: 6px 5px 0;
+  border-top-color: var(--cyera-offwhite);
 }
 
 .otp-forksign__chip {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px 2px 2px;
-  border-radius: var(--otp-r-pill);
-  /* Opaque: at 82% over the sand the chip read muddy (Paul's item 18). */
-  background: var(--cyera-black);
-  color: var(--cyera-offwhite);
-  /* 13px: a step up from 11 with the rest of the world's chrome, at every scale (the chip stands
-     on a 32x48 face drawn one CSS pixel per art pixel, so it does not scale with --otp-ui). */
+  padding: 0 4px 0 0;
+  color: var(--cyera-black);
+  /* 13px at every scale: the bubble stands on a board drawn one CSS pixel per art pixel. */
   font: 600 13px/1 var(--cyera-font-sans);
   white-space: nowrap;
 }
 
-/* The figure's rest frame, one CSS pixel per art pixel: the sheet's first 32x48 cell. */
+/* A hairline between two who live different ways, so each arrow belongs to its own name. */
+.otp-forksign__chip + .otp-forksign__chip {
+  padding-left: 4px;
+  border-left: 1px solid var(--cyera-clay);
+}
+
+/*
+ * The figure's rest frame, one CSS pixel per art pixel: rows 4-45 of the sheet's first 32x48 cell.
+ * Every figure's art lies inside those rows (the tallest, the keeper, starts at row 4); the two
+ * rows under it are the grounding shadow, which on a bubble is a smudge, not a floor.
+ */
 .otp-forksign__face {
   display: block;
   width: 32px;
-  height: 48px;
+  height: 42px;
   overflow: hidden;
 }
 
@@ -460,6 +505,7 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   height: 48px;
   width: auto;
   max-width: none;
+  margin-top: -4px;
   image-rendering: pixelated;
 }
 
@@ -468,12 +514,12 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   height: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
-  border-left: 7px solid var(--cyera-haze);
+  border-left: 7px solid var(--cyera-deep-purple);
 }
 
 /*
- * On a phone the face and the arrow are the sign: the name goes, so three chips fit the world's
- * width beside the hint and the minimap (Paul's item 18). The world summary still names everyone.
+ * On a phone the face and the arrow are the sign: the name goes, so three fit the world's width
+ * beside the hint and the minimap (Paul's item 18). The world summary still names everyone.
  */
 @media (max-width: 640px), (max-height: 500px) {
   .otp-forksign__name {
@@ -481,11 +527,13 @@ html .otp-ui[data-map-shown='true'] .otp-world-hint {
   }
 
   .otp-forksign__chip {
-    padding: 2px 6px 2px 2px;
+    padding-right: 2px;
   }
 }
 
+/* The arrow stands on the side it points: before the face for left, after it otherwise. */
 .otp-forksign__chip[data-heading='left'] .otp-forksign__arrow {
+  order: -1;
   transform: rotate(180deg);
 }
 
