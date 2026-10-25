@@ -1797,6 +1797,58 @@ function waterfall(img: Img): void {
     for (let i = 0; i < len; i++) if (fallTone(wrap(x + i), y) > 0.45) wpx(img, x + i, y, W_FOAM);
 }
 
+/*
+ * A BANK THAT ENDS AT OPEN WATER ABOVE IT (Paul's review of the drawbridge, 2026-10-26).
+ *
+ * `shore-e` is laid in an unbroken column, so its boulders straddle the tile's top and bottom
+ * edges: each tile carries the bottom of the stone the tile above began. The raised drawbridge's
+ * east end (`bridge-gate-shut-2`) is a `shore-e` with OPEN RIVER above it, where the bank turns,
+ * and there that half stone was a flat cut against the water. This lifts the top band of the tile
+ * off -- the fragments and their foam -- back to the bare bank (the same river and lawn `shore()`
+ * paints first, so the band seams into the rest of the tile), and lays whole stones there instead,
+ * keylined and foamed like the bank's own, so the stones run across the top edge and close it.
+ *
+ * `until` is the column the band stops at (the drawbridge's rest post stands over the rest), and
+ * the stones are kept a pixel clear of row 0, so nothing is cut by the edge.
+ */
+const CAP_BAND = 10;
+const CAP_ROCKS: readonly (readonly [
+  cx: number,
+  cy: number,
+  r: number,
+  seed: number,
+  spec: boolean,
+])[] = [
+  [5.5, 4.2, 2.6, 0.9, false],
+  [11.5, 6.6, 5.0, 2.2, true],
+];
+
+export function capBankTop(img: Img, side: Side, until: number): void {
+  const bare = new Img(S, S);
+  river(bare, RIPPLES_A, SWIRLS_A);
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      if (!isLand(side, x, y)) continue;
+      const [t, d] = toBank(side, x, y);
+      bare.px(x, y, landTone(bankDepth(wrap(t) + PHASE[side]) - d, x, y));
+    }
+  for (let y = 0; y < CAP_BAND; y++) for (let x = 0; x < until; x++) img.px(x, y, bare.get(x, y));
+
+  const pile = new Img(S, S);
+  for (const [cx, cy, r, seed, spec] of CAP_ROCKS) layOpen(pile, cx, cy, [0, 0, r, seed, spec]);
+  ringOpen(pile, ROCK_LINE);
+  const rock = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < S && y < S && pile.get(x, y)[3] > 0;
+  // The foam the bank's own stones break: one pixel round the pile, on the water only.
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < until; x++) {
+      if (rock(x, y) || isLand(side, x, y)) continue;
+      if (rock(x - 1, y) || rock(x + 1, y) || rock(x, y - 1) || rock(x, y + 1))
+        img.px(x, y, W_FOAM);
+    }
+  img.blit(pile, 0, 0);
+}
+
 /* --- the seven tiles ------------------------------------------------------ */
 
 export const WATER_TILES: Record<string, (img: Img) => void> = {

@@ -76,7 +76,7 @@
 import { Img, keyline, TILE, tone, type RGBA } from '../paint.ts';
 import type { Painter } from '../paint.ts';
 import { FENCE_TILES } from './s-fence.ts';
-import { WATER_TILES } from './w-water.ts';
+import { capBankTop, WATER_TILES } from './w-water.ts';
 
 /* ---------------------------------------------------------------- the wood */
 
@@ -512,6 +512,24 @@ function raisedLeaf(img: Img): void {
   img.px(x1, y1, IRON_LIT);
 }
 
+/*
+ * THE REST POST'S SILL (Paul's review, 2026-10-26). Lowered, the deck's cut end fills the rows
+ * between the post's head and foot; raised there is no deck, and the bank's grass showed through
+ * as a wedge in each deck row. The rest the leaf comes down onto fills them instead: the post's
+ * own timber carried through, a step darker because it stands back under the head, with the deep
+ * joint under the head's cap and the same 2px keyline outboard.
+ */
+function restSill(img: Img): void {
+  const x0 = TILE - POST_W_R;
+  for (let y = POST_HEAD_BOT + 1; y < POST_FOOT_TOP; y++)
+    for (let i = 0; i < POST_W_R; i++) {
+      const x = x0 + i;
+      if (i === 0 || i >= POST_W_R - 2) img.px(x, y, WOOD_BLACK);
+      else if (y === POST_HEAD_BOT + 1) img.px(x, y, WOOD_DEEP);
+      else img.px(x, y, timber(POST_FACE[POST_W_R - 3 - i]! * 0.62));
+    }
+}
+
 const drawbridgeRaised: Record<'west' | 'middle' | 'east', Painter> = {
   west: (img) => {
     WATER_TILES['shore-w']!(img);
@@ -521,7 +539,10 @@ const drawbridgeRaised: Record<'west' | 'middle' | 'east', Painter> = {
   middle: (img) => WATER_TILES['water']!(img),
   east: (img) => {
     WATER_TILES['shore-e']!(img);
+    // Open river above this end when the leaf is up: the bank's stones close the top edge.
+    capBankTop(img, 'e', TILE - POST_W_R);
     endPost(img, 'right');
+    restSill(img);
   },
 };
 
