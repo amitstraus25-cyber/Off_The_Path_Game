@@ -90,19 +90,19 @@ describe('the score the board stores', () => {
       { handle: 'calm-moss-40', score: 60 },
     ];
     const h = harness(table(rows));
-    const run = ticketed(h.clock, { strategy: 'leave-all', handle: 'Amit' });
+    const run = ticketed(h.clock, { strategy: 'greedy', handle: 'Amit' });
 
     const res = await handleScore(postScore(run), h.deps);
 
-    // Leave-all is a clean arrival with nothing in hand: 25 played and 15 clean, whatever the pace.
+    // Greedy takes everything and lets the wolf in: 25 for playing, whatever the pace.
     await expect(res.json()).resolves.toEqual({
       handle: 'Amit',
-      score: 40,
+      score: 25,
       rank: 3,
       entries: [
         { rank: 1, handle: 'quick-otter-12', score: 100 },
         { rank: 2, handle: 'calm-moss-40', score: 60 },
-        { rank: 3, handle: 'Amit', score: 40 },
+        { rank: 3, handle: 'Amit', score: 25 },
       ],
     });
     // The count is a HEAD, so no other player's row comes back to answer it.
@@ -133,7 +133,7 @@ describe('the score the board stores', () => {
 
   it('cannot be claimed: a body carrying a score is refused outright, and nothing is stored', async () => {
     const h = harness();
-    const run = ticketed(h.clock, { strategy: 'leave-all' });
+    const run = ticketed(h.clock, { strategy: 'greedy' });
 
     const res = await handleScore(postScore({ ...run, score: 999999 }), h.deps);
 
@@ -141,7 +141,7 @@ describe('the score the board stores', () => {
     expect(h.calls).toHaveLength(0);
     // And the same run without the claim stores the recomputed figure, not the claimed one.
     await handleScore(postScore(run), h.deps);
-    expect(h.written()?.score).toBe(40);
+    expect(h.written()?.score).toBe(25);
   });
 
   it('posts a wolf run at `played`: every run that ends keeps the points for playing (2026-10-25)', async () => {
@@ -317,8 +317,10 @@ describe('the run token', () => {
     const instance = { recent: createRecentRuns(), clock: { now: T0 } };
     const first = harness(undefined, instance);
     const run = ticketed(instance.clock);
-    // A different legal log for the same seed: the cheap way to try one token many times.
-    const greedy = { ...run, log: v2.toRunLog(runOf('leave-all', run.log.seed)) };
+    // A different legal log for the same seed: the cheap way to try one token many times. (Greedy,
+    // not leave-all: since the river, leave-all waits out the clock to 3:00, and a log that long is
+    // refused for its age before the token is ever looked up.)
+    const greedy = { ...run, log: v2.toRunLog(runOf('greedy', run.log.seed)) };
 
     expect((await handleScore(postScore(run), first.deps)).status).toBe(200);
     const again = harness(undefined, instance);
@@ -503,8 +505,11 @@ describe('the clock the player does not control', () => {
 
   it('charges the walk the log describes, so a full tour must wait longer than the walk to the door', async () => {
     // Leave-all meets everyone and takes no perk, so the two floors differ by the walking alone.
+    // Since the river it never reaches the door (it ends late), so its meetings are walked on to
+    // the door by hand: the floor reads the walk, and legality is the replay's business.
     const leaveAll = ticketed({ now: T0 }, { strategy: 'leave-all' });
-    const { floorMs: tour } = v2.walkFloor(content, leaveAll.log.events);
+    const walked = leaveAll.log.events.filter((e) => e.e !== 'late');
+    const { floorMs: tour } = v2.walkFloor(content, [...walked, { e: 'arrived', at: 0 }]);
     const { floorMs: direct } = v2.walkFloor(content, [{ e: 'arrived', at: 0 }]);
     expect(tour).toBeGreaterThan(direct + 2_000);
   });

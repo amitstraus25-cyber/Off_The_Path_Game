@@ -113,28 +113,51 @@ describe('the walk floor counts the perks the log took, so the quickest honest r
     const flightMs = magpie.effect.kind === 'wing-ride' ? magpie.effect.flightMs : NaN;
     const run = careful(dealFor('wing-ride'));
     const ride = run.state.perks.find((p) => p.kind === 'wing-ride')!;
-    expect(ride.kind === 'wing-ride' && ride.to).toBe(
-      v2.wingRideTarget(
-        content,
-        content.characters
-          .slice(0, content.characters.indexOf(characterOf(magpie.id)) + 1)
-          .map((c) => c.id),
-        characterOf(magpie.id).id,
-      ),
-    );
+    // Rules 3: the flight lands on the far bank, and the next meeting is the first one over it.
+    expect(ride).toMatchObject({ kind: 'wing-ride', lands: 'wing-landing' });
+    const order = content.characters.map((c) => c.id);
+    const over = order[order.indexOf(characterOf(magpie.id).id) + 1];
     // The simulator flew the leg in exactly the flight time, and the route takes it.
-    const landed = run.log.events.find(
-      (e) => e.e === 'met' && ride.kind === 'wing-ride' && e.c === ride.to,
-    )!;
+    const landed = run.log.events.find((e) => e.e === 'met' && e.c === over)!;
     expect(landed.at - ride.at).toBe(flightMs);
     expect((await careful(dealFor('wing-ride')).post()).status).toBe(200);
     // At its floor it posts; the landing a few ms inside the flight does not.
     const quick = atFloor(run.log.events);
     expect((await run.post(quick)).status).toBe(200);
-    const i = quick.findIndex((e) => e.e === 'met' && ride.kind === 'wing-ride' && e.c === ride.to);
+    const i = quick.findIndex((e) => e.e === 'met' && e.c === over);
     const early = quick.map((e, k) => (k >= i ? { ...e, at: e.at - 5 } : e));
     const again = careful(dealFor('wing-ride'));
     expect((await again.post(early)).status).toBe(400);
+  });
+});
+
+/*
+ * THE RIVER, THROUGH THE ROUTE (rules 3). The cottage is over the river, so a log that reaches the
+ * door without taking the Bridge Key or the Wing Ride is not a run anybody played: the replay
+ * refuses its arrival. An honest run that took neither waited out the clock, and posts as late.
+ */
+describe('the river: a log that arrives without crossing is refused', () => {
+  const crossers = content.skills
+    .filter((s) => content.world.crossing?.includes(s.effect.kind))
+    .map((s) => s.id);
+
+  it('the careful run, with its one way over turned into a leave, does not replay', async () => {
+    const run = careful(dealFor('bridge-gate'));
+    expect(crossers).toHaveLength(2);
+    const taken = crossers.find((id) => run.state.perks.some((p) => p.s === id))!;
+    expect(taken).toBeDefined();
+    expect((await run.post()).status).toBe(200);
+    const again = careful(dealFor('bridge-gate'));
+    expect((await again.post(leaving(again.log.events, taken))).status).toBe(400);
+  });
+
+  it('a run that took neither waited out the clock, and posts late at `played`', async () => {
+    const run = careful(dealFor('bridge-gate'));
+    const left = v2.toRunLog(runOf('leave-all', run.log.seed));
+    expect(left.events.at(-1)).toEqual({ e: 'late', at: v2.TIME_LIMIT_MS });
+    const res = await run.post(left.events);
+    expect(res.status).toBe(200);
+    expect(run.h.written()?.score).toBe(content.scoring.played);
   });
 });
 
