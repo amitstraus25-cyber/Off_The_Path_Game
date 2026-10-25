@@ -11,7 +11,7 @@ import { BootScene, ForestScene } from './world/scenes';
 import type { MapSketch } from './world/minimap';
 import type { Vec } from './world/logic';
 import { GATE_LOCKED_FALLBACK } from './world/gate';
-import { cardOwed, gameRun, localSeed, outOfTime, walkOn } from './world/run';
+import { cardOwed, gameRun, gateNotice, localSeed, outOfTime, stranded, walkOn } from './world/run';
 import { perkLine } from './ui/perks';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
@@ -563,9 +563,15 @@ async function start(): Promise<void> {
     knock();
     draw();
   });
-  // Purple walked into the shut bridge gate: the scene says so once per bump; the words are content's.
+  // Purple walked into the raised drawbridge: the scene says so once per bump; the words are
+  // content's. Once the key has been LEFT, it says what leaving it meant (run.ts `gateNotice`).
   bus.on('gateLocked', () => {
-    say(strings['gateLocked'] ?? GATE_LOCKED_FALLBACK);
+    const key = gateNotice(store.getState(), content);
+    say(
+      key === 'gateLockedLeft'
+        ? (strings['gateLockedLeft'] ?? GATE_LOCKED_FALLBACK)
+        : (strings['gateLocked'] ?? GATE_LOCKED_FALLBACK),
+    );
   });
   bus.on('loadFailed', ({ keys }) => {
     loadFailure = keys;
@@ -589,6 +595,12 @@ async function start(): Promise<void> {
 
   let lastPhase = store.getState().phase;
   let lastVerdicts = 0;
+  /*
+   * Whether the run had left both ways over the river at the last change (run.ts `stranded`), so
+   * `noWayOver` is said once, on the verdict that strands it. A replay empties the verdicts, which
+   * makes this false again, so the next run can be told too.
+   */
+  let wasStranded = false;
   let lastPerks = 0;
   store.subscribe((state) => {
     // The question belongs to the forest: a run that leaves it (the clock, a replay) takes it along.
@@ -625,6 +637,9 @@ async function start(): Promise<void> {
       });
     }
     lastVerdicts = count;
+    const isStranded = stranded(state, content);
+    if (isStranded && !wasStranded) say(strings['noWayOver'] ?? '');
+    wasStranded = isStranded;
     const ended = state.phase === 'cottage' || state.phase === 'late';
     if (ended && lastPhase !== state.phase) {
       const run = v2.result(state, content);

@@ -163,3 +163,34 @@ export const outOfTime = (state: v2.State, elapsed: number): boolean =>
 
 /** A seed for a run the server did not start: the browser's CSPRNG, as core asks (deal.ts). */
 export const localSeed = (): number => crypto.getRandomValues(new Uint32Array(1))[0]!;
+
+/*
+ * THE RIVER'S NOTICES (Paul's review of the Gatekeeper, 2026-10-26). Read off effect KINDS, never
+ * off a skill id, like the perks: the drawbridge is whichever skill has the `bridge-gate` effect,
+ * and the ways over are content's `world.crossing`.
+ */
+
+/** The skills whose effect is one of these kinds. */
+const skillsOfKind = (content: v2.Content, kinds: readonly string[]): v2.Skill[] =>
+  content.skills.filter((s) => kinds.includes(s.effect.kind));
+
+/**
+ * What the raised drawbridge says to a bump (`chrome.gateLocked`): that the Gatekeeper has the key
+ * -- until the run has LEFT the key, when it says what leaving it meant (`chrome.gateLockedLeft`)
+ * and points at the other way over, not at a Gatekeeper the player already turned down.
+ */
+export function gateNotice(state: v2.State, content: v2.Content): 'gateLocked' | 'gateLockedLeft' {
+  const left = skillsOfKind(content, ['bridge-gate']).some((s) => state.verdicts[s.id] === 'leave');
+  return left ? 'gateLockedLeft' : 'gateLocked';
+}
+
+/**
+ * Whether this run has LEFT every way over the river (content `world.crossing`): with none taken
+ * and none still to answer, Purple cannot reach the door, and main.ts says so once
+ * (`chrome.noWayOver`). False for content without a river, and false again on a replay, because a
+ * RESET empties the verdicts. Changes no rule and no score: the clock still ends the run late.
+ */
+export function stranded(state: v2.State, content: v2.Content): boolean {
+  const ways = skillsOfKind(content, content.world.crossing ?? []);
+  return ways.length > 0 && ways.every((s) => state.verdicts[s.id] === 'leave');
+}

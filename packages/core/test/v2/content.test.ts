@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ContentError } from '../../src/v2/load.ts';
 import {
   BANNED_WORDS,
+  CHROME_KEYS,
   EFFECT_KINDS,
   EFFECT_MAX_MS,
   GIVEAWAY_WORDS,
@@ -227,6 +228,17 @@ describe('schema', () => {
     (stray.ui.chrome as Record<string, unknown>)['postLater'] = 'Fixture: a typo of a key.';
     expect(() => loadContent(stray)).toThrow(ContentError);
     expect(() => loadContent(variant())).not.toThrow();
+  });
+
+  // The river's two notices (rules 3): the drawbridge after its key was left, and the run that
+  // left both ways over. Keys of their own, so neither can fall back to a blank.
+  it('holds the river notices to keys of their own', () => {
+    for (const key of ['gateLocked', 'gateLockedLeft', 'noWayOver']) {
+      expect(CHROME_KEYS, key).toContain(key);
+      const missing = variant();
+      delete (missing.ui.chrome as Record<string, unknown>)[key];
+      expect(() => loadContent(missing), key).toThrow(new RegExp(`ui\\.chrome\\.${key}`));
+    }
   });
 
   // The card opens by itself (the client, 2026-10-22): a key for a step that no longer exists is

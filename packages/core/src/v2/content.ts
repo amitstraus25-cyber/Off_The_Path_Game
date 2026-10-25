@@ -320,10 +320,15 @@ export const CHROME_KEYS = [
   'arriveSpeaker',
   /*
    * The Gatekeeper and the river (rules 3, docs/GATEKEEPER.md): `gateLocked` is the notice at the
-   * shut bridge gate, walked up to without the Bridge Key. (`perkBridgeGate`, the gate opening, is
-   * with the other perks above; `perkForkSigns` went with the fork signs.)
+   * raised drawbridge, walked up to without the Bridge Key; `gateLockedLeft` is the same notice
+   * once the Bridge Key has been LEFT, which points the player at the other way over instead of
+   * at a Gatekeeper they already said no to. `noWayOver` is said once a run has left BOTH ways
+   * over (`world.crossing`): it can no longer reach the door. (`perkBridgeGate`, the drawbridge
+   * coming down, is with the other perks above; `perkForkSigns` went with the fork signs.)
    */
   'gateLocked',
+  'gateLockedLeft',
+  'noWayOver',
 ] as const;
 export type ChromeKey = (typeof CHROME_KEYS)[number];
 

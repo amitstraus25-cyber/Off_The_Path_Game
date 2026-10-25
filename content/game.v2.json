@@ -386,6 +386,8 @@
       "arriveChipLabel": "At Grandma’s door",
       "arriveSpeaker": "Purple",
       "gateLocked": "The drawbridge is up. The Gatekeeper has the key.",
+      "gateLockedLeft": "The drawbridge stays up. Find another way over.",
+      "noWayOver": "No way over the river is left.",
       "arriveNext": "Go on",
       "researchFooter": "The Off the Path research, by",
       "postHeading": "Post your score",

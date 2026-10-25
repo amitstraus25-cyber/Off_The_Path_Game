@@ -11,7 +11,7 @@ import type { ComponentChildren, VNode } from 'preact';
 import { v2 } from '@otp/core';
 import raw from '../../../content/game.v2.json';
 import { createStore } from '../src/store';
-import { gameRun, outOfTime, remainingMs } from '../src/world/run';
+import { gameRun, gateNotice, outOfTime, remainingMs, stranded } from '../src/world/run';
 import { perkLine } from '../src/ui/perks';
 import { Hud } from '../src/ui/Hud';
 import { strings } from '../src/ui/copy';
@@ -279,5 +279,63 @@ describe('the clock winding back', () => {
       (v) => v.props['role'] === 'timer',
     )!;
     expect(timer.props['data-winding']).toBe('false');
+  });
+});
+
+/*
+ * THE RIVER'S NOTICES (Paul's review of the Gatekeeper, 2026-10-26): the raised drawbridge's words
+ * once its key was left, and the one notice for a run that left both ways over. Read off the effect
+ * kinds and content's `world.crossing`, never off a skill id.
+ */
+describe("the river's notices", () => {
+  const crossing = content.world.crossing ?? [];
+
+  it('the drawbridge says the Gatekeeper has the key, until the key is left', () => {
+    const run = forest();
+    expect(gateNotice(run.store.getState(), content)).toBe('gateLocked');
+    answer(run.store, 'wing-ride', 'leave');
+    expect(gateNotice(run.store.getState(), content), 'leaving the other way over').toBe(
+      'gateLocked',
+    );
+    answer(run.store, 'bridge-gate', 'leave');
+    expect(gateNotice(run.store.getState(), content)).toBe('gateLockedLeft');
+    expect(strings['gateLockedLeft']).toBe(
+      content.skills.find((s) => s.effect.kind === 'bridge-gate')!.good.card.leave,
+    );
+  });
+
+  it('a taken key is not a left one', () => {
+    const run = forest();
+    answer(run.store, 'bridge-gate', 'take');
+    expect(gateNotice(run.store.getState(), content)).toBe('gateLocked');
+  });
+
+  it('a run is stranded only once it has left every way over, and not after a replay', () => {
+    expect(crossing).toEqual(['bridge-gate', 'wing-ride']);
+    const run = forest();
+    expect(stranded(run.store.getState(), content)).toBe(false);
+    answer(run.store, crossing[0]!, 'leave');
+    expect(stranded(run.store.getState(), content), 'one way over left').toBe(false);
+    answer(run.store, crossing[1]!, 'leave');
+    expect(stranded(run.store.getState(), content)).toBe(true);
+    expect(strings['noWayOver']).toBeTruthy();
+    expect(run.store.dispatch({ type: 'RESET', seed: 7 })).toBeNull();
+    expect(stranded(run.store.getState(), content), 'a replay').toBe(false);
+  });
+
+  it('taking either way over is never stranded', () => {
+    for (const taken of crossing) {
+      const run = forest();
+      for (const kind of crossing)
+        answer(run.store, kind as v2.EffectKind, kind === taken ? 'take' : 'leave');
+      expect(stranded(run.store.getState(), content), taken).toBe(false);
+    }
+  });
+
+  it('content without a river strands nobody', () => {
+    const run = forest();
+    for (const kind of crossing) answer(run.store, kind as v2.EffectKind, 'leave');
+    const dry = { ...content, world: { ...content.world, crossing: undefined } };
+    expect(stranded(run.store.getState(), dry)).toBe(false);
   });
 });

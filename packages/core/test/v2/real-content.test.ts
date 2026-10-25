@@ -318,6 +318,20 @@ describe('the seven perks', () => {
  * formatted the way the HUD shows it (m:ss) -- not a number remembered in the copy (PAUL_BRIEF trap 1).
  */
 describe('the screens say what the rules do', () => {
+  /*
+   * THE RIVER'S NOTICES (Paul's review of the Gatekeeper, 2026-10-26). A run that LEFT the Bridge
+   * Key and walks up to the raised drawbridge hears what the card said leaving it would mean, not
+   * "the Gatekeeper has the key" about a key it already turned down. And the run that left both
+   * ways over is told once that the river cannot be crossed now.
+   */
+  it('the drawbridge, once its key was left, says what leaving the card said; the stranded run is told', () => {
+    const key = v2.findSkill(content, 'bridge-key')!;
+    expect(content.ui.chrome.gateLockedLeft).toBe(key.good.card.leave);
+    expect(content.ui.chrome.gateLockedLeft).toBe(key.bad.card.leave);
+    expect(content.ui.chrome.gateLockedLeft).not.toBe(content.ui.chrome.gateLocked);
+    expect(content.ui.chrome.noWayOver).toMatch(/river/);
+  });
+
   it("the how-to's deadline is the rule's time limit", () => {
     const seconds = v2.TIME_LIMIT_MS / 1000;
     const face = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
