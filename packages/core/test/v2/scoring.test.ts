@@ -73,43 +73,42 @@ describe('the score: a clean arrival plus each good skill, and the wolf takes it
 
   it('scores by the content it is given, so the weights retune without code', () => {
     const tuned = variant();
-    tuned.scoring = { outOf: 100, good: 70, clean: 30, speed: 0, parMs: 60_000 };
+    tuned.scoring = { outOf: 100, played: 0, good: 70, clean: 30, speed: 0, parMs: 60_000 };
     const c = loadContent(tuned);
     expect(score(run([...begin, { type: 'ENTER_COTTAGE' }]), c)).toBe(30);
     expect(score(fullRun(careful), c)).toBe(100);
   });
 });
 
-/** The real weights, on the fixture's rules: three dealt good, 10 / 20 / 30, par 1:45. */
+/** The real weights, on the fixture's rules: three dealt good, 25 played, 15 / 15 / 15, par 1:47. */
 const shipped = {
   ...content,
   deal: { good: 3 },
-  scoring: { outOf: 100, clean: 10, good: 20, speed: 30, parMs: 105_000 },
+  scoring: { outOf: 100, played: 25, clean: 15, good: 15, speed: 15, parMs: 107_000 },
 } as Content;
 
 describe('speed: a bonus on being right, never a second way to score', () => {
   it('is whole at or under par, falls in a straight line, and is nothing at the limit', () => {
-    expect(speedBonus(shipped, 3, 0)).toBe(30);
-    expect(speedBonus(shipped, 3, 105_000)).toBe(30);
-    // Halfway from par to the buzzer is half the bonus.
-    expect(speedBonus(shipped, 3, (105_000 + TIME_LIMIT_MS) / 2)).toBe(15);
+    expect(speedBonus(shipped, 3, 0)).toBe(15);
+    expect(speedBonus(shipped, 3, 107_000)).toBe(15);
+    // Halfway from par to the buzzer is half the bonus: 7.5, rounded to the whole point above.
+    expect(speedBonus(shipped, 3, (107_000 + TIME_LIMIT_MS) / 2)).toBe(8);
     expect(speedBonus(shipped, 3, TIME_LIMIT_MS - 1)).toBe(0);
     expect(speedBonus(shipped, 3, TIME_LIMIT_MS)).toBe(0);
     expect(speedBonus(shipped, 3, TIME_LIMIT_MS + 60_000)).toBe(0);
   });
 
   it('is scaled by the share of good skills taken, so leaving everything earns none however fast', () => {
-    expect([0, 1, 2, 3].map((g) => speedBonus(shipped, g, 0))).toEqual([0, 10, 20, 30]);
+    expect([0, 1, 2, 3].map((g) => speedBonus(shipped, g, 0))).toEqual([0, 5, 10, 15]);
   });
 
   it('never lets a faster basket one good skill short beat a full one, at any time that arrives', () => {
-    const full = (t: number) => 10 + 20 * 3 + speedBonus(shipped, 3, t);
-    const short = 10 + 20 * 2 + speedBonus(shipped, 2, 0);
-    for (let t = 0; t < TIME_LIMIT_MS; t += 1_000)
-      expect(full(t), `${t}ms`).toBeGreaterThanOrEqual(short);
-    // They meet only at the buzzer, which is a tie the board breaks by the earlier post.
-    expect(short).toBe(70);
-    expect(full(TIME_LIMIT_MS - 1)).toBe(70);
+    const full = (t: number) => 25 + 15 + 15 * 3 + speedBonus(shipped, 3, t);
+    const short = 25 + 15 + 15 * 2 + speedBonus(shipped, 2, 0);
+    for (let t = 0; t < TIME_LIMIT_MS; t += 1_000) expect(full(t), `${t}ms`).toBeGreaterThan(short);
+    // The fastest two-good basket is 80; the slowest full one is 85, five clear of it.
+    expect(short).toBe(80);
+    expect(full(TIME_LIMIT_MS - 1)).toBe(85);
   });
 
   it('is a whole number at every millisecond, so the browser and the server cannot round apart', () => {
@@ -146,8 +145,8 @@ describe('speed: a bonus on being right, never a second way to score', () => {
   });
 });
 
-describe('zero, with an ending that says why, for a run that never made it or has not finished', () => {
-  it('a late run has its own ending and scores 0: always an integer, never a run for the board', () => {
+describe('`played`, with an ending that says why, for a run that ended without a clean basket', () => {
+  it('a late run has its own ending and scores `played` (0 in the fixture)', () => {
     const late = run([
       ...begin,
       ...encounter('lantern', 'take'),
@@ -159,6 +158,67 @@ describe('zero, with an ending that says why, for a run that never made it or ha
   it('a run still in the forest has no ending and scores 0', () => {
     const s = run([...begin, ...encounter('lantern', 'take')]);
     expect(result(s, content)).toMatchObject({ total: 0, ending: null });
+  });
+});
+
+describe('`played`: every run that ends is given it, and nothing else changes (the client, 2026-10-25)', () => {
+  // The fixture's weights with 25 of the 100 moved to `played`: 15 clean, 40 the good skill, 20 speed.
+  const floored = (() => {
+    const v = variant();
+    v.scoring = { outOf: 100, played: 25, clean: 15, good: 40, speed: 20, parMs: 60_000 };
+    return loadContent(v);
+  })();
+
+  it('a wolf run scores `played` however fast, and its parts say so', () => {
+    const greedy = { lantern: 'take', courier: 'take', locksmith: 'take' } as const;
+    expect(result(fullRun(greedy), floored)).toMatchObject({
+      total: 25,
+      played: 25,
+      choices: 0,
+      speed: 0,
+      ending: 'wolf',
+    });
+  });
+
+  it('a late run scores `played`', () => {
+    const late = run([
+      ...begin,
+      ...encounter('lantern', 'take'),
+      { type: 'TIME_UP', at: TIME_LIMIT_MS },
+    ]);
+    expect(result(late, floored)).toMatchObject({ total: 25, played: 25, ending: 'late' });
+  });
+
+  it('a run still in the forest has not ended, and has not earned it', () => {
+    const s = run([...begin, ...encounter('lantern', 'take')]);
+    expect(result(s, floored)).toMatchObject({ total: 0, played: 0, ending: null });
+  });
+
+  it('a clean arrival adds its basket and its speed on top, and the careful run is the ceiling', () => {
+    expect(result(run([...begin, { type: 'ENTER_COTTAGE' }]), floored)).toMatchObject({
+      total: 40,
+      played: 25,
+      choices: 15,
+    });
+    expect(result(fullRun(careful), floored)).toMatchObject({
+      total: 100,
+      played: 25,
+      choices: 55,
+      speed: 20,
+    });
+  });
+
+  it('every wolf run is still below every clean one', () => {
+    const totals = { wolf: [] as number[], grandma: [] as number[] };
+    for (const seed of everySeed(floored))
+      for (const a of VERDICTS)
+        for (const b of VERDICTS)
+          for (const c of VERDICTS) {
+            const r = result(fullRun({ lantern: a, courier: b, locksmith: c }, seed), floored);
+            totals[r.ending as 'wolf' | 'grandma'].push(r.total);
+          }
+    expect(new Set(totals.wolf)).toEqual(new Set([25]));
+    expect(Math.min(...totals.grandma)).toBe(40);
   });
 });
 

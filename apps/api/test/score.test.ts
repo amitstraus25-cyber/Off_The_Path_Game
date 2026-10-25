@@ -87,22 +87,22 @@ describe('the score the board stores', () => {
     // Two rows already there: one above this run, one below.
     const rows = [
       { handle: 'quick-otter-12', score: 100 },
-      { handle: 'calm-moss-40', score: 40 },
+      { handle: 'calm-moss-40', score: 60 },
     ];
     const h = harness(table(rows));
     const run = ticketed(h.clock, { strategy: 'leave-all', handle: 'Amit' });
 
     const res = await handleScore(postScore(run), h.deps);
 
-    // Leave-all is a clean arrival with nothing in hand: 10, whatever the pace.
+    // Leave-all is a clean arrival with nothing in hand: 25 played and 15 clean, whatever the pace.
     await expect(res.json()).resolves.toEqual({
       handle: 'Amit',
-      score: 10,
+      score: 40,
       rank: 3,
       entries: [
         { rank: 1, handle: 'quick-otter-12', score: 100 },
-        { rank: 2, handle: 'calm-moss-40', score: 40 },
-        { rank: 3, handle: 'Amit', score: 10 },
+        { rank: 2, handle: 'calm-moss-40', score: 60 },
+        { rank: 3, handle: 'Amit', score: 40 },
       ],
     });
     // The count is a HEAD, so no other player's row comes back to answer it.
@@ -141,23 +141,19 @@ describe('the score the board stores', () => {
     expect(h.calls).toHaveLength(0);
     // And the same run without the claim stores the recomputed figure, not the claimed one.
     await handleScore(postScore(run), h.deps);
-    expect(h.written()?.score).toBe(10);
+    expect(h.written()?.score).toBe(40);
   });
 
-  it('does not post a wolf run: it finished at 0, and the board ranks runs that kept the wolf out', async () => {
+  it('posts a wolf run at `played`: every run that ends keeps the points for playing (2026-10-25)', async () => {
     const h = harness();
     const res = await handleScore(postScore(ticketed(h.clock, { strategy: 'greedy' })), h.deps);
-    expect(res.status).toBe(422);
-    await expect(res.json()).resolves.toEqual({
-      error: 'a run that let the wolf in is not posted',
-      reason: 'wolf',
-    });
-    expect(h.calls).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(h.written()?.score).toBe(content.scoring.played);
   });
 
-  it('does not post a late run at all', async () => {
-    // Ended, but not finished: the clock ran out on the way (core scoring.ts, "the board reads
-    // the ending"). Played honestly at thirty seconds a walk, so the reducer itself ended it.
+  it('posts a late run at `played` too', async () => {
+    // Ended, but the clock ran out on the way (core scoring.ts). Played honestly at thirty seconds
+    // a walk, so the reducer itself ended it.
     const h = harness();
     const { seed, token } = TOKENS.issue(h.clock.now);
     const log = v2.toRunLog(runOf('careful', seed, { walkMs: 30_000, talkMs: 1000 }));
@@ -166,9 +162,8 @@ describe('the score the board stores', () => {
 
     const res = await handleScore(postScore({ handle: HANDLE, log, token }), h.deps);
 
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'a late run is not posted' });
-    expect(h.calls).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(h.written()?.score).toBe(content.scoring.played);
   });
 
   it('is not stored at all for a run that never reached the cottage', async () => {

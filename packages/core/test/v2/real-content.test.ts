@@ -115,22 +115,25 @@ describe('the real v2 content loads under the launch rules', () => {
   /*
    * THE SCORE TABLE, over every deal. The numbers are the report: greedy, leave-all and random all
    * low, the best a wolf run can do far below 100, and the best card-blind basket well under the
-   * rote line.
+   * rote line. Since the client's floor (2026-10-25) every run that ends keeps 25 for playing, so
+   * "low" is 25 for the wolf and 40 for a clean empty basket, against the rote line's 55.
    */
   it('greedy, leave-all and random score low in every deal; careful scores 100 in every one', () => {
     const rows = v2.table(content);
     const of = (name: string) => rows.filter((r) => r.strategy === name).map((r) => r.total);
     const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
     expect(new Set(of('careful'))).toEqual(new Set([100]));
-    expect(new Set(of('greedy'))).toEqual(new Set([0]));
-    expect(new Set(of('leave-all'))).toEqual(new Set([10]));
+    expect(new Set(of('greedy'))).toEqual(new Set([content.scoring.played]));
+    expect(new Set(of('leave-all'))).toEqual(
+      new Set([content.scoring.played + content.scoring.clean]),
+    );
     const random = seeds.flatMap((seed) =>
       Array.from(
         { length: 20 },
         (_x, k) => v2.play(content, 'random', { seed: seed + 35 * k }).total,
       ),
     );
-    expect(mean(random)).toBeLessThan(10);
+    expect(mean(random)).toBeLessThan(content.scoring.played + 5);
     const bestWolf = Math.max(
       ...seeds.flatMap((seed) =>
         v2
@@ -139,10 +142,12 @@ describe('the real v2 content loads under the launch rules', () => {
           .map((r) => r.total),
       ),
     );
-    expect(bestWolf).toBe(0);
+    expect(bestWolf).toBe(content.scoring.played);
+    // Leaving everything (40) and taking one blind (right in 15 deals of 35 at 60, the wolf in the
+    // other 20 at 25) tie at the top, both well under the rote line of 55.
     const blind = v2.blindAverages(content)[0]!;
-    expect(blind.verdicts.filter((v) => v === 'take')).toHaveLength(1);
-    expect(blind.mean).toBeCloseTo((15 / 35) * 40);
+    expect(blind.mean).toBeCloseTo(40);
+    expect(blind.mean).toBeCloseTo((15 / 35) * 60 + (20 / 35) * 25);
   });
 });
 
@@ -562,7 +567,9 @@ describe('par is the brisk careful run on the shortest walk, in the slowest deal
       const slow = v2.play(content, 'careful', { seed, pace: paceFor(tiles) });
       expect(slow.ending).toBe('grandma');
       expect(slow.total, `deal ${seed}`).toBeLessThan(content.scoring.outOf);
-      expect(slow.total).toBeGreaterThanOrEqual(content.scoring.clean + content.scoring.good * 3);
+      expect(slow.total).toBeGreaterThanOrEqual(
+        content.scoring.played + content.scoring.clean + content.scoring.good * 3,
+      );
     }
   });
 });

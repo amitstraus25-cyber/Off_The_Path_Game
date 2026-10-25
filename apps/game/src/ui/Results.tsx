@@ -855,8 +855,12 @@ export function Results({
               {clean ? (
                 <dl class="otp-hero__parts" data-parts="">
                   <div class="otp-hero__part">
+                    <dt>{s('revealPlayed')}</dt>
+                    <dd data-part="played">{run.played}</dd>
+                  </div>
+                  <div class="otp-hero__part">
                     <dt>{s('revealChoices')}</dt>
-                    <dd data-part="choices">{run.choices}</dd>
+                    <dd data-part="choices">+{run.choices}</dd>
                   </div>
                   <div class="otp-hero__part">
                     <dt>{s('revealSpeed')}</dt>
@@ -873,8 +877,10 @@ export function Results({
                   )}
                 </dl>
               ) : (
-                <p class="otp-hero__breakdown" data-zero={run.ending ?? 'late'}>
-                  {s(run.ending === 'wolf' ? 'revealZeroWolf' : 'revealZeroLate')}
+                <p class="otp-hero__breakdown" data-floor={run.ending ?? 'late'}>
+                  {fill(s(run.ending === 'wolf' ? 'revealFloorWolf' : 'revealFloorLate'), {
+                    played: run.played,
+                  })}
                 </p>
               )}
               {/*

@@ -116,6 +116,7 @@ describe('the trap stays a trap: properties checked against any content', () => 
       'careful reaches the ceiling in every deal',
       ROTE,
     ]);
+    expect(content.scoring.played).toBe(0);
     expect(Math.floor(content.scoring.outOf * ROTE_SHARE + 1e-9)).toBe(40);
     expect(t.checks[1]!.detail).toBe(
       'best blind basket (leave,leave,leave) averages 40.0; at most 40 allowed',
@@ -124,10 +125,20 @@ describe('the trap stays a trap: properties checked against any content', () => 
 
   it('the rote line fails ON ITS OWN when the weights make a blind basket pay', () => {
     const v = variant();
-    v.scoring = { outOf: 100, good: 50, clean: 50, speed: 0, parMs: 60_000 };
+    v.scoring = { outOf: 100, played: 0, good: 50, clean: 50, speed: 0, parMs: 60_000 };
     const c = parseContent(v);
     expect(failing(c)).toEqual([ROTE]);
     expect(() => loadContent(v)).toThrow(/trap: no card-blind strategy/);
+  });
+
+  it('the rote line stands on `played`: points for playing raise it, and are not a blind basket paying', () => {
+    // 40 for playing, and the same 40 / 20 / 0 a skill as the fixture's on the 60 left: every
+    // blind basket gains 40, and the line, 40 + 40% of 60, gains the same.
+    const v = variant();
+    v.scoring = { outOf: 100, played: 40, good: 24, clean: 24, speed: 12, parMs: 60_000 };
+    const t = trapChecks(parseContent(v));
+    expect(t.checks[1]!.detail).toMatch(/at most 64 allowed$/);
+    expect(t.ok).toBe(true);
   });
 
   it('careful reaches the ceiling: the simulated run is checked, not only the static sum', () => {

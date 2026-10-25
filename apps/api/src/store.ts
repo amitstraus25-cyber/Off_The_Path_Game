@@ -43,7 +43,13 @@ const MAX_ROWS_READ = 100;
  * Moved to 2026-10-22T21:25:00Z when the client asked to reset the board before sharing it (the
  * rows before it were test runs). The rows themselves are deleted by hand in Supabase.
  */
-export const BOARD_SINCE = '2026-10-22T21:25:00Z';
+/*
+ * Moved to 2026-10-25T13:40:00Z for the client's scoring floor of 2026-10-25 ("anyone who starts playing gets
+ * 25"), which also made every ending a run the board takes: the rows before it were scored without
+ * the floor -- a wolf run at 0 and unposted, a clean empty basket at 10 -- and would rank by a rule
+ * the board no longer uses. Set to a minute or two after the deploy that ships the floor.
+ */
+export const BOARD_SINCE = '2026-10-25T13:40:00Z';
 
 /**
  * The status PostgREST answers to an insert on a table.

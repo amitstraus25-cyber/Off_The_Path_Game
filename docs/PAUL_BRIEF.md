@@ -169,14 +169,15 @@ the repo.
 - `POST /api/score` takes `{ handle, log, token }` (plus `{ email, consent }` when
   `OTP_WORK_EMAIL=required`; ignored and stored nowhere otherwise). It checks the name first
   (`v2.checkName`; names are typed), then the contact when the flag is on, then replays the log
-  against the token's seed and recomputes the score. **A late run and a wolf run are not posted**
-  (400, and 422 `reason: 'wolf'`). **Every meeting and the arrival must be stamped no sooner than the
+  against the token's seed and recomputes the score. **Every ending posts** since the client's floor of
+  2026-10-25: a late run and a wolf run are stored at `scoring.played` (25); from 2026-10-22 until
+  then they were refused (400, and 422 `reason: 'wolf'`). **Every meeting and the arrival must be stamped no sooner than the
   straight-line walk the log describes** (`v2.walkFloor`, core `floor.ts`, perks included), and the
   time since the token must cover the walk; this replaced the flat 10 s `MIN_RUN_MS` in `8c4dc49`.
   A post more than five minutes off the game clock is a 410. One token is one row (409), per
   instance. Thirty writes a minute per instance, then 429.
-- `GET /api/top` answers the top ten, rows from `BOARD_SINCE` (2026-10-22T21:25:00Z, the client's reset; first set at 09:25Z, the moment
-  speed started to count; it replaced the v2-launch cut) and above 0, cached 10 s plus 20 s stale,
+- `GET /api/top` answers the top ten, rows from `BOARD_SINCE` (2026-10-25T13:40:00Z, the client's reset for the 25-point floor; before
+  it 2026-10-22T21:25:00Z, the reset for speed, first set at 09:25Z; it replaced the v2-launch cut) and above 0, cached 10 s plus 20 s stale,
   so never more than 30 s old. The post's own answer carries its rank and the board, so a player
   sees their row at once.
 - The discriminators: `GET /api/start` and `GET /api/score` answer **405 `Allow: POST`** when

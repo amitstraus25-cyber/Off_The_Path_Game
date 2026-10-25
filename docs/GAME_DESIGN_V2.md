@@ -232,13 +232,21 @@ the arrival time on the run clock (`timeMs`, the stamp less any rewind), what a 
 **The client's decision, 2026-10-22: "a combination of time and correct answers". Correctness
 first, then speed.**
 
-| Run                        | Ending        | Total                                                   |
-| -------------------------- | ------------- | ------------------------------------------------------- |
-| any bad skill taken        | `wolf`        | 0, however fast                                         |
-| no bad skill taken         | `grandma`     | `clean` + `good` × good taken + `speed` × f(t) × good/3 |
-| out of time, or unfinished | `late` / none | 0 (the board reads the ending)                          |
+**And the client's floor, 2026-10-25: "anyone who starts playing automatically gets 25, so they can
+at least leave their email".** Every run that ENDS scores `played`, and every ending posts to the
+board; the board was reset for it (`BOARD_SINCE`, apps/api/src/store.ts).
 
-Shipped weights: `clean` 10, `good` 20, `speed` 30, so 10 + 60 + 30 = 100. **f(t)** is 1 at or
+| Run                 | Ending    | Total                                                              |
+| ------------------- | --------- | ------------------------------------------------------------------ |
+| any bad skill taken | `wolf`    | `played`, however fast                                             |
+| no bad skill taken  | `grandma` | `played` + `clean` + `good` × good taken + `speed` × f(t) × good/3 |
+| out of time         | `late`    | `played`                                                           |
+| unfinished          | none      | 0                                                                  |
+
+Shipped weights since 2026-10-25: `played` 25, `clean` 15, `good` 15, `speed` 15, so
+25 + 15 + 45 + 15 = 100 (they were `clean` 10, `good` 20, `speed` 30, and a wolf or late run 0 and
+not posted, from 2026-10-22). Every wolf run still ranks below every clean one (25 against at least
+40), and a full basket at the buzzer (85) still beats the fastest basket one good skill short (80). **f(t)** is 1 at or
 under par, falls in a straight line to 0 at 3:00, and is never negative; t is the run's own
 `arrived` stamp less what a rewind gave back, the stamp itself being what the server bounds from above by its clock and from below by the walk the log
 describes (apps/api). The bonus is rounded to a whole point with integer arithmetic until the one
@@ -262,28 +270,31 @@ par.
 | Run                          | Score |
 | ---------------------------- | ----- |
 | three good, at or under 1:47 | 100   |
-| three good, 2:00             | 95    |
-| three good, 2:30             | 82    |
-| three good, 2:59             | 70    |
-| two good, 1:00 (fast)        | 70    |
-| two good, 2:30               | 58    |
-| one good, 1:00               | 40    |
-| leave everything, 0:30       | 10    |
-| any bad skill, any time      | 0     |
+| three good, 2:00             | 97    |
+| three good, 2:30             | 91    |
+| three good, 2:59             | 85    |
+| two good, 1:00 (fast)        | 80    |
+| two good, 2:30               | 74    |
+| one good, 1:00               | 60    |
+| leave everything, 0:30       | 40    |
+| any bad skill, any time      | 25    |
+| out of time                  | 25    |
 
 **Why this shape.** 100 needs all three good AND a fast run. The bonus is scaled by the good skills
-taken, so leaving everything earns 10 at any speed and speed can never be a substitute for reading.
-Two good and fast (70) never beats three good at any pace that arrives (70 at the buzzer, a tie the
-board breaks by the earlier post); the lint refuses weights where it could (`speed × (n-1) ≤ good ×
-n`). The wolf's 0 is a rule, not a weight, so every wolf run sits below every clean one -- and since
-2026-10-22 a wolf run is not posted to the board at all (apps/api; the reveal is where it teaches).
+taken, so leaving everything earns 40 at any speed and speed can never be a substitute for reading.
+Two good and fast (80) never beats three good at any pace that arrives (85 at the buzzer); the lint
+refuses weights where it could (`speed × (n-1) ≤ good × n`). That a wolf run keeps `played` and
+nothing more is a rule, not a weight, so every wolf run sits below every clean one. From 2026-10-22
+a wolf run scored 0 and was not posted; since the floor of 2026-10-25 it posts at 25 -- the reveal
+is still where it teaches, and the board still ranks it under every run that kept the wolf out.
 
 ### The trap, measured by play (`sim.ts`)
 
 `loadContent` refuses content where careful misses 100 in any deal, or where **any card-blind
-strategy averages above 40 over all 35 deals** (`ROTE_SHARE` 0.4). A player who never opens a card
-sees nothing that differs between deals, so a blind strategy is one fixed basket; the best, "take
-one", averages 17.1. What this guards is the weights. `clockCheck` plays careful in every deal at
+strategy averages above the rote line over all 35 deals**: `played` plus `ROTE_SHARE` (0.4) of the
+rest, 25 + 30 = 55 with the shipped weights (it was 40 before the floor). A player who never opens a
+card sees nothing that differs between deals, so a blind strategy is one fixed basket; the best,
+leaving everything or "take one", averages 40 (it was 17.1). What this guards is the weights. `clockCheck` plays careful in every deal at
 the measured pace and reports the tightest one; it reads the card the deal shows, giveaway included
 (200 words a minute, plus two button words and three seconds to decide). Since draft 8 it charges
 the knock at the door and gives a careful basket the time its perks save, holding each run to its own

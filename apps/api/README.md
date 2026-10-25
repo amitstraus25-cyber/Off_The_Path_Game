@@ -57,9 +57,9 @@ run to finish in time. So the run starts on the server.
   **Rotating the service role key invalidates every outstanding token** — at most eight minutes of
   runs, whose players see "Posting has closed" or "could not be posted".
 - **`POST /api/score`** then requires, in order: a token this service signed (else 400); the log's
-  seed equal to the token's (else 400); a legal v2 replay that ended (else 400); an ending of
-  `grandma` — **a late run is not posted** (400) and, since 2026-10-22, **neither is a wolf run**
-  (422 `reason: 'wolf'`); a claimed duration no longer than the
+  seed equal to the token's (else 400); a legal v2 replay that ended (else 400) -- **any ending
+  posts** since the client's floor of 2026-10-25: a wolf run and a late run are stored at
+  `scoring.played` (25), where from 2026-10-22 they were refused; a claimed duration no longer than the
   time since the token was issued, plus 2 s of clock skew (else 400); and no more than **five
   minutes** off the game clock between issue and post — the title, the how-to and the reveal
   (else **410**, "posting has closed for that run"). Since a run's clock stops before 3:00, no token
@@ -474,8 +474,8 @@ write-what-you-like list that happens to contain honest scores. `src/limit.ts` c
    first real deploy is the first real test of those.
 7. **v1 rows are not comparable with v2's, and neither are rows from before speed counted.** v1
    scored out of 1,000, v2 out of 100, and rows written before 2026-10-22T09:25:00Z were scored
-   without the speed bonus. `GET /api/top` reads only rows from `BOARD_SINCE` (`src/store.ts`) on, so
-   none of them is shown. **This service deletes nothing.** `supabase/migrations/0006_clear_v1_rows.sql`
+   without the speed bonus, and rows before 2026-10-25T13:40:00Z without the 25-point floor of 2026-10-25.
+   `GET /api/top` reads only rows from `BOARD_SINCE` (`src/store.ts`) on, so none of them is shown. **This service deletes nothing.** `supabase/migrations/0006_clear_v1_rows.sql`
    deletes the v1 rows (those before 2026-10-21T23:45:00Z) and is the client's to run in the SQL
    editor; rows between the two instants stay in the table, hidden, until a human removes them
    (`docs/DATABASE.md`, Decision 3's delete path).

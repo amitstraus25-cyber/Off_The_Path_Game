@@ -235,12 +235,12 @@ describe('the two refusals that say why', () => {
   const answer = (status: number, body: unknown) =>
     vi.stubGlobal('fetch', () => Promise.resolve(new Response(JSON.stringify(body), { status })));
 
-  it('a wolf run, and a name the server refused that the game did not', async () => {
-    answer(422, { error: 'a run that let the wolf in is not posted', reason: 'wolf' });
+  it('a name the server refused that the game did not, said in the chrome or the backstop', async () => {
+    answer(422, { error: 'that name cannot go on the board', reason: 'name' });
     await expect(submit('swift-apron-51', log, TOKEN)).resolves.toEqual({
       key: 'leaderboardRefused',
-      text: 'Only runs that keep the wolf out go on the board.',
-      reason: 'wolf',
+      text: 'That name cannot go on the board. Try another.',
+      reason: 'name',
     });
     answer(422, { error: 'that name cannot go on the board', reason: 'name' });
     await expect(
@@ -249,7 +249,8 @@ describe('the two refusals that say why', () => {
   });
 
   it('a 422 it cannot read is a plain refusal, claiming nothing more', async () => {
-    for (const body of [{ reason: 'other' }, null, 'x']) {
+    // `wolf` among them: the board has taken wolf runs since the floor of 2026-10-25.
+    for (const body of [{ reason: 'other' }, { reason: 'wolf' }, null, 'x']) {
       answer(422, body);
       await expect(submit('swift-apron-51', log, TOKEN)).resolves.toEqual({
         key: 'leaderboardRefused',

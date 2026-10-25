@@ -170,8 +170,8 @@ describe('schema', () => {
 
   it('holds the chrome to its named keys, no fewer and no more', () => {
     const missing = variant();
-    delete (missing.ui.chrome as Record<string, unknown>)['postLate'];
-    expect(() => loadContent(missing)).toThrow(/ui\.chrome\.postLate/);
+    delete (missing.ui.chrome as Record<string, unknown>)['postUnavailable'];
+    expect(() => loadContent(missing)).toThrow(/ui\.chrome\.postUnavailable/);
     const stray = variant();
     (stray.ui.chrome as Record<string, unknown>)['postLater'] = 'Fixture: a typo of a key.';
     expect(() => loadContent(stray)).toThrow(ContentError);

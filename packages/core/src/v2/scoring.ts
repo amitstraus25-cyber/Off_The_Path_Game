@@ -68,7 +68,7 @@ export function ending(state: State, content: Content): Ending | null {
 }
 
 export interface RunResult {
-  /** The score, as `score` gives it: `choices` + `speed`. */
+  /** The score, as `score` gives it: `played` + `choices` + `speed`. */
   total: number;
   outOf: number;
   ending: Ending | null;
@@ -78,6 +78,8 @@ export interface RunResult {
   good: number;
   /** How many bad skills are in the basket: each one let the wolf in. */
   served: number;
+  /** The part of the total every run that ENDED earns: the content's `played`. 0 until it ends. */
+  played: number;
   /** The part of the total the basket earned: `clean` + `good` per good skill. 0 unless clean. */
   choices: number;
   /** The part of the total the clock earned (`speedBonus`). 0 unless clean. */
@@ -126,35 +128,38 @@ export function speedBonus(content: Content, good: number, timeMs: number): numb
  *
  * THE SCORE, out of 100 with the shipped weights (GAME_DESIGN_V2 section 9), CORRECTNESS FIRST:
  *
- *   - arrived clean (nothing bad taken):   `clean` + `good` per good skill + `speedBonus`
- *   - the wolf got in (any bad skill):     0, however fast
- *   - late, or not arrived yet:            0, and the ending says which
+ *   - arrived clean (nothing bad taken):   `played` + `clean` + `good` per good skill + `speedBonus`
+ *   - the wolf got in (any bad skill):     `played`, however fast
+ *   - late:                                `played`
+ *   - not ended yet:                       0
  *
- * With the shipped 10 / 20 / 30: three good at or under par is 100, three good just inside the
- * clock is 70, two good at par is 70 too (a tie, which the board breaks by the earlier post), and
- * leaving everything is 10 at any speed. Every wolf run sits below every clean one. The weights and
- * the par are content (golden rule 3); the zero for the wolf and the limit are rules. A late run
- * scores 0 rather than nothing so that the score is always an integer, but it is not a run for the
- * board: the board reads `ending`, and only `grandma` is a run the board takes (apps/api).
+ * `played` (the client, 2026-10-25): every run that ends scores it, so every player has a score
+ * to post, and their work email with it. With the shipped 25 / 15 / 15 / 15: three good at or under
+ * par is 100, three good just inside the clock is 85, two good at par is 80, one good at par is 60,
+ * and leaving everything is 40 at any speed. A wolf run or a late one is 25: every one of them sits
+ * below every clean one, because `clean` is at least 1. The weights and the par are content (golden
+ * rule 3); `played`-and-nothing-more for the wolf and the limit are rules.
  */
 export function result(state: State, content: Content): RunResult {
   const entries = reveal(state, content);
   const end = ending(state, content);
   const taken = entries.filter((r) => r.verdict === 'take');
   const good = taken.filter((r) => r.good).length;
-  const { clean, good: each, outOf, parMs } = content.scoring;
+  const { played: base, clean, good: each, outOf, parMs } = content.scoring;
   const arrived = arrivalMs(state);
   const timeMs = arrived === null ? null : clockMs(state, arrived);
   const clear = end === 'grandma';
+  const played = end === null ? 0 : base;
   const choices = clear ? clean + each * good : 0;
   const speed = clear ? speedBonus(content, good, timeMs!) : 0;
   return {
-    total: choices + speed,
+    total: played + choices + speed,
     outOf,
     ending: end,
     entries,
     good,
     served: taken.length - good,
+    played,
     choices,
     speed,
     timeMs,

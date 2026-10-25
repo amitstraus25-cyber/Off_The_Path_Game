@@ -120,6 +120,23 @@ morning interactions (`3e2473e`, `02420d6`), the afternoon screens (`8c4dc49`), 
   DOM; dimming it would mean filtering the mark). The three captions have not been through
   `docs/COPY_REVIEW.md`.
 
+**The client's scoring floor (2026-10-25): "anyone who starts playing automatically gets 25, so they
+can at least leave their email".** Agreed in chat that afternoon, with late runs posting too and the
+board reset.
+
+- [x] **Core:** `scoring.played` (25) is given to every run that ENDS -- `grandma`, `wolf` or `late`;
+      a clean arrival adds `clean` 15 + `good` 15 per good skill + a speed bonus of up to 15. 100 at
+      par, 85 at the buzzer, two good 74-80, one good 55-60, leave-all 40, wolf or late 25, unfinished 0. The simulator's rote line stands on `played` (25 + 40% of 75 = 55); the best blind basket
+      averages 40. GAME_DESIGN_V2 section 9 has the table.
+- [x] **Server:** a wolf run and a late run are posted at 25 (the `wolf` 422 and the late 400 are
+      gone). `BOARD_SINCE` moved to the deploy that ships this, so the board starts fresh under one
+      rule.
+- [x] **Game:** every ending offers Post; a clean run's score shows "For playing 25" beside its other
+      two parts, and a wolf or late run says it keeps the 25.
+- [ ] **Human:** the rows before the new `BOARD_SINCE` are hidden, not deleted -- delete them in the
+      Supabase SQL editor when convenient (docs/DATABASE.md). The new lines have not been through
+      `docs/COPY_REVIEW.md`.
+
 **The client's art picks (2026-10-25), in the working tree and NOT committed.** Chosen from the
 preview sheets of that morning; both are CLIENT PICKS, not a builder's call.
 

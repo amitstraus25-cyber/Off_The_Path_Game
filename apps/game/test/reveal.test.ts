@@ -92,7 +92,8 @@ describe('the score, as the reveal reads it from core', () => {
   it('reports parts that add up to the total, on a clean run', () => {
     const run = v2.result(careful.state, content);
     expect(run.ending).toBe('grandma');
-    expect(run.choices + run.speed).toBe(run.total);
+    expect(run.played + run.choices + run.speed).toBe(run.total);
+    expect(run.played).toBe(content.scoring.played);
     expect(run.timeMs).not.toBeNull();
   });
 
@@ -182,8 +183,11 @@ describe("the player's own row, right after posting", () => {
     expect(chrome['boardJoining']?.trim()).toBeTruthy();
   });
 
-  it('offers no Post for a run the board does not take', () => {
-    expect(chrome['wolfNotPosted']?.trim()).toBeTruthy();
-    expect(chrome['postLate']?.trim()).toBeTruthy();
+  it('says what a run that did not arrive clean keeps, and offers it Post like any other', () => {
+    expect(chrome['revealFloorWolf']).toContain('{played}');
+    expect(chrome['revealFloorLate']).toContain('{played}');
+    expect(chrome['revealPlayed']?.trim()).toBeTruthy();
+    expect(chrome).not.toHaveProperty('wolfNotPosted');
+    expect(chrome).not.toHaveProperty('postLate');
   });
 });

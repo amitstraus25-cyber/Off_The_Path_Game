@@ -40,7 +40,7 @@ export const raw = {
   version: 'fixture-2',
   status: 'test fixture, not player copy',
   deal: { good: 1 },
-  scoring: { outOf: 100, good: 40, clean: 40, speed: 20, parMs: 60_000 },
+  scoring: { outOf: 100, played: 0, good: 40, clean: 40, speed: 20, parMs: 60_000 },
   // No knock, so a paced fixture run costs exactly its walks, talks and cards (sim.test.ts).
   world: { knockMs: 0, dusk: { fromLeftMs: 120_000, darkest: 0.4 } },
   characters: [

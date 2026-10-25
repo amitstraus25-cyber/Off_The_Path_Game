@@ -170,8 +170,9 @@ export function handleStart(request: Request, deps: Deps): Response {
  * must be dealt from the token's seed; its claimed duration must fit the time the server saw pass
  * since the token was issued; and it is replayed through the real v2 reducer and scored with the
  * game's own `result()`. That recomputed number is the only one ever stored. CLAUDE.md golden rule
- * 6, as a function. Only a run that FINISHED is a run for the board: `grandma` or `wolf`, never
- * `late`.
+ * 6, as a function. Every run that ENDED is a run for the board -- `grandma`, `wolf` or `late` --
+ * since the client's floor of 2026-10-25: each scores at least `played` (25) for playing, so every
+ * player has a score to post (and, with OTP_WORK_EMAIL on, a work email to leave with it).
  */
 export async function handleScore(request: Request, deps: Deps): Promise<Response> {
   // The Allow header is stated rather than implied. A JSON-only POST route that answers 405 to
@@ -254,17 +255,15 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
   if (!replay.ended) return fail(400, 'that run has not reached the cottage');
 
   const run = v2.result(replay.state, deps.content);
-  // A late run ended, but it did not finish: the board reads the ending (core scoring.ts).
-  if (run.ending === 'late') return fail(400, 'a late run is not posted');
   /*
-   * NOR A WOLF RUN, since 2026-10-22. It finished, and it scores 0 by rule; it used to be stored at
-   * 0. The board is a ranking of runs that kept the wolf out -- every one of them scores at least
-   * `clean` -- and a 0 adds nothing to it but noise: on a quiet board it is the whole board, which
-   * is exactly what the client photographed (`warm-candle-17`, 0, alone) and read as broken. The
-   * reveal is where a wolf run is taught; the game offers no Post for one, and this is the
-   * backstop. 422 with `reason: 'wolf'`, so the game can say why rather than "could not be posted".
+   * A WOLF RUN AND A LATE RUN ARE POSTED (the client, 2026-10-25), at `played` and nothing more.
+   * From 2026-10-22 to then neither was: a wolf run scored 0 and a 0 on a quiet board read as broken.
+   * The floor is what changed that -- every ended run scores 25, so no row on the board is a 0 --
+   * and every one of them still ranks below every run that kept the wolf out (core scoring.ts).
+   *
+   * The bounds below hold for a late run exactly as for an arrival: its last stamp is the deadline,
+   * the reducer's own, and it cannot claim more time than its token has existed.
    */
-  if (run.ending === 'wolf') return refuse('wolf', 'a run that let the wolf in is not posted');
 
   /*
    * THE CLOCK, bounded from both sides by the one clock the player does not control.
@@ -373,7 +372,7 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
 }
 
 /** Why a post was refused with 422: the name, a wolf run, or the work email and its consent. */
-export type RefusalReason = 'name' | 'wolf' | v2.ContactRefusal;
+export type RefusalReason = 'name' | v2.ContactRefusal;
 
 /** A refusal the game words by `reason` rather than by status: 422, nothing spent. */
 const refuse = (reason: RefusalReason, error: string): Response => json({ error, reason }, 422);

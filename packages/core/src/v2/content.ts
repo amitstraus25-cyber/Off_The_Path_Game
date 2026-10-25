@@ -187,7 +187,6 @@ export const CHROME_KEYS = [
   'researchFooter',
   'postHeading',
   'postUnavailable',
-  'postLate',
   'handleLabel',
   'handleReroll',
   'handleHint',
@@ -218,14 +217,14 @@ export const CHROME_KEYS = [
    * words here does not reach into a test file another owner is editing.
    */
   'landingPremise',
+  'revealPlayed',
   'revealChoices',
   'revealSpeed',
   'revealTime',
   'revealPar',
-  'wolfNotPosted',
   'boardJoining',
-  'revealZeroWolf',
-  'revealZeroLate',
+  'revealFloorWolf',
+  'revealFloorLate',
   'revealTilesHint',
   'revealFlip',
   'revealFlipBack',
@@ -439,14 +438,18 @@ export const contentSchema = z.strictObject({
   /** How many skills each run deals good. The rest are dealt bad. */
   deal: z.strictObject({ good: z.number().int().min(1) }),
   /**
-   * A clean arrival scores `clean`, plus `good` for each good skill in the basket, plus a speed
-   * bonus of up to `speed` that is scaled by the share of the good skills taken and falls from full
-   * at `parMs` to nothing at the time limit. A run that let the wolf in scores 0, by rule
-   * (scoring.ts). The lint holds `outOf` to the best run, and holds `speed` small enough that a
-   * faster basket with one good skill fewer can never outscore a full one.
+   * Every run that ENDS -- at Grandma's, with the wolf, or late -- scores `played` for playing (the
+   * client, 2026-10-25: "anyone who starts playing gets 25, so they can at least leave their
+   * email"). A clean arrival adds `clean`, plus `good` for each good skill in the basket, plus a
+   * speed bonus of up to `speed` that is scaled by the share of the good skills taken and falls from
+   * full at `parMs` to nothing at the time limit. A run that let the wolf in, or ran out of time,
+   * scores `played` and nothing more, by rule (scoring.ts). The lint holds `outOf` to the best run,
+   * and holds `speed` small enough that a faster basket with one good skill fewer can never
+   * outscore a full one.
    */
   scoring: z.strictObject({
     outOf: z.number().int().min(1),
+    played: z.number().int().min(0),
     good: z.number().int().min(1),
     clean: z.number().int().min(1),
     speed: z.number().int().min(0),
@@ -494,11 +497,14 @@ export const findCharacterForSkill = (content: Content, id: SkillId): Character 
   content.characters.find((c) => c.skillId === id);
 
 /**
- * The best score any run can reach: a clean arrival with every dealt-good skill in the basket, at
- * or under par, so with the whole speed bonus.
+ * The best score any run can reach: `played`, and a clean arrival with every dealt-good skill in
+ * the basket, at or under par, so with the whole speed bonus.
  */
 export const ceiling = (content: Content): number =>
-  content.scoring.clean + content.scoring.good * content.deal.good + content.scoring.speed;
+  content.scoring.played +
+  content.scoring.clean +
+  content.scoring.good * content.deal.good +
+  content.scoring.speed;
 
 export const countWords = (line: string): number => line.split(/\s+/).filter(Boolean).length;
 
@@ -632,9 +638,10 @@ export function lintContent(content: Content, opts: LintOptions = {}): string[] 
   /*
    * CORRECTNESS FIRST, THEN SPEED. The fastest basket one good skill short earns
    * (n-1) x good + speed x (n-1)/n; the slowest full basket that still arrives earns n x good and
-   * no bonus. The first must never exceed the second, which is speed x (n-1) <= good x n. At the
-   * shipped weights (20 a skill, 30 for speed, three good) the two meet exactly at 70, and a tie
-   * ranks the earlier post first; it is never a win for the faster, emptier basket.
+   * no bonus (`played` and `clean` are the same on both sides). The first must never exceed the
+   * second, which is speed x (n-1) <= good x n. At the shipped weights (15 a skill, 15 for speed,
+   * three good) the fastest two-good basket is 80 and the slowest full one 85; a tie, at weights
+   * that make one, ranks the earlier post first and is never a win for the faster, emptier basket.
    */
   const { good: each, speed } = content.scoring;
   const g = content.deal.good;

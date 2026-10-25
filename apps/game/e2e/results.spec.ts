@@ -16,7 +16,10 @@ import { ready, toTheReveal } from './helpers';
 
 const content = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
-) as { ui: { reveal: { caught: string }; chrome: Record<string, string> } };
+) as {
+  scoring: { played: number; clean: number; good: number; speed: number };
+  ui: { reveal: { caught: string }; chrome: Record<string, string> };
+};
 const say = (key: string): string => content.ui.chrome[key]!;
 
 const TOKEN = 'dGVzdA.c2lnbmF0dXJl';
@@ -67,21 +70,24 @@ async function playTo(
 }
 
 test.describe('the result comes first', () => {
-  test('the score, its two parts and the time, as core counted them', async ({ page }) => {
+  test('the score, its three parts and the time, as core counted them', async ({ page }) => {
     await serveEmptyBoard(page);
     await playTo(page, { take: 'good', seconds: 120 });
 
     const hero = page.locator('.otp-hero');
     const total = Number(await hero.getAttribute('data-score'));
-    const choices = Number(await page.locator('[data-part="choices"]').textContent());
-    const speed = Number(
-      (await page.locator('[data-part="speed"]').textContent())!.replace('+', ''),
-    );
-    expect(choices + speed, 'the parts do not add up to the score').toBe(total);
-    // Three good at 2:00 is past par, so some of the bonus and not all of it.
-    expect(choices).toBe(70);
+    const part = async (name: string): Promise<number> =>
+      Number((await page.locator(`[data-part="${name}"]`).textContent())!.replace('+', ''));
+    const played = await part('played');
+    const choices = await part('choices');
+    const speed = await part('speed');
+    expect(played + choices + speed, 'the parts do not add up to the score').toBe(total);
+    // 25 for playing; 15 clean and 15 for each of the three good; and at 2:00, past par, some of
+    // the bonus and not all of it.
+    expect(played).toBe(content.scoring.played);
+    expect(choices).toBe(content.scoring.clean + 3 * content.scoring.good);
     expect(speed).toBeGreaterThan(0);
-    expect(speed).toBeLessThan(30);
+    expect(speed).toBeLessThan(content.scoring.speed);
     await expect(page.locator('[data-part="time"]')).toContainText('2:00');
     await expect(hero.locator('h1')).toHaveText('Clean arrival');
     await expect(page.locator('.otp-replay__caught')).toHaveText(
@@ -98,11 +104,16 @@ test.describe('the result comes first', () => {
     await expect(page.locator('.otp-recap__badge[data-glyph="missed"]')).toHaveCount(0);
   });
 
-  test('a run the wolf got into says why it is 0, in words', async ({ page }) => {
+  test('a run the wolf got into keeps the points for playing, and says why in words', async ({
+    page,
+  }) => {
     await serveEmptyBoard(page);
     await playTo(page, { take: 'all', seconds: 30 });
-    await expect(page.locator('.otp-hero')).toHaveAttribute('data-score', '0');
-    await expect(page.locator('[data-zero="wolf"]')).toHaveText(say('revealZeroWolf'));
+    const played = String(content.scoring.played);
+    await expect(page.locator('.otp-hero')).toHaveAttribute('data-score', played);
+    await expect(page.locator('[data-floor="wolf"]')).toHaveText(
+      say('revealFloorWolf').replace('{played}', played),
+    );
     await expect(page.locator('[data-parts]')).toHaveCount(0);
     await expect(page.locator('.otp-replay__caught')).toHaveText(
       content.ui.reveal.caught.replace('{caught}', '0').replace('{bad}', '4'),
@@ -355,13 +366,13 @@ test.describe("the player's own run, right after posting", () => {
     await expect(page.locator('.otp-board__row--you')).toHaveCount(0);
   });
 
-  test('a wolf run is told it does not go on the board, with no Post to press', async ({
+  test('a wolf run is offered Post like any other, since every ended run keeps 25 (2026-10-25)', async ({
     page,
   }) => {
     await serveEmptyBoard(page);
     await playTo(page, { take: 'all', seconds: 10 });
-    await expect(page.locator('[data-post="unavailable"]')).toHaveText(say('wolfNotPosted'));
-    await expect(page.getByRole('button', { name: 'Post', exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-post="unavailable"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Post', exact: true })).toBeVisible();
   });
 });
 

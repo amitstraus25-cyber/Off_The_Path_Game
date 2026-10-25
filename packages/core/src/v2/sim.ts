@@ -225,14 +225,19 @@ export function everyRun(content: Content, seed: number): Run[] {
 }
 
 /**
- * The most a CARD-BLIND strategy may average over every deal, as a share of the ceiling.
+ * The most a CARD-BLIND strategy may average over every deal, as a share of what a run can earn
+ * above `played` -- the points every run that ends is given for playing, which no basket earns.
  *
  * A strategy that never opens a card sees nothing that differs between deals -- the schema keeps
  * one copy of everything before the card -- so whatever it does is one fixed verdict combination,
- * and its fair score is that combination's average over every deal. With the shipped weights the
- * best of them is "take one, leave six", at 15/35 x 40 = 17.1; leaving everything is 10. The line
- * is 40% of the ceiling, which is "leave everything plus one good skill": what it guards is the
- * WEIGHTS, so a retune that made a blind basket pay (a big `clean`, say) fails at load.
+ * and its fair score is that combination's average over every deal. The line is `played` plus 40%
+ * of the rest: what it guards is the WEIGHTS, so a retune that made a blind basket pay (a big
+ * `clean`, say) fails at load.
+ *
+ * With the weights of 2026-10-22 (no `played`) the line was 40 and the best blind basket "take one,
+ * leave six" averaged 17.1. With the client's floor of 2026-10-25 (25 played, 15 / 15 / 15) the line
+ * is 25 + 30 = 55, and the best blind basket averages 40: leaving everything is 40, and taking one
+ * and leaving six is right in 15 deals of 35 (60) and the wolf in the other 20 (25).
  *
  * WHY THIS REPLACED THE WORD, POSITION, FOLKLORE AND MAKER GUARDS: those each measured whether
  * something seen before the card predicted the verdict in ONE fixed casting. A random deal makes
@@ -271,8 +276,8 @@ export function blindAverages(content: Content): { verdicts: Verdict[]; mean: nu
  * check for them could never fail on its own (PAUL_BRIEF trap 5); the suites assert them instead.
  */
 export function trapChecks(content: Content): { ok: boolean; checks: Check[] } {
-  const outOf = content.scoring.outOf;
-  const line = Math.floor(outOf * ROTE_SHARE + 1e-9);
+  const { outOf, played } = content.scoring;
+  const line = Math.floor(played + (outOf - played) * ROTE_SHARE + 1e-9);
   const missed = everySeed(content).filter(
     (seed) => play(content, 'careful', { seed }).total !== outOf,
   );

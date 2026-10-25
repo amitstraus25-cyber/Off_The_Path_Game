@@ -164,15 +164,15 @@ describe('the long evening: twenty seconds back on the clock, replayed by the sa
     expect((await careful(seed, slow).post(undefined, claimed - CLOCK_SKEW_MS)).status).toBe(200);
   });
 
-  it('a run that ran out even of its rewound clock is late, stamped at the new deadline, and not posted', async () => {
+  it('a run that ran out even of its rewound clock is late, stamped at the new deadline, and posted at `played`', async () => {
     // Twenty-three seconds a walk: the Cat is met inside three minutes and the door is past 3:20.
     const run = careful(seed, { walkMs: 23_000, talkMs: 1_000 });
     expect(run.state.perks.map((p) => p.kind)).toContain('rewind');
     expect(run.log.events.at(-1)).toEqual({ e: 'late', at: v2.deadlineMs(run.state) });
     expect(v2.deadlineMs(run.state)).toBe(v2.TIME_LIMIT_MS + 20_000);
     const res = await run.post();
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: 'a late run is not posted' });
+    expect(res.status).toBe(200);
+    expect(run.h.written()?.score).toBe(content.scoring.played);
   });
 
   it('a log that drops the take cannot keep the extra twenty seconds', async () => {

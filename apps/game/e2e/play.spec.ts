@@ -11,6 +11,7 @@ const raw = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
 ) as {
   skills: { id: string; icon: string }[];
+  scoring: { played: number; clean: number };
   ui: {
     cabinet: { marquee: string };
     reveal: { caught: string; again: string; did: string; wouldHave: string };
@@ -332,7 +333,10 @@ test('the greedy run takes everything and lets the wolf in at 0', async ({ page 
   expect((await state(page)).basket).toHaveLength(7);
   await walkIntoCottage(page);
   await throughTheDoor(page, 'wolf');
-  await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '0');
+  await expect(page.locator('[data-score]')).toHaveAttribute(
+    'data-score',
+    String(raw.scoring.played),
+  );
   await expect(page.locator('[data-ending="wolf"]')).toContainText('That’s not Grandma');
   /*
    * After the zero, the cards that let the wolf in are already turned over -- every bad skill, since
@@ -354,7 +358,9 @@ test('the greedy run takes everything and lets the wolf in at 0', async ({ page 
   }
 });
 
-test('the clock override ends a run late, and a late run is not posted', async ({ page }) => {
+test('the clock override ends a run late, and a late run is posted at 25 like any other', async ({
+  page,
+}) => {
   await serveStart(page, 7);
   await serveEmptyBoard(page);
   await begin(page);
@@ -368,7 +374,7 @@ test('the clock override ends a run late, and a late run is not posted', async (
   /*
    * The line counts the BASKET since Paul's round (2026-10-22): "You kept N of 4 bad skills out of
    * your basket". The clock ended this run before anyone was met, so nothing went in and all four
-   * stayed out -- which is true, and is said beside the 0 and the sentence that says why it is 0.
+   * stayed out -- which is true, and is said beside the 25 and the sentence that says why it is 25.
    * (It counted only cards that were opened until then, and read "0 of 4" on a 100 that walked
    * past the bad cards.) Each tile's Caught / Missed still counts only what was read: none here.
    */
@@ -376,10 +382,14 @@ test('the clock override ends a run late, and a late run is not posted', async (
     raw.ui.reveal.caught.replace('{caught}', '4').replace('{bad}', '4'),
   );
   await expect(page.locator('[data-reveal][data-kind="bad"][data-call="caught"]')).toHaveCount(0);
-  await expect(page.locator('[data-zero="late"]')).toBeVisible();
+  await expect(page.locator('[data-floor="late"]')).toBeVisible();
+  await expect(page.locator('[data-score]')).toHaveAttribute(
+    'data-score',
+    String(raw.scoring.played),
+  );
   await expect(page.locator('.otp-replay [data-action="replay"]')).toBeVisible();
-  await expect(page.locator('[data-post="unavailable"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Post', exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-post="unavailable"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Post', exact: true })).toBeVisible();
 });
 
 test('with no board the game deals its own seed and says posting is unavailable', async ({
@@ -392,7 +402,11 @@ test('with no board the game deals its own seed and says posting is unavailable'
   expect(run.good).toHaveLength(3);
   await walkIntoCottage(page);
   await throughTheDoor(page, 'grandma');
-  await expect(page.locator('[data-score]')).toHaveAttribute('data-score', '10');
+  // Nothing taken: a clean empty basket, the points for playing and the clean weight.
+  await expect(page.locator('[data-score]')).toHaveAttribute(
+    'data-score',
+    String(raw.scoring.played + raw.scoring.clean),
+  );
   await expect(page.locator('[data-post="unavailable"]')).toHaveText(
     'Posting is unavailable for this run.',
   );

@@ -548,17 +548,10 @@ export function App({
             onReplay={onReplay}
             onReadResearch={onReadResearch}
             /*
-             * A late run is not posted, and since 2026-10-22 neither is a wolf run (apps/api
-             * answers 422 `wolf`): both are said up front rather than offered a Post the board
-             * will refuse.
+             * Every ending is offered Post since the client's floor (2026-10-25): a wolf run and a
+             * late run score `played` and the board takes them (apps/api).
              */
-            cannotPost={
-              ending === 'late'
-                ? (strings['postLate'] ?? '')
-                : ending === 'wolf'
-                  ? (strings['wolfNotPosted'] ?? '')
-                  : cannotPost
-            }
+            cannotPost={cannotPost}
             onPost={onPost}
             askEmail={emailRequired}
           />

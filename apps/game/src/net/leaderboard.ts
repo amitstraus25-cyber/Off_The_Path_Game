@@ -59,12 +59,12 @@ export type NoticeKey =
 
 /**
  * Why a post was refused when the answer is not "the run could not be verified": the NAME (the
- * board's rules, core board.ts -- `nameRefusal` says which), a WOLF run, which the board does
- * not take since 2026-10-22, or -- when the server requires one -- the WORK EMAIL or its CONSENT
- * (core contact.ts). All travel under `leaderboardRefused`, because all make exactly the claim
+ * board's rules, core board.ts -- `nameRefusal` says which), or -- when the server requires one --
+ * the WORK EMAIL or its CONSENT (core contact.ts). A WOLF run was one from 2026-10-22 until the
+ * client's floor of 2026-10-25, when every ended run became one the board takes. All travel under `leaderboardRefused`, because all make exactly the claim
  * that key declares (the run did not go up); only the sentence differs.
  */
-export type RefusalReason = 'name' | 'wolf' | v2.ContactRefusal;
+export type RefusalReason = 'name' | v2.ContactRefusal;
 
 /** What the player typed and ticked, when the server requires a work email (`RunStart`). */
 export interface ContactInput {
@@ -117,7 +117,7 @@ export interface PostOutcome {
   key: NoticeKey;
   /** The sentence, with `{handle}` already substituted where the line has one. */
   text: string;
-  /** Only on `leaderboardRefused`, when the refusal was the name or a wolf run (above). */
+  /** Only on `leaderboardRefused`, when the refusal had a reason (above). */
   reason?: RefusalReason;
   /** Only with `reason: 'name'` when the game itself refused it: which rule. */
   nameRefusal?: v2.NameRefusal;
@@ -479,30 +479,22 @@ const BACKSTOPS: Record<NoticeKey, string> = {
 };
 
 /**
- * The sentences for the two refusals that travel under `leaderboardRefused` with a reason. Read
- * from the chrome by these keys when the content carries them (`handleBlocked` is the UI's own
- * sentence for a name; `wolfNotPosted` is not a chrome key today), else these.
+ * The sentence for the name refusal, which travels under `leaderboardRefused` with a reason. Read
+ * from the chrome by `handleBlocked` (the UI's own sentence for a name) when the content carries
+ * it, else this.
  */
-const REASON_KEYS: Record<'name' | 'wolf', string> = {
-  name: 'handleBlocked',
-  wolf: 'wolfNotPosted',
-};
-const REASON_BACKSTOPS: Record<'name' | 'wolf', string> = {
-  name: 'That name cannot go on the board. Try another.',
-  wolf: 'Only runs that keep the wolf out go on the board.',
-};
+const NAME_BACKSTOP = 'That name cannot go on the board. Try another.';
 /** The contact refusals' backstop, for a caller that passed no sentences. Never the address. */
 const CONTACT_BACKSTOP = 'A work email and consent are needed to post this score.';
 
 /** The server's 422 body, read only for its `reason`, and only one this game knows. */
 const reasonOf = (body: unknown): RefusalReason | null => {
   const reason = (body as { reason?: unknown } | null)?.reason;
-  if (reason === 'name' || reason === 'wolf') return reason;
+  if (reason === 'name') return reason;
   return v2.CONTACT_REFUSALS.find((known) => known === reason) ?? null;
 };
 
-const isContactReason = (reason: RefusalReason): reason is v2.ContactRefusal =>
-  reason !== 'name' && reason !== 'wolf';
+const isContactReason = (reason: RefusalReason): reason is v2.ContactRefusal => reason !== 'name';
 
 /**
  * Posts a finished v2 run under the name the player typed. Always answers an outcome: never throws,
@@ -514,7 +506,7 @@ const isContactReason = (reason: RefusalReason): reason is v2.ContactRefusal =>
  * passes is posted in its tidied form. The server checks it again and is the authority.
  *
  * The statuses: 400 is a run the server refused, 409 a token already on the board (the second press
- * of Post), 410 a run whose posting window shut, 422 a refusal with a reason (`name` or `wolf`);
+ * of Post), 410 a run whose posting window shut, 422 a refusal with a reason (`name`, or the work email's);
  * everything else -- 404 undeployed, 503 unconfigured, 429 shedding, 500, a timeout -- is no board
  * right now.
  *
@@ -536,7 +528,7 @@ export async function submit(
     key: 'leaderboardRefused',
     text: isContactReason(reason)
       ? contact?.messages[reason]?.trim() || CONTACT_BACKSTOP
-      : strings[REASON_KEYS[reason]]?.trim() || REASON_BACKSTOPS[reason],
+      : strings['handleBlocked']?.trim() || NAME_BACKSTOP,
     reason,
   });
   const name = checkName(handle);
