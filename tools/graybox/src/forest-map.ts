@@ -7983,7 +7983,7 @@ export function generateForestMap(): GeneratedMap {
   }
   for (const [name, tile] of [
     ['notice-post-r', 'notice-board-r'],
-    ['sign-speed', 'sign-speed'],
+    ['sign-speed', 'sign-dead-end'],
     ['sign-logo', 'sign-logo-l'],
     ['sign-logo-r', 'sign-logo-r'],
   ] as const) {
@@ -8189,7 +8189,7 @@ export function generateForestMap(): GeneratedMap {
     'mailbox',
     // The forest notice's second half and the two Cyera signs, 2026-10-23: posts and stakes.
     'notice-board-r',
-    'sign-speed',
+    'sign-dead-end',
     'sign-logo-l',
     'sign-logo-r',
     'roof-l',

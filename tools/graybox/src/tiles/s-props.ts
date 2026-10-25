@@ -2089,29 +2089,35 @@ const noticeBoard: Painter = noticeHalf(0);
 const noticeBoardR: Painter = noticeHalf(1);
 
 /*
- * "CYERA SPEED!" -- A WOODEN SIGN by the waterfall, on two stakes.
+ * "DEAD END" -- A WOODEN SIGN at the end of the north path, on two stakes.
+ *
+ * It was "CYERA SPEED!" by the waterfall until 2026-10-25, when the client's design moved the Owl
+ * over the river and turned his old spot into a dead end (docs/GATEKEEPER.md): the same board, the
+ * same stakes, the same brush hand, new words, and it stands where the Owl stood. The board's
+ * geometry did not change, so every bound the lettering guard at the foot of this file holds it to
+ * is the one the Speed! sign passed.
  *
  * Timber, not paper, because it is a sign and not a notice: nothing scores the player for reading
- * it, and the pair guard below keeps paper for the things the game does score. Two lines, CYERA over
- * SPEED!, so it fits one tile; on one line it is 44 pixels and would need a second tile of solid
- * ground in a clearing that is not wide.
+ * it, and the pair guard below keeps paper for the things the game does score. Two lines, DEAD over
+ * END, so it fits one tile; on one line it is 35 pixels and would need a second tile of solid
+ * ground at the end of a footpath one tile wide.
  *
  * The board is laid in the timber's lower bands so the lettering -- painted, in the cottage plaster's
  * top cream -- stands a hundred and more luma above it. A groove between the two planks runs between
  * the lines, never through a letter. Two stakes rather than one post, so it does not read as the
  * notice's silhouette at a glance, and each stake has its own pool and its own tufts.
  */
-const SPEED_BOARD = { x: 2, y: 3, w: 28, h: 18 } as const;
+const DEAD_END_BOARD = { x: 2, y: 3, w: 28, h: 18 } as const;
 
 /*
- * The two lines, laid in the brush hand (B1, 2026-10-25) and centred down the board. The board did
- * not need to grow: SPEED! is 24 pixels in the brush hand and the board is 28, which leaves the two
- * pixels a side the guard at the foot of this file asks for.
+ * The two lines, laid in the brush hand (B1, 2026-10-25) and centred down the board. DEAD is 18
+ * pixels in the brush hand and END 14 (the hand's N is new for it, in `sign-brush.ts`), on a board 28
+ * wide, which leaves more than the two pixels a side the guard at the foot of this file asks for.
  */
-const SPEED_LINES = layOn(SPEED_BOARD, ['CYERA', 'SPEED!']);
+const DEAD_END_LINES = layOn(DEAD_END_BOARD, ['DEAD', 'END']);
 
 /** The two stakes, left edge and width. */
-const SPEED_STAKES = [6, 22] as const;
+const DEAD_END_STAKES = [6, 22] as const;
 const STAKE_W = 4;
 
 /**
@@ -2124,22 +2130,23 @@ const PAINT_INK: Record<Role, RGBA> = {
   ...HEART_INK,
 };
 
-const signSpeed: Painter = (img) => {
-  // The lawn the map has at (36,3), and the logo board's below: the variant under each cell, so the
+const signDeadEnd: Painter = (img) => {
+  // The lawn the map has at (18,12) -- and had at (36,3), where it stood as the Speed! sign -- and
+  // the logo board's below: the variant under each cell, so the
   // prop's own ground meets its neighbours in the same mottle.
   groundUnder(img, 1);
-  for (const sx of SPEED_STAKES) cast(img, sx + STAKE_W / 2, 30.5, 5.4, 2.5);
+  for (const sx of DEAD_END_STAKES) cast(img, sx + STAKE_W / 2, 30.5, 5.4, 2.5);
 
   stand(img, (s) => {
-    for (const sx of SPEED_STAKES)
-      postV(s, sx, SPEED_BOARD.y + 2, STAKE_W, TILE - SPEED_BOARD.y - 2);
-    const { x, y, w, h } = SPEED_BOARD;
+    for (const sx of DEAD_END_STAKES)
+      postV(s, sx, DEAD_END_BOARD.y + 2, STAKE_W, TILE - DEAD_END_BOARD.y - 2);
+    const { x, y, w, h } = DEAD_END_BOARD;
     face(s, x, y, w, h, 'wood', 0.04, 0.04 + SPAN * 0.5);
-    // The groove between the two planks, one row under CYERA and one above SPEED!.
-    sinkRun(s, x, SPEED_LINES[1]!.y - 1, w, 1, 46);
-    paintLettering(s, SPEED_LINES, PAINT_INK);
+    // The groove between the two planks, one row under DEAD and one above END.
+    sinkRun(s, x, DEAD_END_LINES[1]!.y - 1, w, 1, 46);
+    paintLettering(s, DEAD_END_LINES, PAINT_INK);
     // The board throws its line onto the stakes below it, which `ring()` cannot see.
-    for (const sx of SPEED_STAKES) {
+    for (const sx of DEAD_END_STAKES) {
       sinkRun(s, sx, y + h, STAKE_W, 1, 48);
       sinkRun(s, sx, y + h + 1, STAKE_W, 1, 22);
     }
@@ -2294,7 +2301,7 @@ export const PROP_TILES: Record<string, Painter> = {
   'door-note': doorNote,
   mailbox,
   'notice-board-r': noticeBoardR,
-  'sign-speed': signSpeed,
+  'sign-dead-end': signDeadEnd,
   'sign-logo-l': logoHalf(0),
   'sign-logo-r': logoHalf(1),
 };
@@ -2546,7 +2553,7 @@ const GROUND_PROPS = [
   'fountain',
   'mailbox',
   'notice-board-r',
-  'sign-speed',
+  'sign-dead-end',
   'sign-logo-l',
   'sign-logo-r',
 ] as const;
@@ -2790,8 +2797,8 @@ for (const name of GROUND_PROPS) {
 
   check('the forest notice', (noticeSheet ??= paintNoticeSheet()), NOTICE_PAGE, NOTICE_LINES);
   const speed = new Img(TILE, TILE);
-  signSpeed(speed);
-  check('the Cyera Speed! sign', speed, SPEED_BOARD, SPEED_LINES);
+  signDeadEnd(speed);
+  check('the Dead End sign', speed, DEAD_END_BOARD, DEAD_END_LINES);
 
   const logo = (logoSheet ??= paintLogoSheet());
   let lo = 255;

@@ -374,9 +374,14 @@ export const TILE_NAMES: readonly string[] = [
    * board the game lays the supplied logo SVG over. Gids 113 to 116.
    *
    * 112 + 4 = 116 names still fits the sheet's 10 rows (120 cells), so it stays 384 x 320.
+   *
+   * Gid 114 was `sign-speed` until 2026-10-25 and is `sign-dead-end` now, RENAMED IN PLACE rather
+   * than appended: the Speed! board was moved to the end of the north path and repainted "DEAD END"
+   * (docs/GATEKEEPER.md), so the same board on the same gid carries new words, and no other name
+   * moves.
    */
   'notice-board-r',
-  'sign-speed',
+  'sign-dead-end',
   'sign-logo-l',
   'sign-logo-r',
   /*
@@ -390,6 +395,15 @@ export const TILE_NAMES: readonly string[] = [
   // The open gate's free halves, in the cell east of the opening (tiles/s-outdoor.ts), 119 and 120.
   'gate-n-swing',
   'gate-s-swing',
+  /*
+   * The gate on the bridge, APPENDED at gids 121 and 122 on 2026-10-25 (docs/GATEKEEPER.md): the
+   * brown picket gate standing on `bridge-l`'s planks, shut and open (tiles/s-fence.ts). The map
+   * lays `bridge-gate-shut` in `decor-below` over both deck rows of the bridge's west end; the game
+   * swaps them to `bridge-gate-open` when Bridge Key is taken. Every existing gid keeps its value;
+   * the sheet grows to 11 rows, 384 x 352, because ceil(122 / 12) is 11.
+   */
+  'bridge-gate-shut',
+  'bridge-gate-open',
 ];
 
 /*

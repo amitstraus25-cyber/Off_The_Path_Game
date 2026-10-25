@@ -75,7 +75,7 @@
  */
 import { Img, keyline, TILE, tone, type RGBA } from '../paint.ts';
 import type { Painter } from '../paint.ts';
-import { FENCE_TILES } from './s-fence.ts';
+import { bridgeGateTiles, FENCE_TILES } from './s-fence.ts';
 
 /* ---------------------------------------------------------------- the wood */
 
@@ -432,4 +432,6 @@ export const OUTDOOR_TILES: Record<string, (img: Img) => void> = {
   'bridge-l': bridgePlank('left'),
   'bridge-m': bridgePlank('middle'),
   'bridge-r': bridgePlank('right'),
+  // The gate on the bridge's west end (2026-10-25, docs/GATEKEEPER.md), over `bridge-l`'s planks.
+  ...bridgeGateTiles(bridgePlank('left')),
 };
