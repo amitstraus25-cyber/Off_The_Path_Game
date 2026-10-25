@@ -99,8 +99,10 @@ describe('the cast and its faces', () => {
    *     line a failure printed, while reading as the gate it was not.
    */
 
-  it('renders all ten cast frames', () => {
-    expect(Object.keys(CAST_FRAMES)).toHaveLength(10);
+  // Twelve since 2026-10-25: the Gatekeeper's two (`npc-gatekeeper-0`, `-1`, sprites/gatekeeper.ts)
+  // joined the cast when the toadstool became him and left `BYSTANDER_FRAMES` (docs/GATEKEEPER.md).
+  it('renders all twelve cast frames', () => {
+    expect(Object.keys(CAST_FRAMES)).toHaveLength(12);
   });
 });
 
@@ -295,13 +297,16 @@ describe('the sheets generate.ts writes for the spawned characters', () => {
    *
    * The wolf is deliberately absent -- he is never spawned from the map, he appears at the
    * cottage, and `generate.ts:60` names him by hand for that reason. This pins his absence too.
+   *
+   * 2026-10-25: `bystander-toadstool` is `npc-gatekeeper` (docs/GATEKEEPER.md), the contract's
+   * spawn name for him, so the key changed with the map object it is looked up by.
    */
   it('keys a two-frame painter for every character the map can spawn', () => {
     expect(Object.keys(NPC_PAINTERS).sort()).toEqual([
       'bystander-cat',
       'bystander-magpie',
       'bystander-snail',
-      'bystander-toadstool',
+      'npc-gatekeeper',
       'npc-lantern-keeper',
       'npc-owl',
       'npc-rabbit',
@@ -422,9 +427,16 @@ describe('the map', () => {
    * 120 since 2026-10-25: `elder-tl-over-br` and `elder-tr-over-bl` for the buried-crown cells
    * (forest-map.ts), and `gate-n-swing` and `gate-s-swing` for the open gate's free halves, all
    * APPENDED. The sheet stays 384x320: `ceil(120 / 12)` is 10.
+   *
+   * 126 since 2026-10-25, later (docs/GATEKEEPER.md, and the client's revision the same day to a
+   * drawbridge): `bridge-gate-shut-0..2` and `bridge-gate-open-0..2`, raised and lowered, one pair
+   * per kind of deck column, APPENDED at gids 121 to 126. The sheet grows to 384x352 because
+   * `ceil(126 / 12)` is 11. In the same round gid 114 was RENAMED in place from `sign-speed` to
+   * `sign-dead-end` -- the same board repainted and moved -- which changes no gid and so not this
+   * count.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(120);
+    expect(TILE_NAMES).toHaveLength(126);
   });
 });
 

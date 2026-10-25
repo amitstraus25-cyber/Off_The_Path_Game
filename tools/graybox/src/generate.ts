@@ -67,7 +67,9 @@ write(
 );
 
 // The wolf has no painter in the map because he is never spawned there; he appears at the cottage.
-const NPCS = ['npc-rabbit', 'npc-owl', 'npc-lantern-keeper', 'npc-wolf'];
+// The rest are read off `NPC_PAINTERS` by prefix, like the bystanders, so a new `npc-*` (the
+// Gatekeeper, 2026-10-25) is written and listed in the manifest without a second list to forget.
+const NPCS = [...Object.keys(NPC_PAINTERS).filter((name) => name.startsWith('npc-')), 'npc-wolf'];
 const BYSTANDERS = Object.keys(NPC_PAINTERS).filter((name) => name.startsWith('bystander-'));
 for (const name of [...NPCS, ...BYSTANDERS]) write(`${name}.png`, paintNpcSheet(name).png());
 

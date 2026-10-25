@@ -1,5 +1,6 @@
 /*
- * THE BRUSH HAND -- the lettering on the forest notice and the Cyera Speed! sign, since 2026-10-25.
+ * THE BRUSH HAND -- the lettering on the forest notice and the Dead End sign (the Cyera Speed! sign
+ * until it was repainted, both 2026-10-25).
  *
  * The client picked "B1" from four previews that day (B0, the 3 x 5 type as shipped; B1 brush; B2
  * signwriter; B3 playful). This is B1 and only B1: the other three were a scratch round and are not
@@ -43,6 +44,8 @@ const BRUSH: Record<string, readonly string[]> = {
   H: ['##.#', '##.#', '####', '##.#', '##.#'],
   P: ['###.', '##.#', '###.', '##..', '##..'],
   D: ['###.', '##.#', '##.#', '##.#', '###.'],
+  // For DEAD END (2026-10-25): H's heavy left downstroke and thin right one, the diagonal between.
+  N: ['##..#', '###.#', '##.##', '##..#', '##..+'],
   '!': ['##', '##', '#+', '..', '#.'],
   ' ': ['.', '.', '.', '.', '.'],
   // Painted, not stamped: lobes of unequal size, the tip pulled a pixel left, one highlight stroke.

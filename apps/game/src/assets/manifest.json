@@ -29,12 +29,12 @@
       "frameHeight": 48
     },
     {
-      "key": "npc-wolf",
+      "key": "npc-gatekeeper",
       "frameWidth": 32,
       "frameHeight": 48
     },
     {
-      "key": "bystander-toadstool",
+      "key": "npc-wolf",
       "frameWidth": 32,
       "frameHeight": 48
     },
@@ -129,12 +129,12 @@
       "frameHeight": 48
     },
     {
-      "key": "bystander-toadstool-idle",
+      "key": "npc-gatekeeper-idle",
       "frameWidth": 32,
       "frameHeight": 48
     },
     {
-      "key": "bystander-toadstool-hop",
+      "key": "npc-gatekeeper-hop",
       "frameWidth": 32,
       "frameHeight": 48
     },

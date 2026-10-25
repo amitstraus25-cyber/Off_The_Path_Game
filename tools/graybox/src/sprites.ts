@@ -99,7 +99,9 @@ export const NPC_PAINTERS: Record<string, NpcPainter> = {
   'npc-rabbit': twoFrame('npc-rabbit'),
   'npc-owl': twoFrame('npc-owl'),
   'npc-lantern-keeper': twoFrame('npc-lantern-keeper'),
-  'bystander-toadstool': twoFrame('bystander-toadstool'),
+  // The toadstool's place in the walk, since 2026-10-25 (docs/GATEKEEPER.md): the same mushroom,
+  // spawned as `npc-gatekeeper`, so his texture key is that and not `bystander-toadstool`.
+  'npc-gatekeeper': twoFrame('npc-gatekeeper'),
   'bystander-magpie': twoFrame('bystander-magpie'),
   'bystander-snail': twoFrame('bystander-snail'),
   'bystander-cat': twoFrame('bystander-cat'),
@@ -143,7 +145,7 @@ export function paintNpcSheet(name: string): Img {
  * hand that drew the static sprite. Frame 0 of every idle strip IS the static frame 0.
  *
  * IDLE, four frames, read as a loop: rest, breathe, the beat at its height, breathe. The breath is
- * the dip each character already had -- the head on the animals, the twig on the toadstool, the
+ * the dip each character already had -- the head on the animals, the twig arm on the gatekeeper, the
  * stalks on the snail, the whole coat on the keeper -- so the strip moves what the old blink moved
  * and adds one thing. Where a beat swings both ways (the cap, the stalks) frames 1 and 3 take the
  * two sides instead of the breath, so the wobble passes through the middle on its way across.
@@ -176,13 +178,8 @@ export const IDLE_POSES: Record<string, readonly Pose[]> = {
     pose(false, 0, 2),
     pose(false, 1, 0),
   ],
-  // cap left, twig up, cap right
-  'bystander-toadstool': [
-    pose(false, 0, 0),
-    pose(false, 0, -1),
-    pose(false, 1, 0),
-    pose(false, 0, 1),
-  ],
+  // cap left, his grip slides up the key, cap right
+  'npc-gatekeeper': [pose(false, 0, 0), pose(false, 0, -1), pose(false, 1, 0), pose(false, 0, 1)],
   // breathe, head cocked, breathe
   'bystander-magpie': [pose(false, 0, 0), pose(false, 1, 0), pose(false, 0, 1), pose(false, 1, 0)],
   // stalks left, stalks dip, stalks right

@@ -7,6 +7,7 @@ import {
   PORTRAIT_WORLD_BAND,
   REFERENCE_VIEWPORTS,
   topEdgeRows,
+  v2,
   visibleTitleColumns,
 } from '@otp/core';
 import { Img, lumaOf, noise, valueNoise2D } from './paint.ts';
@@ -42,6 +43,28 @@ export const FLIP_D = 0x20000000;
  * the one thing this file warns about in three separate places.
  */
 export const BASE_GID = 0x1fffffff;
+
+/*
+ * ===========================================================================
+ * THE RIVER'S TWO WAYS OVER (the client's design, 2026-10-25, docs/GATEKEEPER.md).
+ * ===========================================================================
+ *
+ * The bridge has a gate on it now, and the Gatekeeper at its west end holds the key; the Magpie
+ * waits on the west bank, south of the bridge, and flies Purple over to `wing-landing` on the far
+ * side. These are the two spots that design leaves open, written once here so moving either is one
+ * edit: the client is sending a picture of exactly where the Magpie should stand.
+ *
+ * `MAGPIE_SPOT` is the cell she stands on. Her footpath leaves the main road at the first fork and
+ * is routed to her from here (see `magpieLane`), so it follows her wherever she goes; she must stay
+ * on the west bank, and the audit's BALANCE check (15) fails the build if the walk through her and
+ * the flight stops being within ten per cent of the walk over the bridge.
+ *
+ * `WING_LANDING` is the cell the flight sets Purple down on, on the path from the well up to the road
+ * at the second fork, which joins the road to Grandma. The map object is a POINT at that cell's
+ * centre. It moves the flight's half of the balance, so the audit checks it too.
+ */
+export const MAGPIE_SPOT = { x: 19, y: 27 } as const;
+export const WING_LANDING = { x: 35, y: 28 } as const;
 
 type Layer = number[];
 const blank = (): Layer => new Array<number>(MAP_W * MAP_H).fill(0);
@@ -1770,6 +1793,45 @@ export function generateForestMap(): GeneratedMap {
   ]);
 
   /*
+   * ===========================================================================
+   * THE MAGPIE'S LANE (2026-10-25, docs/GATEKEEPER.md): south from the first fork to the west bank.
+   * ===========================================================================
+   *
+   * The second way over the river starts here: a footpath that leaves the road at the signpost's
+   * junction, on the south side where the north footpath leaves on the north, and runs south and
+   * east through the wood to `MAGPIE_SPOT` on the bank below the bridge. It is one tile wide, like
+   * the other footpaths, and it is laid with `layPath` rather than `layFootpath` on purpose: the
+   * `fork-*` objects are one per `layFootpath` call, numbered west to east, and a third footpath
+   * would renumber the second fork. This one leaves from the first fork's own junction, so it adds
+   * no fork of its own.
+   *
+   * THE SHAPE IS THE HERO FRAME'S ARITHMETIC, like the north footpath's. Composition guard 7a holds
+   * every column of the title camera to at most four rows of sand in an unbroken stack, and the
+   * fork's column already carries four (the north footpath's two over the band's two). So the lane
+   * leaves from the column WEST of the fork, drops the two rows that column can spare, and then
+   * steps down the diagonal two rows a column, so no column it passes stacks into the road. Below the
+   * frame it runs east along the wood to her, with one gentle bend so it is not a ruled line.
+   *
+   * Its last tile is her own, and the dangling-end trim below takes it, so she stands at the end of
+   * the lane on the grass, the way the Owl used to stand at the end of his.
+   */
+  const magpieLane = (): [number, number][] => {
+    const x0 = FORK_X - 1;
+    const y0 = trackTop(x0) + TRACK_W;
+    return [
+      [x0, y0],
+      [x0, y0 + 1],
+      // Down the diagonal and out of the bottom of the title camera (its last row is 25): nine
+      // tiles of sand inside the frame, which is what guard 7a's share has room for.
+      [x0 + 4, y0 + 5],
+      // A dip below the line to her, so the run east is two short legs rather than one ruled one.
+      [x0 + 7, MAGPIE_SPOT.y + 1],
+      [MAGPIE_SPOT.x, MAGPIE_SPOT.y],
+    ];
+  };
+  layPath(magpieLane(), 1);
+
+  /*
    * The old one-tile fringe pass stood here. It is gone, and the note it left is worth keeping: it
    * cut its share at the field's OWN QUANTILES rather than at a fixed threshold, because a road
    * occupies one row, so any field read along it is sampled on a line of near-constant y -- about
@@ -1940,6 +2002,16 @@ export function generateForestMap(): GeneratedMap {
       set(ground, x, y, gid(kind));
       clear(x, y);
     }
+  /**
+   * THE DRAWBRIDGE'S SPAN (2026-10-25, docs/GATEKEEPER.md as the client revised it that day): every
+   * deck cell, from the west end post's column to the east one's, on every deck row. Raised, it is
+   * laid over them at the end of the file in `decor-below`, and they STAY WALKABLE in `collision`:
+   * the game blocks them while the drawbridge is up, because it is the game that lowers it.
+   */
+  const gateX = bridgeCentre - 2;
+  const spanX1 = bridgeCentre + 2;
+  /** Which raised/lowered pair a deck column takes: -0 the west end, -1 the middle, -2 the east. */
+  const spanKind = (x: number): 0 | 1 | 2 => (x === gateX ? 0 : x === spanX1 ? 2 : 1);
 
   /*
    * ...AND THE VERGES GO ON NOW, with the deck already down.
@@ -3960,9 +4032,14 @@ export function generateForestMap(): GeneratedMap {
    *                            right, where the client's screenshot put it -- two rows south of the
    *                            road to the bridge (row 20 there), the bank at (22,22) east of it and a
    *                            sapling at (18..19, 22) west. Off the sand and off both walk rows.
+   *   "DEAD END"               (18,12), since 2026-10-25: the Speed! board, moved and repainted, at
+   *                            the end of the north footpath where the Owl stood until he went over
+   *                            the river (docs/GATEKEEPER.md). His cell was already solid -- nobody
+   *                            in the cast is a ghost -- so the sign closes no way through, and the
+   *                            old spot at (36,3) goes back to lawn.
    */
   landmarks['notice-post-r'] = { x: 44 * TILE, y: 19 * TILE };
-  landmarks['sign-speed'] = { x: 36 * TILE, y: 3 * TILE };
+  landmarks['sign-dead-end'] = { x: 18 * TILE, y: 12 * TILE };
   landmarks['sign-logo'] = { x: 20 * TILE, y: 22 * TILE };
   landmarks['sign-logo-r'] = { x: 21 * TILE, y: 22 * TILE };
   /*
@@ -4048,8 +4125,13 @@ export function generateForestMap(): GeneratedMap {
    * The two cells the trunk takes are cleared first so the plant cannot be refused by whatever the
    * wood left there: a perch that silently fails to appear is the same bug as no perch at all.
    */
+  /*
+   * (2026-10-25, docs/GATEKEEPER.md: the Owl has moved over the river and this tile is the DEAD END
+   * sign's now. The tree stays, for the same reason it was planted: the board end of a footpath
+   * stands against something, and the sign stands under it where the Owl sat.)
+   */
   clearArea(18, 9, 2, 3);
-  if (!plantKind('mid', 18, 11)) throw new Error('the owl has no tree to sit under');
+  if (!plantKind('mid', 18, 11)) throw new Error('the dead-end sign has no tree to stand under');
   place('lantern-post', 36, 32, 'lantern-post');
 
   /*
@@ -5584,9 +5666,17 @@ export function generateForestMap(): GeneratedMap {
   const objects = [
     { name: 'spawn-purple', x: spawnX * TILE, y: spawnY * TILE, width: TILE, height: TILE },
     npc('npc-rabbit', 13, 19),
-    // Directly below the trunk of the tree planted for him in the fountain glade, at the end of the
-    // footpath, so the trunk and its crown stand behind his head. See the note beside that tree.
-    npc('npc-owl', 18, 12),
+    /*
+     * OVER THE RIVER, 2026-10-25 (docs/GATEKEEPER.md). He sat at (18,12), directly below the trunk
+     * of the tree planted for him at the end of the north footpath; that tile is the DEAD END sign's
+     * now. (35,19) keeps the arrangement that made him read as an owl -- he stands on the tile
+     * directly below a trunk, the row of trees at (33..37,18) behind his head and their crowns over
+     * it -- in the meadow north of the road between the bridge and the climb to the cottage. Off the
+     * road (it runs on row 22 below him) and off rows 20 and 21, the due-east walker's line; his
+     * talking ring (34-36 x 18-20) touches neither the Cat's (38-40 x 15-17) nor the Snail's
+     * (37-39 x 22-24).
+     */
+    npc('npc-owl', 35, 19),
     npc('npc-lantern-keeper', 37, 33),
     /*
      * FIVE TILES EAST, ON THE SAME SOUTH VERGE -- moved for v2 Phase C (2026-10-22).
@@ -5625,10 +5715,21 @@ export function generateForestMap(): GeneratedMap {
      * The other three bystanders keep the stretch of the walk they were placed for: the far side
      * of the bridge, the gate approach, and the doorstep.
      */
-    bystander('bystander-toadstool', 15, besideTrack(15)),
-    // East of the deck. It used to stand at x 22, which the river now runs through: the water
-    // crosses the track at a slant and the far bank has moved with it.
-    bystander('bystander-magpie', 30, besideTrack(30)),
+    /*
+     * THE GATEKEEPER, 2026-10-25 (docs/GATEKEEPER.md): the Toadstool, who stood here at
+     * (15, besideTrack(15)) = (15,22), is the keeper of the bridge gate now, so he stands at the
+     * bridge's west end, by the gate: on the north verge of the approach, the tile diagonally off the
+     * gate's top cell, read off the deck rather than written in figures. North rather than south
+     * because the south side of the approach is the river's bank stones. `bystander`'s checks are
+     * the ones he needs -- touching the road, not standing in it -- whatever his name's prefix.
+     */
+    bystander('npc-gatekeeper', gateX - 1, bridgeRows[0]! - 1),
+    /*
+     * ON THE WEST BANK, SOUTH OF THE BRIDGE, 2026-10-25 (docs/GATEKEEPER.md): at `MAGPIE_SPOT`, the
+     * end of her lane from the first fork. A DEFAULT until the client's picture of her spot arrives;
+     * the constant is the one edit. She stood east of the deck at (30, besideTrack(30)).
+     */
+    bystander('bystander-magpie', MAGPIE_SPOT.x, MAGPIE_SPOT.y),
     /*
      * COLUMN 39, NOT 41, AND THE TWO COLUMNS MATTER.
      *
@@ -5893,7 +5994,7 @@ export function generateForestMap(): GeneratedMap {
      * it, so the face is written once and the game cannot be pointed at a rectangle nobody painted.
      */
     { name: 'sign-research', ...landmarks['notice-post']!, width: TILE * 2, height: TILE },
-    { name: 'sign-speed', ...landmarks['sign-speed']!, width: TILE, height: TILE },
+    { name: 'sign-dead-end', ...landmarks['sign-dead-end']!, width: TILE, height: TILE },
     {
       name: 'sign-logo',
       ...landmarks['sign-logo']!,
@@ -5905,6 +6006,34 @@ export function generateForestMap(): GeneratedMap {
         { name: 'faceW', type: 'int', value: LOGO_FACE.w },
         { name: 'faceH', type: 'int', value: LOGO_FACE.h },
       ],
+    },
+    /*
+     * THE RIVER'S TWO WAYS OVER (2026-10-25, docs/GATEKEEPER.md). APPENDED, like the signs, so every
+     * object above keeps its id.
+     *
+     * `gate-bridge` is the DRAWBRIDGE'S SPAN (the client's revision, 2026-10-25): every cell that
+     * is deck when it is down, end post to end post, every deck row. The game reads it to block
+     * those cells while it is raised and, when the Gatekeeper's key is taken, to swap each cell's
+     * `decor-below` tile from `bridge-gate-shut-<n>` to `bridge-gate-open-<n>`. Audit 3 holds every
+     * tile of it walkable, as it holds every non-prop object, which is what the contract asks.
+     *
+     * `wing-landing` is a POINT, at the centre of the `WING_LANDING` cell: where the Magpie's flight
+     * sets Purple down, on the east bank's path up to the road.
+     */
+    {
+      name: 'gate-bridge',
+      x: gateX * TILE,
+      y: bridgeRows[0]! * TILE,
+      width: TILE * (spanX1 - gateX + 1),
+      height: TILE * bridgeRows.length,
+    },
+    {
+      name: 'wing-landing',
+      x: WING_LANDING.x * TILE + TILE / 2,
+      y: WING_LANDING.y * TILE + TILE / 2,
+      width: 0,
+      height: 0,
+      point: true,
     },
   ].map((o, i) => ({ id: i + 1, rotation: 0, visible: true, ...o }));
 
@@ -7451,8 +7580,20 @@ export function generateForestMap(): GeneratedMap {
    * banks had taken. The run cap is the same three as `tuft`'s, for the same reason, so a bed may be
    * a three-by-three mass and may not be a rule.
    */
+  /*
+   * ...AND NEVER UNDER ONE OF THE CAST, added 2026-10-25. The Gatekeeper stands on the verge west
+   * of the bridge, a tile cleared out of a row of scrub (docs/GATEKEEPER.md), and to "close the
+   * holes" below his cleared tile IS a hole -- so it planted a bush under his feet. Nobody in the
+   * cast stood in a hedge row before, which is why nothing asked.
+   */
+  const castCells = new Set(
+    objects
+      .filter((o) => o.name.startsWith('npc-') || o.name.startsWith('bystander-'))
+      .map((o) => (o.y / TILE) * MAP_W + o.x / TILE),
+  );
   const mayBush = (x: number, y: number): boolean =>
     inside(x, y) &&
+    !castCells.has(y * MAP_W + x) &&
     !onBorder(x, y) &&
     at(below, x, y) === 0 &&
     at(above, x, y) === 0 &&
@@ -7983,7 +8124,7 @@ export function generateForestMap(): GeneratedMap {
   }
   for (const [name, tile] of [
     ['notice-post-r', 'notice-board-r'],
-    ['sign-speed', 'sign-speed'],
+    ['sign-dead-end', 'sign-dead-end'],
     ['sign-logo', 'sign-logo-l'],
     ['sign-logo-r', 'sign-logo-r'],
   ] as const) {
@@ -7993,6 +8134,22 @@ export function generateForestMap(): GeneratedMap {
     set(above, sx, sy, 0);
     solid(sx, sy);
   }
+
+  /*
+   * 7. THE DRAWBRIDGE, RAISED (2026-10-25, docs/GATEKEEPER.md as the client revised it), laid last
+   * for the signs' reason: `bridge-gate-shut-<n>` on `decor-below` over every cell of the span, and
+   * NOT made solid. `ground` keeps the lowered deck (`bridge-l/m/r`), which is exactly what each
+   * `bridge-gate-open-<n>` paints, so the game's swap shows the bridge every deck guard above already
+   * holds. The collision layer says the span is walkable because, once the key is taken, it is; the
+   * game holds the cells shut until then. `clear` is said again so that stays true whatever a later
+   * pass is taught to do.
+   */
+  for (const y of bridgeRows)
+    for (let x = gateX; x <= spanX1; x++) {
+      set(below, x, y, gid(`bridge-gate-shut-${spanKind(x)}`));
+      set(above, x, y, 0);
+      clear(x, y);
+    }
 
   console.log(
     `  second pass: ${castTiles.size} of the cast made solid, the facade's gable row closed, ` +
@@ -8189,7 +8346,7 @@ export function generateForestMap(): GeneratedMap {
     'mailbox',
     // The forest notice's second half and the two Cyera signs, 2026-10-23: posts and stakes.
     'notice-board-r',
-    'sign-speed',
+    'sign-dead-end',
     'sign-logo-l',
     'sign-logo-r',
     'roof-l',
@@ -8612,7 +8769,15 @@ export function generateForestMap(): GeneratedMap {
         }
       }
     }
-    const VERGE_GAP = { sides: 23, run: 6 } as const;
+    /*
+     * 23 -> 27 ON 2026-10-25, and the four are the Magpie's lane (docs/GATEKEEPER.md), not a wider
+     * track: a one-wide footpath that runs east for a tile has grass on two OPPOSITE sides, which is
+     * the neighbourhood the tileset cannot draw, and the lane from the first fork to the west bank
+     * has four such tiles -- (13,27), (15,28), (16,28) and (18,27) -- after it was routed as a
+     * staircase to keep the count that low. The worst run did not move. Same ratchet, same rule: the
+     * six missing gids bring it down.
+     */
+    const VERGE_GAP = { sides: 27, run: 6 } as const;
     if (bareSides.length > VERGE_GAP.sides || worstRun > VERGE_GAP.run)
       faults.push(
         `${bareSides.length} track side(s) have no verge drawn on them (want at most ` +
@@ -10001,10 +10166,16 @@ export function generateForestMap(): GeneratedMap {
      * map. The exception is what a footpath is FOR: the last tile of the owl's path stands against
      * him, the last tile of the lantern's stands against the post. A terminus beside a prop or a
      * traveller is an arrival; anywhere else it is a leftover.
+     *
+     * SIGNS AND BYSTANDERS ARRIVE TOO, since 2026-10-25 (docs/GATEKEEPER.md), and it is this
+     * guard's own rule rather than a new one: the north footpath used to end against the Owl, an
+     * `npc-`, and ends against the DEAD END sign where he stood, a `sign-` (which audit 5 holds solid
+     * as it holds a `prop-`); the Magpie's lane ends against her, a `bystander-`. Both are the
+     * "something" a path arrives at. A path end in open lawn still fails.
      */
     const marks = new Set<number>();
     for (const o of objects) {
-      if (!o.name.startsWith('prop-') && !o.name.startsWith('npc-')) continue;
+      if (!['prop-', 'npc-', 'sign-', 'bystander-'].some((p) => o.name.startsWith(p))) continue;
       const r = rectOf(o.name);
       for (let y = r.y0; y <= r.y1; y++)
         for (let x = r.x0; x <= r.x1; x++) marks.add(y * MAP_W + x);
@@ -10246,6 +10417,112 @@ export function generateForestMap(): GeneratedMap {
           return `${name} ${(shown * 100).toFixed(0)}%`;
         })
         .join(', ')} (columns ${stallSeen.x0}-${stallSeen.x1}; see composition guard 7k)`,
+    );
+  }
+
+  /*
+   * ===========================================================================
+   * 15. THE TWO WAYS OVER THE RIVER TAKE ABOUT THE SAME TIME (2026-10-25, docs/GATEKEEPER.md).
+   * ===========================================================================
+   *
+   * The client's rule: "The two routes, bridge and flight, must take about the same time to Grandma
+   * (within 10% of each other, flight included). Otherwise the choice is about the clock, not the
+   * skill." So both are WALKED here, on the finished collision layer, and the build fails when
+   * they drift apart:
+   *
+   *   bridge  the spawn, to a cell beside the Gatekeeper, over the deck (the gate's cells are
+   *           walkable in `collision`; the game is what shuts them), to `trigger-cottage`;
+   *   flight  the spawn, to a cell beside the Magpie, then the flight's time, then from
+   *           `wing-landing` to `trigger-cottage`.
+   *
+   * A walk is the shortest path over walkable cells, eight ways with diagonals at root two, the way
+   * the game moves Purple (`logic.ts`: normalised diagonals). A diagonal is refused when either cell
+   * it cuts past is solid, because her foot box cannot pass between two corners. Speed is core's
+   * `v2.WALK_WORLD.walkSpeed`, which `packages/core`'s floor test derives from the game's own
+   * `WALK_SPEED`, so the flight converts to tiles off the same number the clock is kept with.
+   *
+   * `FLIGHT_MS` is the brief's two seconds -- content's `short-cut` effect carries `flightMs: 2000`.
+   * This file does not read content, so if the flight is ever retimed this constant moves with it.
+   * Talking is not counted on either side: each route meets exactly one stranger.
+   */
+  {
+    const FLIGHT_MS = 2000;
+    const tilesPerSecond = v2.WALK_WORLD.walkSpeed / TILE;
+    // The contract puts the landing ON a path that joins the road to Grandma, so it is asked: a
+    // flight that sets her down in the scrub or in the river is not that.
+    if (!nameAt(ground, WING_LANDING.x, WING_LANDING.y).startsWith('path'))
+      faults.push(
+        `wing-landing (${WING_LANDING.x},${WING_LANDING.y}) is not on a path ` +
+          `(${nameAt(ground, WING_LANDING.x, WING_LANDING.y)})`,
+      );
+    const walkFrom = (sx: number, sy: number): Float64Array => {
+      const dist = new Float64Array(MAP_W * MAP_H).fill(Infinity);
+      const done = new Uint8Array(MAP_W * MAP_H);
+      dist[sy * MAP_W + sx] = 0;
+      // A map of 2,520 cells: a linear scan for the nearest open cell is fast enough and has no
+      // heap to get wrong.
+      for (;;) {
+        let k = -1;
+        for (let i = 0; i < dist.length; i++)
+          if (!done[i] && dist[i]! < Infinity && (k < 0 || dist[i]! < dist[k]!)) k = i;
+        if (k < 0) break;
+        done[k] = 1;
+        const x = k % MAP_W;
+        const y = (k - x) / MAP_W;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            if (!walkableAt(x + dx, y + dy)) continue;
+            if (dx && dy && (!walkableAt(x + dx, y) || !walkableAt(x, y + dy))) continue;
+            const n = (y + dy) * MAP_W + (x + dx);
+            const d = dist[k]! + (dx && dy ? Math.SQRT2 : 1);
+            if (d < dist[n]!) dist[n] = d;
+          }
+      }
+      return dist;
+    };
+    const cellsOf = (name: string): [number, number][] => {
+      const r = rectOf(name);
+      const out: [number, number][] = [];
+      for (let y = r.y0; y <= r.y1; y++) for (let x = r.x0; x <= r.x1; x++) out.push([x, y]);
+      return out;
+    };
+    /** Where a character is spoken to from: the walkable cells beside their own. */
+    const besideOf = (name: string): [number, number][] => {
+      const [[cx, cy]] = cellsOf(name) as [[number, number]];
+      return NEIGHBOURS.map(([dx, dy]) => [cx + dx, cy + dy] as [number, number]).filter(([x, y]) =>
+        walkableAt(x, y),
+      );
+    };
+    const door = cellsOf('trigger-cottage');
+    const toDoor = (d: Float64Array): number =>
+      Math.min(...door.map(([x, y]) => d[y * MAP_W + x]!));
+    const fromSpawn = walkFrom(spawnX, spawnY);
+    const via = (name: string): number =>
+      Math.min(
+        ...besideOf(name).map(([x, y]) => fromSpawn[y * MAP_W + x]! + toDoor(walkFrom(x, y))),
+      );
+    const bridge = via('npc-gatekeeper');
+    const toMagpie = Math.min(
+      ...besideOf('bystander-magpie').map(([x, y]) => fromSpawn[y * MAP_W + x]!),
+    );
+    const landed = toDoor(walkFrom(WING_LANDING.x, WING_LANDING.y));
+    const flightTiles = (FLIGHT_MS / 1000) * tilesPerSecond;
+    const flight = toMagpie + flightTiles + landed;
+    const seconds = (tiles: number): string => (tiles / tilesPerSecond).toFixed(1);
+    const apart = Math.abs(bridge - flight) / Math.min(bridge, flight);
+    if (!Number.isFinite(bridge) || !Number.isFinite(flight) || apart > 0.1)
+      faults.push(
+        `the two ways over the river are ${(apart * 100).toFixed(1)}% apart (want at most 10%): ` +
+          `the bridge is ${bridge.toFixed(1)} tiles (${seconds(bridge)} s), the flight is ` +
+          `${toMagpie.toFixed(1)} to the Magpie + ${flightTiles.toFixed(1)} in the air + ` +
+          `${landed.toFixed(1)} from the landing (${seconds(flight)} s). Move MAGPIE_SPOT or ` +
+          'WING_LANDING, not this bound.',
+      );
+    verdictLines.push(
+      `river crossings: bridge ${bridge.toFixed(1)} tiles (${seconds(bridge)} s), flight ` +
+        `${toMagpie.toFixed(1)} + ${flightTiles.toFixed(1)} + ${landed.toFixed(1)} = ` +
+        `${flight.toFixed(1)} tiles (${seconds(flight)} s), ${(apart * 100).toFixed(1)}% apart`,
     );
   }
 

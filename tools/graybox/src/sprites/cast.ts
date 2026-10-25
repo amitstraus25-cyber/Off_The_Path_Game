@@ -63,6 +63,12 @@ import type { Ramp, RGBA } from '../paint.ts';
 import { BLINK, BYSTANDER_FRAMES, BYSTANDER_PLAN, BYSTANDER_SEATS, REST } from './bystanders.ts';
 import type { Pose, PosedPainter } from './bystanders.ts';
 import { seat } from './seat.ts';
+import {
+  GATEKEEPER_FRAMES,
+  GATEKEEPER_PLAN,
+  GATEKEEPER_POSED,
+  GATEKEEPER_SEATS,
+} from './gatekeeper.ts';
 
 /**
  * How many values a shaded mass is allowed to use between `lo` and `hi`.
@@ -226,6 +232,9 @@ export const CAST_PLAN = {
   // Body 24 wide at the hem, per 10.2; the lantern on its pole takes the bbox out to the frame.
   'npc-lantern-keeper': { w: 32, h: 44, widest: 'the hem', breaks: 'the lantern, held clear' },
   'npc-wolf': { w: 30, h: 30, widest: 'the shoulder', breaks: 'the tail, off the rear edge' },
+  // The Gatekeeper (2026-10-25, docs/GATEKEEPER.md): the toadstool's box and one row, painted in
+  // `gatekeeper.ts`, which says why it is that box.
+  ...GATEKEEPER_PLAN,
 } as const satisfies Record<string, { w: number; h: number; widest: string; breaks: string }>;
 
 // ----------------------------------------------------------------------------- the rabbit
@@ -1610,16 +1619,19 @@ export const CAST_FRAMES: Record<string, (img: Img) => void> = {
   'npc-wolf-1': (img) => paintWolf(img, 1),
   'npc-wolf-2': (img) => paintWolf(img, 2),
   'npc-wolf-3': (img) => paintWolf(img, 3),
+  ...GATEKEEPER_FRAMES,
 };
 
 /**
- * The three spawned members of the cast by sprite key, posable, for the idle and hop strips. The
- * wolf is not here: he is never spawned on the map and has his own four frames.
+ * The four spawned members of the cast by sprite key, posable, for the idle and hop strips -- the
+ * Gatekeeper the fourth since 2026-10-25. The wolf is not here: he is never spawned on the map and
+ * has his own four frames.
  */
 export const CAST_POSED: Record<string, PosedPainter> = {
   'npc-rabbit': paintRabbit,
   'npc-owl': paintOwl,
   'npc-lantern-keeper': paintKeeper,
+  ...GATEKEEPER_POSED,
 };
 
 // ------------------------------------------------------------------- the gate (10.1 and 10.2)
@@ -1728,6 +1740,7 @@ const CAST_SEATS: Record<string, { readonly line: RGBA; readonly shadow: RGBA }>
   'npc-rabbit': { line: RABBIT_DARK, shadow: RABBIT_SHADOW },
   'npc-owl': { line: keyline('trunk'), shadow: OWL_SHADOW },
   'npc-lantern-keeper': { line: KEEPER_DARK, shadow: KEEPER_SHADOW },
+  ...GATEKEEPER_SEATS,
 };
 
 /** What `assertSeats()` reads back off one painted frame. */
