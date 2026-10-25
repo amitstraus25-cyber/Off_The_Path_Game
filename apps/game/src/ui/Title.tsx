@@ -255,10 +255,10 @@ function TitleCard({
         {art && (
           /*
            * THE LANDING ART (the client's pick, 2026-10-25): Purple on the crystal with the seven
-           * skills circling. Cut from the designer's file to the right of its baked-in title and
-           * button, so every word on this screen is still live text (golden rule 4), and laid on
-           * the sky the art itself is painted in, so the whole picture is always in the frame:
-           * height-fit and right-aligned beside the column, width-fit over the card on a phone.
+           * skills circling. The designer's whole frame with its baked-in logo, title and button
+           * painted out, so every word on this screen is still live text (golden rule 4), and the
+           * whole picture is in view around the card: height-fit and right-aligned in landscape,
+           * covering the world with Purple in the middle on a phone (ui/screens.css).
            * Decoration only, so it says nothing to a screen reader.
            */
           <div class="otp-title-art" aria-hidden="true">

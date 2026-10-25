@@ -2476,16 +2476,21 @@ h2.otp-section-label.otp-post__title {
 
 /*
  * THE CLIENT'S ILLUSTRATION ON THE LANDING (ui/Title.tsx `art`, 2026-10-25). It covers the world's
- * box exactly -- the canvas box ui/stage.ts publishes, in every layout -- on the sky the art is
- * painted in (tokens.css `--otp-art-sky`), and the picture is never cropped:
+ * box exactly -- the canvas box ui/stage.ts publishes, in every layout -- and the whole picture is
+ * in view, with nothing over it but the card. The file is the designer's full frame with its baked-in
+ * logo, title, subtitle and button painted out (every word here is live text, golden rule 4) and its
+ * sky and ground carried 2280px further left, so it is 4200x1080 and the frame reads as one scene
+ * from edge to edge at any landscape width up to 3.9:1 (a short desktop window is past 3:1):
  *
- *   landscape, column left   height-fit, right-aligned, its left edge fading into the sky
- *   beside a side deck       the column is docked right (above), so the picture goes left
- *   portrait                 width-fit at the top of the world, its foot fading into the sky
+ *   landscape, card left     height-fit, right-aligned; only the carried-on sky is ever cropped
+ *   beside a side deck       the card is docked right (above), so the picture ends at its edge
+ *   portrait                 the space above the card, Purple and the ring of skills in the middle
  *
  * The card goes dark to match: no Shell, white type with the one Lilac word, the Lime pill as it
- * was. A Black wash behind the column keeps every line of it at or above 4.5:1 wherever the sky
- * runs light (e2e/heading-contrast.spec.ts measures it against what is actually behind it).
+ * was. It is a compact card the height of its copy, not a column the height of the world, and it
+ * is opaque Deep Purple, so every line is measured against one colour (e2e/heading-contrast.spec.ts)
+ * and nothing of the picture is washed or faded to make room for it (the client, 2026-10-25: "I
+ * don't want to see half of this blurred out").
  */
 .otp-title-art {
   position: fixed;
@@ -2507,71 +2512,82 @@ h2.otp-section-label.otp-post__title {
   height: 100%;
   width: auto;
   max-width: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16%);
-  mask-image: linear-gradient(90deg, transparent 0, #000 16%);
+  /* Only past 3.9:1 does the box outrun the picture; its far-left sky then meets the box's own. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 4%);
   user-select: none;
 }
 
+/* Beside a side deck the card is on the right, so the picture's right edge is put at the card's
+   left edge: Purple and the ring stay in the open, and the cut-off edge is behind the card. */
 html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
-  right: auto;
-  left: 0;
-  -webkit-mask-image: linear-gradient(270deg, transparent 0, #000 16%);
-  mask-image: linear-gradient(270deg, transparent 0, #000 16%);
+  right: calc(var(--otp-art-card) + calc(14px * var(--otp-ui)));
 }
 
 @media (orientation: portrait) {
-  .otp-title-art__img {
-    top: 0;
-    bottom: auto;
-    width: 100%;
+  /* On a phone the card docks up over the bottom of the world, and on a short one it reached
+     Purple's feet (360x640: the card's top at 323, her boots at 390). So here the picture is not
+     the world's box but the space between the world's top edge and the card: a flex item above it
+     in the dock, running on under the card's rounded corners. */
+  .otp-title-art {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: auto;
     height: auto;
-    -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent 100%);
-    mask-image: linear-gradient(180deg, #000 82%, transparent 100%);
+    flex: 1 1 0;
+    min-height: 0;
+    margin-top: calc(var(--otp-canvas-y, 0px) - var(--otp-cab-top) - 10px * var(--otp-ui));
+    margin-bottom: calc(-1 * var(--otp-r-panel));
+    border-radius: 0;
+    container-type: size;
+  }
+
+  .otp-title-art__img {
+    /* Height-fit, with Purple -- 590 of the file's 1080px of height in from its right edge -- in
+       the middle of the box, so the whole ring of skills is either side of her on a phone. A box
+       wider than that needs is right-aligned instead, so the picture never stops short of it. */
+    right: min(0px, calc(50% - 54.6cqh));
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }
 
 /*
- * The card, dark, over the art. Its own box is an opaque Deep Purple, and the sky with a Black
- * wash -- deepest where the column's text is -- is painted on a layer behind the text, so the
- * column looks exactly like the art's sky while e2e/heading-contrast.spec.ts still has one colour
- * to measure. That colour is a little darker than the real ground, so it was checked by hand too,
- * against the lightest ground the wash leaves under any line (the sky's 80% stop under 72% Black,
- * about #4B2F5B): Haze 7.9:1, Lilac 5.2:1, Offwhite 11:1.
+ * The card, dark, over the art: opaque Deep Purple, every corner rounded, as tall as its copy and
+ * centred on the world's left side (on the right beside a side deck). When the copy is taller than
+ * the world -- a phone held sideways -- `max-height` binds and the card's own scroll box takes the
+ * overflow, exactly as the full-height column did. Offwhite on it is 13.4:1, Haze 9.2:1, Lilac 6.0:1.
  */
+@media (orientation: landscape) {
+  .otp-title-dock[data-art] {
+    /* 340, not the forest column's 306: that number keeps the column off Purple in the forest,
+       and here she stands on the far side of the picture. At 306 the frame took "Off the Path"
+       onto two lines. */
+    --otp-art-card: min(calc(340px * var(--otp-ui)), 62%);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    padding: calc(14px * var(--otp-ui));
+  }
+
+  .otp-title-dock[data-art] .otp-title-panel {
+    width: var(--otp-art-card);
+  }
+}
+
 .otp-title-dock[data-art] .otp-title-panel {
   position: relative;
   isolation: isolate;
+  height: auto;
+  max-height: 100%;
   background: var(--cyera-deep-purple);
+  border: var(--otp-panel-border) solid var(--cyera-aubergine);
+  border-radius: var(--otp-r-panel);
+  box-shadow: 0 calc(10px * var(--otp-ui)) calc(28px * var(--otp-ui))
+    color-mix(in srgb, var(--cyera-black) 35%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-}
-
-.otp-title-dock[data-art] .otp-title-panel::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--cyera-black) 72%, transparent) 72%,
-      color-mix(in srgb, var(--cyera-black) 0%, transparent) 100%
-    ),
-    var(--otp-art-sky);
-}
-
-/* Beside a side deck the column is on the right, so the wash fades the other way. */
-html:is([data-cabinet='sides'], [data-cabinet='overlay'])
-  .otp-title-dock[data-art]
-  .otp-title-panel::before {
-  background-image:
-    linear-gradient(
-      270deg,
-      color-mix(in srgb, var(--cyera-black) 72%, transparent) 72%,
-      color-mix(in srgb, var(--cyera-black) 0%, transparent) 100%
-    ),
-    var(--otp-art-sky);
 }
 
 .otp-title-dock[data-art] .otp-title-panel :is(.otp-title__mark, .otp-title__agent) {
@@ -2597,10 +2613,16 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay'])
 
 @media (orientation: portrait) {
   .otp-title-dock[data-art] .otp-title-panel {
-    border-color: var(--cyera-aubergine);
+    border-radius: var(--otp-r-panel);
   }
 
   .otp-title-dock[data-art] .otp-title-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
     background-image: linear-gradient(
       180deg,
       color-mix(in srgb, var(--cyera-aubergine) 55%, var(--cyera-deep-purple)),

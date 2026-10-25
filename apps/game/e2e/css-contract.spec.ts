@@ -587,7 +587,8 @@ test('the title column leaves Purple on the path it says she is standing on', as
     [1920, 1080],
   ] as const) {
     await page.setViewportSize({ width: w, height: h });
-    await page.goto('/');
+    // Purple stands in the forest on the forest landing, the A/B test's other half (src/ab.ts).
+    await page.goto('/?landing=forest');
     await page.waitForSelector('#game[data-ready="true"]');
 
     const seen = await page.evaluate(() => {
@@ -735,7 +736,8 @@ test('the title card leaves Purple on the path in portrait, as the column does i
     expect(camera.portrait, `${where} is a portrait camera`).toBe(true);
 
     await page.setViewportSize(size);
-    await page.goto('/');
+    // Purple stands in the forest on the forest landing, the A/B test's other half (src/ab.ts).
+    await page.goto('/?landing=forest');
     await page.waitForSelector('#game[data-ready="true"]');
 
     const seen = await titleFrame(page, TILE);

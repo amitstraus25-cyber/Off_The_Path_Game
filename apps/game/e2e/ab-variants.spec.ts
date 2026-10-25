@@ -50,6 +50,25 @@ test('the landing shows the client art by default, and the live forest for landi
   await expect(page.getByRole('heading', { name: 'Off the Path' })).toBeVisible();
 });
 
+/*
+ * NOTHING OF THE PICTURE IS WASHED OUT (the client, 2026-10-25: "I don't want to see half of this
+ * blurred out"). On a short, wide desktop window -- 3.3:1, the shape that showed it -- the picture
+ * reaches the world's left edge, so there is no empty strip beside it, and the card is a card the
+ * height of its copy, not a column the height of the world.
+ */
+test('on a wide window the picture fills the world and the card is only as tall as its copy', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 535 });
+  await page.goto('/');
+  await ready(page);
+  const world = (await page.locator('.otp-title-art').boundingBox())!;
+  const art = (await page.locator('.otp-title-art img').boundingBox())!;
+  const card = (await page.locator('.otp-title-panel').boundingBox())!;
+  expect(art.x).toBeLessThanOrEqual(world.x + 0.5);
+  expect(card.height).toBeLessThan(world.height * 0.9);
+});
+
 test('start=one puts the rules and par on the landing, and its button starts the walk', async ({
   page,
 }) => {
