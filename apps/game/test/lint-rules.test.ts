@@ -67,13 +67,15 @@ const SHIPPED = [
 
 describe('the sinks every shipped directory is held to', () => {
   for (const path of SHIPPED) {
+    // 20s, not the default 5: the first of these pays eslint's cold start on the typed config,
+    // which ran 5.6s on a busy machine and failed a green suite.
     it(`${path}: eval and the HTML sinks are reported`, async () => {
       const fired = await rulesFiredIn(path, SINKS);
       expect(fired, `${path} parsed as anything but TypeScript`).not.toContain('parse-error');
       expect(fired.filter((r) => r === 'no-restricted-properties')).toHaveLength(3);
       expect(fired).toContain('no-eval');
       expect(fired).toContain('no-implied-eval');
-    });
+    }, 20_000);
   }
 
   it('apps/game: dangerouslySetInnerHTML is reported in TSX', async () => {

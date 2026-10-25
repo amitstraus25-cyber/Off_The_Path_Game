@@ -121,7 +121,7 @@ product; where the current build differs it is a gap, not a decision.
 
 **00 Title.** Cyera logo at the top of the card. "Off the **Path**" with Path as the Season Mix
 highlight word. Subtitle, a three-line premise, a Lime **Play** pill with a Black arrow disc, and a
-muted line: `Arrow keys to walk · E to talk · about 5 minutes`. The card sits over the live world,
+muted line: `Arrow keys to walk · T to talk · about 5 minutes` (T since 2026-10-25; it was E). The card sits over the live world,
 translucent, with the controls faintly visible behind it.
 
 **01 Explore.** Header chip reads `Find Grandma   0 of 3 skills seen`, plus a sound toggle. A

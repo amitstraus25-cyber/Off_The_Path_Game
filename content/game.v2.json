@@ -362,7 +362,7 @@
       "leaderboardAlready": "That run is already on the board.",
       "handleAssigned": "Posted to the board as {handle}.",
       "howToPlayWalkTouch": "Drag the joystick to walk. Tap A to talk.",
-      "controlsHint": "Arrows or WASD to walk, E to talk, Esc to go back.",
+      "controlsHint": "Arrows or WASD to walk, T to talk, Esc to go back.",
       "controlsHintTouch": "Use the walk buttons to move, and Talk or interact when someone is within reach.",
       "touchWalkLabel": "Walk",
       "touchWalkUp": "Walk up",

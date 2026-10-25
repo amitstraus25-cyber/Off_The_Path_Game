@@ -94,7 +94,7 @@ describe('the joystick follows the keys', () => {
   it('stands up straight for opposite keys, the same key twice, and keys that do not walk', () => {
     expect(keyTilt(['ArrowLeft', 'ArrowRight'])).toEqual({ x: 0, y: 0 });
     expect(keyTilt(['ArrowRight', 'KeyD'])).toEqual({ x: 1, y: 0 });
-    expect(keyTilt(['Space', 'Enter', 'KeyE'])).toEqual({ x: 0, y: 0 });
+    expect(keyTilt(['Space', 'Enter', 'KeyT'])).toEqual({ x: 0, y: 0 });
     expect(keyTilt([])).toEqual({ x: 0, y: 0 });
   });
 

@@ -42,7 +42,7 @@ describe('activationKey', () => {
      */
     expect(activationKey('Space')).toBe(false);
     // And the letters the world walks with, which arrive here as plain characters.
-    for (const key of ['w', 'a', 's', 'd', 'e', 'Tab'])
+    for (const key of ['w', 'a', 's', 'd', 't', 'Tab'])
       expect(activationKey(key), `${key} would be held back at the button`).toBe(false);
   });
 });

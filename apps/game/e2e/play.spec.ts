@@ -117,7 +117,7 @@ async function walkTheCast(
   const shown: Record<string, string[]> = {};
   for (const c of people) {
     await standBeside(page, c.spawn);
-    await page.keyboard.press('e');
+    await page.keyboard.press('t');
     const offer = page.locator(`[data-offer="${c.id}"]`);
     await expect(offer, `${c.id} opens their own offer`).toBeVisible();
     // The card is the offer's own body: no step between meeting someone and reading it.
@@ -457,7 +457,7 @@ test('keyboard only: begin, talk, read, answer, arrive, reveal, replay', async (
   const { good } = await state(page);
   for (const c of await cast(page)) {
     await standBeside(page, c.spawn);
-    await page.keyboard.press('e');
+    await page.keyboard.press('t');
     const card = page.locator(`[data-offer="${c.id}"][data-card="${c.skillId}"]`);
     // The card is open and focus lands on it, so nothing is pre-selected; then Take, Leave, Walk on.
     await expect(card.locator('.otp-card'), 'focus starts on reading').toBeFocused();
@@ -574,7 +574,7 @@ for (const [width, height] of [
 
     const rabbit = (await cast(page))[0]!;
     await standBeside(page, rabbit.spawn);
-    await page.keyboard.press('e');
+    await page.keyboard.press('t');
     // One panel, card open: both answers and the way past are on screen without scrolling the
     // page, and the page itself never scrolls -- a card too tall scrolls inside its panel.
     await onScreen('[data-offer] [data-action="take"]', 'offer');
@@ -648,7 +648,7 @@ for (const [width, height] of [
             (c) => !good.includes(c.skillId) && !rides.includes(c.skillId),
           )!;
           await standBeside(page, bad.spawn);
-          await page.keyboard.press('e');
+          await page.keyboard.press('t');
           await page.waitForTimeout(320);
           await page.locator(`[data-offer="${bad.id}"] [data-action="take"]`).click();
           await expect(page.locator('#game')).toHaveAttribute('data-phase', 'forest');

@@ -200,14 +200,14 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   button.type = 'button';
   button.className = 'otp-a-button';
   /*
-   * "A" on a touch screen, "E" where there is a keyboard and a mouse (the client's review,
-   * 2026-10-25, P12): on a keyboard A walks LEFT, so a newcomer who pressed the letter on the
-   * button watched Purple walk away from the character. Both letters are in the DOM and CSS shows
+   * "A" on a touch screen, "T" -- for talk -- where there is a keyboard and a mouse (the client,
+   * 2026-10-25; it read "E" after the review's P12): on a keyboard A walks LEFT, so a newcomer who
+   * pressed the letter on the button watched Purple walk away from the character. Both letters are in the DOM and CSS shows
    * one (tokens.css `.otp-a-button__key`), on the same media test the world hint uses.
    */
   for (const [key, where] of [
     ['A', 'touch'],
-    ['E', 'keys'],
+    ['T', 'keys'],
   ] as const) {
     const letter = document.createElement('span');
     letter.className = `otp-a-button__key otp-a-button__key--${where}`;

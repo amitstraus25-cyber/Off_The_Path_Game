@@ -3,7 +3,7 @@ import { ready } from './helpers';
 
 /*
  * THE TALK BUTTON SAYS THE KEY THAT TALKS (the client's review, 2026-10-25, P12). With a keyboard
- * and a mouse the round button reads "E", because A walks left; on a touch screen it reads "A".
+ * and a mouse the round button reads "T", for talk, because A walks left; on a touch screen it reads "A".
  */
 
 const shown = (page: import('@playwright/test').Page) =>
@@ -13,11 +13,11 @@ const shown = (page: import('@playwright/test').Page) =>
       .map((k) => k.textContent),
   );
 
-test('with a keyboard and a mouse the talk button reads E', async ({ page }) => {
+test('with a keyboard and a mouse the talk button reads T', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
   await ready(page);
-  expect(await shown(page)).toEqual(['E']);
+  expect(await shown(page)).toEqual(['T']);
 });
 
 test.describe('on a touch screen', () => {

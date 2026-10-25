@@ -23,7 +23,8 @@ export const MOVE_KEYS: Readonly<Record<string, { x: number; y: number }>> = {
   ArrowDown: { x: 0, y: 1 },
   KeyS: { x: 0, y: 1 },
 };
-const INTERACT_KEYS = new Set(['Space', 'Enter', 'KeyE']);
+// T for talk (the client, 2026-10-25), not E.
+const INTERACT_KEYS = new Set(['Space', 'Enter', 'KeyT']);
 const BACK_KEYS = new Set(['Escape']);
 
 export interface InputOptions {
