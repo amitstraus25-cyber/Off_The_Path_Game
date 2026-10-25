@@ -20,7 +20,6 @@ import {
   FACE_SIZE,
   GROUND_GLOW_SIZE,
   paintDustFrame,
-  paintForkSignFrame,
   paintGroundGlowFrame,
   paintInteractPromptFrame,
   paintLanternGlowFrame,
@@ -253,10 +252,6 @@ export const ITEM_PAINTERS: Record<string, FacePainter> = facesWithPrefix('item-
  * Every small square sheet: its frame size, its frame count and the painter for one frame. Each
  * frame is painted on its own canvas and blitted along the strip, which is what the three original
  * sheets always did, so they come out byte for byte as before.
- *
- * `prop-forksign` lives here rather than in the tileset because it is a SPRITE: the game stands it
- * at a `fork-*` object and lays a face over its board, and a tile cannot carry an overlay or face
- * two ways.
  */
 export const FX_SHEETS: Record<
   string,
@@ -284,8 +279,6 @@ export const FX_SHEETS: Record<
     frames: 4,
     paint: (img, f) => paintPaperBirdFrame(img, f as 0 | 1 | 2 | 3),
   },
-  // The Way Teller's blank board on a post: two frames of 32x32, pointing left, then right.
-  'prop-forksign': { size: 32, frames: 2, paint: (img, f) => paintForkSignFrame(img, f as 0 | 1) },
   // The lantern's glow, for an additive blend: one frame of 64x64.
   'fx-lantern-glow': { size: 64, frames: 1, paint: (img) => paintLanternGlowFrame(img) },
   /*

@@ -79,11 +79,6 @@
       "frameHeight": 16
     },
     {
-      "key": "prop-forksign",
-      "frameWidth": 32,
-      "frameHeight": 32
-    },
-    {
       "key": "fx-lantern-glow",
       "frameWidth": 64,
       "frameHeight": 64

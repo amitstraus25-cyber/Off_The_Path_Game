@@ -2056,37 +2056,6 @@ export function paintPaperBirdFrame(img: Img, frame: 0 | 1 | 2 | 3): void {
 }
 
 /**
- * The fork sign, 32 x 32 x 2: a small blank board on a post, frame 0 pointing LEFT and frame 1
- * RIGHT, for the Way Teller to stand at a fork in the path. "Which way? Ask the sign."
- *
- * BLANK, AND THAT IS THE BRIEF: the game lays a face icon over the board, so the board's face is
- * one flat field of `wood` 1 -- rows 6 to 13 and columns 11 to 22 on both frames, the same
- * rectangle on both, so an overlay placed once is placed for either facing. No grain, no knot and
- * no nail in it; the grain is on the post. It is the forest's own signpost hand (`arrowBoard`, from the signpost
- * icon): lit top edge, shaded bottom two rows, the point bevelled, the post in `trunk` lit down its
- * left with its cap catching the light.
- *
- * No baked ground. A sprite that carries a patch of lawn takes it onto the sand, which is the whole
- * argument of `cast.ts`'s CONTACT note; the post stands on a bar of its own keyline instead.
- */
-export function paintForkSignFrame(img: Img, frame: 0 | 1): void {
-  // The post, lit down the left, and its cap.
-  img.rect(14, 3, 4, 27, shade('trunk', 1));
-  img.rect(14, 3, 1, 27, shade('trunk', 2));
-  img.rect(17, 3, 1, 27, shade('trunk', 0));
-  img.rect(13, 2, 6, 2, shade('trunk', 0));
-  img.rect(13, 2, 5, 1, shade('trunk', 3));
-  img.rect(15, 20, 1, 4, shade('trunk', 0)); // a run of grain below the board
-  // The board, pointing the way the frame says, and the shadow it drops on the post.
-  if (frame === 0) arrowBoard(img, 9, 27, 5, 11, 5, false);
-  else arrowBoard(img, 4, 22, 5, 11, 5, true);
-  img.rect(14, 16, 4, 1, shade('trunk', 0));
-  // The contact: a bar of keyline under the foot, wider than the post.
-  img.rect(12, 30, 8, 1, keyline('wood'));
-  img.outline(keyline('wood'));
-}
-
-/**
  * The lantern's glow, 64 x 64 x 1: a radial in hard rings, from the flame's `gold` at the core down
  * the ramp and past its foot through `keyline('gold')` to a near-black rim.
  *
