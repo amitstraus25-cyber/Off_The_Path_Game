@@ -15,7 +15,16 @@
     },
     {
       "name": "production",
-      "url": "https://off-the-path-game.vercel.app"
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@otp/game",
+        "exec",
+        "sh",
+        "-c",
+        "vite build --outDir dist-preview && vite preview --outDir dist-preview --port 4180 --strictPort"
+      ],
+      "port": 4180
     }
   ]
 }
