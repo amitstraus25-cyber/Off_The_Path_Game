@@ -857,6 +857,7 @@ specs and Paul's review.
 - [x] The drawbridge (the client's late change): raised over the whole span, lowered by Bridge Key in a brief fall, walkable once down, instant under reduced motion
 - [x] Merge, browser specs, sim and par (2026-10-25: tour 91 tiles, 9.9 s to spare with no perk, derived par 103.4 s against 107 s; e2e 432 passed, 6 skipped)
 - [ ] Paul's review, push
+- [x] Paul's review fixes (2026-10-26): drawbridge and lent-key copy; `gateLockedLeft` and `noWayOver`; the raised east end's bank and rest sill; the leaf sweeps across as it falls; the Gatekeeper one tile west at (22,19); COPY_REVIEW 0c; `prop-forksign` removed (e2e 431 passed, 6 skipped)
 - [ ] The Magpie's exact spot from the client's picture
 - [ ] Research sign-off on the Bridge Key note; leaderboard reset when this ships (the client's call)
 
