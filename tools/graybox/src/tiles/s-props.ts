@@ -1995,32 +1995,51 @@ function tufts(img: Img, at: readonly (readonly [number, number])[], slot = 0): 
  * laid by `layOn`, stacked and centred down the page, rather than at hand-set rows. The dry-brush
  * ends are the wood's darkest stop, a warm brown that reads as the ink running thin on the paper.
  */
-const NOTICE_PAGE = { x: 11, y: 3, w: 42, h: 24 } as const;
+/*
+ * 2026-10-25, LATER: ONE FAMILY WITH THE LOGO BOARD (the client: "these two signs should feel the same
+ * language"). The page on a lone post beside a framed board on two stakes read as two props from two
+ * games. So the notice is now built as the logo board is -- the same two-pixel lit timber frame, the
+ * same two stakes at the same inset, the same pools and tufts -- and only its face differs: a nailed page where the logo board has its dark recess. Paper it
+ * stays, because the pair guard below holds the notice to paper (it is the thing a player reads) and
+ * the signpost to timber. Two lines now, "I ♥ CYERA" over "RESEARCH", so the board is the logo board's
+ * height and keeps its stakes showing: three lines needed 24 rows of page and buried the stakes.
+ */
+/*
+ * Four pixels narrower than the logo board and stood four pixels west on its two tiles, because the
+ * phone's payoff camera opens three quarters of the way across `notice-board-r` and nothing drawn may
+ * reach past that line (forest-map.ts, "THE NOTICE'S EAST HALF"). The stakes keep the logo board's
+ * eight-pixel inset from each end.
+ */
+const NOTICE_PAGE = { x: 4, y: 5, w: 48, h: 17 } as const;
 
-/** The post under the notice, centred on the seam between its two tiles. */
-const NOTICE_POST = { x: 29, w: 6 } as const;
+/** The board the page is nailed into: a two-pixel lit frame all round, as on the logo board. */
+const NOTICE_BOARD = {
+  x: NOTICE_PAGE.x - 2,
+  y: NOTICE_PAGE.y - 2,
+  w: NOTICE_PAGE.w + 4,
+  h: NOTICE_PAGE.h + 4,
+} as const;
 
-/** The notice's three lines, laid in the brush hand down its page. */
-const NOTICE_LINES = layOn(NOTICE_PAGE, ['I ♥', 'CYERA', 'RESEARCH']);
+/** The two stakes, on the sheet: left edge each, eight pixels in from each end as on the logo board. */
+const NOTICE_STAKES = [NOTICE_BOARD.x + 8, NOTICE_BOARD.x + NOTICE_BOARD.w - 8 - 4] as const;
+
+/** The notice's two lines, laid in the brush hand down its page. */
+const NOTICE_LINES = layOn(NOTICE_PAGE, ['I ♥ CYERA', 'RESEARCH']);
 
 /** Each role's colour on the paper. */
 const NOTICE_INK: Record<Role, RGBA> = { ink: LINE.cloth, dry: shade('wood', 0), ...HEART_INK };
 
 function paintNoticeSheet(): Img {
   return standSheet(2, (s) => {
-    // The post reaches the tile's last row, as the signpost's does: a post that stops short floats.
-    postV(s, NOTICE_POST.x, 2, NOTICE_POST.w, 30);
-    capBlock(s, NOTICE_POST.x - 1, 1, NOTICE_POST.w + 2, 2);
+    const b = NOTICE_BOARD;
+    // The logo board's stakes and frame: the two signs are one family.
+    for (const sx of NOTICE_STAKES) postV(s, sx, b.y + 2, STAKE_W, TILE - b.y - 2);
+    face(s, b.x, b.y, b.w, b.h, 'wood', 0.3, 0.3 + SPAN * 0.7);
 
     const { x, y, w, h } = NOTICE_PAGE;
     paper(s, x, y, w, h);
-
-    // The page against the post, top and bottom, where `ring()` cannot see the edge: opaque on
-    // opaque. Then the page's own shadow falling down the post below it.
-    s.rect(NOTICE_POST.x, y, NOTICE_POST.w, 1, LINE.cloth);
-    s.rect(NOTICE_POST.x, y + h - 1, NOTICE_POST.w, 1, LINE.cloth);
-    sinkRun(s, NOTICE_POST.x, y + h, NOTICE_POST.w, 1, 54);
-    sinkRun(s, NOTICE_POST.x, y + h + 1, NOTICE_POST.w, 1, 24);
+    // The frame's shadow falling into the recess from the top-left light, as on the logo board.
+    sinkRun(s, x, y, w, 1, 40);
 
     nail(s, x + 2, y + 1);
     nail(s, x + w - 3, y + 1);
@@ -2028,37 +2047,39 @@ function paintNoticeSheet(): Img {
     paintLettering(s, NOTICE_LINES, NOTICE_INK);
 
     /*
-     * The dog ear: the sheet's own back, folded up at the foot, with the fold in near-black.
-     *
-     * It is a handful of pixels and it is the difference between paper and a painted panel. A
-     * rectangle with writing on it is a sign; a rectangle with one corner turned up is a thing
-     * somebody pinned there, which is the whole proposition of this prop. Four now, not five: at
-     * five its tip reached the foot of RESEARCH's last letter.
+     * The dog ear: the sheet's own back, folded up at the foot, with the fold in near-black. It is a
+     * handful of pixels and it is the difference between paper and a painted panel.
      */
     const EAR = 4;
     for (let j = 0; j < EAR; j++)
       for (let i = 0; i + j < EAR; i++) s.px(x + w - 1 - i, y + h - 1 - j, band('wall', 0.08, 4));
     for (let k = 0; k < EAR; k++) s.px(x + w - EAR + k, y + h - 1 - k, LINE.cloth);
+
+    // The board throws its line onto the stakes below it, which `ring()` cannot see.
+    for (const sx of NOTICE_STAKES) {
+      sinkRun(s, sx, b.y + b.h, STAKE_W, 1, 48);
+      sinkRun(s, sx, b.y + b.h + 1, STAKE_W, 1, 22);
+    }
   });
 }
 
 let noticeSheet: Img | undefined;
 
-/** One half of the notice. The pool and the tufts are laid per tile, at sheet coordinates. */
+/** One half of the notice. The pools and the tufts are the logo board's, per tile. */
 const noticeHalf =
   (slot: 0 | 1): Painter =>
   (img) => {
     noticeSheet ??= paintNoticeSheet();
     groundUnder(img, POST_GROUND['notice-board']);
-    cast(img, NOTICE_POST.x + NOTICE_POST.w / 2 - slot * TILE, 30.5, 8.6, 2.6);
+    for (const sx of NOTICE_STAKES) cast(img, sx + STAKE_W / 2 - slot * TILE, 30.5, 5.4, 2.5);
     cutColumn(img, noticeSheet, slot);
     tufts(
       img,
       [
-        [22, 29],
-        [25, 30],
-        [36, 30],
-        [39, 29],
+        [6, 29],
+        [15, 30],
+        [38, 30],
+        [47, 29],
       ],
       slot,
     );
