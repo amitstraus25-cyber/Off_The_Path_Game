@@ -12,18 +12,21 @@ import {
   GATE_LOCKED_FALLBACK,
   GATE_NOTICE_COOLDOWN_MS,
   GATE_OBJECT,
-  GATE_OPEN_TILE,
-  GATE_SHUT_TILE,
+  GATE_OPEN_PREFIX,
+  GATE_SHUT_PREFIX,
+  gatePairs,
   landingSpot,
   LANDING_OBJECT,
+  loweredWidth,
+  LOWER_MS,
   shutGate,
 } from '../src/world/gate';
 
 /*
  * THE GATE ON THE BRIDGE AND THE WING RIDE'S LANDING (docs/GATEKEEPER.md), as pure code: which cells
  * the gate covers, the collision map that keeps it shut, what counts as a bump, which tile layer
- * carries the picture, where a flight lands. Fixtures first, so these pass whatever the shipped map
- * holds; the last block reads the shipped map and is skipped, by name, until the map has the gate.
+ * carries the picture, how the drawbridge falls, where a flight lands. Fixtures first, so these pass
+ * whatever the shipped map holds; the last block holds the shipped map to the contract.
  */
 
 /** An all-grass world: `width` x `height` tiles, nothing solid. */
@@ -163,26 +166,35 @@ describe('the layer that carries the gate picture', () => {
     const overlay = blank();
     overlay[at(5, 1)] = SHUT;
     overlay[at(5, 2)] = SHUT;
-    expect(gateLayerName(layers({ ground: blank(), 'bridge-overlay': overlay }), cells, SHUT)).toBe(
-      'bridge-overlay',
-    );
+    expect(
+      gateLayerName(layers({ ground: blank(), 'bridge-overlay': overlay }), cells, [SHUT]),
+    ).toBe('bridge-overlay');
     const below = blank();
     below[at(5, 2)] = SHUT;
-    expect(gateLayerName(layers({ ground: blank(), 'decor-below': below }), cells, SHUT)).toBe(
+    expect(gateLayerName(layers({ ground: blank(), 'decor-below': below }), cells, [SHUT])).toBe(
       'decor-below',
     );
   });
 
+  it('is found by ANY of the raised tiles: a drawbridge has one per kind of deck column', () => {
+    const below = blank();
+    below[at(5, 2)] = 902;
+    expect(gateLayerName(layers({ 'decor-below': below }), cells, [SHUT, 901, 902])).toBe(
+      'decor-below',
+    );
+    expect(gateLayerName(layers({ 'decor-below': below }), cells, [SHUT, 901])).toBeNull();
+  });
+
   it('never the collision layer, which may hold any non-zero number', () => {
-    expect(gateLayerName(layers({ ground: blank() }), cells, SHUT)).toBeNull();
+    expect(gateLayerName(layers({ ground: blank() }), cells, [SHUT])).toBeNull();
   });
 
   it('is null for a map from before the gate, so nothing is swapped and nothing crashes', () => {
-    expect(gateLayerName(layers({}), cells, SHUT)).toBeNull();
-    expect(gateLayerName({ width: 12, layers: [] }, cells, SHUT)).toBeNull();
+    expect(gateLayerName(layers({}), cells, [SHUT])).toBeNull();
+    expect(gateLayerName({ width: 12, layers: [] }, cells, [SHUT])).toBeNull();
     // A layer with no data (an image layer, an empty one) is skipped, not read.
     expect(
-      gateLayerName({ width: 12, layers: [{ name: 'x', type: 'tilelayer' }] }, cells, SHUT),
+      gateLayerName({ width: 12, layers: [{ name: 'x', type: 'tilelayer' }] }, cells, [SHUT]),
     ).toBeNull();
   });
 
@@ -193,9 +205,71 @@ describe('the layer that carries the gate picture', () => {
       gateLayerName(
         { width: 12, layers: [{ name: 'o', type: 'tilelayer', width: 8, data: narrow }] },
         [{ col: 5, row: 1 }],
-        SHUT,
+        [SHUT],
       ),
     ).toBe('o');
+  });
+});
+
+describe("the drawbridge's tiles, a raised and a lowered one per kind of deck column", () => {
+  it('pairs shut-<n> with open-<n> from 0 upward', () => {
+    const table = {
+      [`${GATE_SHUT_PREFIX}0`]: 10,
+      [`${GATE_OPEN_PREFIX}0`]: 11,
+      [`${GATE_SHUT_PREFIX}1`]: 12,
+      [`${GATE_OPEN_PREFIX}1`]: 13,
+      grass: 1,
+    };
+    expect(gatePairs(table)).toEqual([
+      { shut: 10, open: 11 },
+      { shut: 12, open: 13 },
+    ]);
+  });
+
+  it('stops at the first n missing either half, and a tileset without them has none', () => {
+    expect(gatePairs({ [`${GATE_SHUT_PREFIX}0`]: 10 })).toEqual([]);
+    expect(
+      gatePairs({
+        [`${GATE_SHUT_PREFIX}0`]: 10,
+        [`${GATE_OPEN_PREFIX}0`]: 11,
+        [`${GATE_OPEN_PREFIX}1`]: 13,
+        [`${GATE_SHUT_PREFIX}2`]: 14,
+        [`${GATE_OPEN_PREFIX}2`]: 15,
+      }),
+    ).toEqual([{ shut: 10, open: 11 }]);
+    expect(gatePairs({ grass: 1 })).toEqual([]);
+  });
+});
+
+describe('the drawbridge coming down', () => {
+  const width = 160;
+
+  it('starts standing up and ends lying across the whole span', () => {
+    expect(loweredWidth(0, width)).toBe(0);
+    expect(loweredWidth(LOWER_MS, width)).toBe(width);
+    expect(loweredWidth(LOWER_MS * 3, width)).toBe(width);
+    expect(loweredWidth(-50, width)).toBe(0);
+  });
+
+  it('only ever grows, in whole pixels, and falls fastest as it lands', () => {
+    const steps = Array.from({ length: 33 }, (_, i) => loweredWidth((LOWER_MS * i) / 32, width));
+    for (let i = 1; i < steps.length; i++) {
+      expect(steps[i]!).toBeGreaterThanOrEqual(steps[i - 1]!);
+      expect(Number.isInteger(steps[i]!)).toBe(true);
+    }
+    // Slow off the top: the first quarter of the time covers less than the last quarter.
+    const first = loweredWidth(LOWER_MS / 4, width);
+    const last = width - loweredWidth((LOWER_MS * 3) / 4, width);
+    expect(first).toBeLessThan(last);
+  });
+
+  it('is brief: long enough to see, never long enough to wait on', () => {
+    expect(LOWER_MS).toBeGreaterThanOrEqual(300);
+    expect(LOWER_MS).toBeLessThanOrEqual(1000);
+  });
+
+  it('is down at once when given no time to fall', () => {
+    expect(loweredWidth(0, width, 0)).toBe(width);
   });
 });
 
@@ -229,52 +303,68 @@ describe('where the wing ride lands', () => {
 });
 
 /*
- * THE SHIPPED MAP. The gate, its two tiles, the landing and the Gatekeeper arrive with the map
- * builder's change; until then these are skipped, by name, and then they hold it to the contract.
+ * THE SHIPPED MAP, against the contract (docs/GATEKEEPER.md and the drawbridge change): the span's
+ * cells walkable in `collision`, a raised tile on every one of them, and a landing past it.
  */
 describe('the shipped map, against the contract', () => {
   const forest = readForestMap(map);
   const table = gids as Record<string, number>;
   const gateRect = findObject(forest, GATE_OBJECT);
   const landing = findObject(forest, LANDING_OBJECT);
-  const hasGate = gateRect !== undefined;
 
-  it.skipIf(!hasGate)('leaves the gate cells walkable: the game is what shuts them', () => {
+  it('has the gate and the landing', () => {
+    expect(gateRect, GATE_OBJECT).toBeDefined();
+    expect(landing, LANDING_OBJECT).toBeDefined();
+  });
+
+  it('leaves the gate cells walkable: the game is what shuts them', () => {
     for (const { col, row } of gateCells(gateRect!))
       expect(forest.collision.tiles[row * forest.collision.width + col], `(${col},${row})`).toBe(0);
   });
 
-  it.skipIf(!hasGate)('has both gate tiles, and the shut one drawn on the gate cells', () => {
-    expect(table[GATE_SHUT_TILE]).toBeDefined();
-    expect(table[GATE_OPEN_TILE]).toBeDefined();
+  it('has the three raised/lowered pairs, and a raised tile on EVERY cell of the span', () => {
+    const pairs = gatePairs(table);
+    expect(pairs).toHaveLength(3);
+    const tiled = map as unknown as {
+      width: number;
+      layers: { name: string; type: string; data?: number[] }[];
+    };
     const name = gateLayerName(
-      map as unknown as Parameters<typeof gateLayerName>[0],
+      tiled,
       gateCells(gateRect!),
-      table[GATE_SHUT_TILE]!,
+      pairs.map((p) => p.shut),
     );
-    expect(name, 'no tile layer draws the shut gate').not.toBeNull();
+    expect(name, 'no tile layer draws the raised drawbridge').not.toBeNull();
+    const data = tiled.layers.find((l) => l.name === name)!.data!;
+    const shut = gateCells(gateRect!).map(({ col, row }) => data[row * tiled.width + col]!);
+    for (const gid of shut) expect(pairs.map((p) => p.shut)).toContain(gid);
+    // West end, open river, east end: each kind is used, west to east.
+    const firstRow = shut.slice(
+      0,
+      gateCells(gateRect!).filter((c) => c.row === gateCells(gateRect!)[0]!.row).length,
+    );
+    expect(firstRow[0]).toBe(pairs[0]!.shut);
+    expect(firstRow.at(-1)).toBe(pairs[2]!.shut);
+    for (const gid of firstRow.slice(1, -1)) expect(gid).toBe(pairs[1]!.shut);
   });
 
-  it.skipIf(!hasGate)(
-    'keeps Purple out until it opens: a walk along the bridge stops at the gate',
-    () => {
-      const shut = shutGate(forest.collision, gateRect!);
-      const mid = centreOf(gateRect!);
-      // Standing one tile west of the gate's middle, walking east, she stops short of it when shut
-      // and gets through when the map's own (open) collision is what she walks on.
-      const start = { x: gateRect!.x - TILE, y: mid.y + TILE / 4 };
-      expect(blocked(forest.collision, start.x, start.y), 'the start is on the bridge').toBe(false);
-      expect(walk(shut, start, 1, 0, 300).x).toBeLessThan(gateRect!.x);
-      expect(walk(forest.collision, start, 1, 0, 300).x).toBeGreaterThan(
-        gateRect!.x + gateRect!.width,
-      );
-    },
-  );
+  it('keeps Purple out until it opens: a walk along the bridge stops at the gate', () => {
+    const shut = shutGate(forest.collision, gateRect!);
+    const mid = centreOf(gateRect!);
+    // Standing one tile west of the gate's middle, walking east, she stops short of it when shut
+    // and gets through when the map's own (open) collision is what she walks on.
+    const start = { x: gateRect!.x - TILE, y: mid.y + TILE / 4 };
+    expect(blocked(forest.collision, start.x, start.y), 'the start is on the bridge').toBe(false);
+    expect(walk(shut, start, 1, 0, 300).x).toBeLessThan(gateRect!.x);
+    expect(walk(forest.collision, start, 1, 0, 300).x).toBeGreaterThan(
+      gateRect!.x + gateRect!.width,
+    );
+  });
 
-  it.skipIf(landing === undefined)('has a wing landing she can stand on', () => {
+  it('has a wing landing she can stand on', () => {
     const spot = landingSpot(forest.collision, centreOf(landing!));
     expect(blocked(forest.collision, spot.x, spot.y)).toBe(false);
     // The landing is what the contract says it is: on the east bank, past the gate.
-    if (hasGate) expect(spot.x).toBeGreaterThan(gateRect!.x + gateRect!.width);
+    expect(spot.x).toBeGreaterThan(gateRect!.x + gateRect!.width);
   });
 });

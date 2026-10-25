@@ -19,9 +19,53 @@ import type { CollisionMap, Rect, Vec } from './logic';
 export const GATE_OBJECT = 'gate-bridge';
 /** The map point on the east bank where a Wing Ride sets Purple down. */
 export const LANDING_OBJECT = 'wing-landing';
-/** The gate's two pictures, tiles of the shipped tileset (looked up by name in the gids file). */
-export const GATE_SHUT_TILE = 'bridge-gate-shut';
-export const GATE_OPEN_TILE = 'bridge-gate-open';
+/**
+ * THE DRAWBRIDGE'S PICTURES (2026-10-25, the client's late change: the gate became a drawbridge).
+ * Tiles of the shipped tileset, looked up by name in the gids file, one PAIR per kind of deck
+ * column: `bridge-gate-shut-<n>` (raised) and `bridge-gate-open-<n>` (lowered), n = 0 the west end
+ * with the leaf standing up, 1 the open river, 2 the east end. The map lays the raised ones over
+ * the whole span and the game swaps each cell's shut-<n> for its own open-<n>.
+ */
+export const GATE_SHUT_PREFIX = 'bridge-gate-shut-';
+export const GATE_OPEN_PREFIX = 'bridge-gate-open-';
+
+/** One kind of deck column: its raised and its lowered tile, by gid. */
+export interface GatePair {
+  readonly shut: number;
+  readonly open: number;
+}
+
+/**
+ * Every raised/lowered pair the tileset has, from -0 upward, stopping at the first n that lacks
+ * either half. A tileset from before the drawbridge has none, and the gate is then only the block.
+ */
+export function gatePairs(table: Readonly<Record<string, number>>): GatePair[] {
+  const pairs: GatePair[] = [];
+  for (let n = 0; ; n++) {
+    const shut = table[`${GATE_SHUT_PREFIX}${n}`];
+    const open = table[`${GATE_OPEN_PREFIX}${n}`];
+    if (shut === undefined || open === undefined) return pairs;
+    pairs.push({ shut, open });
+  }
+}
+
+/**
+ * HOW LONG THE DRAWBRIDGE TAKES TO COME DOWN, in ms. Brief on purpose: long enough to be seen
+ * falling, short enough that nobody waits on it. Instant under prefers-reduced-motion.
+ */
+export const LOWER_MS = 640;
+
+/**
+ * How much of the lowered deck shows, in whole pixels from the hinge (the span's west edge), after
+ * `elapsedMs` of the fall. The leaf is hinged at the west end on a north-south axis, and this camera
+ * looks straight down on it, so a leaf at angle a from upright covers `width * sin(a)` of the river.
+ * It falls like a weight let go, slow off the top and fastest as it lands: a = (pi / 2) * t^2.
+ * Whole pixels, because the world is pixel art (a crop, never a stretch).
+ */
+export function loweredWidth(elapsedMs: number, width: number, ms: number = LOWER_MS): number {
+  const t = ms > 0 ? Math.min(1, Math.max(0, elapsedMs / ms)) : 1;
+  return Math.round(width * Math.sin((Math.PI / 2) * t * t));
+}
 
 /**
  * The lines the gate says, as content's `ui.chrome` has them, and the words used until it does
@@ -88,9 +132,9 @@ interface TiledTileLayer {
 }
 
 /**
- * The tile layer the map drew the SHUT gate on: the first layer, `collision` aside, that has the
- * shut gate's tile at every one of the gate's cells -- or at any of them, when the art covers part
- * of the rectangle. Null when no layer has it, which is a map from before the gate (or a tileset
+ * The tile layer the map drew the SHUT gate on: the first layer, `collision` aside, that has one of
+ * the raised tiles (`shutGids`) at any of the gate's cells, since the art may cover only part of
+ * the rectangle. Null when no layer has it, which is a map from before the gate (or a tileset
  * without its tiles): the scene then has nothing to swap and the gate is only the block.
  *
  * Found by looking, not by a layer name the contract does not give: the picture is wherever the
@@ -99,12 +143,13 @@ interface TiledTileLayer {
 export function gateLayerName(
   tiled: { width: number; layers: readonly TiledTileLayer[] },
   cells: readonly Cell[],
-  shutGid: number,
+  shutGids: readonly number[],
 ): string | null {
   for (const layer of tiled.layers) {
     if (layer.type !== 'tilelayer' || layer.name === 'collision' || !layer.data) continue;
     const width = layer.width ?? tiled.width;
-    if (cells.some((c) => layer.data![c.row * width + c.col] === shutGid)) return layer.name;
+    if (cells.some((c) => shutGids.includes(layer.data![c.row * width + c.col]!)))
+      return layer.name;
   }
   return null;
 }

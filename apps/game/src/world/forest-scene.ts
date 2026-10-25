@@ -43,10 +43,11 @@ import {
   gateLayerName,
   GATE_NOTICE_COOLDOWN_MS,
   GATE_OBJECT,
-  GATE_OPEN_TILE,
-  GATE_SHUT_TILE,
+  gatePairs,
   landingSpot,
   LANDING_OBJECT,
+  loweredWidth,
+  LOWER_MS,
   shutGate,
 } from './gate';
 import type { Cell } from './gate';
@@ -749,23 +750,25 @@ export class ForestScene extends Phaser.Scene {
   /** Who the run was talking to last frame, so a character hops once on the meeting's edge. */
   private talking: string | null = null;
   /**
-   * THE GATE ON THE BRIDGE (world/gate.ts): the two collision maps (the map's own, open, and the
-   * same with the gate's cells solid) and the cells whose picture swaps between `bridge-gate-shut`
-   * and `bridge-gate-open`. Null on a map without a gate, which then has nothing to block and
-   * nothing to open.
+   * THE DRAWBRIDGE (world/gate.ts): the two collision maps (the map's own, open, and the same with
+   * the span's cells solid), each raised cell with its own raised and lowered tile
+   * (`bridge-gate-shut-<n>` and `-open-<n>`), and the lowered deck as one picture, which is what is
+   * seen coming down. Null on a map without a gate, which then has nothing to block or open.
    */
   private gate: {
     open: CollisionMap;
     shut: CollisionMap;
     art: {
       layer: Phaser.Tilemaps.TilemapLayer;
-      cells: Cell[];
-      shutGid: number;
-      openGid: number;
+      cells: (Cell & { shut: number; open: number })[];
+      /** The lowered deck over the whole span, revealed from the hinge as it falls; null if unbuilt. */
+      deck: Phaser.GameObjects.Image | null;
     } | null;
   } | null = null;
-  /** Whether the gate is standing open now: read off the run every frame (`drawGate`). */
+  /** Whether the drawbridge is DOWN now -- tiles lowered, collision lifted (`drawGate`). */
   private gateOpen = false;
+  /** Milliseconds the drawbridge has been falling, or null when it is not coming down. */
+  private gateLowering: number | null = null;
   /** Milliseconds until a bump against the shut gate may say so again. */
   private gateQuiet = 0;
   /** The dusk's wash over the world, and the lantern's warm circle over it. */
@@ -1207,8 +1210,8 @@ export class ForestScene extends Phaser.Scene {
    * The perks that are a STATE of the forest rather than a moment, re-read every frame from the run
    * (world/run.ts), so a replay that clears the perks clears what they drew with no bookkeeping.
    */
-  private drawPerks(): void {
-    this.drawGate(this.run.gateOpen());
+  private drawPerks(deltaMs: number): void {
+    this.drawGate(this.run.gateOpen(), deltaMs);
 
     const welcome = this.run.welcome();
     const door = this.openedDoor;
@@ -1247,12 +1250,13 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
-   * THE BRIDGE GATE, built once at boot: the map's `gate-bridge` rectangle, shut. The map leaves its
-   * cells walkable (so the open bridge is the map's own), and the scene shuts them in the collision
-   * it walks on until the run has the key (`drawGate`). The picture is the map's: `bridge-gate-shut`
-   * on whichever tile layer the painter put it, swapped to `bridge-gate-open` when the gate opens.
+   * THE DRAWBRIDGE, built once at boot: the map's `gate-bridge` rectangle, raised. The map leaves
+   * its cells walkable (so the lowered bridge is the map's own), and the scene shuts them in the
+   * collision it walks on until the run has the key (`drawGate`). The picture is the map's: each
+   * cell's `bridge-gate-shut-<n>` on whichever tile layer the painter put it, swapped for its own
+   * `bridge-gate-open-<n>` once the bridge is down.
    *
-   * A map with no gate, or a tileset without the two tiles, is wrong by omission and never by
+   * A map with no gate, or a tileset without the tiles, is wrong by omission and never by
    * invention: no gate means nothing blocks, and no tiles means the block has no picture. The build
    * must not crash before the art lands, so nothing here throws.
    */
@@ -1267,51 +1271,135 @@ export class ForestScene extends Phaser.Scene {
     const shut = shutGate(open, rect);
     this.gate = { open, shut, art: null };
     this.map.collision = shut;
-    const table = gids as Record<string, number>;
-    const shutGid = table[GATE_SHUT_TILE];
-    const openGid = table[GATE_OPEN_TILE];
-    if (shutGid === undefined || openGid === undefined) return;
-    const cells = gateCells(rect);
-    const name = gateLayerName(tiled as Parameters<typeof gateLayerName>[0], cells, shutGid);
+    const pairs = gatePairs(gids as Record<string, number>);
+    if (pairs.length === 0) return;
+    const name = gateLayerName(
+      tiled as Parameters<typeof gateLayerName>[0],
+      gateCells(rect),
+      pairs.map((p) => p.shut),
+    );
     if (name === null) return;
     // The picture is usually on a layer the scene already draws; a layer of its own is drawn above
-    // the ground and with the rest of the world, so Purple walks over the open gate's planks.
+    // the ground and with the rest of the world, so Purple walks over the lowered deck's planks.
     const layer =
       [this.ground, this.decorBelow, this.decorAbove].find((l) => l?.layer.name === name) ??
       phaserMap.createLayer(name, tiles)?.setDepth(1);
     if (!layer) return;
-    this.gate.art = {
-      layer,
-      cells: cells.filter((c) => layer.getTileAt(c.col, c.row)?.index === shutGid),
-      shutGid,
-      openGid,
-    };
+    const cells = gateCells(rect).flatMap((c) => {
+      const pair = pairs.find((p) => p.shut === layer.getTileAt(c.col, c.row)?.index);
+      return pair ? [{ ...c, ...pair }] : [];
+    });
+    this.gate.art = { layer, cells, deck: this.createDeck(tiles, cells, layer.depth) };
   }
 
   /**
-   * The gate as the run has it, re-read every frame like the other perks (so a replay shuts it again
-   * with no bookkeeping): the collision it blocks with and the tiles it is drawn with.
+   * The lowered deck as one image over the raised cells, built from the lowered tiles themselves
+   * (the same pixels the swap will put down, so the end of the fall and the swap are the same
+   * frame), hidden until the bridge comes down. Null when the tileset cannot be read back, and the
+   * bridge then simply swaps, as it does under reduced motion.
    */
-  private drawGate(open: boolean): void {
-    const gate = this.gate;
-    if (!gate || open === this.gateOpen) return;
-    this.gateOpen = open;
-    this.map.collision = open ? gate.open : gate.shut;
-    const art = gate.art;
-    if (art)
-      for (const c of art.cells)
-        art.layer.putTileAt(open ? art.openGid : art.shutGid, c.col, c.row);
+  private createDeck(
+    tiles: Phaser.Tilemaps.Tileset,
+    cells: readonly (Cell & { open: number })[],
+    depth: number,
+  ): Phaser.GameObjects.Image | null {
+    const image = tiles.image?.getSourceImage();
+    if (cells.length === 0 || !image) return null;
+    const col0 = Math.min(...cells.map((c) => c.col));
+    const row0 = Math.min(...cells.map((c) => c.row));
+    const width = (Math.max(...cells.map((c) => c.col)) - col0 + 1) * TILE;
+    const height = (Math.max(...cells.map((c) => c.row)) - row0 + 1) * TILE;
+    const key = 'fx-drawbridge-deck';
+    try {
+      if (!this.textures.exists(key)) {
+        const texture = this.textures.createCanvas(key, width, height);
+        if (!texture) return null;
+        for (const c of cells) {
+          const at = tiles.getTileTextureCoordinates(c.open) as { x: number; y: number } | null;
+          if (!at) return null;
+          texture.context.drawImage(
+            image as CanvasImageSource,
+            at.x,
+            at.y,
+            TILE,
+            TILE,
+            (c.col - col0) * TILE,
+            (c.row - row0) * TILE,
+            TILE,
+            TILE,
+          );
+        }
+        texture.refresh();
+      }
+    } catch {
+      return null;
+    }
+    return this.add
+      .image(col0 * TILE, row0 * TILE, key)
+      .setOrigin(0, 0)
+      .setDepth(depth + 0.5)
+      .setVisible(false);
   }
 
-  /** Whether the bridge gate is standing open, for the specs. */
+  /**
+   * The drawbridge as the run has it, re-read every frame like the other perks (so a replay raises
+   * it again with no bookkeeping). Taking the key lets the leaf fall: the lowered deck is revealed
+   * from the hinge over `LOWER_MS` (`loweredWidth`), once the world is back in play so the player
+   * sees it, and only when it has landed are the tiles swapped and the collision lifted -- the
+   * bridge is walkable when it is down, not while it is in the air. Instant under reduced motion,
+   * or with no deck picture to drop.
+   */
+  private drawGate(open: boolean, deltaMs: number): void {
+    const gate = this.gate;
+    if (!gate) return;
+    const art = gate.art;
+    if (!open) {
+      if (!this.gateOpen && this.gateLowering === null) return;
+      this.gateOpen = false;
+      this.gateLowering = null;
+      this.map.collision = gate.shut;
+      art?.deck?.setVisible(false);
+      if (art) for (const c of art.cells) art.layer.putTileAt(c.shut, c.col, c.row);
+      return;
+    }
+    if (this.gateOpen) return;
+    const deck = art?.deck ?? null;
+    if (this.gateLowering === null) {
+      if (deck && !this.reducedMotion) {
+        if (!this.run.exploring()) return;
+        this.gateLowering = 0;
+        deck.setCrop(0, 0, 0, deck.height).setVisible(true);
+        return;
+      }
+    } else if (deck) {
+      this.gateLowering += deltaMs;
+      deck.setCrop(0, 0, loweredWidth(this.gateLowering, deck.width), deck.height);
+      if (this.gateLowering < LOWER_MS) return;
+    }
+    this.gateOpen = true;
+    this.gateLowering = null;
+    this.map.collision = gate.open;
+    deck?.setVisible(false);
+    if (art) for (const c of art.cells) art.layer.putTileAt(c.open, c.col, c.row);
+  }
+
+  /** Whether the drawbridge is down (lowered and walkable), for the specs. */
   get gateStandsOpen(): boolean {
     return this.gateOpen;
+  }
+
+  /** How far the drawbridge has fallen, 0 to 1, while it is coming down; null otherwise. */
+  get gateFalling(): number | null {
+    const deck = this.gate?.art?.deck;
+    if (this.gateLowering === null || !deck) return null;
+    return loweredWidth(this.gateLowering, deck.width) / deck.width;
   }
 
   /** Whether this step ran into the shut gate, so the player is told why Purple stopped. */
   private bumpGate(dx: number, dy: number): void {
     const gate = this.gate;
-    if (!gate || this.gateOpen || this.gateQuiet > 0) return;
+    // Falling, it is not locked: the key is taken and the bridge is on its way down.
+    if (!gate || this.gateOpen || this.gateLowering !== null || this.gateQuiet > 0) return;
     if (!gateBump(gate.open, gate.shut, this.position, dx, dy)) return;
     this.gateQuiet = GATE_NOTICE_COOLDOWN_MS;
     this.bus.emit('gateLocked', undefined);
@@ -1990,7 +2078,7 @@ export class ForestScene extends Phaser.Scene {
 
     if (!this.arrived && this.run.atCottage()) this.stageArrival();
     this.gateQuiet = Math.max(0, this.gateQuiet - deltaMs);
-    this.drawPerks();
+    this.drawPerks(deltaMs);
     this.lifeOfCast();
 
     if (this.flight) {
