@@ -12,7 +12,7 @@ import type { MapSketch } from './world/minimap';
 import type { Vec } from './world/logic';
 import { GATE_LOCKED_FALLBACK } from './world/gate';
 import { cardOwed, gameRun, localSeed, outOfTime, walkOn } from './world/run';
-import { perkLine, wingRideTo } from './ui/perks';
+import { perkLine } from './ui/perks';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
@@ -445,16 +445,12 @@ async function start(): Promise<void> {
    * taking off, and the wing ride. Read off the perk's kind, never off a skill id.
    *
    * THE WING RIDE FLIES OVER THE RIVER (docs/GATEKEEPER.md): to the map's `wing-landing`, and there
-   * is nobody there to meet, so the ride ends with Purple on her feet. On a map with no landing it
-   * falls back to the older aim, the talking spot of the friend core named, and meets them.
+   * is nobody there to meet, so the ride ends with Purple on her feet.
    */
   const perkTaken = (perk: v2.Perk): void => {
     say(perkLine(perk));
     if (perk.kind === 'early-welcome') forest.releasePaperBird();
     if (perk.kind !== 'wing-ride') return;
-    const to = wingRideTo(perk);
-    // Recorded with nobody to fly to: the ride does nothing (and the line has said so).
-    if (to === null) return;
     const giver = content.characters.find((c) => c.skillId === perk.s)?.id ?? null;
     const down = (): void => {
       landing = null;
@@ -474,14 +470,6 @@ async function start(): Promise<void> {
         draw();
       }),
     );
-    if (!flying && to !== undefined)
-      flying = forest.flyTo(to, giver, perk.flightMs, () =>
-        afterFlight(() => {
-          down();
-          if (store.getState().phase === 'forest') store.dispatch({ type: 'MEET', c: to });
-          draw();
-        }),
-      );
     syncWorldChrome();
   };
 

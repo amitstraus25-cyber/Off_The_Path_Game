@@ -12,7 +12,7 @@ import { v2 } from '@otp/core';
 import raw from '../../../content/game.v2.json';
 import { createStore } from '../src/store';
 import { gameRun, outOfTime, remainingMs } from '../src/world/run';
-import { perkLine, wingRideTo } from '../src/ui/perks';
+import { perkLine } from '../src/ui/perks';
 import { Hud } from '../src/ui/Hud';
 import { strings } from '../src/ui/copy';
 
@@ -75,7 +75,9 @@ describe('the clock reads the run deadline, not the bare limit', () => {
     answer(plain.store, 'rewind', 'leave');
     for (const r of [plain, wound]) {
       r.at(150_000);
-      r.store.dispatch({ type: 'ENTER_COTTAGE' });
+      // Over the river first (rules 3: no way across, no door), the same way in both runs.
+      answer(r.store, 'bridge-gate', 'take');
+      expect(r.store.dispatch({ type: 'ENTER_COTTAGE' })).toBeNull();
     }
     const a = v2.result(plain.store.getState(), content);
     const b = v2.result(wound.store.getState(), content);
@@ -232,22 +234,15 @@ describe('each perk says one line, from the content, by kind', () => {
     expect(perkLine(perk)).toContain(String(Math.round(rewind.ms / 1000)));
   });
 
-  it('a ride recorded with nobody to fly to says so', () => {
+  it('a ride is the flight over the river, and says the ride line', () => {
+    // Since rules 3 the perk carries the map point it lands on (`lands`), never a friend.
     const perk = {
       kind: 'wing-ride',
       s: 'x',
       at: 0,
       flightMs: 1000,
-      to: null,
+      lands: 'wing-landing',
     } as unknown as v2.Perk;
-    expect(wingRideTo(perk)).toBeNull();
-    expect(perkLine(perk)).toBe(strings['perkWingRideNobody']);
-  });
-
-  it('a ride with no friend to land beside is the flight over the river, and says the ride line', () => {
-    // The Wing Ride's landing is the map's point, so its perk needs no `to` at all.
-    const perk = { kind: 'wing-ride', s: 'x', at: 0, flightMs: 1000 } as unknown as v2.Perk;
-    expect(wingRideTo(perk)).toBeUndefined();
     expect(perkLine(perk)).toBe(strings['perkWingRide']);
   });
 

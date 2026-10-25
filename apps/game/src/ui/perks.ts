@@ -27,11 +27,8 @@ export function perkLine(perk: v2.Perk): string {
     case 'early-welcome':
       return strings['perkEarlyWelcome'] ?? '';
     case 'wing-ride':
-      // A ride that was given an explicit nobody to fly to does nothing, and says so. One to the
-      // river's far bank (the landing point) always flies.
-      return wingRideTo(perk) === null
-        ? (strings['perkWingRideNobody'] ?? '')
-        : (strings['perkWingRide'] ?? '');
+      // Since rules 3 the ride always flies: over the river, to the far bank (docs/GATEKEEPER.md).
+      return strings['perkWingRide'] ?? '';
     case 'walk-faster':
       return strings['perkWalkFaster'] ?? '';
     case 'lantern':
@@ -39,13 +36,4 @@ export function perkLine(perk: v2.Perk): string {
     default:
       return '';
   }
-}
-
-/**
- * Who a wing ride was recorded to land beside: a character's id, null when it was recorded with
- * nobody to fly to, and undefined when the perk carries no such field at all -- a ride that flies
- * to the map's landing point (docs/GATEKEEPER.md) and needs no one.
- */
-export function wingRideTo(perk: v2.Perk): string | null | undefined {
-  return (perk as { to?: string | null }).to;
 }

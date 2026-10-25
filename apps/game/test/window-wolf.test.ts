@@ -79,12 +79,19 @@ describe('the wolf is in the window on his ending and nowhere else', () => {
     }
   });
 
+  const crosses = (s: string): boolean => {
+    const kind = content.skills.find((k) => k.id === s)?.effect.kind;
+    return kind !== undefined && (content.world.crossing ?? []).includes(kind);
+  };
+
   it('is not in the window on the clean ending, taken or left', () => {
     for (const seed of SEEDS)
       for (const takeGood of [false, true]) {
         const run = forest(seed);
         const world = gameRun(run.store);
-        answerAll(run.store, (_s, good) => (good && takeGood ? 'take' : 'leave'));
+        // Leaving every good skill still means taking the good way over the river: without one
+        // there is no door to reach (rules 3, content `world.crossing`).
+        answerAll(run.store, (s, good) => (good && (takeGood || crosses(s)) ? 'take' : 'leave'));
         expect(run.store.dispatch({ type: 'ENTER_COTTAGE' })).toBeNull();
         expect(v2.ending(run.store.getState(), content)).toBe('grandma');
         expect(world.wolfInside()).toBe(false);

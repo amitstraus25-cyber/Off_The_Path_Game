@@ -298,12 +298,6 @@ export const CHROME_KEYS = [
   'perkBridgeGate',
   'perkEarlyWelcome',
   'perkWingRide',
-  /*
-   * The ride with nobody left to fly to, from before rules 3. No run can reach it now -- the
-   * flight always lands on the far bank -- and it is kept, at the lead's word (2026-10-25), only
-   * because the game still reads it. It goes when the game stops.
-   */
-  'perkWingRideNobody',
   'perkWalkFaster',
   'perkLantern',
   'perkRewind',
