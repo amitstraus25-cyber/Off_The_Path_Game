@@ -252,15 +252,39 @@ the wrong host **drops** the event rather than leaking it. Standalone, every cal
 
 ```
 otp:ready        { version: string }
-otp:started      { runId: string | null }
+otp:howto        {}                              // "Begin the walk" pressed (since 2026-10-25)
+otp:started      { runId: string | null, replay: boolean }   // `replay`: Walk it again
 otp:verdict      { skillId: string, verdict: string }
 otp:completed    { score: number, ending: string }
+otp:posted       { ok: boolean }                 // a post answered; never a name or an email
 otp:cta          {}              // "Read the Research" clicked (analytics; every click)
 ```
 
+Every one of these messages is `{ type, payload, variants }` since 2026-10-25, where `variants` is
+this visit's A/B groups as one string, `landing:art,results:below,start:two,post:one`.
+
+### A/B tests (the client, 2026-10-25: "A/B test everything")
+
+**The page assigns, the game draws and reports.** The parent puts a visitor in a group by adding
+parameters to the iframe's `src`; the game reads them once at boot (`apps/game/src/ab.ts`) and
+names them on every event above. Nothing is sent INTO the game, so the channel stays outbound only.
+No parameter, or any value not in this table, gives the first variant, which is what ships:
+
+| Parameter | Variants (first = default) | What changes                                                           |
+| --------- | -------------------------- | ---------------------------------------------------------------------- |
+| `landing` | `art`, `forest`            | the client's illustration, or the live forest behind a light card      |
+| `results` | `below`, `above`           | "Read the research" after the seven cards, or directly under the score |
+| `start`   | `two`, `one`               | landing then how-to, or one screen with the rules and par on it        |
+| `post`    | `one`, `two`               | name, email and consent at once, or the email as a second step         |
+
+Example: `https://off-the-path-game.vercel.app/?landing=forest&post=two`. Suggested metrics: start
+rate (`otp:howto` / `otp:ready`), completion (`otp:completed` / `otp:started`), posts (`otp:posted`
+with `ok`), research clicks (`otp:cta` per `otp:completed`). The research link itself carries
+`utm_source=off-the-path` when it opens a new tab.
+
 ### The "Read the Research" message (the contract for the web agency)
 
-Besides the five events above, which are `{ type, payload }`, the game sends **one more message,
+Besides the seven events above, which are `{ type, payload, variants }`, the game sends **one more message,
 shaped `{ type }` with no payload**:
 
 ```

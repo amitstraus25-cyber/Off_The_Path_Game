@@ -2471,3 +2471,140 @@ h2.otp-section-label.otp-tiles__title {
 h2.otp-section-label.otp-post__title {
   margin-top: calc(26px * var(--otp-ui));
 }
+
+/* ------------------------------------------------------------------ the landing's art */
+
+/*
+ * THE CLIENT'S ILLUSTRATION ON THE LANDING (ui/Title.tsx `art`, 2026-10-25). It covers the world's
+ * box exactly -- the canvas box ui/stage.ts publishes, in every layout -- on the sky the art is
+ * painted in (tokens.css `--otp-art-sky`), and the picture is never cropped:
+ *
+ *   landscape, column left   height-fit, right-aligned, its left edge fading into the sky
+ *   beside a side deck       the column is docked right (above), so the picture goes left
+ *   portrait                 width-fit at the top of the world, its foot fading into the sky
+ *
+ * The card goes dark to match: no Shell, white type with the one Lilac word, the Lime pill as it
+ * was. A Black wash behind the column keeps every line of it at or above 4.5:1 wherever the sky
+ * runs light (e2e/heading-contrast.spec.ts measures it against what is actually behind it).
+ */
+.otp-title-art {
+  position: fixed;
+  left: var(--otp-canvas-x, 0px);
+  top: var(--otp-canvas-y, 0px);
+  width: var(--otp-canvas-w, 0px);
+  height: var(--otp-canvas-h, 0px);
+  overflow: hidden;
+  background: var(--otp-art-sky);
+  border-bottom-left-radius: calc(var(--otp-r-panel) - var(--otp-panel-border));
+  border-bottom-right-radius: calc(var(--otp-r-panel) - var(--otp-panel-border));
+  pointer-events: none;
+}
+
+.otp-title-art__img {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  width: auto;
+  max-width: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 16%);
+  user-select: none;
+}
+
+html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
+  right: auto;
+  left: 0;
+  -webkit-mask-image: linear-gradient(270deg, transparent 0, #000 16%);
+  mask-image: linear-gradient(270deg, transparent 0, #000 16%);
+}
+
+@media (orientation: portrait) {
+  .otp-title-art__img {
+    top: 0;
+    bottom: auto;
+    width: 100%;
+    height: auto;
+    -webkit-mask-image: linear-gradient(180deg, #000 82%, transparent 100%);
+    mask-image: linear-gradient(180deg, #000 82%, transparent 100%);
+  }
+}
+
+/*
+ * The card, dark, over the art. Its own box is an opaque Deep Purple, and the sky with a Black
+ * wash -- deepest where the column's text is -- is painted on a layer behind the text, so the
+ * column looks exactly like the art's sky while e2e/heading-contrast.spec.ts still has one colour
+ * to measure. That colour is a little darker than the real ground, so it was checked by hand too,
+ * against the lightest ground the wash leaves under any line (the sky's 80% stop under 72% Black,
+ * about #4B2F5B): Haze 7.9:1, Lilac 5.2:1, Offwhite 11:1.
+ */
+.otp-title-dock[data-art] .otp-title-panel {
+  position: relative;
+  isolation: isolate;
+  background: var(--cyera-deep-purple);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.otp-title-dock[data-art] .otp-title-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--cyera-black) 72%, transparent) 72%,
+      color-mix(in srgb, var(--cyera-black) 0%, transparent) 100%
+    ),
+    var(--otp-art-sky);
+}
+
+/* Beside a side deck the column is on the right, so the wash fades the other way. */
+html:is([data-cabinet='sides'], [data-cabinet='overlay'])
+  .otp-title-dock[data-art]
+  .otp-title-panel::before {
+  background-image:
+    linear-gradient(
+      270deg,
+      color-mix(in srgb, var(--cyera-black) 72%, transparent) 72%,
+      color-mix(in srgb, var(--cyera-black) 0%, transparent) 100%
+    ),
+    var(--otp-art-sky);
+}
+
+.otp-title-dock[data-art] .otp-title-panel :is(.otp-title__mark, .otp-title__agent) {
+  color: var(--cyera-offwhite);
+}
+
+.otp-title-dock[data-art] .otp-title-panel .otp-title__mark .otp-serif {
+  color: var(--cyera-lilac);
+}
+
+/* The how-to's steps, on the one-screen start (P20, `?start=one`), on the dark card. */
+.otp-title-dock[data-art] .otp-title-panel .otp-howto li {
+  color: var(--cyera-offwhite);
+}
+
+.otp-title-dock[data-art] .otp-title-panel .otp-howto > li::before {
+  color: var(--cyera-lilac);
+}
+
+.otp-title-dock[data-art] .otp-title-panel :is(.otp-title__sub, .otp-body-text, .otp-hint) {
+  color: var(--cyera-haze);
+}
+
+@media (orientation: portrait) {
+  .otp-title-dock[data-art] .otp-title-panel {
+    border-color: var(--cyera-aubergine);
+  }
+
+  .otp-title-dock[data-art] .otp-title-panel::before {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cyera-aubergine) 55%, var(--cyera-deep-purple)),
+      var(--cyera-deep-purple)
+    );
+  }
+}

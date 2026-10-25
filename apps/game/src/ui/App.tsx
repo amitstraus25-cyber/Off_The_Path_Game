@@ -6,7 +6,8 @@ import { hudBasket, remainingMs, walkOn } from '../world/run';
 import { Dialogue } from './Dialogue';
 import { HowTo, Title, hasKeyboard } from './Title';
 import { Cottage } from './Cottage';
-import { Results } from './Results';
+import { formatElapsed, Results } from './Results';
+import { variants } from '../ab';
 import { ProblemScreen } from './ProblemScreen';
 import { Hud } from './Hud';
 import { Minimap } from './Minimap';
@@ -510,7 +511,22 @@ export function App({
         );
       }
       case 'title':
-        return <Title ui={content.ui} onPlay={onStart} />;
+        return (
+          <Title
+            ui={content.ui}
+            onPlay={onStart}
+            oneStep={
+              variants.start === 'one'
+                ? {
+                    par: fill(strings['startPar'] ?? '', {
+                      par: formatElapsed(content.scoring.parMs),
+                    }),
+                    busy: starting,
+                  }
+                : undefined
+            }
+          />
+        );
       case 'howto':
         return <HowTo ui={content.ui} onGo={onGo} busy={starting} />;
       /*

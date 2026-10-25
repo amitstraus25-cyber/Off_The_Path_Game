@@ -1007,7 +1007,8 @@ test('the title card is a light ground, and carries the logo that belongs on one
     [375, 812],
   ] as const) {
     await page.setViewportSize({ width: w, height: h });
-    await page.goto('/');
+    // The light card is the forest landing's, the A/B test's other half (src/ab.ts).
+    await page.goto('/?landing=forest');
     await page.waitForSelector('#game[data-ready="true"]');
 
     const seen = await page.evaluate(() => {
@@ -1056,7 +1057,8 @@ test('the title subtitle is the muted text role, not a foreground accent', async
    * this agrees with reference/brand/cyera-theme.css by construction instead of by transcription.
    */
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('/');
+  // The light card is the forest landing's, the A/B test's other half (src/ab.ts).
+  await page.goto('/?landing=forest');
   await page.waitForSelector('#game[data-ready="true"]');
 
   const seen = await page.evaluate(() => {

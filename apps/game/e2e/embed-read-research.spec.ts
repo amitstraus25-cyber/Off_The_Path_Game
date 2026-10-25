@@ -25,6 +25,8 @@ const MESSAGE = 'OFF_THE_PATH_READ_RESEARCH';
  * Playwright's node process does not, and the URL is part of the agency's contract anyway.
  */
 const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/research';
+/** What the link carries since 2026-10-25 (P7): the same page, tagged as coming from the game. */
+const RESEARCH_HREF = `${DEFAULT_RESEARCH_URL}?utm_source=off-the-path`;
 
 const CONTENT_TYPES: Record<string, string> = {
   html: 'text/html',
@@ -133,7 +135,7 @@ for (const parentOrigin of [
 
     const link = frame.getByRole('link', { name: /Read the research/ });
     // A real link, kept for no-JS, middle-click and assistive technology.
-    await expect(link).toHaveAttribute('href', DEFAULT_RESEARCH_URL);
+    await expect(link).toHaveAttribute('href', RESEARCH_HREF);
 
     const navigations: string[] = [];
     page.on('framenavigated', (f) => navigations.push(f.url()));
@@ -168,7 +170,7 @@ test('framed by a page that is not on the allow-list, the link is just a link', 
 
   const popup = page.waitForEvent('popup');
   await frame.getByRole('link', { name: /Read the research/ }).click();
-  expect((await popup).url()).toBe(DEFAULT_RESEARCH_URL);
+  expect((await popup).url()).toBe(RESEARCH_HREF);
   expect(await researchMessages(page)).toEqual([]);
 });
 
@@ -183,9 +185,9 @@ test('opened directly, the link navigates to the research page', async ({ page }
   await toTheReveal(page);
 
   const link = page.getByRole('link', { name: /Read the research/ });
-  await expect(link).toHaveAttribute('href', DEFAULT_RESEARCH_URL);
+  await expect(link).toHaveAttribute('href', RESEARCH_HREF);
   const popup = page.waitForEvent('popup');
   await link.click();
-  expect((await popup).url()).toBe(DEFAULT_RESEARCH_URL);
+  expect((await popup).url()).toBe(RESEARCH_HREF);
   expect(elsewhere.some((u) => u.startsWith(DEFAULT_RESEARCH_URL))).toBe(true);
 });

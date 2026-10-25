@@ -274,6 +274,14 @@ export const CHROME_KEYS = [
   'saidTook',
   'saidLeft',
   /*
+   * The A/B tests' other halves (the client, 2026-10-25, apps/game/src/ab.ts): `postNext` and
+   * `postNextNote` are the two-step post form's first step (P21), `startPar` is the par line on
+   * the one-screen start (P20), carrying {par}.
+   */
+  'postNext',
+  'postNextNote',
+  'startPar',
+  /*
    * THE PERKS, as the forest says them (the client, 2026-10-22). One line per effect KIND, never per
    * skill, so a new skill that picks an existing kind needs no new words; `perkRewind` carries
    * {seconds}, the time the rewind gave back. `perkWingRideNobody` is the ride with nobody left to

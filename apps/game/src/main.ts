@@ -20,6 +20,7 @@ import { cabinetFor } from './ui/cabinet';
 import { App } from './ui/App';
 import { ProblemScreen } from './ui/ProblemScreen';
 import { fill, marqueeText, strings } from './ui/copy';
+import { variants } from './ab';
 import { mountMarquee } from './ui/marquee';
 import { contactMessages, startRun, submit } from './net/leaderboard';
 import type { ContactInput, RunStart } from './net/leaderboard';
@@ -373,7 +374,7 @@ async function start(): Promise<void> {
      */
     if (replay) bus.emit('restartRun', undefined);
     starting = false;
-    emit('otp:started', { runId: store.getState().runId });
+    emit('otp:started', { runId: store.getState().runId, replay });
     draw();
   };
 
@@ -500,8 +501,11 @@ async function start(): Promise<void> {
           boot.retry();
         },
         onStart: () => {
+          emit('otp:howto', {});
           askForStart();
-          store.dispatch({ type: 'START', runId: crypto.randomUUID() });
+          // The one-screen start (P20, `?start=one`): the landing's button is Start walking.
+          if (variants.start === 'one') void startTheRun();
+          else store.dispatch({ type: 'START', runId: crypto.randomUUID() });
         },
         onGo: () => void startTheRun(),
         onReplay: () => {
@@ -523,7 +527,11 @@ async function start(): Promise<void> {
             token ?? '',
             strings,
             contact ? { ...contact, messages: contactMessages(content.ui.contact) } : null,
-          ),
+          ).then((outcome) => {
+            // Whether it went on, and nothing about who posted it (P7).
+            emit('otp:posted', { ok: outcome.key === 'handleAssigned' });
+            return outcome;
+          }),
       }),
       panels,
     );

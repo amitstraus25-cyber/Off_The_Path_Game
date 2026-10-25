@@ -3,10 +3,18 @@ import type { ComponentChildren } from 'preact';
 import type { v2 } from '@otp/core';
 import { Highlighted, NotationChip, WorldFrame } from './components';
 import { strings } from './copy';
+import { variants } from '../ab';
+import landingArt from './landing-art.webp';
 
 export interface TitleProps {
   ui: v2.Content['ui'];
   onPlay(): void;
+  /**
+   * The one-screen start, the A/B test's other half (P20, `?start=one`, src/ab.ts): the how-to's
+   * steps and a par line on the landing itself, and its button starts the walk. `par` is that
+   * line, already filled.
+   */
+  oneStep?: { par: string; busy: boolean } | undefined;
 }
 
 export interface HowToProps {
@@ -204,6 +212,7 @@ function TitleCard({
   onAction,
   busy = false,
   focus = false,
+  art = false,
 }: {
   children: ComponentChildren;
   /** The frame's title: the landing's `ui.landing.frameTitle`, the how-to's own `ui.howTo.title`. */
@@ -218,6 +227,8 @@ function TitleCard({
   busy?: boolean;
   /** Take focus on arrival, so a keyboard player's next Enter is this button. */
   focus?: boolean;
+  /** The client's illustration behind the card instead of the live forest (the landing's `art`). */
+  art?: boolean;
 }) {
   const cta = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -240,7 +251,20 @@ function TitleCard({
         labelHidden={hideFrameTitle}
         aside={<NotationChip label={strings['landingChip'] ?? ''} />}
       />
-      <div class="otp-title-dock">
+      <div class="otp-title-dock" data-art={art ? 'true' : undefined}>
+        {art && (
+          /*
+           * THE LANDING ART (the client's pick, 2026-10-25): Purple on the crystal with the seven
+           * skills circling. Cut from the designer's file to the right of its baked-in title and
+           * button, so every word on this screen is still live text (golden rule 4), and laid on
+           * the sky the art itself is painted in, so the whole picture is always in the frame:
+           * height-fit and right-aligned beside the column, width-fit over the card on a phone.
+           * Decoration only, so it says nothing to a screen reader.
+           */
+          <div class="otp-title-art" aria-hidden="true">
+            <img class="otp-title-art__img" src={landingArt} alt="" />
+          </div>
+        )}
         <div class="otp-title-panel" ref={panel}>
           {/*
             THE PROSE SCROLLS; THE WAY IN DOES NOT. The copy has a scroll box of its own and the foot
@@ -280,15 +304,20 @@ function TitleCard({
  * The landing. Cyera-branded per UI_FOUNDATIONS section 8: the wordmark, "Off the Path" with one
  * Season Mix word, the subtitle, and the one Lime pill.
  *
- * NO BACKGROUND PICTURE YET. The client asked for a Cyera background "like this" and the image has
- * not arrived (GAME_DESIGN_V2 section 8). CLAUDE.md rule 5 forbids inventing one, and a labelled
- * placeholder ("awaiting the client's art") is internal wording a public visitor must not see, so
- * the landing ships without one. When the art lands it goes here, under the subtitle.
+ * THE BACKGROUND PICTURE ARRIVED ON 2026-10-25: the client's illustration, behind the card
+ * (`TitleCard` `art`). The live forest is still the landing for `?landing=forest`, the A/B test's
+ * other half (src/ab.ts).
  */
-export function Title({ ui, onPlay }: TitleProps) {
+export function Title({ ui, onPlay, oneStep }: TitleProps) {
   const l = ui.landing;
   return (
-    <TitleCard frameTitle={l.frameTitle} action={l.start} onAction={onPlay}>
+    <TitleCard
+      frameTitle={l.frameTitle}
+      action={oneStep ? ui.howTo.go : l.start}
+      onAction={onPlay}
+      busy={oneStep?.busy ?? false}
+      art={variants.landing === 'art'}
+    >
       <h1 class="otp-title__mark">
         <Highlighted text={l.title} word={l.titleHighlight} />
       </h1>
@@ -308,6 +337,24 @@ export function Title({ ui, onPlay }: TitleProps) {
         follows says the same thing in four steps.
       */}
       <p class="otp-body-text otp-title__premise">{strings['landingPremise'] ?? ''}</p>
+      {oneStep && (
+        <>
+          <ol class="otp-howto" data-howto="">
+            {ui.howTo.steps.map((step, i) =>
+              ui.howTo.stress?.includes(i) ? (
+                <li key={step} data-stress="">
+                  <strong>{step}</strong>
+                </li>
+              ) : (
+                <li key={step}>{step}</li>
+              ),
+            )}
+          </ol>
+          <p class="otp-title__agent" data-par="">
+            {oneStep.par}
+          </p>
+        </>
+      )}
     </TitleCard>
   );
 }

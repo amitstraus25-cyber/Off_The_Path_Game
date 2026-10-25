@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { DEFAULT_TOP_LIMIT, v2 } from '@otp/core';
-import { RESEARCH_URL } from '../embed/postMessage';
+import { RESEARCH_URL, researchHref } from '../embed/postMessage';
+import { variants } from '../ab';
 /*
  * TWO STATEMENTS FROM ONE MODULE, DELIBERATELY. `test/handle-field.test.ts` matches this exact
  * line -- `import { newHandle } from '../net/leaderboard'` -- to hold the screen and the wire to a
@@ -785,6 +786,16 @@ export function Results({
   const [emailProblem, setEmailProblem] = useState<v2.EmailRefusal | null>(null);
   const [consentProblem, setConsentProblem] = useState(false);
   const emailField = useRef<HTMLInputElement>(null);
+  /*
+   * THE EMAIL AS A SECOND STEP, the A/B test's other half (P21, `?post=two`, src/ab.ts): the name
+   * first with a line saying a work email comes next, then the address and the consent in exactly
+   * the words Legal approved. With `post=one` -- what ships -- every field shows at once.
+   */
+  const [contactStep, setContactStep] = useState(variants.post === 'one');
+  const toContact = (): void => {
+    setContactStep(true);
+    requestAnimationFrame(() => emailField.current?.focus());
+  };
   const consentBox = useRef<HTMLInputElement>(null);
   const ready = !asking || contactReady(email, consent);
   const [board, setBoard] = useState<BoardState>({ state: 'loading' });
@@ -828,6 +839,11 @@ export function Results({
     }
     // The tidied form (spaces collapsed, apostrophes straightened) is what the board stores.
     const name = read.name;
+    // On the two-step form, Enter on the name is Next, never a post without the address.
+    if (asking && !contactStep) {
+      toContact();
+      return;
+    }
     /*
      * The contact, when asked for: every problem marked at once, focus to the first, nothing
      * posted. This is what pressing the aria-disabled Post does -- it stays focusable and
@@ -889,6 +905,39 @@ export function Results({
   const lessonOn = clean
     ? run.entries.find((row) => !row.good && tileCall(row) === 'caught')
     : undefined;
+
+  /*
+   * THE RESEARCH BAND, placed by the A/B test (P19, `?results=above`, src/ab.ts): after the cards,
+   * as it ships, or directly under the score, where it is in view when the result is.
+   */
+  const band = (
+    <>
+      {/*
+              ---------------------------------------------- 3. the question and the one Lime
+              An <a> with an href, so it works standalone, with no .env, and on a middle-click;
+              `onReadResearch` is the side channel to a parent page: embedded in an allowed
+              parent, a plain click posts OFF_THE_PATH_READ_RESEARCH and does not navigate
+              (embed/postMessage.ts, ARCHITECTURE section 9); anywhere else the link just works.
+            */}
+      <div class="otp-band">
+        <p class="otp-band__question">
+          <Highlighted text={r.question} word="agent" />
+        </p>
+        <a
+          class="otp-cta"
+          href={researchHref(RESEARCH_URL)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onReadResearch}
+        >
+          {r.cta}
+          <span class="otp-cta__disc" aria-hidden="true">
+            →
+          </span>
+        </a>
+      </div>
+    </>
+  );
 
   return (
     <div class="otp-screen">
@@ -976,6 +1025,8 @@ export function Results({
               </div>
             </div>
 
+            {variants.results === 'above' && band}
+
             {/* ---------------------------------------------- 2. the seven cards */}
             <section class="otp-tiles-section" aria-labelledby="otp-tiles-heading">
               <h2 class="otp-section-label otp-tiles__title" id="otp-tiles-heading">
@@ -995,30 +1046,7 @@ export function Results({
               </ol>
             </section>
 
-            {/*
-              ---------------------------------------------- 3. the question and the one Lime
-              An <a> with an href, so it works standalone, with no .env, and on a middle-click;
-              `onReadResearch` is the side channel to a parent page: embedded in an allowed
-              parent, a plain click posts OFF_THE_PATH_READ_RESEARCH and does not navigate
-              (embed/postMessage.ts, ARCHITECTURE section 9); anywhere else the link just works.
-            */}
-            <div class="otp-band">
-              <p class="otp-band__question">
-                <Highlighted text={r.question} word="agent" />
-              </p>
-              <a
-                class="otp-cta"
-                href={RESEARCH_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={onReadResearch}
-              >
-                {r.cta}
-                <span class="otp-cta__disc" aria-hidden="true">
-                  →
-                </span>
-              </a>
-            </div>
+            {variants.results === 'below' && band}
 
             {/* ---------------------------------------------- 4. your name, and the board */}
             <h2 class="otp-section-label otp-post__title" id="otp-post">
@@ -1081,7 +1109,7 @@ export function Results({
                   >
                     {s('handleReroll')}
                   </button>
-                  {asking && (
+                  {asking && contactStep && (
                     /*
                      * THE WORK EMAIL AND THE CONSENT, between the name and Post so the reading and
                      * tab order is name, address, consent, Post. Each problem is tied to its
@@ -1166,16 +1194,32 @@ export function Results({
                       )}
                     </div>
                   )}
-                  <button
-                    type="submit"
-                    class="otp-button"
-                    aria-disabled={posting || !ready ? 'true' : undefined}
-                    aria-describedby={asking && !ready ? 'otp-post-needs' : undefined}
-                  >
-                    {s('post')}
-                  </button>
+                  {asking && !contactStep ? (
+                    <>
+                      <button
+                        type="button"
+                        class="otp-button"
+                        data-action="post-next"
+                        onClick={toContact}
+                      >
+                        {s('postNext')}
+                      </button>
+                      <p class="otp-fine otp-post__needs" data-post-next-note="">
+                        {s('postNextNote')}
+                      </p>
+                    </>
+                  ) : (
+                    <button
+                      type="submit"
+                      class="otp-button"
+                      aria-disabled={posting || !ready ? 'true' : undefined}
+                      aria-describedby={asking && !ready ? 'otp-post-needs' : undefined}
+                    >
+                      {s('post')}
+                    </button>
+                  )}
                   {/* Why Post is greyed, in words, beside it (P13): it used to say nothing. */}
-                  {asking && !ready && !posting && (
+                  {asking && contactStep && !ready && !posting && (
                     <p class="otp-fine otp-post__needs" id="otp-post-needs" data-post-needs="">
                       {words.postNeeds}
                     </p>

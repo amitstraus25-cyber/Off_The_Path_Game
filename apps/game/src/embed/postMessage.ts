@@ -9,11 +9,17 @@
  * Events the game posts to the page that embeds it. The parent owns analytics; the game ships none
  * of its own. Standalone (not in an iframe) these are no-ops.
  */
+import { variantTag, variants } from '../ab';
 export interface EmbedEvents {
   'otp:ready': { version: string };
-  'otp:started': { runId: string | null };
+  /** "Begin the walk" pressed: the how-to opened (the review of 2026-10-25, P7). */
+  'otp:howto': Record<string, never>;
+  /** A run started; `replay` is true for Walk it again (P7). */
+  'otp:started': { runId: string | null; replay: boolean };
   'otp:verdict': { skillId: string; verdict: string };
   'otp:completed': { score: number; ending: string };
+  /** A post to the board answered: `ok` is whether it went on. Never a name or an email (P7). */
+  'otp:posted': { ok: boolean };
   'otp:cta': Record<string, never>;
 }
 
@@ -73,6 +79,17 @@ const RESEARCH_URL_RAW = (import.meta.env.VITE_RESEARCH_URL as string | undefine
  * in is a question out with the web agency. The old default, /off-the-path, was a 404.
  */
 export const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/research';
+
+/**
+ * The research link as the player follows it outside an embed, tagged so the research page's
+ * analytics can tell the click came from the game (P7): the link carries `noreferrer`, so no
+ * Referer arrives. Only a campaign source, never anything about the player.
+ */
+export function researchHref(base: string): string {
+  const url = new URL(base);
+  url.searchParams.set('utm_source', 'off-the-path');
+  return url.toString();
+}
 
 /**
  * Where events go when the browser will not say who the parent is.
@@ -262,7 +279,12 @@ export function emit<K extends keyof EmbedEvents>(type: K, payload: EmbedEvents[
   if (reported === null) complain(`parent origin unknown; posting to the default ${target}`);
 
   try {
-    window.parent.postMessage({ type, payload }, target);
+    /*
+     * `variants` beside the payload, on every event (the client, 2026-10-25: "A/B test
+     * everything"): which group this visit is in, as the page assigned it in the iframe's address
+     * (src/ab.ts), so the page's analytics can split any event by it.
+     */
+    window.parent.postMessage({ type, payload, variants: variantTag(variants) }, target);
   } catch {
     // A blocked postMessage must never break play.
   }
