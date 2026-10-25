@@ -15,7 +15,6 @@ import { DoorCheck } from './DoorCheck';
 import { ForkSigns } from './ForkSigns';
 import type { SignBoards } from './ForkSigns';
 import { WorldSigns } from './WorldSigns';
-import { Beacon } from './Beacon';
 import type { SignFaces } from './WorldSigns';
 import { NEAR_SIGN } from '../world/signs';
 import { NotationChip, WorldFrame } from './components';
@@ -363,7 +362,6 @@ export function App({
           </h1>
           {/* Before the HUD, so the clock, the basket and the Way Teller's chips paint over a logo. */}
           {signs && <WorldSigns faces={signs} />}
-          <Beacon />
           <Hud
             remainingMs={remaining}
             faceMs={winding.face}

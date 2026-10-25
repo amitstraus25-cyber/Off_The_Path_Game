@@ -36,11 +36,9 @@
  * deleting the line because its names went unused disarms that owner's guard, and is the one way
  * this file can stop doing its job while staying green.
  */
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { Img } from '../src/paint.ts';
-import { svgCoverage } from '../src/svg-coverage.ts';
 
 import { CAST_FRAMES } from '../src/sprites/cast.ts';
 import { CAPE_MARK, PURPLE_FRAMES } from '../src/sprites/char-purple.ts';
@@ -177,25 +175,29 @@ describe('Purple', () => {
    * Measured when written: 11 x 11; the threshold inks 62 pixels and the two edits leave 60, of
    * which 13 are rim; the inked pixel nearest the threshold is 0.38 and the blank one 0.25.
    */
-  it('carries a pixel trace of the official Cyera symbol on her back', () => {
-    const svg = readFileSync(
-      new URL('../../../reference/brand/logos/cyera-symbol-black.svg', import.meta.url),
-      'utf8',
-    );
-    /** The client's A3 pick, 2026-10-25: eleven pixels. */
+  /*
+   * REDRAWN 2026-10-25, later (the client: "you can redraw it so it's perfect on her... it doesn't
+   * have to be what the original one looks like"). The mark is no longer held to the SVG pixel by
+   * pixel: the trace read on her as a cog. It is held to the DRAWING the client approved, written
+   * out below as a contract, and to the facts that make it the symbol at this size -- a ring and a
+   * detached dot at the top right, two pixels apart, and the rim on the lit arc only.
+   */
+  it('carries the redrawn Cyera mark on her back, exactly as approved', () => {
     const n = 11;
-    expect(CAPE_MARK.size, 'the mark is not the eleven pixels the client picked').toBe(n);
-    /** The two hand edits that open the dot's gap, as (row, column) on the mark's grid. */
-    const CLEARED = ['(r1,c8)', '(r3,c8)'];
-    const TRACE = 0.35;
-    const cov = svgCoverage(svg, n);
-    for (const at of CLEARED) {
-      const [, r, c] = /\(r(\d+),c(\d+)\)/.exec(at)!.map(Number);
-      expect(
-        cov[r!]![c!]!,
-        `${at} is not covered by the symbol, so clearing it edits nothing`,
-      ).toBeGreaterThanOrEqual(TRACE);
-    }
+    expect(CAPE_MARK.size, 'the mark is not eleven pixels').toBe(n);
+    const APPROVED = [
+      '...XXX.....',
+      '.XXXXX..XX.',
+      '.XXX....XX.',
+      'XXX........',
+      'XX.......XX',
+      'XX.......XX',
+      'XX.......XX',
+      'XXX.....XXX',
+      '.XXX...XXX.',
+      '.XXXXXXXXX.',
+      '...XXXXX...',
+    ];
     const same = (c: readonly number[], k: readonly number[]): boolean =>
       c[3]! > 0 && c[0] === k[0] && c[1] === k[1] && c[2] === k[2];
     for (const name of ['up-0', 'up-1', 'up-2', 'up-3']) {
@@ -214,26 +216,14 @@ describe('Purple', () => {
       const x0 = Math.min(...pts.map(([x]) => x));
       const y0 = Math.min(...pts.map(([, y]) => y));
       const ink = new Set(pts.map(([x, y]) => `${x - x0},${y - y0}`));
-      const dropped: string[] = [];
-      const added: string[] = [];
-      const cleared: string[] = [];
-      for (let r = 0; r < n; r++)
-        for (let c = 0; c < n; c++) {
-          const v = cov[r]![c]!;
-          const at = `(r${r},c${c})`;
-          if (v >= TRACE && !ink.has(`${c},${r}`)) {
-            if (CLEARED.includes(at)) cleared.push(at);
-            else dropped.push(`${at} ${v.toFixed(2)}`);
-          }
-          if (v < TRACE && ink.has(`${c},${r}`)) added.push(`${at} ${v.toFixed(2)}`);
-        }
+      const drawn = Array.from({ length: n }, (_, r) =>
+        Array.from({ length: n }, (_, c) => (ink.has(`${c},${r}`) ? 'X' : '.')).join(''),
+      );
+      expect(drawn, `${name}: the mark is not the approved drawing`).toEqual(APPROVED);
       const outside = [...ink].filter((k) => k.split(',').some((v) => Number(v) >= n));
-      expect(dropped, `${name}: the trace drops pixels the symbol covers`).toEqual([]);
-      expect(added, `${name}: the trace inks pixels the symbol barely touches`).toEqual([]);
-      expect(cleared, `${name}: the dot's gap is not the two named hand edits`).toEqual(CLEARED);
       expect(outside, `${name}: the mark is bigger than its ${n}px grid`).toEqual([]);
 
-      // The gap those two edits open: the dot (the smaller 4-connected piece) against the ring.
+      // The dot (the smaller 4-connected piece) stands two pixels off the ring.
       const left = new Set(ink);
       const pieces: string[][] = [];
       for (const k0 of ink) {
@@ -418,9 +408,12 @@ describe('the map', () => {
    * 0 -> 115, (21,22) 0 -> 116, `decor-above` (44,18) and (45,18) sapling crown -> 0, and
    * `collision` (36,3), (20,22), (21,22) 0 -> 1, plus the appended `sign-research`, `sign-speed` and
    * `sign-logo` objects (ids 22 to 24). The sheet stays 384x320 because `ceil(116 / 12)` is 10.
+   *
+   * 118 since 2026-10-25: `elder-tl-over-br` and `elder-tr-over-bl`, APPENDED at 117 and 118, for
+   * the buried-crown cells (forest-map.ts). The sheet stays 384x320: `ceil(118 / 12)` is 10.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(116);
+    expect(TILE_NAMES).toHaveLength(120);
   });
 });
 

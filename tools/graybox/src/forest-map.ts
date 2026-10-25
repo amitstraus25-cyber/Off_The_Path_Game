@@ -2286,6 +2286,8 @@ export function generateForestMap(): GeneratedMap {
       'elder-tc-over-ml',
       'elder-tl-over-sapling-tr',
       'elder-tr-over-sapling-tl',
+      'elder-tl-over-br',
+      'elder-tr-over-bl',
     ].map(gid),
   ]);
   /** Masked, because the canopy is re-stamped mirrored and a flipped gid is not that gid. */
@@ -4916,8 +4918,11 @@ export function generateForestMap(): GeneratedMap {
    * `set` alone leaves `ground` (`path-n`/`path-s`, just laid by the lane) and `collision` (0)
    * exactly as they are, and writes only the decor the gap has never had.
    */
-  for (const [i, y] of gateRows.entries())
+  for (const [i, y] of gateRows.entries()) {
     set(below, fenceX, y, gid(i === 0 ? 'gate-n' : 'gate-s'));
+    // The leaf swung open runs on into the garden's first cell (tiles/s-outdoor.ts, 2026-10-25).
+    set(below, fenceX + 1, y, gid(i === 0 ? 'gate-n-swing' : 'gate-s-swing'));
+  }
   /*
    * THE APRON AT THE DOOR IS LOAD-BEARING, and this is the note rather than the fix.
    *
@@ -6459,11 +6464,13 @@ export function generateForestMap(): GeneratedMap {
       'elder-tc/elder-ml': 'elder-tc-over-ml',
       'elder-tl/sapling-tr': 'elder-tl-over-sapling-tr',
       'elder-tr/sapling-tl': 'elder-tr-over-sapling-tl',
+      'elder-tl/elder-br': 'elder-tl-over-br',
+      'elder-tr/elder-bl': 'elder-tr-over-bl',
     };
     /** Every crown quarter laid on each cell, as drawn: name, flip and the tree's trunk row. */
     const laid = new Map<number, { name: string; flip: boolean; y: number }[]>();
-    for (const t of trees) {
-      if (t.k !== KINDS['elder'] && t.k !== KINDS['sapling']) continue;
+    trees.forEach((t) => {
+      if (t.k !== KINDS['elder'] && t.k !== KINDS['sapling']) return;
       for (const [dx, dy] of t.k.crown) {
         const key = (t.y + dy) * MAP_W + t.x + dx;
         const name = t.flip ? mirroredTile(t.k, dx, dy) : t.k.tileAt(dx, dy);
@@ -6471,7 +6478,7 @@ export function generateForestMap(): GeneratedMap {
         list.push({ name, flip: t.flip, y: t.y });
         laid.set(key, list);
       }
-    }
+    });
     let fronted = 0;
     for (const [key, list] of laid) {
       if (list.length < 2) continue;
@@ -6479,8 +6486,23 @@ export function generateForestMap(): GeneratedMap {
       const y = (key - x) / MAP_W;
       // The quarter that actually won the cell, and the front-most crown it beat, if any. Where
       // three crowns share a cell the middle one lost before this pass and still does.
-      const back = list.find((q) => at(above, x, y) === gid(q.name) + (q.flip ? FLIP_H : 0));
+      let back = list.find((q) => at(above, x, y) === gid(q.name) + (q.flip ? FLIP_H : 0));
       if (!back) continue;
+      /*
+       * A BURIED CROWN DOES NOT GET TO SHOW THROUGH (the client's screenshot, 2026-10-25). Where
+       * three crowns share a cell, the quarter that won it can be the MIDDLE crown's -- a tree that
+       * lost the cells round it to the rearmost crown's opaque underside -- and its bright middle
+       * then printed as a lighter square inside that underside, cut by the grid on two sides, at
+       * (33,15). The rearmost crown is what surrounds such a cell, so the front crown is laid over
+       * it instead: a three-crown cell reads as the front tree over the one the eye sees round it.
+       */
+      if (list.length >= 3) {
+        const rearmost = [...list].sort((p, q) => p.y - q.y)[0]!;
+        if (rearmost !== back && rearmost.y < back.y) {
+          back = rearmost;
+          set(above, x, y, gid(back.name) + (back.flip ? FLIP_H : 0));
+        }
+      }
       const front = list.filter((q) => q.y > back.y).sort((p, q) => q.y - p.y)[0];
       if (!front || front.flip !== back.flip) continue;
       const tile = OVERLAP[`${front.name}/${back.name}`];

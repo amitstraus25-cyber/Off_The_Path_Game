@@ -114,5 +114,9 @@
   "notice-board-r": 113,
   "sign-speed": 114,
   "sign-logo-l": 115,
-  "sign-logo-r": 116
+  "sign-logo-r": 116,
+  "elder-tl-over-br": 117,
+  "elder-tr-over-bl": 118,
+  "gate-n-swing": 119,
+  "gate-s-swing": 120
 }

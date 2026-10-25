@@ -881,7 +881,6 @@ const fenceCornerWith =
  * walks on it.
  */
 const GATE_X = RUN_X;
-const GATE_W = RUN_EDGE - RUN_X + 1; // 13, the run's own span rather than a second opinion on it
 
 /*
  * ONE STEP OUT OF `RAIL_ROWS`, CHECKED.
@@ -947,62 +946,82 @@ const GATE_T = railStep(NEAR_RAIL_CROWN);
  * arrival frame disagrees, THIS is the number to move -- never `MIN_DAYLIGHT` in the guard below,
  * which is deliberately not derived from it.
  */
-const GATE_N_END = 13; // gate-n's free end: the cut row
-const GATE_S_END = TILE - 1 - GATE_N_END; // 18: the same cut, measured from the south
-const GATE_STRAP: readonly number[] = [2, 5]; // two hinge straps, iron wrapped round the rail
-const GATE_LATCH = GATE_S_END + 1; // the latch bar, where the two leaves meet when shut
-
-/** One band right across the leaf: a cut end, a hinge strap or the latch. */
-function gateBand(img: Img, y: number, c: RGBA): void {
-  img.rect(GATE_X, y, GATE_W, 1, c);
-}
-
-/**
- * One row of the leaf's body: the run's own cross-section, held flat at `GATE_T`.
- *
- * Deliberately the run's columns and the run's offsets rather than a profile of its own, so the
- * gate cannot drift off the fence it hangs in. What differs is along the length, where the run
- * pulses through `CAP_ALONG` and this does not move at all.
- */
-function gateBody(img: Img, y: number): void {
-  img.px(GATE_X, y, WOOD_BLACK);
-  for (let i = 0; i < RUN_FACE_W; i++)
-    img.px(RUN_FACE + i, y, timber(Math.max(GATE_T + RUN_ACROSS[i]!, 0.04)));
-  img.px(RUN_SHADE_X, y, timber(Math.max(GATE_T - 0.34, 0.04)));
-  img.px(RUN_SHADE_X + 1, y, timber(Math.max(GATE_T - 0.46, 0.04)));
-  img.px(RUN_EDGE, y, WOOD_BLACK);
-}
-
-/**
- * One leaf of the gate, hung at whichever `end` of its tile meets a post.
- *
- * `north` hangs from the post at (46,19). Its row 0 is the hinge joint -- ONE row of near-black,
- * because `fenceCorner`'s own note says two rows of it "read as a gap between two objects rather
- * than as the seam of one". Then body, two iron straps across it, and a square-cut free end.
- *
- * `south` is the mirror, hung at row 31, with two differences that are the whole reason this is
- * two tiles and not one stamped twice. Its hung row is BODY and deliberately not black: the
- * `fence-corner` at (46,22) draws its own `WOOD_BLACK` joint across its row 0 immediately below,
- * so a black row here would stack into exactly the two-row gap that note warns about. And it
- * carries the LATCH bar inboard of its cut end, where the two leaves meet when the gate is shut --
- * a latch has a bar on one leaf and a keeper on the other, so putting it on one of them is right
- * as well as being what tells the two apart.
- */
+/** The hinged half of one leaf, in the opening itself: from its post's west keyline to the cell's east edge. */
 const gateLeaf =
   (end: 'north' | 'south'): Painter =>
-  (img) => {
-    if (end === 'north') {
-      gateBand(img, 0, WOOD_BLACK);
-      for (let y = 1; y < GATE_N_END; y++) gateBody(img, y);
-      for (const y of GATE_STRAP) gateBand(img, y, WOOD_LINE);
-      gateBand(img, GATE_N_END, WOOD_BLACK);
-      return;
+  (img) =>
+    gateOpen(img, end, GATE_X, TILE - 1, true);
+
+/*
+ * THE GATE STANDS OPEN (the client, 2026-10-25: "I still don't love the layout of that front gate.
+ * Let's get that perfect"). The two leaves used to hang in the opening as two short stubs of the
+ * run, which read as broken fence rather than as a gate. Now each is SWUNG BACK into the garden: a
+ * rail lying flat along the edge of the lane, hinged at its gatepost and running east across this
+ * cell and into the next (`gate-n-swing`, `gate-s-swing`), so the two posts frame a clear lane and
+ * the two leaves line it like an open double gate. Swung east-west, a leaf faces the camera, so it
+ * is drawn side-on: pickets, two rails and a brace, like a field gate.
+ */
+const GATE_PANEL_H = 15; // the leaf's face, seen side-on now it is swung east-west
+const GATE_PICKET_PITCH = 5; // a picket every five pixels
+const GATE_SWING_END = 12; // where the leaf's free end is cut, in the next cell
+
+/**
+ * One leaf, swung open and seen side-on: pickets with rounded tops, a top and a bottom rail, and the
+ * diagonal brace every field gate carries, from the hinge's foot to the free end's head. `north`
+ * stands on the lane's north edge (its foot on row GATE_PANEL_H - 1), `south` on its south edge
+ * (its foot on the cell's last row). `x0..x1` is its span in this cell; `hinged` keeps the brace's
+ * low end and a keyline at the west, and the free half carries the latch.
+ */
+function gateOpen(img: Img, end: 'north' | 'south', x0: number, x1: number, hinged: boolean): void {
+  const top = end === 'north' ? 0 : TILE - GATE_PANEL_H;
+  const foot = top + GATE_PANEL_H - 1;
+  const railHi = top + 3;
+  const railLo = foot - 3;
+  // Pickets, on a fixed pitch from the hinge so the two halves line up across the cell edge.
+  const first = hinged
+    ? x0 + 1
+    : x0 + ((GATE_PICKET_PITCH - ((TILE - GATE_X - 1) % GATE_PICKET_PITCH)) % GATE_PICKET_PITCH);
+  for (let px = first; px + 2 <= x1; px += GATE_PICKET_PITCH) {
+    for (let y = top + 1; y <= foot; y++) {
+      img.px(px, y, timber(GATE_T + 0.02));
+      img.px(px + 1, y, timber(GATE_T - 0.12));
+      img.px(px + 2, y, WOOD_LINE);
     }
-    gateBand(img, GATE_S_END, WOOD_BLACK);
-    gateBand(img, GATE_LATCH, WOOD_LINE);
-    for (let y = GATE_LATCH + 1; y < TILE; y++) gateBody(img, y);
-    for (const y of GATE_STRAP) gateBand(img, TILE - 1 - y, WOOD_LINE);
-  };
+    img.px(px, top, WOOD_BLACK);
+    img.px(px + 1, top, WOOD_BLACK);
+  }
+  // The two rails, right across.
+  for (const ry of [railHi, railLo]) {
+    for (let x = x0; x <= x1; x++) {
+      img.px(x, ry - 1, WOOD_BLACK);
+      img.px(x, ry, timber(GATE_T + 0.08));
+      img.px(x, ry + 1, timber(GATE_T - 0.2));
+      img.px(x, ry + 2, WOOD_BLACK);
+    }
+  }
+  // The brace: one diagonal from the hinge's foot rising to the free end's head.
+  const span = TILE - GATE_X + GATE_SWING_END; // the whole leaf, both cells
+  const offset = hinged ? 0 : TILE - GATE_X;
+  for (let x = x0; x <= x1; x++) {
+    const along = (x - x0 + offset) / span;
+    const y = Math.round(railLo - along * (railLo - railHi));
+    if (y > railHi + 1 && y < railLo - 1) {
+      img.px(x, y, timber(GATE_T));
+      img.px(x, y + 1, WOOD_LINE);
+    }
+  }
+  // Keylines at the ends: the hinge stile on the hinged half, the cut end and latch on the free.
+  const endX = hinged ? x0 : x1;
+  for (let y = top; y <= foot; y++) img.px(endX, y, WOOD_BLACK);
+  if (!hinged && end === 'south')
+    for (let y = railHi; y <= railHi + 2; y++) img.px(x1 - 2, y, WOOD_LINE);
+}
+
+/** The swung leaves' free halves, in the cell east of the opening. */
+const gateSwing =
+  (end: 'north' | 'south'): Painter =>
+  (img) =>
+    gateOpen(img, end, 0, GATE_SWING_END, false);
 
 /* ------------------------------------------------------------------- bridge */
 
@@ -1383,40 +1402,31 @@ function bridgePlank(kind: 'left' | 'middle' | 'right'): Painter {
     if (rows.length === 0)
       throw new Error(`${name} draws nothing: the gate opening is an absence of fence again`);
 
-    // 2. NARROWER THAN THE POST IT HANGS FROM. The bound is the post's MEASURED width, so widening
-    //    the leaf out to the post's own footprint fails here rather than moving the bound with it.
-    if (cols.length >= postCols.length)
-      throw new Error(
-        `${name} is ${cols.length} columns wide against fence-corner's ${postCols.length}: a gate ` +
-          `leaf as wide as its post reads as more fence, not as a gate`,
-      );
-
-    // 3. INSIDE THE POST'S FOOTPRINT, so the gateway lines up down one column of the map.
-    if (cols[0]! < postCols[0]! || cols.at(-1)! > postCols.at(-1)!)
-      throw new Error(
-        `${name} spans x${cols[0]}..${cols.at(-1)} and fence-corner spans ` +
-          `x${postCols[0]}..${postCols.at(-1)}: the leaf hangs outside its own post`,
-      );
-
-    // 4. IT MEETS ITS POST. `gate-n` is hung at the top of its tile, `gate-s` at the bottom.
+    // 2. IT MEETS ITS POST: wood on the hung row, starting inside the post's own columns.
     const hung = name === 'gate-n' ? 0 : TILE - 1;
-    if (!rows.includes(hung))
+    if (!rows.includes(hung) || cols[0]! > postCols.at(-1)! || cols[0]! < postCols[0]!)
       throw new Error(
-        `${name} draws nothing on row ${hung}, so the leaf does not reach the post it hangs from ` +
-          `-- which is the "two lengths of picket ending in open lawn" the gate already was`,
+        `${name} does not start at its post on row ${hung} -- a leaf that is not hinged to a ` +
+          `post is a plank lying on the lane`,
       );
 
-    // 5. IT LEAVES THE OPENING OPEN.
-    const MIN_DAYLIGHT = 4;
+    // 3. IT IS SWUNG OPEN, INTO THE GARDEN: the leaf runs on to the cell's east edge, where its
+    //    free half (`-swing`) continues, rather than hanging in the opening (2026-10-25).
+    if (cols.at(-1)! !== TILE - 1)
+      throw new Error(
+        `${name} stops at x${cols.at(-1)}: the swung leaf must run on to the east edge`,
+      );
+
+    // 4. IT LEAVES THE LANE CLEAR: at least half the cell's rows carry no wood at all.
+    const MIN_DAYLIGHT = 14;
     const free = TILE - rows.length;
     if (free < MIN_DAYLIGHT)
       throw new Error(
-        `${name} leaves only ${free} rows of the opening clear (floor ${MIN_DAYLIGHT}): a rail from ` +
-          `post to post is a gate standing shut, and the player walks through this one`,
+        `${name} leaves only ${free} rows of the opening clear (floor ${MIN_DAYLIGHT}): the leaves ` +
+          `line the lane, they never cross it`,
       );
 
-    // 6. CONTINUOUS. A leaf with a hole in it is a chain, which is the fault five versions of
-    //    `fencePost` had -- see the long note above RUN_X.
+    // 5. CONTINUOUS. A leaf with a hole in it is a chain.
     if (rows.at(-1)! - rows[0]! + 1 !== rows.length)
       throw new Error(
         `${name} has a hole in it: rows ${rows[0]}..${rows.at(-1)} carry only ${rows.length} ` +
@@ -1453,6 +1463,8 @@ export const OUTDOOR_TILES: Record<string, (img: Img) => void> = {
   'fence-corner-w': fenceCornerWith('west'),
   'gate-n': gateLeaf('north'),
   'gate-s': gateLeaf('south'),
+  'gate-n-swing': gateSwing('north'),
+  'gate-s-swing': gateSwing('south'),
   'bridge-l': bridgePlank('left'),
   'bridge-m': bridgePlank('middle'),
   'bridge-r': bridgePlank('right'),

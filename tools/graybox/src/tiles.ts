@@ -379,6 +379,17 @@ export const TILE_NAMES: readonly string[] = [
   'sign-speed',
   'sign-logo-l',
   'sign-logo-r',
+  /*
+   * Two more crown overlaps, APPENDED at gids 117 and 118 on 2026-10-25: a front crown's top corner
+   * over a neighbour's BOTTOM corner, for the cells where a third crown buried between them used
+   * to win and print its bright middle as a square (forest-map.ts, "A BURIED CROWN"). Every
+   * existing gid keeps its value and its cell; the sheet stays 10 rows because ceil(118 / 12) is 10.
+   */
+  'elder-tl-over-br',
+  'elder-tr-over-bl',
+  // The open gate's free halves, in the cell east of the opening (tiles/s-outdoor.ts), 119 and 120.
+  'gate-n-swing',
+  'gate-s-swing',
 ];
 
 /*

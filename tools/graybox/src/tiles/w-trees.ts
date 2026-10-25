@@ -2892,6 +2892,10 @@ export const TREE_TILES: Record<string, (img: Img) => void> = {
   'elder-tc-over-ml': overlapTile(elderCanopyTile(1, 0), elderCanopyTile(0, 1)),
   'elder-tl-over-sapling-tr': overlapTile(elderCanopyTile(0, 0), saplingTile(1, 0)),
   'elder-tr-over-sapling-tl': overlapTile(elderCanopyTile(2, 0), saplingTile(0, 0)),
+  // A crown a row in front over a neighbour's bottom corner, where a third crown is buried
+  // between them (forest-map.ts, "A BURIED CROWN DOES NOT GET TO SHOW THROUGH").
+  'elder-tl-over-br': overlapTile(elderCanopyTile(0, 0), elderCanopyTile(2, 2)),
+  'elder-tr-over-bl': overlapTile(elderCanopyTile(2, 0), elderCanopyTile(0, 2)),
 };
 
 /* ------------------------------------------------------------------- the shoulder, guarded */
