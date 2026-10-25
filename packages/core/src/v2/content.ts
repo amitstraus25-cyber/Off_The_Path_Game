@@ -188,7 +188,6 @@ export const CHROME_KEYS = [
   'postHeading',
   'postUnavailable',
   'handleLabel',
-  'handleReroll',
   'handleHint',
   'privacyLine',
   'leaderboardTitle',

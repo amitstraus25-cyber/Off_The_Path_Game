@@ -92,6 +92,15 @@ export async function startGame(page: Page): Promise<void> {
 }
 
 /**
+ * Types a name into the empty name field, as a player now must: the field starts empty and nothing
+ * suggests one (the client, 2026-10-25). A field already holding a name is left as it is.
+ */
+export async function typeAName(page: Page, name = 'Little Purple'): Promise<void> {
+  const field = page.locator('#otp-handle-input');
+  if ((await field.inputValue()) === '') await field.fill(name);
+}
+
+/**
  * From the cottage door (or the late ending) to the reveal: every line of the arrival, then the
  * way in. The v2 rules have no FINISH: the run ended at the door, and this is the view walking on.
  */
@@ -108,6 +117,18 @@ export async function toTheReveal(page: Page): Promise<void> {
    * that opened on Enter and then ignored Space, because Space went to the body.
    */
   await expect(page.locator('.otp-screen__body')).toBeFocused();
+  /*
+   * A name in the field, as the player who posts will have typed. The field starts empty since the
+   * client's call of 2026-10-25, and the specs that reach this point are about what happens next.
+   * Set through an input event rather than `fill`, so focus stays where the screen put it.
+   */
+  const field = page.locator('#otp-handle-input');
+  if (await field.count())
+    await field.evaluate((el: HTMLInputElement) => {
+      if (el.value !== '') return;
+      el.value = 'Little Purple';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 }
 
 /**

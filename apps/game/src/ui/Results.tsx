@@ -2,12 +2,6 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { DEFAULT_TOP_LIMIT, v2 } from '@otp/core';
 import { RESEARCH_URL, researchHref } from '../embed/postMessage';
 import { variants } from '../ab';
-/*
- * TWO STATEMENTS FROM ONE MODULE, DELIBERATELY. `test/handle-field.test.ts` matches this exact
- * line -- `import { newHandle } from '../net/leaderboard'` -- to hold the screen and the wire to a
- * single mint function. Merging these reddens it.
- */
-import { newHandle } from '../net/leaderboard';
 import { readBoard as readTheBoard } from '../net/leaderboard';
 import type { BoardRead, ContactInput, PostOutcome } from '../net/leaderboard';
 import { CyeraMark, Highlighted, NotationChip, Panel } from './components';
@@ -100,9 +94,9 @@ function RevealIcon({ skill }: { skill: v2.Skill }) {
  * plain words rather than meeting a bare refusal. Nothing here is stricter or looser than the
  * server, because nothing here is a rule of its own.
  *
- * Every name `mintHandle` produces still passes -- `test/leaderboard.test.ts` runs all 3,072
- * through `validateHandle` -- because the field is pre-filled with one, and a suggestion the form
- * then refuses would be absurd.
+ * The field starts EMPTY and nothing on this screen suggests a name (the client, 2026-10-25: "I
+ * don't need you to suggest a name... let people enter their own name"): no pre-filled handle and
+ * no Suggest a name button. An empty press is refused like any other short name, in words.
  */
 
 /** What is wrong with a typed name, as the chrome key of the sentence that says so. */
@@ -737,7 +731,7 @@ function RevealTile({
  *      over to see why. This is the interactive, educational part, and it is kept short.
  *   3. THE QUESTION and the screen's one Lime, Read the research, before the post form: the sentence
  *      this asset exists to ask must not sit below a form the visitor may not use (UX_REVIEW 9).
- *   4. YOUR NAME, typed (pre-filled with a suggestion the player can overwrite), Post, and the board,
+ *   4. YOUR NAME, typed by the player into an empty field, Post, and the board,
  *      with the player's own run shown the moment it is taken.
  */
 export function Results({
@@ -763,11 +757,8 @@ export function Results({
     body.current?.focus({ preventScroll: true });
   }, []);
 
-  /*
-   * The name field starts with a suggestion, minted once per mount -- `useState(newHandle)` passes
-   * the function, so it is called for the initial state only -- and the player types over it.
-   */
-  const [handle, setHandle] = useState(newHandle);
+  /* The name field starts empty: the player types their own (see the note on HANDLE_PROBLEM). */
+  const [handle, setHandle] = useState('');
   /** The problem the last press found with the name, or null. Shown until the name changes. */
   const [problem, setProblem] = useState<HandleProblem | null>(null);
   const [notice, setNotice] = useState<PostOutcome | null>(null);
@@ -819,12 +810,6 @@ export function Results({
       reads.close();
     };
   }, []);
-
-  const suggest = (): void => {
-    if (inFlight.current) return;
-    setHandle(newHandle());
-    setProblem(null);
-  };
 
   const submit = async (e: Event): Promise<void> => {
     e.preventDefault();
@@ -1101,14 +1086,6 @@ export function Results({
                       {s(problem)}
                     </p>
                   )}
-                  <button
-                    type="button"
-                    class="otp-button otp-button--quiet"
-                    onClick={suggest}
-                    aria-disabled={posting ? 'true' : undefined}
-                  >
-                    {s('handleReroll')}
-                  </button>
                   {asking && contactStep && (
                     /*
                      * THE WORK EMAIL AND THE CONSENT, between the name and Post so the reading and

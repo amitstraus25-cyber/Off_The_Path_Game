@@ -64,15 +64,10 @@ describe('the name on the board is the one the player types', () => {
     expect(code, 'the raw field value is posted').not.toContain('await onPost(handle');
   });
 
-  it('pre-fills a suggestion once per arrival, not once per render', () => {
-    /*
-     * `useState(newHandle)` passes the function and Preact calls it for the initial state only;
-     * `useState(newHandle())` mints on EVERY render -- and this component now re-renders on every
-     * keystroke, so the field would be overwritten under the player's fingers.
-     */
-    expect(code).toContain('useState(newHandle)');
-    expect(code, 'the suggestion is minted on every render').not.toContain('useState(newHandle())');
-    expect(code).toMatch(/import \{ newHandle \} from '\.\.\/net\/leaderboard'/);
+  it('starts the name field empty and suggests no name (the client, 2026-10-25)', () => {
+    expect(code).toContain("useState('')");
+    expect(code, 'the screen mints a name again').not.toContain('newHandle');
+    expect(code, 'the Suggest a name button is back').not.toContain('handleReroll');
   });
 
   it('accepts every suggestion it can make', () => {
@@ -112,7 +107,7 @@ describe('the name on the board is the one the player types', () => {
   it('ships a sentence for every reason the board can give, and no copy for a field it lacks', () => {
     for (const key of Object.values(HANDLE_PROBLEM))
       expect(strings[key]?.trim(), `${key} renders as nothing`).toBeTruthy();
-    expect(strings['handleReroll']?.trim(), 'the suggest button renders as nothing').toBeTruthy();
+    expect(Object.keys(strings), 'a Suggest a name label is back').not.toContain('handleReroll');
     // A placeholder would be a second, invisible-on-type label; the field has a real one.
     expect(Object.keys(strings)).not.toContain('handlePlaceholder');
   });

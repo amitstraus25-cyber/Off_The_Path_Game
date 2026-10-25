@@ -298,7 +298,9 @@ test.describe('the name is the one the player types', () => {
     await playTo(page, { take: 'good', seconds: 10 });
 
     const field = page.getByRole('textbox', { name: say('handleLabel') });
-    await expect(field, 'the field is pre-filled with a suggestion').toHaveValue(/\S/);
+    // Players type their own name (the client, 2026-10-25): no button suggests one. That the field
+    // starts empty is held by test/handle-field.test.ts, since toTheReveal types a name into it.
+    await expect(page.locator('.otp-post .otp-button--quiet')).toHaveCount(0);
     await field.fill('  Little   Purple ');
     await page.getByRole('button', { name: 'Post', exact: true }).click();
     await expect(page.locator('[data-announce="post"]')).toHaveAttribute(
@@ -377,7 +379,6 @@ test.describe("the player's own run, right after posting", () => {
 
     // Once a read carries the row, it is the board's own row, marked once, no longer "joining".
     board = JSON.stringify({ entries: [{ rank: 1, handle: name, score }] });
-    await page.getByRole('button', { name: say('handleReroll') }).click();
     await page.getByRole('textbox', { name: say('handleLabel') }).fill(name);
     await page.getByRole('button', { name: 'Post', exact: true }).click();
     await expect(mine).toHaveCount(1);
@@ -442,12 +443,6 @@ for (const [width, height] of [
       const box = (await page.locator(selector).boundingBox())!;
       expect(box.height, `${selector} at ${width}px`).toBeGreaterThanOrEqual(44);
     }
-    // Post is the form's primary, so it is never the smaller pill beside "Suggest a name".
-    const post = (await page.locator('.otp-post button[type="submit"]').boundingBox())!;
-    const suggest = (await page.locator('.otp-post .otp-button--quiet').boundingBox())!;
-    expect(post.width, `Post is narrower than Suggest at ${width}px`).toBeGreaterThanOrEqual(
-      suggest.width - 0.5,
-    );
     // The board's title is a title, "Wolf Spotters", not the all-caps label "WOLF Spotters".
     const title = page.locator('.otp-board__title');
     await expect(title).toHaveText(say('leaderboardTitle'));

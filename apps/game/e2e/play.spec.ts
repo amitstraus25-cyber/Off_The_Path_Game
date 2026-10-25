@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { TILE } from '../src/world/logic';
-import { ready } from './helpers';
+import { ready, typeAName } from './helpers';
 import type { RunState } from './helpers';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -190,6 +190,7 @@ test('the careful run reads every card, sorts the seven, scores 100 and posts', 
   await expect(cta).toHaveAttribute('target', '_blank');
 
   // Post: the body carries the run log dealt from the server's seed, and the server's token.
+  await typeAName(page);
   await page.getByRole('button', { name: 'Post', exact: true }).click();
   await expect(page.locator('[data-announce="post"]')).toHaveAttribute(
     'data-notice',

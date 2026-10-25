@@ -548,9 +548,9 @@ test('at 375 a name the board would refuse is said directly under its field', as
   await expect(field).toHaveAttribute('aria-describedby', 'otp-handle-problem otp-handle-hint');
   const input = (await field.boundingBox())!;
   const said = (await problem.boundingBox())!;
-  const reroll = (await page.getByRole('button', { name: say('handleReroll') }).boundingBox())!;
+  const post = (await page.getByRole('button', { name: 'Post', exact: true }).boundingBox())!;
   expect(said.y).toBeGreaterThanOrEqual(input.y + input.height);
   expect(said.y - (input.y + input.height)).toBeLessThanOrEqual(16);
-  expect(said.y + said.height).toBeLessThanOrEqual(reroll.y);
+  expect(said.y + said.height).toBeLessThanOrEqual(post.y);
   await page.context().close();
 });

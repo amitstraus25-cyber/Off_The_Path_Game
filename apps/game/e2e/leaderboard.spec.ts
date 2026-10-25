@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
 import { HANDLE_FIRST_WORDS, HANDLE_SECOND_WORDS, isMintedHandle } from '@otp/core';
-import { answerAllAndArrive, ready, startGame, toTheReveal } from './helpers';
+import { answerAllAndArrive, ready, startGame, toTheReveal, typeAName } from './helpers';
 
 /*
  * The post form, and the board under it, against an API that answers, in a real browser.
@@ -93,6 +93,7 @@ async function reachResults(page: Page): Promise<void> {
 }
 
 const post = async (page: Page): Promise<void> => {
+  await typeAName(page);
   await page.getByRole('button', { name: 'Post', exact: true }).click();
 };
 
@@ -115,9 +116,9 @@ test('a post the board takes says which name went up', async ({ page }) => {
   await reachResults(page);
   await post(page);
 
-  // The handle is minted, never typed, and no score is sent (golden rule 6). The sharper claim
-  // the minted field makes available: the name on the wire is the name on the screen.
-  expect(sent.handle).toMatch(/^[a-z]+-[a-z]+-[1-9][0-9]$/);
+  // The handle is the one typed into the field, and no score is sent (golden rule 6): the name on
+  // the wire is the name on the screen.
+  expect(sent.handle).toBe('Little Purple');
   expect(sent.handle).toBe(
     await page.locator('.otp-handle [data-handle]').getAttribute('data-handle'),
   );
@@ -789,14 +790,14 @@ for (const outcome of ROW_OUTCOMES) {
     });
 
     // The mount read finds nothing, so the handle can be read off the page before the board that
-    // carries it is built. It is minted in the browser; there is no other way to build it.
+    // carries it is built. It is the name typed into the field (helpers.ts `toTheReveal`).
     const board: Board = { reply: ABSENT_BOARD, calls: 0 };
     await serveBoard(page, board);
     await reachResults(page);
     await expect(note(page)).toHaveText(say('boardDown'));
 
     const mine = await page.locator('.otp-handle [data-handle]').getAttribute('data-handle');
-    expect(mine).toMatch(/^[a-z]+-[a-z]+-[1-9][0-9]$/);
+    expect(mine).toBe('Little Purple');
     const others = tenRows(mine!);
     board.reply = rowsReply([
       others[0]!,
@@ -1074,13 +1075,13 @@ test('the retry asks the board again, and your own row is marked when it arrives
   expect(board.calls).toBe(1);
 
   /*
-   * The handle is minted on this screen and never typed, so the only way to build a board with
+   * The handle is the name typed into the field, so the only way to build a board with
    * YOUR row on it is to read the name the page is showing and answer with it. That is also the
    * honest shape of the claim: your row is matched locally against that value and nothing extra
    * goes over the wire to find it.
    */
   const mine = await page.locator('.otp-handle [data-handle]').getAttribute('data-handle');
-  expect(mine).toMatch(/^[a-z]+-[a-z]+-[1-9][0-9]$/);
+  expect(mine).toBe('Little Purple');
   const others = tenRows(mine!);
   board.reply = rowsReply([
     ...others.slice(0, 2),
