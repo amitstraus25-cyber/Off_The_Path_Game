@@ -255,8 +255,40 @@ otp:ready        { version: string }
 otp:started      { runId: string | null }
 otp:verdict      { skillId: string, verdict: string }
 otp:completed    { score: number, ending: string }
-otp:cta          {}              // "Read the Research" clicked; parent decides navigation
+otp:cta          {}              // "Read the Research" clicked (analytics; every click)
 ```
+
+### The "Read the Research" message (the contract for the web agency)
+
+Besides the five events above, which are `{ type, payload }`, the game sends **one more message,
+shaped `{ type }` with no payload**:
+
+```
+window.parent.postMessage({ type: 'OFF_THE_PATH_READ_RESEARCH' }, <the parent's exact origin>)
+```
+
+- **When:** on a plain click of the "Read the research" link on the results screen (and Enter on
+  it). Not on load, not on a timer.
+- **Which parents:** `https://cyera.com`, any `https://*.cyera.com` host (so `www.cyera.com`), and
+  `https://cyera-staging.webflow.io` -- exactly the `frame-ancestors` list. The target origin is
+  that parent's own origin, never `*`. The parent is read from `location.ancestorOrigins[0]` where
+  the browser has it (Chrome, Safari), else from `document.referrer`'s origin (Firefox), and
+  checked against the list. `https` and the default port only.
+- **What the game does:** when the message is posted, the click's navigation is cancelled (no new
+  tab, no navigation of the frame or the parent): **the parent is expected to scroll itself to the
+  research section.** The page's `message` listener should check `event.origin` is the game's
+  origin (`https://off-the-path-game.vercel.app`) and `event.data.type`.
+- **Standalone:** opened directly (not in a frame), or framed by a page that is not on the list,
+  or by a parent the browser will not name (for example a parent sending `Referrer-Policy:
+no-referrer` to a browser without `ancestorOrigins`): nothing is posted and the link behaves as
+  a link, opening `https://www.cyera.com/research` (`DEFAULT_RESEARCH_URL`, overridable at build
+  time with `VITE_RESEARCH_URL`) in a new tab.
+- **The link stays a link:** it keeps its `href`, so no-JS, middle-click and assistive technology
+  work. Ctrl/Cmd/Shift/Alt-clicks and non-primary buttons are left to the browser (a new tab) and
+  post no message. `otp:cta` is still sent on every click for the parent's analytics.
+- **Still outbound only.** The game gains no `message` listener, so there is no inbound payload to
+  validate; the origin decision is `resolveParentOrigin` and the click is `readResearchClick`, both
+  in `embed/postMessage.ts`, covered by `test/embed-origin.test.ts` and `e2e/embed-read-research.spec.ts`.
 
 Two corrections to the list this replaced: `otp:completed` carries **no `rank`** (the board answers
 with a score, and the rank on screen is a position in a fetched list, not something the game knows
@@ -279,16 +311,25 @@ specification of what it ought to be:
 
 ```
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
-  font-src 'self'; connect-src 'self'; frame-ancestors https://cyera.com https://*.cyera.com;
+  font-src 'self'; connect-src 'self';
+  frame-ancestors https://cyera.com https://*.cyera.com https://cyera-staging.webflow.io;
   base-uri 'none'; form-action 'none'; object-src 'none'
 X-Content-Type-Options: nosniff     Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy: camera=(), microphone=(), geolocation=()
 ```
 
-Two differences from the version this document used to print, both of which matter:
+Three differences from the version this document used to print, all of which matter:
 
 - `frame-ancestors` names **`https://cyera.com` as well as `https://*.cyera.com`**. The wildcard does not
   match the bare apex, so the documented policy would have refused to frame the game on cyera.com itself.
+- `frame-ancestors` also names **`https://cyera-staging.webflow.io`** (added 2026-10-25 at the web
+  agency's request, so the Webflow staging copy of the research page can frame the game). It is one
+  exact host: not `https://*.webflow.io`, which every Webflow customer's site would satisfy. It is
+  named in three places that tests keep equal: `vercel.json` (which `vercel-output.mjs` copies, the
+  script restates nothing), `FRAME_ANCESTOR_HOSTS` in `apps/game/src/embed/postMessage.ts`
+  (guarded by `test/embed-origin.test.ts`), and this block (guarded by `test/docs-truth.test.ts`).
+  There is no meta policy and no other allow-list: `index.html` carries no CSP, and a `<meta>` CSP
+  cannot carry `frame-ancestors` anyway.
 - `connect-src` is `'self'` with no API origin, because the leaderboard is same-origin by decision D3.
   Phase 6 adds nothing here.
 

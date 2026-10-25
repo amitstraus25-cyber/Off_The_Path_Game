@@ -484,7 +484,7 @@ export interface ResultsProps {
   /** What the run came to: the score, its parts, the ending and the reveal, from core (rule 6). */
   run: v2.RunResult;
   onReplay(): void;
-  onReadResearch(): void;
+  onReadResearch(event: MouseEvent): void;
   /**
    * Why this run cannot be posted, or null when it can. A run the server did not start has no
    * token, and a late run is refused by rule (apps/api): both are said, never a dead button.
@@ -912,7 +912,9 @@ export function Results({
             {/*
               ---------------------------------------------- 3. the question and the one Lime
               An <a> with an href, so it works standalone, with no .env, and on a middle-click;
-              `onReadResearch` is the side channel to a parent page.
+              `onReadResearch` is the side channel to a parent page: embedded in an allowed
+              parent, a plain click posts OFF_THE_PATH_READ_RESEARCH and does not navigate
+              (embed/postMessage.ts, ARCHITECTURE section 9); anywhere else the link just works.
             */}
             <div class="otp-band">
               <p class="otp-band__question">

@@ -260,6 +260,36 @@ describe('the API table in the architecture', () => {
   });
 });
 
+describe('the frame-ancestors policy the documents print', () => {
+  /*
+   * ARCHITECTURE section 10 prints the shipped policy "copied verbatim". The Webflow staging origin
+   * was added to vercel.json on 2026-10-25; a document that still printed the old list would send
+   * the agency to debug a page that the policy now allows, or the next reader to widen it again.
+   */
+  const shipped = (
+    JSON.parse(read('vercel.json')) as {
+      headers: { headers: { key: string; value: string }[] }[];
+    }
+  ).headers
+    .flatMap((rule) => rule.headers)
+    .find((h) => h.key === 'Content-Security-Policy')
+    ?.value.match(/frame-ancestors([^;]*);/)?.[1]
+    ?.trim()
+    .split(/\s+/);
+
+  it('is the list ARCHITECTURE prints', () => {
+    expect(shipped?.length, 'no frame-ancestors parsed out of vercel.json').toBeGreaterThan(0);
+    const printed = read('docs/ARCHITECTURE.md')
+      .replace(/\s+/g, ' ')
+      .match(/frame-ancestors((?: https:\/\/[^\s;]+)+);/)?.[1]
+      ?.trim()
+      .split(' ');
+    expect(printed, 'ARCHITECTURE prints a different frame-ancestors than vercel.json').toEqual(
+      shipped,
+    );
+  });
+});
+
 describe('the embed channel', () => {
   const sources = ['apps/game/src', 'packages/core/src'];
   const files = sources.flatMap(function walk(dir: string): string[] {

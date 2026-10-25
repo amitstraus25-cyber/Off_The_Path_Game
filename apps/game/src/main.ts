@@ -23,7 +23,7 @@ import { marqueeText, strings } from './ui/copy';
 import { mountMarquee } from './ui/marquee';
 import { contactMessages, startRun, submit } from './net/leaderboard';
 import type { ContactInput, RunStart } from './net/leaderboard';
-import { emit } from './embed/postMessage';
+import { emit, readResearchClick } from './embed/postMessage';
 // Before panels.css, so hud.css lands first in the cascade, as the HUD's selectors expect.
 import './ui/hud.css';
 import './ui/panels.css';
@@ -498,7 +498,7 @@ async function start(): Promise<void> {
           askForStart();
           void startTheRun(true);
         },
-        onReadResearch: () => emit('otp:cta', {}),
+        onReadResearch: readResearchClick,
         cannotPost: token === null ? (strings['postUnavailable'] ?? '') : null,
         emailRequired,
         // Results renders no Post button without a token (`cannotPost`), so `token ?? ''` is

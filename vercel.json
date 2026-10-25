@@ -8,7 +8,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors https://cyera.com https://*.cyera.com; base-uri 'none'; form-action 'none'; object-src 'none'"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors https://cyera.com https://*.cyera.com https://cyera-staging.webflow.io; base-uri 'none'; form-action 'none'; object-src 'none'"
         },
         {
           "key": "X-Content-Type-Options",

@@ -15,7 +15,9 @@ that was shipping to players. Read trap 10 before investigating anything the cli
 ## 1. What is true right now
 
 - The game is live at `off-the-path-game.vercel.app`, embedded-ready, `frame-ancestors` locked to
-  `cyera.com` and `*.cyera.com`.
+  `cyera.com`, `*.cyera.com` and `cyera-staging.webflow.io` (added 2026-10-25), and "Read the
+  research" posts `OFF_THE_PATH_READ_RESEARCH` to an allowed parent instead of navigating
+  (ARCHITECTURE section 9).
 - The suite is **1,151 tests passing and 1 skipped** (run 2026-10-22 on `e2f7e7f`, each workspace
   on its own with its exit code taken separately, all 0) — `packages/core` 348 in 13 files and
   `apps/api` 202 in 12, both at a 100% gate on statements, branches, functions AND lines (core

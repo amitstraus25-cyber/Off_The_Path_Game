@@ -30,7 +30,7 @@ export interface AppProps {
   /** The start is still out, so the how-to's button waits. */
   starting: boolean;
   onReplay(): void;
-  onReadResearch(): void;
+  onReadResearch(event: MouseEvent): void;
   onPost(handle: string, contact?: ContactInput): Promise<PostOutcome>;
   /** Why this run cannot be posted, or null; see `ResultsProps.cannotPost`. */
   cannotPost: string | null;

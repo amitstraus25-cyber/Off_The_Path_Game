@@ -101,6 +101,21 @@ describe('the Content-Security-Policy we ship', () => {
     }
   });
 
+  it('lets exactly these pages frame the game, and no others', () => {
+    /*
+     * The embedding allow-list is a security decision, so it is pinned by value: widening it
+     * (say, to `https://*.webflow.io`, which every Webflow customer would satisfy) must be a
+     * deliberate edit to this list and not a side effect. The Webflow staging site is one exact
+     * host, added 2026-10-25 at the web agency's request.
+     */
+    for (const { value } of declared)
+      expect(directives(value).get('frame-ancestors')).toEqual([
+        'https://cyera.com',
+        'https://*.cyera.com',
+        'https://cyera-staging.webflow.io',
+      ]);
+  });
+
   it('opens nothing to a whole scheme or to everything', () => {
     /*
      * Two shapes only: a bare `*`, and a scheme with no host (`https:`, `data:`, `blob:`).

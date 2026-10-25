@@ -49,7 +49,13 @@ export interface EmbedEvents {
  * and fails if this list and that directive stop describing the same set of origins. Change the
  * policy and this goes red; change this and the policy goes red.
  */
-const FRAME_ANCESTOR_HOSTS: readonly string[] = ['cyera.com', '*.cyera.com'];
+const FRAME_ANCESTOR_HOSTS: readonly string[] = [
+  'cyera.com',
+  '*.cyera.com',
+  // The web agency's Webflow staging site (2026-10-25). One exact host, NOT `*.webflow.io`: that
+  // would let every Webflow customer's site frame the game and receive its events.
+  'cyera-staging.webflow.io',
+];
 
 /** `VITE_EMBED_ORIGIN=none` turns posting off outright. Unset means "whatever the policy allows". */
 const DISABLED = 'none';
@@ -156,13 +162,24 @@ export function allowedParentOrigin(candidate: string | null | undefined): strin
 }
 
 /**
- * Who is framing us, according to the browser.
+ * The allowed parent origin for what a browser reported, or null. PURE, so the decision is unit
+ * tested without a window: `ancestor` is `location.ancestorOrigins[0]` (undefined where the browser
+ * has none -- Firefox) and `referrer` is `document.referrer`.
  *
- * `ancestorOrigins[0]` is the IMMEDIATE parent -- the window `emit` posts to -- not the top one.
- * Firefox ships no `ancestorOrigins`, so the referrer stands in: for an https parent under
- * `strict-origin-when-cross-origin`, which is both Firefox's default and what we send, a
- * cross-origin frame still gets the parent's origin.
+ * `ancestorOrigins[0]` is the IMMEDIATE parent -- the window we post to -- not the top one, and
+ * when the browser offers it, it is the answer: a referrer is only the parent's URL as filtered by
+ * the parent's referrer policy. Without it the referrer's origin stands in: for an https parent
+ * under `strict-origin-when-cross-origin`, Firefox's default and what we send, a cross-origin frame
+ * still gets the parent's origin. Either way the result is checked against the allow-list and is
+ * the PARSED origin, so what reaches `postMessage` is never the string the browser handed over.
  */
+export function resolveParentOrigin(ancestor: string | undefined, referrer: string): string | null {
+  if (ancestor !== undefined) return allowedParentOrigin(ancestor);
+  if (referrer === '') return null;
+  return allowedParentOrigin(referrer);
+}
+
+/** The raw report, for `emit`'s fallback logic: what the browser said, allowed or not. */
 function reportedParentOrigin(): string | null {
   const ancestors: DOMStringList | undefined = location.ancestorOrigins;
   const immediate = ancestors && ancestors.length > 0 ? ancestors[0] : undefined;
@@ -173,6 +190,60 @@ function reportedParentOrigin(): string | null {
   } catch {
     return null;
   }
+}
+
+/** The message "Read the Research" posts to an allowed parent, which scrolls its own page. */
+export const READ_RESEARCH_MESSAGE = 'OFF_THE_PATH_READ_RESEARCH';
+
+/**
+ * Asks the embedding page to take the visitor to the research, if there is one that may be asked.
+ *
+ * Returns true when the message was posted -- the caller then cancels the link's navigation -- and
+ * false in every other case, which the caller treats as STANDALONE: not framed, posting switched
+ * off, a parent the browser will not name, or a parent that is not on the allow-list. Unlike
+ * `emit` there is no default-origin fallback here: guessing a target and posting into the void
+ * while also cancelling the link would leave the visitor with a button that does nothing. An
+ * unknown parent gets the plain link instead.
+ *
+ * The target is the parent's exact allowed origin, never `*`. Nothing is received: the channel
+ * stays outbound only (ARCHITECTURE section 9).
+ */
+export function requestReadResearch(): boolean {
+  if (window.parent === window || EMBED_ORIGIN_RAW === DISABLED) return false;
+  const ancestors: DOMStringList | undefined = location.ancestorOrigins;
+  const target = resolveParentOrigin(
+    ancestors && ancestors.length > 0 ? ancestors[0] : undefined,
+    document.referrer,
+  );
+  if (target === null) return false;
+  try {
+    window.parent.postMessage({ type: READ_RESEARCH_MESSAGE }, target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** What `readResearchClick` reads off the click, so a test can hand it a plain object. */
+export type ResearchClick = Pick<
+  MouseEvent,
+  'button' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'preventDefault'
+>;
+
+/**
+ * The click handler of the payoff screen's one link. The link keeps its href, so with no script, on
+ * a middle-click and for assistive technology it is simply a link; this only changes what a plain
+ * click does, and only when the game is embedded in an allowed parent (`requestReadResearch`).
+ *
+ * `otp:cta` is still emitted on every click for the parent's analytics. A modified click
+ * (ctrl, cmd, shift, alt, or a non-primary button) is the visitor asking for a new tab or window,
+ * so it is left to the browser and posts no scroll request.
+ */
+export function readResearchClick(event: ResearchClick): void {
+  emit('otp:cta', {});
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+    return;
+  if (requestReadResearch()) event.preventDefault();
 }
 
 export function emit<K extends keyof EmbedEvents>(type: K, payload: EmbedEvents[K]): void {
