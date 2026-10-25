@@ -5,3 +5,4 @@ coverage
 reference
 pnpm-lock.yaml
 apps/game/src/assets
+.claude/worktrees

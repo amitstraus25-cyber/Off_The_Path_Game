@@ -214,6 +214,7 @@ function TitleCard({
   busy = false,
   focus = false,
   art = false,
+  open = false,
 }: {
   children: ComponentChildren;
   /** The frame's title: the landing's `ui.landing.frameTitle`, the how-to's own `ui.howTo.title`. */
@@ -230,6 +231,12 @@ function TitleCard({
   focus?: boolean;
   /** The client's illustration behind the card instead of the live forest (the landing's `art`). */
   art?: boolean;
+  /**
+   * The words straight on the picture, with no card (the client, 2026-10-25: "rethink the blob...
+   * revert back to the original image I sent you"): a computer's landing, as the designer drew it.
+   * screens.css applies it in landscape only; a phone keeps its card.
+   */
+  open?: boolean;
 }) {
   const cta = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -252,7 +259,11 @@ function TitleCard({
         labelHidden={hideFrameTitle}
         aside={<NotationChip label={strings['landingChip'] ?? ''} />}
       />
-      <div class="otp-title-dock" data-art={art ? 'true' : undefined}>
+      <div
+        class="otp-title-dock"
+        data-art={art ? 'true' : undefined}
+        data-open={art && open ? 'true' : undefined}
+      >
         {art && (
           /*
            * THE LANDING ART (the client's pick, 2026-10-25): Purple on the crystal with the seven
@@ -267,12 +278,12 @@ function TitleCard({
             <img
               class="otp-title-art__img"
               src={landingArt}
-              srcset={`${landingArt} 4800w, ${landingArt2x} 9600w`}
+              srcset={`${landingArt} 6000w, ${landingArt2x} 9000w`}
               /*
                * How wide the picture is drawn, so a browser takes the 2x file only where it shows:
                * about 2.5 times the window's width on a computer, and a phone's few hundred pixels
-               * of height times 4.4 -- for which the 1x file is already sharp, and the 2x one is
-               * 83MB of decoded pixels a phone has no need to hold.
+               * of height times 5.6 -- for which the 1x file is already sharp, and the larger one is
+               * 58MB of decoded pixels a phone has no need to hold.
                */
               sizes="(orientation: portrait) 1000px, (max-height: 500px) 1000px, 250vw"
               alt=""
@@ -331,6 +342,7 @@ export function Title({ ui, onPlay, oneStep }: TitleProps) {
       onAction={onPlay}
       busy={oneStep?.busy ?? false}
       art={variants.landing === 'art'}
+      open={!oneStep}
     >
       <h1 class="otp-title__mark">
         <Highlighted text={l.title} word={l.titleHighlight} />

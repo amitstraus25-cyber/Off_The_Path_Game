@@ -253,6 +253,95 @@ async function expectReadable(
   }
 }
 
+/**
+ * THE LANDING'S WORDS ON THE PICTURE (the client, 2026-10-25: no card on a computer, the designer's
+ * composition). There is no opaque layer behind them, so `measureHeadings` rightly calls them
+ * unmeasurable. Here they are measured against the picture itself: every text run's colour against
+ * EVERY pixel of what is really drawn behind it, read off a screenshot of its box with the words
+ * made transparent. The worst pixel decides, so a run passes only if it clears AA everywhere it
+ * sits. The title, the subtitle, the two lines of premise and the controls line on the shore are
+ * all held to it, not the h1 alone.
+ */
+async function expectReadableOverPicture(page: Page, where: string): Promise<void> {
+  const runs = await page.evaluate(() => {
+    const out: {
+      text: string;
+      box: { x: number; y: number; width: number; height: number };
+      fg: string;
+      large: boolean;
+    }[] = [];
+    const panel = document.querySelector('.otp-title-panel')!;
+    for (const el of panel.querySelectorAll<HTMLElement>(
+      '.otp-title__mark, .otp-title__mark *, .otp-title__sub, .otp-title__agent, .otp-title__premise, .otp-hint',
+    )) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent ?? '').trim());
+      if (!own) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      const px = parseFloat(cs.fontSize);
+      const bold = Number(cs.fontWeight) >= 700;
+      out.push({
+        text: (el.textContent ?? '').trim().slice(0, 30),
+        box: { x: r.x, y: r.y, width: r.width, height: r.height },
+        fg: cs.color,
+        large: px >= 24 || (bold && px >= 18.66),
+      });
+    }
+    return out;
+  });
+  expect(
+    runs.some((r) => r.text.startsWith('Off the')),
+    `${where}: the title was not measured`,
+  ).toBe(true);
+  await page.addStyleTag({
+    content: '.otp-title-panel, .otp-title-panel * { color: transparent !important; }',
+  });
+  for (const r of runs) {
+    const shot = (await page.screenshot({ clip: r.box })).toString('base64');
+    const worst = await page.evaluate(
+      async ({ png, fg }) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${png}`;
+        await img.decode();
+        const c = document.createElement('canvas');
+        c.width = img.width;
+        c.height = img.height;
+        const x = c.getContext('2d')!;
+        x.drawImage(img, 0, 0);
+        const d = x.getImageData(0, 0, c.width, c.height).data;
+        x.fillStyle = fg;
+        x.fillRect(0, 0, 1, 1);
+        const f = x.getImageData(0, 0, 1, 1).data;
+        const lin = (v: number): number => {
+          const t = v / 255;
+          return t <= 0.03928 ? t / 12.92 : ((t + 0.055) / 1.055) ** 2.4;
+        };
+        const lum = (r: number, g: number, b: number): number =>
+          0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+        const lf = lum(f[0]!, f[1]!, f[2]!);
+        let min = Infinity;
+        for (let i = 0; i < d.length; i += 4) {
+          const lb = lum(d[i]!, d[i + 1]!, d[i + 2]!);
+          const ratio = (Math.max(lf, lb) + 0.05) / (Math.min(lf, lb) + 0.05);
+          if (ratio < min) min = ratio;
+        }
+        return min;
+      },
+      { png: shot, fg: r.fg },
+    );
+    expect
+      .soft(
+        worst,
+        `${where}: "${r.text}" (${r.fg}) falls to ${worst.toFixed(2)}:1 over the picture`,
+      )
+      .toBeGreaterThanOrEqual(r.large ? AA_LARGE : AA_NORMAL);
+  }
+  await page.reload();
+  await ready(page);
+}
+
 /** Plays the three encounters through the store, the way a run is played, ending at the door. */
 const toTheDoor = (page: Page): Promise<void> =>
   page.evaluate((skillOf) => {
@@ -279,8 +368,13 @@ for (const size of SIZES) {
       await page.goto('/');
       await ready(page);
 
-      // 00 Title: the h1. 00 How to play: its own h1.
-      await expectReadable(page, at('title'), ['Off the']);
+      // 00 Title: the h1 -- on the picture itself on a computer, in its card on a phone. 00 How to
+      // play: its own h1.
+      const pictured = await page
+        .locator('.otp-title-panel')
+        .evaluate((el) => getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)');
+      if (pictured) await expectReadableOverPicture(page, at('title'));
+      else await expectReadable(page, at('title'), ['Off the']);
       await page.getByRole('button', { name: /Begin the walk/ }).click();
       await expectReadable(page, at('how-to'), ['How to play']);
       await page.getByRole('button', { name: /Start walking/ }).click();

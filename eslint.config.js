@@ -130,6 +130,7 @@ export default tseslint.config(
       'reference/**',
       'node_modules/**',
       '.vercel/**',
+      '.claude/worktrees/**',
     ],
   },
   js.configs.recommended,
