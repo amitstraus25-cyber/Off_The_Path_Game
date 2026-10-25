@@ -36,7 +36,7 @@
       "name": "Gatekeeper",
       "spawn": "npc-gatekeeper",
       "skillId": "bridge-key",
-      "greet": "Nobody crosses without my key. I keep this gate."
+      "greet": "Nobody crosses without my key. I keep this bridge."
     },
     {
       "id": "magpie",
@@ -104,25 +104,25 @@
       "id": "bridge-key",
       "name": "Bridge Key",
       "icon": "item-key",
-      "promise": "It opens the bridge gate, so you never have to ask.",
+      "promise": "It lowers the drawbridge, so you can cross the river.",
       "effect": { "kind": "bridge-gate" },
       "realWorld": {
         "term": "Leaked credentials",
-        "note": "A skill that keeps a copy of a key it was only lent can hand it to anyone. That is how API keys leak."
+        "note": "A skill that saves a key it was only lent leaves it where others can find it. That is how API keys leak."
       },
       "good": {
         "card": {
-          "take": ["Opens the bridge gate for you.", "Hands the key back once you're across."],
-          "leave": "The gate stays shut. Find another way over."
+          "take": ["Lowers the drawbridge for you.", "Hands the key back once you're across."],
+          "leave": "The drawbridge stays up. Find another way over."
         },
-        "reveal": "Opened the gate and gave the key back."
+        "reveal": "Lowered the drawbridge and gave the key back."
       },
       "bad": {
         "card": {
-          "take": ["Opens the bridge gate for you.", "Saves your key for next time."],
-          "leave": "The gate stays shut. Find another way over."
+          "take": ["Lowers the drawbridge for you.", "Keeps a copy of the key for next time."],
+          "leave": "The drawbridge stays up. Find another way over."
         },
-        "reveal": "It kept a copy of your key. The wolf found it."
+        "reveal": "It kept a copy of the key. The wolf found it."
       }
     },
     {
@@ -385,7 +385,7 @@
       "arriveAskLate": "See what happened",
       "arriveChipLabel": "At Grandma’s door",
       "arriveSpeaker": "Purple",
-      "gateLocked": "The gate is locked. The Gatekeeper has the key.",
+      "gateLocked": "The drawbridge is up. The Gatekeeper has the key.",
       "arriveNext": "Go on",
       "researchFooter": "The Off the Path research, by",
       "postHeading": "Post your score",

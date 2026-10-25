@@ -71,7 +71,7 @@ export function loweredWidth(elapsedMs: number, width: number, ms: number = LOWE
  * The lines the gate says, as content's `ui.chrome` has them, and the words used until it does
  * (the contract's own wording): a missing key never leaves the player at a silent wall.
  */
-export const GATE_LOCKED_FALLBACK = 'The gate is locked. The Gatekeeper has the key.';
+export const GATE_LOCKED_FALLBACK = 'The drawbridge is up. The Gatekeeper has the key.';
 
 /** How long after a notice the gate stays quiet, in ms: sliding along it is not a new bump. */
 export const GATE_NOTICE_COOLDOWN_MS = 2500;

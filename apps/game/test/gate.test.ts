@@ -144,7 +144,7 @@ describe('a bump against the shut gate', () => {
 
   it('says its words once per cooldown, and the words are the contract wording', () => {
     expect(GATE_NOTICE_COOLDOWN_MS).toBeGreaterThan(1000);
-    expect(GATE_LOCKED_FALLBACK).toBe('The gate is locked. The Gatekeeper has the key.');
+    expect(GATE_LOCKED_FALLBACK).toBe('The drawbridge is up. The Gatekeeper has the key.');
   });
 });
 
