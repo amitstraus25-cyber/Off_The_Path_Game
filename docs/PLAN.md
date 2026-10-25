@@ -844,6 +844,20 @@ reopens the work of Phases 1, 3, 4 and 5. Staffing follows PAUL_BRIEF section 4.
       deleted. The timer override and the bundle-grep item are done (`testClock`); the sweep
       itself is the review of `6e1192f`, above.
 
+## Phase 10: The Gatekeeper and the river (v2.1)
+
+The client's design of 2026-10-25, approved to build the same day ("let's get this baby going"). The
+contract is docs/GATEKEEPER.md. Three builders in parallel worktrees, then the merge, the browser
+specs and Paul's review.
+
+- [x] T talks, not E (the key, the round button's letter, the hint)
+- [ ] Rules and content: the deal constraints, rules 3, Gatekeeper and Bridge Key, Wing Ride over the river, Way Teller retired
+- [ ] Map and art: Gatekeeper sprite, bridge gate tiles, dead-end sign, Magpie's path south and the landing, the Owl moved east
+- [ ] Game: the shut gate and its notice, the gate opening on Bridge Key, the flight re-aimed, fork signs removed
+- [ ] Merge, browser specs, sim and par, Paul's review, push
+- [ ] The Magpie's exact spot from the client's picture
+- [ ] Research sign-off on the Bridge Key note; leaderboard reset when this ships (the client's call)
+
 ## Readiness findings (sweep of 2026-10-21)
 
 Measured on production and the working tree by four review lenses plus a completeness critic.
