@@ -46,6 +46,8 @@ import {
   gatePairs,
   landingSpot,
   LANDING_OBJECT,
+  LEAF_COLUMN,
+  leafOffset,
   loweredWidth,
   LOWER_MS,
   shutGate,
@@ -763,6 +765,8 @@ export class ForestScene extends Phaser.Scene {
       cells: (Cell & { shut: number; open: number })[];
       /** The lowered deck over the whole span, revealed from the hinge as it falls; null if unbuilt. */
       deck: Phaser.GameObjects.Image | null;
+      /** The raised leaf, drawn at the deck's leading edge while it falls (`leafOffset`); null if unbuilt. */
+      leaf: Phaser.GameObjects.Image | null;
     } | null;
   } | null = null;
   /** Whether the drawbridge is DOWN now -- tiles lowered, collision lifted (`drawGate`). */
@@ -1289,7 +1293,58 @@ export class ForestScene extends Phaser.Scene {
       const pair = pairs.find((p) => p.shut === layer.getTileAt(c.col, c.row)?.index);
       return pair ? [{ ...c, ...pair }] : [];
     });
-    this.gate.art = { layer, cells, deck: this.createDeck(tiles, cells, layer.depth) };
+    const deck = this.createDeck(tiles, cells, layer.depth);
+    const leaf = deck ? this.createLeaf(tiles, cells, pairs[0]!.shut, deck) : null;
+    this.gate.art = { layer, cells, deck, leaf };
+  }
+
+  /**
+   * The raised leaf as one image a tile wide over the span's rows: each west-end cell's
+   * `bridge-gate-shut-0`, from `LEAF_COLUMN` to its east edge (the leaf and its shadow on the
+   * water, never the bank or the hinge post), hidden until the bridge comes down. Null when the
+   * tileset cannot be read back, and the fall is then the deck alone.
+   */
+  private createLeaf(
+    tiles: Phaser.Tilemaps.Tileset,
+    cells: readonly (Cell & { shut: number })[],
+    westShut: number,
+    deck: Phaser.GameObjects.Image,
+  ): Phaser.GameObjects.Image | null {
+    const image = tiles.image?.getSourceImage();
+    const west = cells.filter((c) => c.shut === westShut);
+    if (west.length === 0 || !image) return null;
+    const row0 = Math.min(...cells.map((c) => c.row));
+    const key = 'fx-drawbridge-leaf';
+    try {
+      if (!this.textures.exists(key)) {
+        const texture = this.textures.createCanvas(key, TILE, deck.height);
+        if (!texture) return null;
+        for (const c of west) {
+          const at = tiles.getTileTextureCoordinates(c.shut) as { x: number; y: number } | null;
+          if (!at) return null;
+          const w = TILE - LEAF_COLUMN;
+          texture.context.drawImage(
+            image as CanvasImageSource,
+            at.x + LEAF_COLUMN,
+            at.y,
+            w,
+            TILE,
+            LEAF_COLUMN,
+            (c.row - row0) * TILE,
+            w,
+            TILE,
+          );
+        }
+        texture.refresh();
+      }
+    } catch {
+      return null;
+    }
+    return this.add
+      .image(deck.x, deck.y, key)
+      .setOrigin(0, 0)
+      .setDepth(deck.depth + 0.1)
+      .setVisible(false);
   }
 
   /**
@@ -1359,27 +1414,34 @@ export class ForestScene extends Phaser.Scene {
       this.gateLowering = null;
       this.map.collision = gate.shut;
       art?.deck?.setVisible(false);
+      art?.leaf?.setVisible(false);
       if (art) for (const c of art.cells) art.layer.putTileAt(c.shut, c.col, c.row);
       return;
     }
     if (this.gateOpen) return;
     const deck = art?.deck ?? null;
+    const leaf = art?.leaf ?? null;
     if (this.gateLowering === null) {
       if (deck && !this.reducedMotion) {
         if (!this.run.exploring()) return;
         this.gateLowering = 0;
         deck.setCrop(0, 0, 0, deck.height).setVisible(true);
+        leaf?.setX(deck.x + leafOffset(0)).setVisible(true);
         return;
       }
     } else if (deck) {
       this.gateLowering += deltaMs;
-      deck.setCrop(0, 0, loweredWidth(this.gateLowering, deck.width), deck.height);
+      const lowered = loweredWidth(this.gateLowering, deck.width);
+      deck.setCrop(0, 0, lowered, deck.height);
+      // The leaf sweeps over the river at the deck's leading edge, so the fall reads as a fall.
+      leaf?.setX(deck.x + leafOffset(lowered));
       if (this.gateLowering < LOWER_MS) return;
     }
     this.gateOpen = true;
     this.gateLowering = null;
     this.map.collision = gate.open;
     deck?.setVisible(false);
+    leaf?.setVisible(false);
     if (art) for (const c of art.cells) art.layer.putTileAt(c.open, c.col, c.row);
   }
 
@@ -1393,6 +1455,20 @@ export class ForestScene extends Phaser.Scene {
     const deck = this.gate?.art?.deck;
     if (this.gateLowering === null || !deck) return null;
     return loweredWidth(this.gateLowering, deck.width) / deck.width;
+  }
+
+  /**
+   * The falling leaf as drawn this frame, for the specs: its tile's x east of the hinge and the
+   * deck's lowered width it was placed against, or null when no leaf is showing.
+   */
+  get gateLeaf(): { x: number; lowered: number; deckWidth: number } | null {
+    const art = this.gate?.art;
+    if (this.gateLowering === null || !art?.deck || !art.leaf?.visible) return null;
+    return {
+      x: art.leaf.x - art.deck.x,
+      lowered: loweredWidth(this.gateLowering, art.deck.width),
+      deckWidth: art.deck.width,
+    };
   }
 
   /** Whether this step ran into the shut gate, so the player is told why Purple stopped. */

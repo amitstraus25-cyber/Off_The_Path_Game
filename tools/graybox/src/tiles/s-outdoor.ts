@@ -460,7 +460,9 @@ function bridgePlank(kind: 'left' | 'middle' | 'right'): Painter {
  */
 const IRON: RGBA = keyline('stone', 30);
 const IRON_LIT: RGBA = tone('stone', 0.55);
-const LEAF_X0 = 14; // the leaf's west keyline, one column clear of the hinge post's 14
+// The leaf's west keyline, one column clear of the hinge post's 14. The game crops the falling leaf
+// from this column (apps/game/src/world/gate.ts LEAF_COLUMN; its test holds the two together).
+const LEAF_X0 = 14;
 const LEAF_X1 = 25; // its east keyline: ten painted columns, so it holds its own at the camera
 /* Across the leaf's ten painted columns: lit west, falling to the shaded east. */
 const LEAF_ACROSS = [0.9, 0.74, 0.64, 0.58, 0.54, 0.5, 0.45, 0.38, 0.28, 0.14];

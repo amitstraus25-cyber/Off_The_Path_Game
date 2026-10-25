@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import map from '../src/assets/map-forest.json';
 import gids from '../src/assets/tileset-forest.gids.json';
@@ -17,6 +19,8 @@ import {
   gatePairs,
   landingSpot,
   LANDING_OBJECT,
+  LEAF_COLUMN,
+  leafOffset,
   loweredWidth,
   LOWER_MS,
   shutGate,
@@ -270,6 +274,31 @@ describe('the drawbridge coming down', () => {
 
   it('is down at once when given no time to fall', () => {
     expect(loweredWidth(0, width, 0)).toBe(width);
+  });
+
+  /*
+   * THE LEAF SWEEPS ACROSS (Paul's review, 2026-10-26): its tile's east edge on the deck's leading
+   * edge, never west of where the raised leaf stood, so the fall is a thing moving, not a wipe.
+   */
+  it('draws the leaf at the leading edge, from where it stood to the far end of the span', () => {
+    expect(leafOffset(0)).toBe(0);
+    expect(leafOffset(TILE / 2), 'still where it stood until the deck reaches it').toBe(0);
+    const mid = loweredWidth(LOWER_MS / 2, width);
+    expect(mid).toBeGreaterThan(TILE);
+    expect(leafOffset(mid)).toBe(mid - TILE);
+    expect(leafOffset(width)).toBe(width - TILE);
+    const steps = Array.from({ length: 33 }, (_, i) =>
+      leafOffset(loweredWidth((LOWER_MS * i) / 32, width)),
+    );
+    for (let i = 1; i < steps.length; i++) expect(steps[i]!).toBeGreaterThanOrEqual(steps[i - 1]!);
+  });
+
+  it("crops the leaf at the painter's own leaf column", () => {
+    const painter = readFileSync(
+      fileURLToPath(new URL('../../../tools/graybox/src/tiles/s-outdoor.ts', import.meta.url)),
+      'utf8',
+    );
+    expect(painter).toContain(`const LEAF_X0 = ${LEAF_COLUMN};`);
   });
 });
 

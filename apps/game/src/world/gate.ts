@@ -68,6 +68,19 @@ export function loweredWidth(elapsedMs: number, width: number, ms: number = LOWE
 }
 
 /**
+ * THE LEAF SWEEPS ACROSS (Paul's review of the drawbridge, 2026-10-26). A crop revealing the deck
+ * from the hinge read as a wipe: planks appearing, nothing moving. So while it falls the raised
+ * leaf -- `bridge-gate-shut-0`'s leaf, from `LEAF_COLUMN` to the tile's east edge, its shadow on
+ * the water included -- is drawn as one tile at the deck's leading edge, its east edge on it:
+ * `hinge + loweredWidth - TILE`. Never west of where the raised leaf stands, so the first frames
+ * of the fall show it exactly where it stood, and it only starts moving once the deck reaches it.
+ */
+export const LEAF_COLUMN = 14;
+
+/** Where the falling leaf's tile is drawn, in pixels east of the hinge, for a deck `lowered` wide. */
+export const leafOffset = (lowered: number): number => Math.max(0, lowered - TILE);
+
+/**
  * The lines the gate says, as content's `ui.chrome` has them, and the words used until it does
  * (the contract's own wording): a missing key never leaves the player at a silent wall.
  */

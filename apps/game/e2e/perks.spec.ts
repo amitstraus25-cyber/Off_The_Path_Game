@@ -135,6 +135,7 @@ interface Scene {
   }[];
   gateStandsOpen: boolean;
   gateFalling: number | null;
+  gateLeaf: { x: number; lowered: number; deckWidth: number } | null;
   gate: {
     art: { layer: { getTileAt(c: number, r: number): { index: number } | null } } | null;
   } | null;
@@ -507,27 +508,34 @@ test.describe('the drawbridge', () => {
     // Watch every frame from the take: how far it has fallen, and whether the deck is solid.
     const watched = page.evaluate(
       ([x, y]) =>
-        new Promise<{ fall: (number | null)[]; solidWhileFalling: boolean[]; open: boolean }>(
-          (resolve) => {
-            const otp = window.__otp!;
-            const s = otp.scene as unknown as Scene;
-            const fall: (number | null)[] = [];
-            const solidWhileFalling: boolean[] = [];
-            const t0 = performance.now();
-            const tick = (): void => {
-              const f = s.gateFalling;
-              fall.push(f);
-              if (f !== null) solidWhileFalling.push(otp.isSolidAt!(x!, y!));
-              if (performance.now() - t0 < 2500 && !s.gateStandsOpen) requestAnimationFrame(tick);
-              else resolve({ fall, solidWhileFalling, open: s.gateStandsOpen });
-            };
-            tick();
-          },
-        ),
+        new Promise<{
+          fall: (number | null)[];
+          solidWhileFalling: boolean[];
+          leaf: ({ x: number; lowered: number; deckWidth: number } | null)[];
+          open: boolean;
+        }>((resolve) => {
+          const otp = window.__otp!;
+          const s = otp.scene as unknown as Scene;
+          const fall: (number | null)[] = [];
+          const solidWhileFalling: boolean[] = [];
+          const leaf: ({ x: number; lowered: number; deckWidth: number } | null)[] = [];
+          const t0 = performance.now();
+          const tick = (): void => {
+            const f = s.gateFalling;
+            fall.push(f);
+            if (f !== null) {
+              solidWhileFalling.push(otp.isSolidAt!(x!, y!));
+              leaf.push(s.gateLeaf);
+            }
+            if (performance.now() - t0 < 2500 && !s.gateStandsOpen) requestAnimationFrame(tick);
+            else resolve({ fall, solidWhileFalling, leaf, open: s.gateStandsOpen });
+          };
+          tick();
+        }),
       [mid.x, mid.y] as const,
     );
     await take(page, 'bridge-gate');
-    const { fall, solidWhileFalling, open } = await watched;
+    const { fall, solidWhileFalling, leaf, open } = await watched;
     expect(open, 'the drawbridge never came down').toBe(true);
     const falling = fall.filter((f): f is number => f !== null);
     expect(falling.length, 'it was down at once: nothing was seen falling').toBeGreaterThan(2);
@@ -539,6 +547,17 @@ test.describe('the drawbridge', () => {
       expect(falling[i]!, 'it went back up').toBeGreaterThanOrEqual(falling[i - 1]!);
     // Not walkable in the air: the deck is solid for every frame it is falling.
     expect(solidWhileFalling.every(Boolean), 'walkable before it was down').toBe(true);
+    // Not a wipe: the raised leaf is drawn at the deck's leading edge on every falling frame
+    // (world/gate.ts leafOffset), and is seen part-way across the river.
+    expect(
+      leaf.every((l) => l !== null),
+      'a falling frame without the leaf',
+    ).toBe(true);
+    for (const l of leaf) expect(l!.x).toBe(Math.max(0, l!.lowered - TILE));
+    expect(
+      leaf.some((l) => l!.x > 0 && l!.x < l!.deckWidth - TILE),
+      'the leaf was never seen mid-river',
+    ).toBe(true);
 
     // Down: the lowered tiles on every cell, the collision lifted, and Purple walks across.
     const row = Math.floor(gate.y / TILE);
