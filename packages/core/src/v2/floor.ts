@@ -62,7 +62,7 @@ export const WALK_WORLD: WalkWorld = {
   door: { x: 1600, y: 608, width: 64, height: 96 },
   spots: {
     'npc-rabbit': { x: 432, y: 640 },
-    'npc-gatekeeper': { x: 752, y: 640 },
+    'npc-gatekeeper': { x: 720, y: 640 },
     'bystander-magpie': { x: 624, y: 896 },
     'npc-owl': { x: 1136, y: 640 },
     'bystander-snail': { x: 1232, y: 768 },

@@ -5718,12 +5718,16 @@ export function generateForestMap(): GeneratedMap {
     /*
      * THE GATEKEEPER, 2026-10-25 (docs/GATEKEEPER.md): the Toadstool, who stood here at
      * (15, besideTrack(15)) = (15,22), is the keeper of the bridge gate now, so he stands at the
-     * bridge's west end, by the gate: on the north verge of the approach, the tile diagonally off the
-     * gate's top cell, read off the deck rather than written in figures. North rather than south
-     * because the south side of the approach is the river's bank stones. `bystander`'s checks are
-     * the ones he needs -- touching the road, not standing in it -- whatever his name's prefix.
+     * bridge's west end, by the gate: on the north verge of the approach, read off the deck rather
+     * than written in figures. North rather than south because the south side of the approach is
+     * the river's bank stones. `bystander`'s checks are the ones he needs -- touching the road, not
+     * standing in it -- whatever his name's prefix.
+     *
+     * TWO COLUMNS WEST OF THE DECK, NOT ONE (Paul's review, 2026-10-26): diagonally off the gate's
+     * top cell, at (23,19), Purple standing at the raised drawbridge covered him. One tile further
+     * west, at (22,19), she stands beside him instead.
      */
-    bystander('npc-gatekeeper', gateX - 1, bridgeRows[0]! - 1),
+    bystander('npc-gatekeeper', gateX - 2, bridgeRows[0]! - 1),
     /*
      * ON THE WEST BANK, SOUTH OF THE BRIDGE, 2026-10-25 (docs/GATEKEEPER.md): at `MAGPIE_SPOT`, the
      * end of her lane from the first fork. A DEFAULT until the client's picture of her spot arrives;
