@@ -119,6 +119,10 @@
   "elder-tr-over-bl": 118,
   "gate-n-swing": 119,
   "gate-s-swing": 120,
-  "bridge-gate-shut": 121,
-  "bridge-gate-open": 122
+  "bridge-gate-shut-0": 121,
+  "bridge-gate-open-0": 122,
+  "bridge-gate-shut-1": 123,
+  "bridge-gate-open-1": 124,
+  "bridge-gate-shut-2": 125,
+  "bridge-gate-open-2": 126
 }
