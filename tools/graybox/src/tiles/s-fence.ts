@@ -47,7 +47,7 @@ const P_ACROSS = [0.92, 0.6, 0.06];
 const pAlong = (y: number): number => (y > P_BASE - 5 ? -(y - (P_BASE - 5)) * 0.05 : 0);
 
 /* Two rails behind the pickets, seen only in the gaps: lit top, shaded body, dark underside. */
-const RAILS: readonly [number, readonly (RGBA)[]][] = [
+const RAILS: readonly [number, readonly RGBA[]][] = [
   [9, [OUT, paint(0.5), paint(0.05), paint(-0.6), OUT]],
   [19, [OUT, paint(0.5), paint(0.05), paint(-0.6), OUT]],
 ];
@@ -163,7 +163,8 @@ const fenceCorner: Painter = (img) => {
     img.rect(x0, r, 2, 1, OUT);
     img.rect(x1 - 1, r, 2, 1, OUT);
     if (r === 0) img.px(15, 0, OUT);
-    for (let x = x0 + 2; x <= x1 - 2; x++) img.px(x, r, paint(x <= 15 ? 1 - r * 0.03 : 0.3 - r * 0.04));
+    for (let x = x0 + 2; x <= x1 - 2; x++)
+      img.px(x, r, paint(x <= 15 ? 1 - r * 0.03 : 0.3 - r * 0.04));
   }
   img.rect(13, 0, 5, 1, OUT);
   // The slab under it, a pixel proud of the shaft on both sides: a lit fascia, then its shadow line.
