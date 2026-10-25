@@ -2478,13 +2478,14 @@ h2.otp-section-label.otp-post__title {
  * THE CLIENT'S ILLUSTRATION ON THE LANDING (ui/Title.tsx `art`, 2026-10-25). It covers the world's
  * box exactly -- the canvas box ui/stage.ts publishes, in every layout -- and the whole picture is
  * in view, with nothing over it but the card. The file is the designer's full frame with its baked-in
- * logo, title, subtitle and button painted out (every word here is live text, golden rule 4) and its
- * sky and ground carried 2280px further left, so it is 4200x1080 and the frame reads as one scene
- * from edge to edge at any landscape width up to 3.9:1 (a short desktop window is past 3:1):
+ * logo, title, subtitle and button painted out (every word here is live text, golden rule 4), its
+ * sky and shore carried 2280px further left, and 600px further right -- the sky above, the village
+ * mirrored on below -- so it is 4800x1080. The designer's frame is the 1920 columns from 2280; the
+ * rest lets the scene run on to any edge, so a phone can stand Purple in its middle without zooming:
  *
- *   landscape, card left     height-fit, right-aligned; only the carried-on sky is ever cropped
+ *   landscape, card left     the whole frame across the world's width, the card where its title was
  *   beside a side deck       the card is docked right (above), so the picture ends at its edge
- *   portrait                 the space above the card, Purple and the ring of skills in the middle
+ *   portrait                 the space above the card, Purple in the middle of it
  *
  * The card goes dark to match: no Shell, white type with the one Lilac word, the Lime pill as it
  * was. It is a compact card the height of its copy, not a column the height of the world, and it
@@ -2505,11 +2506,25 @@ h2.otp-section-label.otp-post__title {
   pointer-events: none;
 }
 
+/*
+ * THE PICTURE'S SIZE, IN LANDSCAPE: the designer's whole frame across the world's whole width (the
+ * client, 2026-10-25: "use the whole picture"), with the card where its title was. The box is wider
+ * than 16:9, so that height is more than the box's; what is cut is shared 27:73 between the empty sky
+ * at the top and the shore at the bottom. It never grows past 1.213 of the box's height -- the
+ * scene from the top cube (file row 50) to the houses (row 940), 890 of its 1080 rows -- so on a
+ * short, very wide window the ring stays whole and the carried-on sky fills the left instead.
+ */
+.otp-title-art {
+  container-type: size;
+  --otp-art-h: clamp(100cqh, 56.25cqw, 121.3cqh);
+}
+
 .otp-title-art__img {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  height: 100%;
+  /* The 600 carried-on columns at the right are off the box: the frame's own edge is its edge. */
+  right: calc(var(--otp-art-h) * -0.5556);
+  top: calc((100cqh - var(--otp-art-h)) * 0.27);
+  height: var(--otp-art-h);
   width: auto;
   max-width: none;
   /* Only past 3.9:1 does the box outrun the picture; its far-left sky then meets the box's own. */
@@ -2520,8 +2535,12 @@ h2.otp-section-label.otp-post__title {
 
 /* Beside a side deck the card is on the right, so the picture's right edge is put at the card's
    left edge: Purple and the ring stay in the open, and the cut-off edge is behind the card. */
+html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art {
+  --otp-art-h: 100cqh;
+}
+
 html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
-  right: calc(var(--otp-art-card) + calc(14px * var(--otp-ui)));
+  right: calc(var(--otp-art-card) + calc(14px * var(--otp-ui)) - var(--otp-art-h) * 0.5556);
 }
 
 @media (orientation: portrait) {
@@ -2540,14 +2559,16 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
     margin-top: calc(var(--otp-canvas-y, 0px) - var(--otp-cab-top) - 10px * var(--otp-ui));
     margin-bottom: calc(-1 * var(--otp-r-panel));
     border-radius: 0;
-    container-type: size;
+    /* Height-fit: nothing of the scene is cut, top or bottom, and her feet stay above the card. */
+    --otp-art-h: 100cqh;
   }
 
   .otp-title-art__img {
-    /* Height-fit, with Purple -- 590 of the file's 1080px of height in from its right edge -- in
-       the middle of the box, so the whole ring of skills is either side of her on a phone. A box
-       wider than that needs is right-aligned instead, so the picture never stops short of it. */
-    right: min(0px, calc(50% - 54.6cqh));
+    /* Purple in the middle of the box (the client, 2026-10-25: "make sure little purple is
+       centered on the phone"). She is 1190 of the file's 1080 rows in from its right edge -- the
+       frame's 590 and the 600 carried on -- so the scene runs past the box's right edge on any box
+       narrower than 2.2 times its height, which is every portrait one. */
+    right: min(0px, calc(50cqw - var(--otp-art-h) * 1.102));
     -webkit-mask-image: none;
     mask-image: none;
   }

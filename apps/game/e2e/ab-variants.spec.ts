@@ -36,12 +36,15 @@ test('the landing shows the client art by default, and the live forest for landi
   await ready(page);
   const art = page.locator('.otp-title-art img');
   await expect(art).toBeVisible();
-  // The whole picture is inside the world's box: nothing of it is cut off.
+  // The designer's frame -- columns 2280 to 4200 of the 4800px file -- ends at the world's right
+  // edge, and its scene, from the top of the highest cube (row 65) to the houses (row 940), is all
+  // in the box.
   const box = (await art.boundingBox())!;
   const world = (await page.locator('.otp-title-art').boundingBox())!;
-  expect(box.y).toBeGreaterThanOrEqual(world.y - 0.5);
-  expect(box.y + box.height).toBeLessThanOrEqual(world.y + world.height + 0.5);
-  expect(box.x + box.width).toBeLessThanOrEqual(world.x + world.width + 0.5);
+  const s = box.height / 1080;
+  expect(Math.abs(box.x + 4200 * s - (world.x + world.width))).toBeLessThan(1);
+  expect(box.y + 65 * s).toBeGreaterThanOrEqual(world.y - 0.5);
+  expect(box.y + 940 * s).toBeLessThanOrEqual(world.y + world.height + 0.5);
   await expect(art).toHaveAttribute('alt', '');
 
   await page.goto('/?landing=forest');
@@ -68,6 +71,42 @@ test('on a wide window the picture fills the world and the card is only as tall 
   expect(art.x).toBeLessThanOrEqual(world.x + 0.5);
   expect(card.height).toBeLessThan(world.height * 0.9);
 });
+
+/*
+ * PURPLE IN THE MIDDLE OF A PHONE (the client, 2026-10-25: "make sure little purple is centered on
+ * the phone"), and her feet above the card, on a tall phone and on a short one. She stands at
+ * column 3610 of the 4800px file (ui/screens.css, "the landing's art").
+ */
+for (const [w, h] of [
+  [375, 812],
+  [393, 660],
+  [360, 640],
+] as const) {
+  test(`at ${w}x${h} Purple stands in the middle of the picture, above the card`, async ({
+    browser,
+  }) => {
+    const page = await browser.newPage({
+      viewport: { width: w, height: h },
+      isMobile: true,
+      hasTouch: true,
+    });
+    await page.goto('/');
+    await ready(page);
+    const seen = await page.evaluate(() => {
+      const box = document.querySelector('.otp-title-art')!.getBoundingClientRect();
+      const img = document.querySelector('.otp-title-art img')!.getBoundingClientRect();
+      const card = document.querySelector('.otp-title-panel')!.getBoundingClientRect();
+      const s = img.height / 1080;
+      return {
+        offCentre: img.left + 3610 * s - (box.left + box.width / 2),
+        feetToCard: card.top - (img.top + 860 * s),
+      };
+    });
+    expect(Math.abs(seen.offCentre)).toBeLessThan(2);
+    expect(seen.feetToCard).toBeGreaterThan(0);
+    await page.close();
+  });
+}
 
 test('start=one puts the rules and par on the landing, and its button starts the walk', async ({
   page,
