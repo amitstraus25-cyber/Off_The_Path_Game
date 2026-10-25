@@ -112,11 +112,13 @@
   "bank-stones-cove-se": 111,
   "mailbox": 112,
   "notice-board-r": 113,
-  "sign-speed": 114,
+  "sign-dead-end": 114,
   "sign-logo-l": 115,
   "sign-logo-r": 116,
   "elder-tl-over-br": 117,
   "elder-tr-over-bl": 118,
   "gate-n-swing": 119,
-  "gate-s-swing": 120
+  "gate-s-swing": 120,
+  "bridge-gate-shut": 121,
+  "bridge-gate-open": 122
 }
