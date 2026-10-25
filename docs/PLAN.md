@@ -851,10 +851,12 @@ contract is docs/GATEKEEPER.md. Three builders in parallel worktrees, then the m
 specs and Paul's review.
 
 - [x] T talks, not E (the key, the round button's letter, the hint)
-- [ ] Rules and content: the deal constraints, rules 3, Gatekeeper and Bridge Key, Wing Ride over the river, Way Teller retired
-- [ ] Map and art: Gatekeeper sprite, bridge gate tiles, dead-end sign, Magpie's path south and the landing, the Owl moved east
-- [ ] Game: the shut gate and its notice, the gate opening on Bridge Key, the flight re-aimed, fork signs removed
-- [ ] Merge, browser specs, sim and par, Paul's review, push
+- [x] Rules and content: the deal constraints, rules 3, Gatekeeper and Bridge Key, Wing Ride over the river, Way Teller retired
+- [x] Map and art: Gatekeeper sprite, bridge gate tiles, dead-end sign, Magpie's path south and the landing, the Owl moved east
+- [x] Game: the shut gate and its notice, the gate opening on Bridge Key, the flight re-aimed, fork signs removed
+- [x] The drawbridge (the client's late change): raised over the whole span, lowered by Bridge Key in a brief fall, walkable once down, instant under reduced motion
+- [x] Merge, browser specs, sim and par (2026-10-25: tour 91 tiles, 9.9 s to spare with no perk, derived par 103.4 s against 107 s; e2e 432 passed, 6 skipped)
+- [ ] Paul's review, push
 - [ ] The Magpie's exact spot from the client's picture
 - [ ] Research sign-off on the Bridge Key note; leaderboard reset when this ships (the client's call)
 

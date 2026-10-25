@@ -56,6 +56,11 @@ core function, so scoring stays server-side and trusted (golden rule 6). `rules`
 - The bridge gate is **shut** from the start. Walking up to it without Bridge Key shows a short
   notice: the gate is locked, and the Gatekeeper has the key.
 - Taking Bridge Key opens the gate at once: it swings open and the bridge is walkable.
+  **Superseded by the client's late change (2026-10-25): the gate is a DRAWBRIDGE**, raised over
+  the whole span. Taking Bridge Key lowers it: a brief fall (`LOWER_MS`, 640 ms, in
+  `apps/game/src/world/gate.ts`) once the world is back in play, instant under
+  prefers-reduced-motion, and the span is walkable only once it is down. The toast says 'The
+  drawbridge comes down.'
 - Taking Wing Ride flies Purple from the Magpie to the far bank (the `wing-landing` point) at once.
   The flight is the existing wing-ride effect, re-aimed.
 - Taking both is allowed. Taking neither leaves Purple on the west bank until the clock runs out,
@@ -92,6 +97,10 @@ core function, so scoring stays server-side and trusted (golden rule 6). `rules`
 - `bridge-gate-shut` and `bridge-gate-open`, drawn as the brown picket gate (`s-fence.ts`) standing
   on the bridge's planks. The map places `bridge-gate-shut` at the gate's cells in an overlay
   layer, and the game swaps those cells to `bridge-gate-open` when the gate opens.
+  **Superseded by the drawbridge:** `bridge-gate-shut-0/-1/-2` (raised: the west end with the leaf
+  standing up, open river, the east end) and `bridge-gate-open-0/-1/-2` (lowered: `bridge-l/m/r`),
+  laid in `decor-below` over all of `gate-bridge` (tiles x 24-28, y 20-21); the game swaps each
+  cell's shut-<n> for open-<n>.
 - A Gatekeeper sprite sheet: the Toadstool's mushroom, now a gatekeeper in a keeper's cap holding
   a big brass key, in the same frame layout as the other characters, so `CAST_FRAMES` takes it
   unchanged.
