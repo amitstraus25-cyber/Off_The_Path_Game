@@ -2478,18 +2478,23 @@ h2.otp-section-label.otp-post__title {
  * box exactly -- the canvas box ui/stage.ts publishes, in every layout -- and the whole picture is
  * in view, with nothing over it but the card. The file is the designer's full frame with its baked-in
  * logo, title, subtitle and button painted out (every word here is live text, golden rule 4), its
- * sky and shore carried 2280px further left, and 600px further right -- the sky above, the village
- * mirrored on below -- 4800x1080 in the frame's own pixels, which is what every number in this file
- * counts in. The designer's frame is the 1920 columns from 2280; the
- * rest lets the scene run on to any edge, so a phone can stand Purple in its middle without zooming.
- * A computer is served a 2x copy (ui/Title.tsx `srcset`, 9600x2160, resampled and sharpened),
- * because the designer's 1920x1080 is shown at about 1.5x on a laptop's screen and read as soft
+ * sky and shore carried 2280px further left, and 1800px further right -- the sky above, the village
+ * mirrored on below -- 6000x1080 in the frame's own pixels, which is what every number in this file
+ * counts in. The designer's frame is the 1920 columns from 2280, and Purple stands at column 3610,
+ * 2390 in from the right edge. The rest lets the scene run on to any edge, so Purple can stand in
+ * the middle of any box with the picture shown whole: never cropped top or bottom, never zoomed.
+ * A computer is served a 1.5x copy (ui/Title.tsx `srcset`, 9000x1620, resampled and sharpened),
+ * because the designer's 1920x1080 is shown larger than that on a laptop's screen and read as soft
  * (the client, 2026-10-25: "something about the landing picture doesn't feel very crisp"). A 2x
  * export from the designer would be crisper still, and drops in with no other change:
  *
- *   landscape, card left     the whole frame across the world's width, the card where its title was
- *   beside a side deck       the card is docked right (above), so the picture ends at its edge
+ *   landscape                the whole frame, height-fit, as the designer framed it, the words on its
+ *                            sky with no card (below)
+ *   beside a side deck       Purple in the middle of the room the card leaves her
  *   portrait                 the space above the card, Purple in the middle of it
+ *
+ * The big rock at the top runs off the top edge of the designer's own frame, so it is cut there as
+ * they drew it; a whole one would have to come from the designer's file.
  *
  * The card goes dark to match: no Shell, white type with the one Lilac word, the Lime pill as it
  * was. It is a compact card the height of its copy, not a column the height of the world, and it
@@ -2511,40 +2516,37 @@ h2.otp-section-label.otp-post__title {
 }
 
 /*
- * THE PICTURE'S SIZE, IN LANDSCAPE: the designer's whole frame across the world's whole width (the
- * client, 2026-10-25: "use the whole picture"), with the card where its title was. The box is wider
- * than 16:9, so that height is more than the box's; what is cut is shared 27:73 between the empty sky
- * at the top and the shore at the bottom. It never grows past 1.213 of the box's height -- the
- * scene from the top cube (file row 50) to the houses (row 940), 890 of its 1080 rows -- so on a
- * short, very wide window the ring stays whole and the carried-on sky fills the left instead.
+ * THE PICTURE'S SIZE: height-fit in every layout, so the whole frame is seen top to bottom, and
+ * Purple in the middle (the client, 2026-10-25, on a desktop: "a little bit more zoomed out and
+ * centralized, so purple will be in the middle", and the top's clouds and rock no longer cut). It
+ * was the frame across the world's width, 1.2 times the box's height, which cut the top.
  */
 .otp-title-art {
   container-type: size;
-  --otp-art-h: clamp(100cqh, 56.25cqw, 121.3cqh);
+  --otp-art-h: 100cqh;
 }
 
 .otp-title-art__img {
   position: absolute;
-  /* The 600 carried-on columns at the right are off the box: the frame's own edge is its edge. */
-  right: calc(var(--otp-art-h) * -0.5556);
-  top: calc((100cqh - var(--otp-art-h)) * 0.27);
+  /* The designer's own framing: the frame's right edge on the box's, Purple to the right and the
+     sky on the left for the words. The 1800 carried-on columns at the right are off the box. */
+  right: calc(var(--otp-art-h) * -1.6667);
+  top: 0;
   height: var(--otp-art-h);
   width: auto;
   max-width: none;
-  /* Only past 3.9:1 does the box outrun the picture; its far-left sky then meets the box's own. */
+  /* Only past 6:1 does the box outrun the picture's left; its far sky then meets the box's own. */
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%);
   mask-image: linear-gradient(90deg, transparent 0, #000 4%);
   user-select: none;
 }
 
-/* Beside a side deck the card is on the right, so the picture's right edge is put at the card's
-   left edge: Purple and the ring stay in the open, and the cut-off edge is behind the card. */
-html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art {
-  --otp-art-h: 100cqh;
-}
-
+/* Beside a side deck the card is on the right, so Purple stands in the middle of the room it
+   leaves: half of the box's width less the card and its margin. */
 html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
-  right: calc(var(--otp-art-card) + calc(14px * var(--otp-ui)) - var(--otp-art-h) * 0.5556);
+  right: calc(
+    100cqw - (100cqw - var(--otp-art-card) - 14px * var(--otp-ui)) / 2 - var(--otp-art-h) * 2.213
+  );
 }
 
 @media (orientation: portrait) {
@@ -2563,16 +2565,12 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
     margin-top: calc(var(--otp-canvas-y, 0px) - var(--otp-cab-top) - 10px * var(--otp-ui));
     margin-bottom: calc(-1 * var(--otp-r-panel));
     border-radius: 0;
-    /* Height-fit: nothing of the scene is cut, top or bottom, and her feet stay above the card. */
-    --otp-art-h: 100cqh;
   }
 
   .otp-title-art__img {
-    /* Purple in the middle of the box (the client, 2026-10-25: "make sure little purple is
-       centered on the phone"). She is 1190 of the file's 1080 rows in from its right edge -- the
-       frame's 590 and the 600 carried on -- so the scene runs past the box's right edge on any box
-       narrower than 2.2 times its height, which is every portrait one. */
-    right: min(0px, calc(50cqw - var(--otp-art-h) * 1.102));
+    /* Purple in the middle of the box on a phone (the client, 2026-10-25: "make sure little purple
+       is centered on the phone"): her column is 2390/1080 of the height in from the right edge. */
+    right: calc(50cqw - var(--otp-art-h) * 2.213);
     -webkit-mask-image: none;
     mask-image: none;
   }
@@ -2613,6 +2611,87 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
     color-mix(in srgb, var(--cyera-black) 35%, transparent);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/*
+ * THE WORDS ON THE PICTURE, WITH NO CARD (the client, 2026-10-25: "rethink the blob... revert back
+ * to the original image I sent you"). On a computer the landing is the designer's composition:
+ * the title, the subtitle, the two lines of premise and the Lime pill straight on the sky at the
+ * left, sized off the world's height as the designer sized them off the frame's, and kept in its
+ * upper part, where the sky is dark enough to read on. The controls line, which the pale sky under
+ * the pill cannot carry, moves down to the dark shore at the bottom left. A phone, and a phone held
+ * sideways beside its deck, keep the card. e2e/heading-contrast.spec.ts measures the title against
+ * the picture's own pixels behind it.
+ */
+@media (orientation: landscape) {
+  html:not([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-dock[data-open] {
+    align-items: flex-start;
+    padding: calc(var(--otp-canvas-h, 0px) * 0.13) calc(var(--otp-canvas-h, 0px) * 0.1) 0;
+  }
+
+  html:not([data-cabinet='sides'], [data-cabinet='overlay'])
+    .otp-title-dock[data-open]
+    .otp-title-panel {
+    width: min(calc(var(--otp-canvas-h, 0px) * 0.9), 44%);
+    /* Down to the world's bottom edge, so the controls line (below) can stand on the shore. */
+    height: 100%;
+    max-height: none;
+    justify-content: flex-start;
+    /* The bottom strip is the controls line's; the column's copy ends above it, and on a short
+       world the fit ladder (ui/Title.tsx) gives up the premise before the two could meet. */
+    padding: 0 0 calc(var(--otp-canvas-h, 0px) * 0.14);
+    background: none;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  html:not([data-cabinet='sides'], [data-cabinet='overlay'])
+    .otp-title-dock[data-open]
+    .otp-title-panel
+    .otp-title__mark {
+    font-size: max(34px, calc(var(--otp-canvas-h, 0px) * 0.13));
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  html:not([data-cabinet='sides'], [data-cabinet='overlay'])
+    .otp-title-dock[data-open]
+    .otp-title-panel
+    .otp-title__sub {
+    font-size: max(17px, calc(var(--otp-canvas-h, 0px) * 0.045));
+    margin-top: calc(var(--otp-canvas-h, 0px) * 0.02);
+  }
+
+  html:not([data-cabinet='sides'], [data-cabinet='overlay'])
+    .otp-title-dock[data-open]
+    .otp-title-panel
+    :is(.otp-title__agent, .otp-body-text) {
+    font-size: max(13px, calc(var(--otp-canvas-h, 0px) * 0.029));
+    color: var(--cyera-offwhite);
+  }
+
+  html:not([data-cabinet='sides'], [data-cabinet='overlay'])
+    .otp-title-dock[data-open]
+    .otp-title-panel
+    .otp-hint {
+    /* On the dark band of the shore, rows 955 to 1005 of the picture's 1080, on one line. */
+    position: absolute;
+    left: 0;
+    bottom: calc(var(--otp-canvas-h, 0px) * 0.071);
+    margin: 0;
+    white-space: nowrap;
+    line-height: 1.1;
+    font-size: max(12px, calc(var(--otp-canvas-h, 0px) * 0.024));
+    color: var(--cyera-offwhite);
+  }
+
+  /* The pill grows with the title, as the designer drew it: about a third of the title's width. */
+  html:not([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-dock[data-open] .otp-cta {
+    font-size: max(16px, calc(var(--otp-canvas-h, 0px) * 0.036));
+    padding: calc(var(--otp-canvas-h, 0px) * 0.024) calc(var(--otp-canvas-h, 0px) * 0.042);
+    margin-top: calc(var(--otp-canvas-h, 0px) * 0.02);
+  }
 }
 
 .otp-title-dock[data-art] .otp-title-panel :is(.otp-title__mark, .otp-title__agent) {

@@ -10,3 +10,6 @@ test-results
 *.tsbuildinfo
 .wrangler
 .vercel
+
+# The isolated copies the build agents work in (git worktrees), never part of the repo.
+.claude/worktrees/

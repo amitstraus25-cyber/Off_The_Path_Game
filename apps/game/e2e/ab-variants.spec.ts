@@ -36,15 +36,15 @@ test('the landing shows the client art by default, and the live forest for landi
   await ready(page);
   const art = page.locator('.otp-title-art img');
   await expect(art).toBeVisible();
-  // The designer's frame -- columns 2280 to 4200 of the 4800px file -- ends at the world's right
-  // edge, and its scene, from the top of the highest cube (row 65) to the houses (row 940), is all
-  // in the box.
+  // The whole picture, height-fit and as the designer framed it (the client, 2026-10-25: "revert
+  // back to the original image"): the highest cube's top (row 65) to the houses (row 940) all in the
+  // box, and the frame -- columns 2280 to 4200 of the 6000px file -- ending at the world's right edge.
   const box = (await art.boundingBox())!;
   const world = (await page.locator('.otp-title-art').boundingBox())!;
   const s = box.height / 1080;
-  expect(Math.abs(box.x + 4200 * s - (world.x + world.width))).toBeLessThan(1);
   expect(box.y + 65 * s).toBeGreaterThanOrEqual(world.y - 0.5);
   expect(box.y + 940 * s).toBeLessThanOrEqual(world.y + world.height + 0.5);
+  expect(Math.abs(box.x + 4200 * s - (world.x + world.width))).toBeLessThan(2);
   await expect(art).toHaveAttribute('alt', '');
 
   await page.goto('/?landing=forest');
@@ -75,7 +75,7 @@ test('on a wide window the picture fills the world and the card is only as tall 
 /*
  * PURPLE IN THE MIDDLE OF A PHONE (the client, 2026-10-25: "make sure little purple is centered on
  * the phone"), and her feet above the card, on a tall phone and on a short one. She stands at
- * column 3610 of the 4800px file (ui/screens.css, "the landing's art").
+ * column 3610 of the 6000px file (ui/screens.css, "the landing's art").
  */
 for (const [w, h] of [
   [375, 812],
