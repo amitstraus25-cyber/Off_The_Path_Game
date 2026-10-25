@@ -23,7 +23,7 @@ export function perkLine(perk: v2.Perk): string {
     case 'minimap':
       return strings['perkMinimap'] ?? '';
     case 'bridge-gate':
-      return strings['perkBridgeGate'] ?? 'The gate swings open.';
+      return strings['perkBridgeGate'] ?? 'The drawbridge comes down.';
     case 'early-welcome':
       return strings['perkEarlyWelcome'] ?? '';
     case 'wing-ride':
