@@ -78,6 +78,8 @@
  *   The awning's stripe is no longer purple, which contradicts ART_PRODUCTION section 6a. The
  *   reasoning is at `PALE_HI`, and it needs a brand reviewer's yes or no.
  */
+import { layOn } from './sign-brush.ts';
+import type { LaidAt, Role } from './sign-brush.ts';
 import { GROUND_TILES } from './w-ground.ts';
 import { COTTAGE_TILES } from './s-cottage.ts';
 import { CONTACT } from './s-outdoor.ts';
@@ -1886,96 +1888,41 @@ const nail = (s: Img, x: number, y: number): void => s.px(x, y, LINE.metal);
  * or a screen reader needs lives only in the pixels. The LOGO is not painted at all: rule 5 forbids
  * redrawing it, so its board is painted blank and the supplied SVG is laid over it in the DOM.
  *
- * THE FONT is three by five with one column between letters, the smallest a capital alphabet can be
- * and stay unambiguous. At the game's zoom 2 a letter is 6 x 10 CSS pixels; at a phone's zoom 1 it is
- * 3 x 5 CSS pixels, drawn on six by ten device pixels on every phone with a 2x screen. Nothing
- * smaller reads, and anything bigger would not fit "RESEARCH" on any board a post can carry.
- * Capitals only, because a lower-case "y" or "e" needs a descender and a bowl that five rows cannot
- * hold. Only the letters these three signs spell are drawn; a sign that asks for another one throws.
+ * THE FONT WAS three by five with one column between letters, the smallest a capital alphabet can
+ * be and stay unambiguous. At the game's zoom 2 a letter is 6 x 10 CSS pixels; at a phone's zoom 1
+ * it is 3 x 5 CSS pixels, drawn on six by ten device pixels on every phone with a 2x screen.
+ *
+ * SUPERSEDED 2026-10-25: the client picked the BRUSH HAND ("B1") from four previews, and it lives in
+ * `sign-brush.ts` -- heavy two-pixel downstrokes, dry-brush ends, a bouncing baseline, and a drawn
+ * heart with an outline and a highlight. Still five rows and still capitals, for the reason above;
+ * the heavier downstrokes cost width, so the notice's page went from 38 to 42 to carry RESEARCH.
+ * The 3 x 5 table is gone from this file because nothing paints with it any more.
  */
-const GLYPHS: Record<string, readonly string[]> = {
-  A: ['.#.', '#.#', '###', '#.#', '#.#'],
-  C: ['.##', '#..', '#..', '#..', '.##'],
-  D: ['##.', '#.#', '#.#', '#.#', '##.'],
-  E: ['###', '#..', '##.', '#..', '###'],
-  H: ['#.#', '#.#', '###', '#.#', '#.#'],
-  I: ['###', '.#.', '.#.', '.#.', '###'],
-  P: ['##.', '#.#', '##.', '#..', '#..'],
-  R: ['##.', '#.#', '##.', '#.#', '#.#'],
-  S: ['.##', '#..', '.#.', '..#', '##.'],
-  Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
-  '!': ['#', '#', '#', '.', '#'],
-  /*
-   * The heart, five wide so its two lobes are separate pixels -- at three wide it is a triangle.
-   * It is the one glyph not drawn in the sign's ink: see `heartInk`.
-   */
-  '♥': ['.#.#.', '#####', '#####', '.###.', '..#..'],
-  // A word space: one blank column, which with the gap either side of it is three.
-  ' ': ['.', '.', '.', '.', '.'],
-};
-
-/** Rows in every glyph. */
-const LETTER_H = 5;
-
-/** The blank column between two glyphs. */
-const LETTER_GAP = 1;
-
-/** How wide a line of lettering is, in pixels. */
-function measure(text: string): number {
-  let w = 0;
-  for (const ch of text) {
-    const g = GLYPHS[ch];
-    if (!g) throw new Error(`the sign font has no "${ch}" -- draw it in GLYPHS before using it`);
-    w += g[0]!.length + LETTER_GAP;
-  }
-  return Math.max(0, w - LETTER_GAP);
-}
-
-/**
- * Letters one line of `text` with its top-left at (x, y), every glyph pixel in `ink(ch, gx, gy)` --
- * the glyph's own column and row passed so a glyph can carry a highlight. Hard pixels only.
- */
-function letter(
-  s: Img,
-  text: string,
-  x: number,
-  y: number,
-  ink: (ch: string, gx: number, gy: number) => RGBA,
-): void {
-  let at = x;
-  for (const ch of text) {
-    const g = GLYPHS[ch]!;
-    for (let gy = 0; gy < LETTER_H; gy++)
-      for (let gx = 0; gx < g[gy]!.length; gx++)
-        if (g[gy]![gx] === '#') s.px(at + gx, y + gy, ink(ch, gx, gy));
-    at += g[0]!.length + LETTER_GAP;
-  }
-}
-
-/** Letters `text` centred across the span x0..x0+w-1. */
-function letterCentred(
-  s: Img,
-  text: string,
-  x0: number,
-  w: number,
-  y: number,
-  ink: (ch: string, gx: number, gy: number) => RGBA,
-): void {
-  letter(s, text, x0 + Math.floor((w - measure(text)) / 2), y, ink);
-}
 
 /*
  * THE HEART IS BRAND PURPLE, on the client's word. PIXEL_STANDARD section 2 keeps Purple's hues off
  * the props -- the protagonist and the attacker are meant to be the only saturated figures in frame
- * -- and this is a deliberate, client-requested exception the size of one 5 x 5 glyph. It is Deep
- * Purple #441363 (`cloak` level 0, the brand's primary purple), not Lilac: on cream paper Lilac sits
- * within forty luma of the page and the heart would go to a smudge, where Deep Purple stands two
- * hundred below it. One Aubergine pixel on the west lobe is the light from the top left -- Lilac
- * there was tried and stood only 75 luma off the page, which the guard at the foot of this file
- * fails, because a pale pixel in a five-pixel glyph eats the lobe. FOR BRAND REVIEW.
+ * -- and this is a deliberate, client-requested exception the size of one glyph. FOR BRAND REVIEW.
+ *
+ * In the 3 x 5 font it was a 5 x 5 block of Deep Purple with one Aubergine pixel for the light, and
+ * Lilac for that pixel was tried and REJECTED: 75 luma off the page, and a pale pixel in a five-pixel
+ * glyph eats the lobe. Since 2026-10-25 (B1) the heart is DRAWN, seven by six: a keyline outline in
+ * `keyline('cloak')`, an Aubergine body, and a two-pixel Lilac highlight on the west lobe. Lilac is
+ * back, at the same 75 luma, and it no longer eats anything, because the OUTLINE carries the shape
+ * now -- the highlight sits wholly inside it. That is the condition the guard at the foot of this
+ * file holds it to, as a named exception to the letter floor, instead of the floor.
  */
-const heartInk = (gx: number, gy: number): RGBA =>
-  gx === 1 && gy === 0 ? shade('cloak', 1) : shade('cloak', 0);
+const HEART_INK = {
+  hline: keyline('cloak'),
+  hfill: shade('cloak', 1),
+  hhi: shade('cloak', 2),
+} as const;
+
+/** Paints laid lines onto a sheet, each role in the sign's own colour for it. */
+function paintLettering(s: Img, lines: readonly LaidAt[], ink: Record<Role, RGBA>): void {
+  for (const { x, y, laid } of lines)
+    for (const [px, py, r] of laid.px) s.px(x + px, y + py, ink[r]);
+}
 
 /**
  * Paints a prop that is wider than one tile on its own transparent sheet, rounds it off and rings it
@@ -2021,7 +1968,7 @@ function tufts(img: Img, at: readonly (readonly [number, number])[], slot = 0): 
 /*
  * THE NOTICE NAILED TO A POST, on the gate approach -- and since 2026-10-23 it says something.
  *
- * "I ♥ / CYERA / RESEARCH", three lines, in the sign font. RESEARCH is 31 pixels, and the page was
+ * "I ♥ / CYERA / RESEARCH", three lines, in the sign font. RESEARCH was 31 pixels, and the page was
  * 18 wide on a 32-pixel tile, so the page could not carry the word and no page on one tile could:
  * 31 plus a three-pixel margin a side is 37. So the notice is TWO tiles now, `notice-board` and
  * `notice-board-r`, and the page is 38 x 24 -- the same paper, the same nails, the same dog ear and
@@ -2039,19 +1986,25 @@ function tufts(img: Img, at: readonly (readonly [number, number])[], slot = 0): 
  * the ground. Ruled strokes of writing are gone: there is real lettering where they stood.
  *
  * The ink is the cream's own keyline (`LINE.cloth`), a warm near-black, so the letters stand some two
- * hundred luma under the page they are written on. The heart is the exception; see `heartInk`.
+ * hundred luma under the page they are written on. The heart is the exception; see `HEART_INK`.
+ *
+ * 2026-10-25, THE BRUSH HAND (B1, the client's pick): RESEARCH is 36 pixels in it, and 36 plus the
+ * three-pixel margin a side is 42, so the page is 42 x 24 now, at x 11 -- still centred on the seam
+ * at x 32, so the post stays under the middle of it. Four pixels wider and nothing else: the same
+ * two tiles, the same height, the same nails at the same insets, the same dog ear. The lines are
+ * laid by `layOn`, stacked and centred down the page, rather than at hand-set rows. The dry-brush
+ * ends are the wood's darkest stop, a warm brown that reads as the ink running thin on the paper.
  */
-const NOTICE_PAGE = { x: 13, y: 3, w: 38, h: 24 } as const;
+const NOTICE_PAGE = { x: 11, y: 3, w: 42, h: 24 } as const;
 
 /** The post under the notice, centred on the seam between its two tiles. */
 const NOTICE_POST = { x: 29, w: 6 } as const;
 
-/** Where each line of the notice starts, top row, on the sheet. */
-const NOTICE_LINES = [
-  { text: 'I ♥', y: 6 },
-  { text: 'CYERA', y: 12 },
-  { text: 'RESEARCH', y: 18 },
-] as const;
+/** The notice's three lines, laid in the brush hand down its page. */
+const NOTICE_LINES = layOn(NOTICE_PAGE, ['I ♥', 'CYERA', 'RESEARCH']);
+
+/** Each role's colour on the paper. */
+const NOTICE_INK: Record<Role, RGBA> = { ink: LINE.cloth, dry: shade('wood', 0), ...HEART_INK };
 
 function paintNoticeSheet(): Img {
   return standSheet(2, (s) => {
@@ -2072,10 +2025,7 @@ function paintNoticeSheet(): Img {
     nail(s, x + 2, y + 1);
     nail(s, x + w - 3, y + 1);
 
-    for (const line of NOTICE_LINES)
-      letterCentred(s, line.text, x, w, line.y, (ch, gx, gy) =>
-        ch === '♥' ? heartInk(gx, gy) : LINE.cloth,
-      );
+    paintLettering(s, NOTICE_LINES, NOTICE_INK);
 
     /*
      * The dog ear: the sheet's own back, folded up at the foot, with the fold in near-black.
@@ -2132,17 +2082,26 @@ const noticeBoardR: Painter = noticeHalf(1);
  */
 const SPEED_BOARD = { x: 2, y: 3, w: 28, h: 18 } as const;
 
-const SPEED_LINES = [
-  { text: 'CYERA', y: 6 },
-  { text: 'SPEED!', y: 12 },
-] as const;
+/*
+ * The two lines, laid in the brush hand (B1, 2026-10-25) and centred down the board. The board did
+ * not need to grow: SPEED! is 24 pixels in the brush hand and the board is 28, which leaves the two
+ * pixels a side the guard at the foot of this file asks for.
+ */
+const SPEED_LINES = layOn(SPEED_BOARD, ['CYERA', 'SPEED!']);
 
 /** The two stakes, left edge and width. */
 const SPEED_STAKES = [6, 22] as const;
 const STAKE_W = 4;
 
-/** Painted cream on timber: the plaster's top stop, so the letters are the lightest thing on it. */
-const PAINT_INK = shade('wall', 3);
+/**
+ * Painted cream on timber: the plaster's top stop, so the letters are the lightest thing on it. The
+ * dry-brush ends are a stop lower, the cream running thin over the grain.
+ */
+const PAINT_INK: Record<Role, RGBA> = {
+  ink: shade('wall', 3),
+  dry: shade('wall', 1),
+  ...HEART_INK,
+};
 
 const signSpeed: Painter = (img) => {
   // The lawn the map has at (36,3), and the logo board's below: the variant under each cell, so the
@@ -2156,8 +2115,8 @@ const signSpeed: Painter = (img) => {
     const { x, y, w, h } = SPEED_BOARD;
     face(s, x, y, w, h, 'wood', 0.04, 0.04 + SPAN * 0.5);
     // The groove between the two planks, one row under CYERA and one above SPEED!.
-    sinkRun(s, x, SPEED_LINES[1].y - 1, w, 1, 46);
-    for (const line of SPEED_LINES) letterCentred(s, line.text, x, w, line.y, () => PAINT_INK);
+    sinkRun(s, x, SPEED_LINES[1]!.y - 1, w, 1, 46);
+    paintLettering(s, SPEED_LINES, PAINT_INK);
     // The board throws its line onto the stakes below it, which `ring()` cannot see.
     for (const sx of SPEED_STAKES) {
       sinkRun(s, sx, y + h, STAKE_W, 1, 48);
@@ -2683,14 +2642,36 @@ for (const name of GROUND_PROPS) {
  * (the heart's one Aubergine highlight; its Deep Purple body stands about 205 under the page), and
  * the speed sign's paint 145 over its timber on both lines.
  *
- * And the logo's board has to stay blank and dark: blank because anything painted under a mark the
- * DOM lays on top is a mark the logo has to fight, and dark because the mark is the white one. Its
- * face spans at most 24 luma end to end and tops out under 90, so the offwhite logo (251) stands at
- * least 160 above every pixel of it.
+ * 2026-10-25, THE BRUSH HAND (B1, the client's pick; `sign-brush.ts`). The floor did NOT move. Every
+ * pixel is measured by the ROLE the layout gave it, and two roles are NAMED EXCEPTIONS to the floor,
+ * each held to a rule of its own instead -- never the floor lowered to let them through:
+ *
+ *   - THE LETTERS (`ink`) and THE HEART'S BODY (`hline`, `hfill`) are held to the 100 floor, as the
+ *     3 x 5 type was. Measured: ink 226 / 226 / 212 on the notice's three lines and 145 / 145 on the
+ *     speed sign; the heart's outline 237 and its body 175.
+ *   - THE DRY-BRUSH ENDS (`dry`) are the stroke's end where the paint ran thin, so by design they sit
+ *     BETWEEN the letter and its ground. The rule: each one touches its letter's ink (4-adjacent),
+ *     lies strictly between the line's ground and its ink in luma, stands at least half as far off
+ *     the ground as that line's weakest ink, and a line's dry pixels are fewer than half its ink --
+ *     so a hand that went mostly dry, or a dry pixel that floated free as a speck, fails here.
+ *     Measured: 174 / 174 / 161 off the page against ink 226 / 226 / 212, and 117 against 145 on the
+ *     timber -- 0.76 to 0.81 of the ink, against the rule's 0.5; and 2 dry to 7 ink on "I ♥" (the I
+ *     ends dry at both serifs), 5 to 55, 8 to 94 and 5 to 59 on the other lines.
+ *   - THE HEART'S HIGHLIGHT (`hhi`) is Lilac, 75 luma off the page, and that is the brand token. It
+ *     was rejected in the 3 x 5 font because a pale pixel in a five-pixel glyph eats the lobe; here
+ *     the outline carries the shape, so the rule is that it CANNOT reach the silhouette: every
+ *     highlight pixel has heart on all four sides, there are at most two, and each is lighter than
+ *     the heart's body.
  */
 {
   const LETTER_FLOOR = 100;
   const MARGIN = 2;
+  /** The dry-brush ends stand at least this share of the line's weakest ink off the ground. */
+  const DRY_SHARE_OF_INK = 0.5;
+  /** And there are fewer than this many of them per ink pixel: the line is mostly paint. */
+  const DRY_PER_INK = 0.5;
+  /** The heart's highlight: at most this many pixels, each enclosed by the heart. */
+  const HIGHLIGHT_PX = 2;
 
   const median = (xs: number[]): number => {
     const sorted = [...xs].sort((a, b) => a - b);
@@ -2701,40 +2682,88 @@ for (const name of GROUND_PROPS) {
     what: string,
     sheet: Img,
     board: { x: number; y: number; w: number; h: number },
-    lines: readonly { text: string; y: number }[],
+    lines: readonly LaidAt[],
   ): void => {
-    for (const line of lines) {
-      const w = measure(line.text);
-      const x0 = board.x + Math.floor((board.w - w) / 2);
+    for (const { x: x0, y: y0, laid, text } of lines) {
+      const { w, h } = laid;
       if (
         x0 - board.x < MARGIN ||
         board.x + board.w - (x0 + w) < MARGIN ||
-        line.y - board.y < MARGIN ||
-        board.y + board.h - (line.y + LETTER_H) < MARGIN
+        y0 - board.y < MARGIN ||
+        board.y + board.h - (y0 + h) < MARGIN
       )
         throw new Error(
-          `${what}: "${line.text}" is ${w}px at (${x0},${line.y}) on a ${board.w}x${board.h} board at (${board.x},${board.y}) -- under ${MARGIN}px from the board's edge, where the rim is banked dark or the line runs off the board. Widen the board or shorten the line.`,
+          `${what}: "${text}" is ${w}x${h}px at (${x0},${y0}) on a ${board.w}x${board.h} board at (${board.x},${board.y}) -- under ${MARGIN}px from the board's edge, where the rim is banked dark or the line runs off the board. Widen the board or shorten the line.`,
         );
-      const ink: number[] = [];
+      const roleAt = new Map<string, Role>();
+      for (const [px, py, r] of laid.px) roleAt.set(`${x0 + px},${y0 + py}`, r);
       const ground: number[] = [];
-      let at = x0;
-      const glyphAt = new Set<number>();
-      for (const ch of line.text) {
-        const g = GLYPHS[ch]!;
-        for (let gy = 0; gy < LETTER_H; gy++)
-          for (let gx = 0; gx < g[gy]!.length; gx++)
-            if (g[gy]![gx] === '#') glyphAt.add((line.y + gy) * sheet.w + at + gx);
-        at += g[0]!.length + LETTER_GAP;
-      }
-      for (let y = line.y; y < line.y + LETTER_H; y++)
-        for (let x = x0; x < x0 + w; x++)
-          (glyphAt.has(y * sheet.w + x) ? ink : ground).push(lumaOf(sheet.get(x, y)));
+      const by: Record<Role, number[]> = { ink: [], dry: [], hline: [], hfill: [], hhi: [] };
+      for (let y = y0; y < y0 + h; y++)
+        for (let x = x0; x < x0 + w; x++) {
+          const r = roleAt.get(`${x},${y}`);
+          (r ? by[r] : ground).push(lumaOf(sheet.get(x, y)));
+        }
       const bg = median(ground);
-      const weakest = Math.min(...ink.map((l) => Math.abs(l - bg)));
-      if (weakest < LETTER_FLOOR)
-        throw new Error(
-          `${what}: a letter of "${line.text}" stands only ${weakest.toFixed(0)} luma off its ground (median ${bg.toFixed(0)}; want at least ${LETTER_FLOOR}). A letter the colour of its board is the same bug as no letter, and at a phone's zoom 1 it is three CSS pixels wide.`,
+      const off = (l: number): number => Math.abs(l - bg);
+
+      // The letters and the heart's body: the floor.
+      for (const role of ['ink', 'hline', 'hfill'] as const) {
+        if (!by[role].length) continue;
+        const weakest = Math.min(...by[role].map(off));
+        if (weakest < LETTER_FLOOR)
+          throw new Error(
+            `${what}: ${role === 'ink' ? 'a letter' : "the heart's " + (role === 'hline' ? 'outline' : 'body')} of "${text}" stands only ${weakest.toFixed(0)} luma off its ground (median ${bg.toFixed(0)}; want at least ${LETTER_FLOOR}). A letter the colour of its board is the same bug as no letter, and at a phone's zoom 1 it is three CSS pixels wide.`,
+          );
+      }
+
+      // Named exception 1: the dry-brush ends.
+      if (by.dry.length) {
+        const weakestInk = Math.min(...by.ink.map(off));
+        const inkMid = median(by.ink);
+        const say = `${by.dry.length} dry-brush pixel(s) against ${by.ink.length} of ink`;
+        if (!by.ink.length || by.dry.length >= by.ink.length * DRY_PER_INK)
+          throw new Error(
+            `${what}: "${text}" has ${say} (want fewer than ${DRY_PER_INK} per ink pixel). Dry brush is where a stroke ends; a line that is mostly dry is a faded sign, not a painted one.`,
+          );
+        for (const [px, py, r] of laid.px) {
+          if (r !== 'dry') continue;
+          const [x, y] = [x0 + px, y0 + py];
+          const l = lumaOf(sheet.get(x, y));
+          const between = (l - bg) * (inkMid - bg) > 0 && Math.abs(l - bg) < Math.abs(inkMid - bg);
+          const touches = [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ].some(([ox, oy]) => roleAt.get(`${x + ox!},${y + oy!}`) === 'ink');
+          if (!touches || !between || off(l) < weakestInk * DRY_SHARE_OF_INK)
+            throw new Error(
+              `${what}: the dry-brush pixel at (${x},${y}) in "${text}" is ${!touches ? 'a speck touching no letter' : !between ? `not between its ground (${bg.toFixed(0)}) and its ink (${inkMid.toFixed(0)})` : `only ${off(l).toFixed(0)} luma off its ground, under ${DRY_SHARE_OF_INK} of the line's weakest ink (${weakestInk.toFixed(0)})`}. A dry end is the same paint running thin at the end of a stroke -- exempt from the letter floor on those terms and no others.`,
+            );
+        }
+      }
+
+      // Named exception 2: the heart's Lilac highlight.
+      const hhi = laid.px.filter(([, , r]) => r === 'hhi');
+      if (hhi.length) {
+        const heart = new Set<Role>(['hline', 'hfill', 'hhi']);
+        const fill = median(by.hfill);
+        const loose = hhi.filter(
+          ([px, py]) =>
+            ![
+              [1, 0],
+              [-1, 0],
+              [0, 1],
+              [0, -1],
+            ].every(([ox, oy]) => heart.has(roleAt.get(`${x0 + px + ox!},${y0 + py + oy!}`)!)) ||
+            !(lumaOf(sheet.get(x0 + px, y0 + py)) > fill),
         );
+        if (hhi.length > HIGHLIGHT_PX || loose.length)
+          throw new Error(
+            `${what}: the heart in "${text}" has ${hhi.length} highlight pixel(s) (want at most ${HIGHLIGHT_PX}), ${loose.length} of them on its edge or no lighter than its body. The Lilac highlight is exempt from the letter floor only because the outline carries the heart's shape: a highlight on the silhouette eats the lobe, which is why it was rejected in the 3 x 5 font.`,
+          );
+      }
     }
   };
 

@@ -570,7 +570,7 @@ const FRINGE = [6, 6, 5, 4, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6];
  * device, or leave the cape plain. Both are acceptable. What is not acceptable is calling this the
  * logo, in a commit message, a review, or to a stakeholder.
  */
-const MOTIF = 9;
+const MOTIF = 11;
 /*
  * ELEVENTH PASS, 2026-10-20: THE FORM WAS RIGHT AND THE EXECUTION WAS NOT DRAWN, IT WAS SAMPLED.
  *
@@ -726,31 +726,104 @@ const MOTIF = 9;
  * so the dot is at the viewer's top right, as in the SVG. CENTRING: on `CX`, her spine, under the
  * seam -- and the seam lands in the gap column. The two-pixel offset against the visible cloth that
  * the twelfth pass measured is unchanged and is the basket's, not the mark's.
+ *
+ * ---
+ *
+ * FOURTEENTH PASS, 2026-10-25: THE CLIENT PICKED "A3" FROM FOUR PREVIEWS, and three things in the
+ * thirteenth pass above are superseded by it -- the size, "no pixel edited by hand", and "mono, one
+ * value". Everything else above still binds, the brand sign-off most of all: this is now a HAND-EDITED
+ * pixel rendering of the Cyera symbol, which is further from the artwork than a straight threshold,
+ * and the brand team has seen neither. Call it that in every review and commit.
+ *
+ * The pick, as the client saw it (`A3-purple-back.png` in that round's preview set):
+ *
+ *   1. ELEVEN PIXELS, not nine. The SVG thresholded at the SAME 0.35 on an 11 x 11 grid; the gap
+ *      round the threshold is .25 blank against .38 inked, cleaner than nine's .34 / .38. Coverage:
+ *
+ *        r0   .00 .00 .24 .94 .72 .02 .72 .88 .20 .00 .00
+ *        r1   .00 .00 .55 1.0 .99 .15 1.0 1.0 .47 .00 .00     <- (r1,c8) cleared by hand
+ *        r2   .23 .56 .82 .64 .38 .00 .44 .62 .17 .52 .25
+ *        r3   .92 1.0 .68 .00 .00 .00 .00 .00 .62 1.0 .93     <- (r3,c8) cleared by hand
+ *        r4   .71 1.0 .39 .00 .00 .00 .00 .00 .40 1.0 .71
+ *        r5   .12 .81 .00 .00 .00 .00 .00 .00 .00 .82 .12
+ *        r6   .70 1.0 .39 .00 .00 .00 .00 .00 .40 1.0 .70
+ *        r7   .93 1.0 .68 .00 .00 .00 .00 .00 .69 1.0 .91
+ *        r8   .24 .56 .82 .68 .39 .00 .39 .64 .82 .56 .23
+ *        r9   .00 .00 .55 1.0 1.0 .80 1.0 1.0 .55 .00 .00
+ *        r10  .00 .00 .24 .95 .75 .15 .75 .94 .24 .00 .00
+ *
+ *   2. THE DOT'S GAP OPENED, by exactly TWO hand edits: (r1,c8) at .47 and (r3,c8) at .62. At the
+ *      straight threshold those two pixels carry the dot into the right-hand lobe corner to corner,
+ *      and at 1x a corner contact reads as joined -- the dot stops being a dot. Cleared, the dot
+ *      stands two pixels (one clear column of cloth, Chebyshev distance 2) off the ring everywhere.
+ *      These are the only two places the mark departs from the threshold, and `test/art-guards`
+ *      names both and requires each to be a real edit (covered at or above the threshold).
+ *
+ *   3. A ONE-PIXEL LIGHTER RIM ON THE OUTER LIT ARC, in `shade('cloak', 3)`: a mark pixel with open
+ *      cloth above it or to its left, on the outer ring (at least r - 1 from the mark's centre), on
+ *      the light's side of the diagonal. PIXEL_STANDARD section 3's one light, from the top-left,
+ *      caught on the mark's own raised edge; the inner edge and the shaded half stay Lilac.
+ *
+ * Placement: one column right of the spine (`MARK_SHIFT`), which is the visible cloth's centre at
+ * this width; and the back view's cape line rises THREE rows (`BACK_CAPE_LIFT`, derived) so the band
+ * under it is the eleven rows the mark needs. The cape line itself stays -- A2, which dropped it,
+ * was not picked. The hem gathers step out with the mark, and the right-hand pair is left off any row
+ * where it would sit closer than two columns to the cloth's edge.
  */
 const MARK_ROWS = [
-  '..XX.XX..',
-  '..XX.XX..',
-  'XXX....XX',
-  'XX.....XX',
-  '.X.....X.',
-  'XX.....XX',
-  'XXX...XXX',
-  '..XXXXX..',
-  '..XX.XX..',
+  '...XX.XX...',
+  '..XXX.XX...',
+  '.XXXX.XX.X.',
+  'XXX......XX',
+  'XXX.....XXX',
+  '.X.......X.',
+  'XXX.....XXX',
+  'XXX.....XXX',
+  '.XXXX.XXXX.',
+  '..XXXXXXX..',
+  '...XX.XX...',
 ] as const;
 
-/** The mark's one colour: Lilac, the brand token, which the official symbol ships in on dark. */
+/** The mark's body: Lilac, the brand token, which the official symbol ships in on dark. */
 const MARK_INK = shade('cloak', 2);
+
+/** The rim on the mark's outer lit arc -- the client's A3 pick, 2026-10-25. */
+const MARK_RIM = shade('cloak', 3);
+
+/** The mark sits one column right of the spine: the centre of the cloth a player can see. */
+const MARK_SHIFT = 1;
+
+/** True where the mark has ink, by grid cell; false off the grid. */
+const markAt = (dx: number, dy: number): boolean => MARK_ROWS[dy]?.[dx] === 'X';
+
+/**
+ * The lit edge: a mark pixel with open cloth above it or to its left, on the outer ring, on the
+ * light's side of the diagonal. See the fourteenth pass.
+ */
+function markLit(dx: number, dy: number): boolean {
+  const r = (MOTIF - 1) / 2;
+  const ox = dx - r;
+  const oy = dy - r;
+  return (
+    markAt(dx, dy) &&
+    (!markAt(dx, dy - 1) || !markAt(dx - 1, dy)) &&
+    Math.hypot(ox, oy) >= r - 1 &&
+    ox + oy <= 0
+  );
+}
 
 /**
  * What `test/art-guards.test.ts` needs to find the mark on the rendered frame and hold it to the
- * SVG: its colour and its grid. Not its pixels -- those are read off the frame, so the test checks
- * what ships rather than what this file says it drew.
+ * SVG: its two colours and its grid. Not its pixels -- those are read off the frame, so the test
+ * checks what ships rather than what this file says it drew.
  */
-export const CAPE_MARK = { ink: MARK_INK, size: MOTIF } as const;
+export const CAPE_MARK = { ink: MARK_INK, rim: MARK_RIM, size: MOTIF } as const;
 
-/** How far the back view's cape line sits above the other facings'. See the thirteenth pass. */
-const BACK_CAPE_LIFT = 1;
+/**
+ * How far the back view's cape line sits above the other facings': whatever leaves exactly the
+ * mark's own height between it and the hem. Three rows at eleven pixels. See the fourteenth pass.
+ */
+const BACK_CAPE_LIFT = MOTIF + 1 - CAPE_EDGE;
 
 /** The row the cape's hem line is drawn on, for a facing. The hem never moves; this is fixed too. */
 const capeLineRow = (facing: Facing): number =>
@@ -761,7 +834,8 @@ function paintCapeMark(img: Img, cx: number, top: number): void {
   const r = (MOTIF - 1) / 2;
   MARK_ROWS.forEach((row, dy) => {
     for (let dx = 0; dx < row.length; dx++)
-      if (row[dx] === 'X') img.px(cx - r + dx, top + dy, MARK_INK);
+      if (row[dx] === 'X')
+        img.px(cx + MARK_SHIFT - r + dx, top + dy, markLit(dx, dy) ? MARK_RIM : MARK_INK);
   });
 }
 
@@ -1333,7 +1407,7 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, str
   // Drawn in the keyline value, not in a shade: the board's interior boundaries are as dark as its
   // outlines, and that is the whole device by which one layer of cloth sits in front of another. A
   // midtone here is a crease; the keyline is a cape.
-  // One row higher on the back view, to give the logo the nine rows it needs; see `BACK_CAPE_LIFT`.
+  // Three rows higher on the back view, to give the logo the eleven rows it needs; see `BACK_CAPE_LIFT`.
   // The widths are read off the profile at the row actually drawn, so on the other three facings
   // this is exactly the `CAPE_EDGE` / `CAPE_EDGE - 1` it always was.
   const capeY = capeLineRow(facing);
@@ -1416,13 +1490,22 @@ function paintCloak(img: Img, shoulder: number, facing: Facing, dir: number, str
   // leaves the clear space `BRAND_AND_UI` section 82 asks for round the mark, and a skirt that
   // gathers a little wider apart at the back is what a skirt does anyway. The offset is derived from
   // the device's own half-width so the two cannot drift back into each other.
+  //
+  // 2026-10-25, the eleven-pixel mark (the fourteenth pass): the gathers also follow the mark's
+  // one-column shift, and at eleven the right-hand pair would land on the cloth's own edge on the
+  // narrowing rows, so it is left off any row where it would not sit two columns inside that edge.
+  // On the other three facings that bound is never reached and nothing moves.
   const gatherOut = facing === 'up' ? (MOTIF - 1) / 2 - 1 : 0;
+  const gatherShift = facing === 'up' ? MARK_SHIFT : 0;
   for (let y = HEM - 4; y < HEM; y++) {
     const k = lean(y);
-    img.px(cx - 4 - gatherOut + k, y, tone('cloak', CLOAK_RIM));
-    img.px(cx - 3 - gatherOut + k, y, tone('cloak', CLOAK_FOLD));
-    img.px(cx + 2 + gatherOut + k, y, tone('cloak', CLOAK_SHADE));
-    img.px(cx + 3 + gatherOut + k, y, tone('cloak', CLOAK_FOLD));
+    img.px(cx - 4 - gatherOut + gatherShift + k, y, tone('cloak', CLOAK_RIM));
+    img.px(cx - 3 - gatherOut + gatherShift + k, y, tone('cloak', CLOAK_FOLD));
+    const edgeHw = profile[Math.min(HEM - y, profile.length - 1)]!;
+    if (3 + gatherOut + gatherShift + k <= edgeHw - 3) {
+      img.px(cx + 2 + gatherOut + gatherShift + k, y, tone('cloak', CLOAK_SHADE));
+      img.px(cx + 3 + gatherOut + gatherShift + k, y, tone('cloak', CLOAK_FOLD));
+    }
   }
 
   // The HEM, as one dark line along the bottom of the cloth.
@@ -2015,56 +2098,137 @@ function assertPurpleReads(): void {
  *      pieces, the small one in the top-right corner of the mark, and a hollow centre.
  *   3. All nine rows between the cape line and the hem -- touching is allowed now, overlapping is
  *      not, because whichever line is painted last would clip the lobes.
+ *
+ * REWRITTEN AGAIN 2026-10-25 FOR THE CLIENT'S A3 PICK (the fourteenth pass on `MARK_ROWS`). The mark
+ * is two colours now, so every check reads BOTH and takes their union as the mark. Item 2's dot used
+ * to be found as "the top two rows right of centre", which was true of the nine-pixel trace only --
+ * at eleven the dot is three rows tall, and that heuristic split it in two and reported a broken
+ * mark that was whole. It is now found as what it is, the smaller of the two pieces, and it must
+ * lie wholly in the top-right quarter. Three further checks, each the thing A3 was picked FOR:
+ *
+ *   4. THE SIZE: the measured bounding box is MOTIF x MOTIF, so a trace that lost its outer ring
+ *      to something painted later fails here even if it stayed two pieces.
+ *   5. THE DOT GAP is exactly two pixels: the nearest dot pixel and the nearest ring pixel are a
+ *      Chebyshev distance of 2 apart, one clear pixel of cloth everywhere between them. One is the
+ *      corner contact the two hand edits removed; three would mean a lobe went missing.
+ *   6. THE RIM IS ON THE LIT ARC ONLY: every pixel in the rim colour is a mark pixel on the outer
+ *      ring (at least r - 1 from the measured centre), on the light's side of the diagonal, with open
+ *      cloth above or to its left; and there is at least one. Nothing in the rim colour may sit on
+ *      the shaded half or the inner edge. Item 1 already pins which pixels; this says why, so a
+ *      future redraw that moves the rim to the wrong side is named as that rather than as a diff.
  */
 function assertCapeDevice(): void {
   const faults: string[] = [];
   const capeY = capeLineRow('up');
   const r = (MOTIF - 1) / 2;
-  const want = new Set<string>();
+  const want = new Map<string, 'ink' | 'rim'>();
   MARK_ROWS.forEach((row, dy) => {
     for (let dx = 0; dx < row.length; dx++)
-      if (row[dx] === 'X') want.add(`${CX - r + dx},${capeY + 1 + dy}`);
+      if (row[dx] === 'X')
+        want.set(`${CX + MARK_SHIFT - r + dx},${capeY + 1 + dy}`, markLit(dx, dy) ? 'rim' : 'ink');
   });
   if (capeY + MARK_ROWS.length >= HEM || MARK_ROWS.length !== MOTIF)
     faults.push(
       `the band between the back's cape line (row ${capeY}) and the hem (row ${HEM}) holds ` +
         `${HEM - capeY - 1} rows and the mark is ${MARK_ROWS.length} -- the hem would clip its lobes`,
     );
+  const same = (c: RGBA, k: RGBA): boolean =>
+    c[3] > 0 && c[0] === k[0] && c[1] === k[1] && c[2] === k[2];
+  /** The 4-connected pieces of a point set, as point lists. */
+  const piecesOf = (pts: readonly [number, number][]): [number, number][][] => {
+    // Pieces already taken are deleted as they are found; a Map's iterator skips deleted keys.
+    const left = new Map<string, [number, number]>(pts.map((p) => [`${p[0]},${p[1]}`, p]));
+    const out: [number, number][][] = [];
+    for (const [k0, p0] of left) {
+      left.delete(k0);
+      const piece: [number, number][] = [p0];
+      for (let i = 0; i < piece.length; i++) {
+        const [x, y] = piece[i]!;
+        for (const [ox, oy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          const k = `${x + ox},${y + oy}`;
+          const p = left.get(k);
+          if (p) {
+            left.delete(k);
+            piece.push(p);
+          }
+        }
+      }
+      out.push(piece);
+    }
+    return out;
+  };
   for (const phase of [0, 1, 2, 3] as const) {
     const name = `up-${phase}`;
     const img = frameOf(name);
     const pts: [number, number][] = [];
+    const rim: [number, number][] = [];
+    const got = new Map<string, 'ink' | 'rim'>();
     for (let y = capeY; y <= HEM; y++)
       for (let x = 0; x < PURPLE_FRAME_W; x++) {
         const c = img.get(x, y);
-        if (c[3] > 0 && c[0] === MARK_INK[0] && c[1] === MARK_INK[1] && c[2] === MARK_INK[2])
-          pts.push([x, y]);
+        const role = same(c, MARK_INK) ? 'ink' : same(c, MARK_RIM) ? 'rim' : undefined;
+        if (!role) continue;
+        pts.push([x, y]);
+        if (role === 'rim') rim.push([x, y]);
+        got.set(`${x},${y}`, role);
       }
-    const got = new Set(pts.map(([x, y]) => `${x},${y}`));
-    const missing = [...want].filter((k) => !got.has(k));
-    const extra = [...got].filter((k) => !want.has(k));
+    const missing = [...want].filter(([k, v]) => got.get(k) !== v).map(([k, v]) => `${k} ${v}`);
+    const extra = [...got].filter(([k]) => !want.has(k)).map(([k, v]) => `${k} ${v}`);
     if (missing.length || extra.length)
       faults.push(
-        `${name}: the mark is not the traced mark -- ${missing.length} pixel(s) painted over ` +
-          `(${missing.join(' ')}) and ${extra.length} stray pixel(s) in its colour (${extra.join(' ')})`,
+        `${name}: the mark is not the traced mark -- ${missing.length} pixel(s) painted over or ` +
+          `in the wrong colour (${missing.join(' ')}) and ${extra.length} stray pixel(s) in its ` +
+          `colours (${extra.join(' ')})`,
       );
     if (!pts.length) continue;
-    const comps = componentsOf(pts);
     const xs = pts.map(([x]) => x);
     const ys = pts.map(([, y]) => y);
     const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
     const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
-    const dot = pts.filter(([x, y]) => x > (x0 + x1) / 2 && y < y0 + 2);
-    const dotAlone =
-      componentsOf(dot) === 1 && componentsOf(pts.filter((p) => !dot.includes(p))) === 1;
-    if (comps !== 2 || !dotAlone)
+    const [mx, my] = [(x0 + x1) / 2, (y0 + y1) / 2];
+    if (x1 - x0 + 1 !== MOTIF || y1 - y0 + 1 !== MOTIF)
       faults.push(
-        `${name}: the mark is ${comps} piece(s) -- the Cyera symbol at this size is a ring and a ` +
-          `detached dot at its top right, and anything else is not the symbol`,
+        `${name}: the mark measures ${x1 - x0 + 1} x ${y1 - y0 + 1}, not the ${MOTIF} x ${MOTIF} ` +
+          `it is traced at`,
       );
-    if (got.has(`${(x0 + x1) / 2},${(y0 + y1) / 2}`))
+    const pieces = piecesOf(pts).sort((a, b) => a.length - b.length);
+    const dot = pieces[0]!;
+    const dotTopRight = dot.every(([x, y]) => x > mx && y < my);
+    if (pieces.length !== 2 || !dotTopRight)
+      faults.push(
+        `${name}: the mark is ${pieces.length} piece(s) -- the Cyera symbol at this size is a ring ` +
+          `and a detached dot at its top right, and anything else is not the symbol`,
+      );
+    if (pieces.length === 2) {
+      let gap = Infinity;
+      for (const [ax, ay] of dot)
+        for (const [bx, by] of pieces[1]!)
+          gap = Math.min(gap, Math.max(Math.abs(ax - bx), Math.abs(ay - by)));
+      if (gap !== 2)
+        faults.push(
+          `${name}: the dot stands ${gap} px off the ring -- the A3 mark opens it to exactly 2 ` +
+            `(one clear pixel of cloth); 1 is the corner contact that reads as joined at 1x`,
+        );
+    }
+    if (got.has(`${mx},${my}`))
       faults.push(
         `${name}: the mark's centre is filled -- the symbol is a ring, hollow in the middle`,
+      );
+    const offArc = rim.filter(
+      ([x, y]) =>
+        Math.hypot(x - mx, y - my) < (MOTIF - 1) / 2 - 1 ||
+        x - mx + (y - my) > 0 ||
+        (got.has(`${x},${y - 1}`) && got.has(`${x - 1},${y}`)),
+    );
+    if (!rim.length || offArc.length)
+      faults.push(
+        `${name}: the rim is ${rim.length ? `off the outer lit arc at ${offArc.map(([x, y]) => `${x},${y}`).join(' ')}` : 'missing'} -- ` +
+          `it belongs on the mark's outer edge facing the top-left light, and nowhere else`,
       );
   }
   if (faults.length) throw new Error(`Purple's cape mark is broken:\n  ` + faults.join('\n  '));

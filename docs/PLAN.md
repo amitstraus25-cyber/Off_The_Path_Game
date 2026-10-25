@@ -120,6 +120,25 @@ morning interactions (`3e2473e`, `02420d6`), the afternoon screens (`8c4dc49`), 
   DOM; dimming it would mean filtering the mark). The three captions have not been through
   `docs/COPY_REVIEW.md`.
 
+**The client's art picks (2026-10-25), in the working tree and NOT committed.** Chosen from the
+preview sheets of that morning; both are CLIENT PICKS, not a builder's call.
+
+- [x] **A3, the mark on Purple's back:** the Cyera-symbol trace at 11 px (was 9), the dot's gap
+      opened to 2 px by two hand-cleared pixels, (r1,c8) and (r3,c8), and a 1 px lighter rim on the
+      outer lit arc; the cape line stays, lifted three rows on the back view only. Only her four back
+      frames changed. `assertCapeDevice` (`char-purple.ts`) and `test/art-guards.test.ts` pin it
+      exactly: the size, the two named edits, the 2 px gap, and the rim on the lit arc only.
+      **Brand sign-off is pending, and this widens Waiting-on-you item 5:** the mark is now a
+      HAND-EDITED rendering of the Cyera symbol, further from the artwork than the straight
+      threshold it replaces, and the brand team has seen neither.
+- [x] **B1, the brush hand on the notice and the Cyera Speed! sign** (`tiles/sign-brush.ts`):
+      heavy downstrokes, dry-brush ends, a bouncing baseline, and a drawn heart with an outline and
+      a Lilac highlight. The notice's paper is 42 wide (was 38) to carry RESEARCH. Only the tiles
+      `notice-board`, `notice-board-r` and `sign-speed` changed; `map-forest.json` regenerated
+      byte-identical, so no map cell moved and the tour is still 113 tiles. The lettering guard
+      keeps its 100-luma floor for the letters and the heart's body; the dry-brush ends and the
+      heart's highlight are named exceptions with rules of their own.
+
 ### Planned
 
 - **Phase 7, the release candidate:** the host side of the embed (the responsive container and a

@@ -156,41 +156,125 @@ describe('Purple', () => {
    * the thirteenth pass's whole tracing decision in `char-purple.ts`, and there is no hand edit on top
    * of it to allow for. Measured when written: 38 ink pixels; the inked pixels nearest the line are
    * 0.38 and the blank ones 0.34, so the threshold sits in a clean gap rather than on a pixel.
+   *
+   * SUPERSEDED IN THREE PLACES 2026-10-25 BY THE CLIENT'S A3 PICK (the fourteenth pass on
+   * `MARK_ROWS`), and each place is pinned here rather than loosened:
+   *
+   *   - THE SIZE is the client's eleven, stated as a contract. `CAPE_MARK.size` alone would move
+   *     with the painter (trap 5), so the expectation is the number the client picked, and the
+   *     grid the SVG is read at is that number, not the export.
+   *   - THERE ARE TWO HAND EDITS NOW, and they are NAMED: (r1,c8) and (r3,c8), the pixels that
+   *     carried the dot into the right-hand lobe corner to corner. The shipped mark must be the
+   *     0.35 threshold of the SVG minus EXACTLY those two -- a third edit, or a missing one, names
+   *     its pixel -- and each must be a real edit, covered at or above the threshold, or it is a
+   *     no-op written down as a decision. The gap they open is measured too: two pixels.
+   *   - THE MARK IS TWO COLOURS: the Lilac body and a one-pixel rim in `CAPE_MARK.rim`. The trace is
+   *     their union. The rim's place is defined here from the light, not read off the painter: a
+   *     mark pixel with open cloth above or to its left, on the outer ring, on the light's side of
+   *     the diagonal. The rim must be exactly that set -- nothing on the shaded half, nothing on
+   *     the inner edge, and none of that arc left in the body colour.
+   *
+   * Measured when written: 11 x 11; the threshold inks 62 pixels and the two edits leave 60, of
+   * which 13 are rim; the inked pixel nearest the threshold is 0.38 and the blank one 0.25.
    */
   it('carries a pixel trace of the official Cyera symbol on her back', () => {
     const svg = readFileSync(
       new URL('../../../reference/brand/logos/cyera-symbol-black.svg', import.meta.url),
       'utf8',
     );
-    const n = CAPE_MARK.size;
+    /** The client's A3 pick, 2026-10-25: eleven pixels. */
+    const n = 11;
+    expect(CAPE_MARK.size, 'the mark is not the eleven pixels the client picked').toBe(n);
+    /** The two hand edits that open the dot's gap, as (row, column) on the mark's grid. */
+    const CLEARED = ['(r1,c8)', '(r3,c8)'];
+    const TRACE = 0.35;
     const cov = svgCoverage(svg, n);
-    const [ir, ig, ib] = CAPE_MARK.ink;
+    for (const at of CLEARED) {
+      const [, r, c] = /\(r(\d+),c(\d+)\)/.exec(at)!.map(Number);
+      expect(
+        cov[r!]![c!]!,
+        `${at} is not covered by the symbol, so clearing it edits nothing`,
+      ).toBeGreaterThanOrEqual(TRACE);
+    }
+    const same = (c: readonly number[], k: readonly number[]): boolean =>
+      c[3]! > 0 && c[0] === k[0] && c[1] === k[1] && c[2] === k[2];
     for (const name of ['up-0', 'up-1', 'up-2', 'up-3']) {
       const img = new Img(32, 48);
       PURPLE_FRAMES[name]!(img);
       const pts: [number, number][] = [];
+      const rimAt = new Set<string>();
       for (let y = 0; y < img.h; y++)
         for (let x = 0; x < img.w; x++) {
           const c = img.get(x, y);
-          if (c[3] > 0 && c[0] === ir && c[1] === ig && c[2] === ib) pts.push([x, y]);
+          const rim = same(c, CAPE_MARK.rim);
+          if (rim || same(c, CAPE_MARK.ink)) pts.push([x, y]);
+          if (rim) rimAt.add(`${x},${y}`);
         }
-      expect(pts.length, `${name}: no mark in the mark's colour`).toBeGreaterThan(0);
+      expect(pts.length, `${name}: no mark in the mark's colours`).toBeGreaterThan(0);
       const x0 = Math.min(...pts.map(([x]) => x));
       const y0 = Math.min(...pts.map(([, y]) => y));
       const ink = new Set(pts.map(([x, y]) => `${x - x0},${y - y0}`));
-      const TRACE = 0.35;
       const dropped: string[] = [];
       const added: string[] = [];
+      const cleared: string[] = [];
       for (let r = 0; r < n; r++)
         for (let c = 0; c < n; c++) {
           const v = cov[r]![c]!;
-          if (v >= TRACE && !ink.has(`${c},${r}`)) dropped.push(`(r${r},c${c}) ${v.toFixed(2)}`);
-          if (v < TRACE && ink.has(`${c},${r}`)) added.push(`(r${r},c${c}) ${v.toFixed(2)}`);
+          const at = `(r${r},c${c})`;
+          if (v >= TRACE && !ink.has(`${c},${r}`)) {
+            if (CLEARED.includes(at)) cleared.push(at);
+            else dropped.push(`${at} ${v.toFixed(2)}`);
+          }
+          if (v < TRACE && ink.has(`${c},${r}`)) added.push(`${at} ${v.toFixed(2)}`);
         }
       const outside = [...ink].filter((k) => k.split(',').some((v) => Number(v) >= n));
       expect(dropped, `${name}: the trace drops pixels the symbol covers`).toEqual([]);
       expect(added, `${name}: the trace inks pixels the symbol barely touches`).toEqual([]);
+      expect(cleared, `${name}: the dot's gap is not the two named hand edits`).toEqual(CLEARED);
       expect(outside, `${name}: the mark is bigger than its ${n}px grid`).toEqual([]);
+
+      // The gap those two edits open: the dot (the smaller 4-connected piece) against the ring.
+      const left = new Set(ink);
+      const pieces: string[][] = [];
+      for (const k0 of ink) {
+        if (!left.has(k0)) continue;
+        left.delete(k0);
+        const piece = [k0];
+        for (let i = 0; i < piece.length; i++) {
+          const [x, y] = piece[i]!.split(',').map(Number) as [number, number];
+          for (const k of [`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`])
+            if (left.delete(k)) piece.push(k);
+        }
+        pieces.push(piece);
+      }
+      expect(pieces.length, `${name}: the mark is not a ring and a dot`).toBe(2);
+      const [dot, ring] = pieces.sort((a, b) => a.length - b.length) as [string[], string[]];
+      let gap = Infinity;
+      for (const a of dot)
+        for (const b of ring) {
+          const [ax, ay] = a.split(',').map(Number) as [number, number];
+          const [bx, by] = b.split(',').map(Number) as [number, number];
+          gap = Math.min(gap, Math.max(Math.abs(ax - bx), Math.abs(ay - by)));
+        }
+      expect(gap, `${name}: the dot is not two pixels off the ring`).toBe(2);
+
+      // The rim: exactly the mark's outer lit arc, read from the light rather than the painter.
+      const half = (n - 1) / 2;
+      const lit = (x: number, y: number): boolean =>
+        (!ink.has(`${x},${y - 1}`) || !ink.has(`${x - 1},${y}`)) &&
+        Math.hypot(x - half, y - half) >= half - 1 &&
+        x - half + (y - half) <= 0;
+      const wrongRim: string[] = [];
+      const unlit: string[] = [];
+      for (const k of ink) {
+        const [x, y] = k.split(',').map(Number) as [number, number];
+        const isRim = rimAt.has(`${x + x0},${y + y0}`);
+        if (isRim && !lit(x, y)) wrongRim.push(`(r${y},c${x})`);
+        if (!isRim && lit(x, y)) unlit.push(`(r${y},c${x})`);
+      }
+      expect(rimAt.size, `${name}: the mark has no rim`).toBeGreaterThan(0);
+      expect(wrongRim, `${name}: rim pixels off the outer lit arc`).toEqual([]);
+      expect(unlit, `${name}: pixels of the outer lit arc left without the rim`).toEqual([]);
     }
   });
 });
