@@ -2003,12 +2003,15 @@ export function generateForestMap(): GeneratedMap {
       clear(x, y);
     }
   /**
-   * The gate's column: the deck's west end, the `bridge-l` cells, on every deck row (2026-10-25,
-   * docs/GATEKEEPER.md). The shut gate is laid over them at the end of the file, in `decor-below`,
-   * and they STAY WALKABLE in `collision`: the game blocks them while the gate is shut, because it
-   * is the game that opens it.
+   * THE DRAWBRIDGE'S SPAN (2026-10-25, docs/GATEKEEPER.md as the client revised it that day): every
+   * deck cell, from the west end post's column to the east one's, on every deck row. Raised, it is
+   * laid over them at the end of the file in `decor-below`, and they STAY WALKABLE in `collision`:
+   * the game blocks them while the drawbridge is up, because it is the game that lowers it.
    */
   const gateX = bridgeCentre - 2;
+  const spanX1 = bridgeCentre + 2;
+  /** Which raised/lowered pair a deck column takes: -0 the west end, -1 the middle, -2 the east. */
+  const spanKind = (x: number): 0 | 1 | 2 => (x === gateX ? 0 : x === spanX1 ? 2 : 1);
 
   /*
    * ...AND THE VERGES GO ON NOW, with the deck already down.
@@ -6008,10 +6011,11 @@ export function generateForestMap(): GeneratedMap {
      * THE RIVER'S TWO WAYS OVER (2026-10-25, docs/GATEKEEPER.md). APPENDED, like the signs, so every
      * object above keeps its id.
      *
-     * `gate-bridge` is the gate's cells: the deck's west end, every deck row. The game reads it to
-     * block those cells while the gate is shut and to swap their `decor-below` tile from
-     * `bridge-gate-shut` to `bridge-gate-open` when it opens. Audit 3 holds every tile of it
-     * walkable, as it holds every non-prop object, which is what the contract asks of it.
+     * `gate-bridge` is the DRAWBRIDGE'S SPAN (the client's revision, 2026-10-25): every cell that
+     * is deck when it is down, end post to end post, every deck row. The game reads it to block
+     * those cells while it is raised and, when the Gatekeeper's key is taken, to swap each cell's
+     * `decor-below` tile from `bridge-gate-shut-<n>` to `bridge-gate-open-<n>`. Audit 3 holds every
+     * tile of it walkable, as it holds every non-prop object, which is what the contract asks.
      *
      * `wing-landing` is a POINT, at the centre of the `WING_LANDING` cell: where the Magpie's flight
      * sets Purple down, on the east bank's path up to the road.
@@ -6020,7 +6024,7 @@ export function generateForestMap(): GeneratedMap {
       name: 'gate-bridge',
       x: gateX * TILE,
       y: bridgeRows[0]! * TILE,
-      width: TILE,
+      width: TILE * (spanX1 - gateX + 1),
       height: TILE * bridgeRows.length,
     },
     {
@@ -8132,17 +8136,20 @@ export function generateForestMap(): GeneratedMap {
   }
 
   /*
-   * 7. THE BRIDGE GATE, SHUT (2026-10-25, docs/GATEKEEPER.md), laid last for the signs' reason: on
-   * `decor-below` over the deck's west end, every deck row, and NOT made solid. The collision layer
-   * says the deck is walkable because, once Bridge Key is taken, it is; the game holds the cells shut
-   * until then and swaps the tile to `bridge-gate-open`. Nothing above lays anything on the deck,
-   * and `clear` is said again so that stays true whatever a later pass is taught to do.
+   * 7. THE DRAWBRIDGE, RAISED (2026-10-25, docs/GATEKEEPER.md as the client revised it), laid last
+   * for the signs' reason: `bridge-gate-shut-<n>` on `decor-below` over every cell of the span, and
+   * NOT made solid. `ground` keeps the lowered deck (`bridge-l/m/r`), which is exactly what each
+   * `bridge-gate-open-<n>` paints, so the game's swap shows the bridge every deck guard above already
+   * holds. The collision layer says the span is walkable because, once the key is taken, it is; the
+   * game holds the cells shut until then. `clear` is said again so that stays true whatever a later
+   * pass is taught to do.
    */
-  for (const y of bridgeRows) {
-    set(below, gateX, y, gid('bridge-gate-shut'));
-    set(above, gateX, y, 0);
-    clear(gateX, y);
-  }
+  for (const y of bridgeRows)
+    for (let x = gateX; x <= spanX1; x++) {
+      set(below, x, y, gid(`bridge-gate-shut-${spanKind(x)}`));
+      set(above, x, y, 0);
+      clear(x, y);
+    }
 
   console.log(
     `  second pass: ${castTiles.size} of the cast made solid, the facade's gable row closed, ` +

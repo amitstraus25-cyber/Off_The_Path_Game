@@ -75,7 +75,8 @@
  */
 import { Img, keyline, TILE, tone, type RGBA } from '../paint.ts';
 import type { Painter } from '../paint.ts';
-import { bridgeGateTiles, FENCE_TILES } from './s-fence.ts';
+import { FENCE_TILES } from './s-fence.ts';
+import { WATER_TILES } from './w-water.ts';
 
 /* ---------------------------------------------------------------- the wood */
 
@@ -427,11 +428,112 @@ function bridgePlank(kind: 'left' | 'middle' | 'right'): Painter {
   };
 }
 
+/* -------------------------------------------------------------- drawbridge */
+
+/*
+ * THE DRAWBRIDGE (the client, 2026-10-25, revising docs/GATEKEEPER.md the same day): the crossing
+ * is a drawbridge that stands up until the Gatekeeper's key is taken, and then comes down. A picket
+ * gate on the deck was drawn first and is gone.
+ *
+ * Six tiles, a shut (RAISED) and an open (LOWERED) for each of the deck's three kinds of column,
+ * because the map lays the bridge as `bridge-l`, three `bridge-m` and `bridge-r`, the same tile in
+ * both deck rows. `forest-map.ts` lays the raised ones in `decor-below` over every deck cell, and
+ * the game swaps each `bridge-gate-shut-<n>` for `bridge-gate-open-<n>` when the key is taken:
+ *
+ *   -0  the west end   raised: the bank, the hinge posts, the leaf standing up, a chain to it
+ *                      lowered: `bridge-l`, exactly
+ *   -1  the middle     raised: open river, plain `water`, so it seams into the river around it
+ *                      lowered: `bridge-m`, exactly
+ *   -2  the east end   raised: the far bank and the rest post the leaf comes down onto
+ *                      lowered: `bridge-r`, exactly
+ *
+ * THE LOWERED STATE IS TODAY'S BRIDGE, painted by the same painters, so the moment the key is taken
+ * the crossing is the one every guard on the deck already holds.
+ *
+ * THE RAISED LEAF, and the projection's one cheat. The leaf is hinged at the west end on a north-
+ * south axis, so stood up it is a north-south wall -- which this camera looks along, as it looks
+ * along the garden's north-south fence runs. So it is drawn the way those are: a timber strip down
+ * the whole two-row width of the crossing, its boards edge-on, two iron bands across it, and a long
+ * shadow on the water to the east that says how tall it stands. Stacked in the two deck rows, each
+ * cell carries one chain from its hinge post up to the leaf, so the pair reads as the two chains a
+ * drawbridge has, north and south. The missing deck does the rest: the planks are simply not there.
+ */
+const IRON: RGBA = keyline('stone', 30);
+const IRON_LIT: RGBA = tone('stone', 0.55);
+const LEAF_X0 = 14; // the leaf's west keyline, one column clear of the hinge post's 14
+const LEAF_X1 = 25; // its east keyline: ten painted columns, so it holds its own at the camera
+/* Across the leaf's ten painted columns: lit west, falling to the shaded east. */
+const LEAF_ACROSS = [0.9, 0.74, 0.64, 0.58, 0.54, 0.5, 0.45, 0.38, 0.28, 0.14];
+
+function raisedLeaf(img: Img): void {
+  // The hinge: an iron barrel across the gap between the post's head and foot, where the deck's
+  // cut end used to show, lit along its top.
+  img.rect(1, 13, LEAF_X0, 6, IRON);
+  img.rect(2, 14, LEAF_X0 - 2, 1, IRON_LIT);
+  img.rect(2, 17, LEAF_X0 - 2, 1, WOOD_BLACK);
+  // The long shadow on the water, falling east, away from the light.
+  for (let y = 0; y < TILE; y++)
+    for (let x = LEAF_X1 + 1; x < TILE; x++) {
+      const c = img.get(x, y);
+      const k = x <= LEAF_X1 + 3 ? 0.5 : 0.28;
+      img.px(x, y, [
+        Math.round(c[0] * (1 - k) + WOOD_DEEP[0] * k),
+        Math.round(c[1] * (1 - k) + WOOD_DEEP[1] * k),
+        Math.round(c[2] * (1 - k) + WOOD_DEEP[2] * k),
+        255,
+      ]);
+    }
+  for (let y = 0; y < TILE; y++) {
+    img.px(LEAF_X0, y, WOOD_BLACK);
+    img.px(LEAF_X1, y, WOOD_BLACK);
+    const seam = y % 8 === 0;
+    LEAF_ACROSS.forEach((t, i) =>
+      img.px(LEAF_X0 + 1 + i, y, seam ? WOOD_SEAM : timber(t - (y % 8 === 7 ? 0.12 : 0))),
+    );
+  }
+  // Two iron bands, each with a rivet catching the light.
+  for (const by of [5, 26]) {
+    img.rect(LEAF_X0 + 1, by, LEAF_X1 - LEAF_X0 - 1, 2, IRON);
+    img.px(LEAF_X0 + 2, by, IRON_LIT);
+  }
+  // The chain: links from the hinge post's head up to the leaf's band, alternating lit and dark.
+  // Two pixels thick, so it reads as chain and not as a scratch: a lit link, then a dark one.
+  const [x0, y0, x1, y1] = [3, 1, LEAF_X0 + 4, 8];
+  const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+  for (let s = 0; s <= steps; s++) {
+    const x = Math.round(x0 + ((x1 - x0) * s) / steps);
+    const y = Math.round(y0 + ((y1 - y0) * s) / steps);
+    const lit = Math.floor(s / 2) % 2 === 0;
+    img.px(x, y, lit ? IRON_LIT : IRON);
+    img.px(x, y + 1, lit ? IRON : WOOD_BLACK);
+  }
+  // Where it meets the leaf: an iron eye.
+  img.rect(x1 - 1, y1 - 1, 3, 3, IRON);
+  img.px(x1, y1, IRON_LIT);
+}
+
+const drawbridgeRaised: Record<'west' | 'middle' | 'east', Painter> = {
+  west: (img) => {
+    WATER_TILES['shore-w']!(img);
+    endPost(img, 'left');
+    raisedLeaf(img);
+  },
+  middle: (img) => WATER_TILES['water']!(img),
+  east: (img) => {
+    WATER_TILES['shore-e']!(img);
+    endPost(img, 'right');
+  },
+};
+
 export const OUTDOOR_TILES: Record<string, (img: Img) => void> = {
   ...FENCE_TILES,
   'bridge-l': bridgePlank('left'),
   'bridge-m': bridgePlank('middle'),
   'bridge-r': bridgePlank('right'),
-  // The gate on the bridge's west end (2026-10-25, docs/GATEKEEPER.md), over `bridge-l`'s planks.
-  ...bridgeGateTiles(bridgePlank('left')),
+  'bridge-gate-shut-0': drawbridgeRaised.west,
+  'bridge-gate-open-0': bridgePlank('left'),
+  'bridge-gate-shut-1': drawbridgeRaised.middle,
+  'bridge-gate-open-1': bridgePlank('middle'),
+  'bridge-gate-shut-2': drawbridgeRaised.east,
+  'bridge-gate-open-2': bridgePlank('right'),
 };

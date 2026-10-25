@@ -396,14 +396,21 @@ export const TILE_NAMES: readonly string[] = [
   'gate-n-swing',
   'gate-s-swing',
   /*
-   * The gate on the bridge, APPENDED at gids 121 and 122 on 2026-10-25 (docs/GATEKEEPER.md): the
-   * brown picket gate standing on `bridge-l`'s planks, shut and open (tiles/s-fence.ts). The map
-   * lays `bridge-gate-shut` in `decor-below` over both deck rows of the bridge's west end; the game
-   * swaps them to `bridge-gate-open` when Bridge Key is taken. Every existing gid keeps its value;
-   * the sheet grows to 11 rows, 384 x 352, because ceil(122 / 12) is 11.
+   * THE DRAWBRIDGE, APPENDED at gids 121 to 126 on 2026-10-25 (docs/GATEKEEPER.md, and the client's
+   * revision the same day: a drawbridge, not a gate on the deck). A shut (raised) and an open
+   * (lowered) tile for each kind of deck column -- -0 the west end, -1 the middle, -2 the east end
+   * (tiles/s-outdoor.ts). The map lays the shut ones in `decor-below` over every deck cell, which is
+   * `gate-bridge`; the game swaps each `bridge-gate-shut-<n>` for `bridge-gate-open-<n>` when the
+   * Gatekeeper's key is taken. Every existing gid keeps its value; the sheet grows to 11 rows,
+   * 384 x 352, because ceil(126 / 12) is 11. (Gids 121 and 122 were a picket gate's,
+   * `bridge-gate-shut` and `bridge-gate-open`, for an afternoon on this branch; never shipped.)
    */
-  'bridge-gate-shut',
-  'bridge-gate-open',
+  'bridge-gate-shut-0',
+  'bridge-gate-open-0',
+  'bridge-gate-shut-1',
+  'bridge-gate-open-1',
+  'bridge-gate-shut-2',
+  'bridge-gate-open-2',
 ];
 
 /*

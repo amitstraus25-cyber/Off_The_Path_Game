@@ -428,14 +428,15 @@ describe('the map', () => {
    * (forest-map.ts), and `gate-n-swing` and `gate-s-swing` for the open gate's free halves, all
    * APPENDED. The sheet stays 384x320: `ceil(120 / 12)` is 10.
    *
-   * 122 since 2026-10-25, later (docs/GATEKEEPER.md): `bridge-gate-shut` and `bridge-gate-open`,
-   * the picket gate on the bridge's west end, APPENDED at gids 121 and 122. The sheet grows to
-   * 384x352 because `ceil(122 / 12)` is 11. In the same round gid 114 was RENAMED in place from
-   * `sign-speed` to `sign-dead-end` -- the same board repainted and moved -- which changes no gid
-   * and so not this count.
+   * 126 since 2026-10-25, later (docs/GATEKEEPER.md, and the client's revision the same day to a
+   * drawbridge): `bridge-gate-shut-0..2` and `bridge-gate-open-0..2`, raised and lowered, one pair
+   * per kind of deck column, APPENDED at gids 121 to 126. The sheet grows to 384x352 because
+   * `ceil(126 / 12)` is 11. In the same round gid 114 was RENAMED in place from `sign-speed` to
+   * `sign-dead-end` -- the same board repainted and moved -- which changes no gid and so not this
+   * count.
    */
   it('keeps the tileset at the gid count the committed map was written against', () => {
-    expect(TILE_NAMES).toHaveLength(122);
+    expect(TILE_NAMES).toHaveLength(126);
   });
 });
 
