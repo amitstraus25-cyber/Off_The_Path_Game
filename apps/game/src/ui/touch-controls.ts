@@ -183,16 +183,11 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
    * that cannot. The buttons below are what is exposed; the drag is for thumbs.
    */
   stick.setAttribute('aria-hidden', 'true');
-  // Haze direction arrows, as in the mock's joystick.
-  for (const [direction, glyph] of [
-    ['up', '▲'],
-    ['down', '▼'],
-    ['left', '◀'],
-    ['right', '▶'],
-  ] as const) {
+  // Haze direction arrows, as in the mock's joystick. Drawn in CSS (tokens.css), never typed:
+  // iOS turns the left and right triangle characters into colour emoji.
+  for (const direction of ['up', 'down', 'left', 'right'] as const) {
     const arrow = document.createElement('span');
     arrow.className = `otp-stick-arrow otp-stick-arrow--${direction}`;
-    arrow.textContent = glyph;
     arrow.setAttribute('aria-hidden', 'true');
     stick.append(arrow);
   }

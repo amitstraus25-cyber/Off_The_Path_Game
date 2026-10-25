@@ -390,24 +390,43 @@ body::before {
 }
 
 .otp-stick-arrow {
+  /* Drawn as CSS triangles, not typed. iOS renders U+25C0 and U+25B6 as colour emoji (blue
+     boxes) while leaving the up and down arrows as text, so the stick looked broken on an iPhone
+     (2026-10-25). Borders draw the same shape on every platform, in Haze. */
   position: absolute;
-  color: var(--cyera-haze);
-  font-size: 15px;
-  line-height: 1;
+  width: 0;
+  height: 0;
+  border: 0 solid transparent;
   pointer-events: none;
 }
 
 .otp-stick-arrow--up {
-  top: 6px;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 6px 9px;
+  border-bottom-color: var(--cyera-haze);
 }
 .otp-stick-arrow--down {
-  bottom: 6px;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 9px 6px 0;
+  border-top-color: var(--cyera-haze);
 }
 .otp-stick-arrow--left {
-  left: 8px;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 6px 9px 6px 0;
+  border-right-color: var(--cyera-haze);
 }
 .otp-stick-arrow--right {
-  right: 8px;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 6px 0 6px 9px;
+  border-left-color: var(--cyera-haze);
 }
 
 .otp-a-button {
