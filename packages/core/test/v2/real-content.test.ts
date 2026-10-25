@@ -12,7 +12,6 @@ import {
   overlaps,
 } from '../../../../apps/game/src/world/logic.ts';
 import { ContentError, v2 } from '../../src/index.ts';
-import { AWAITING_MAP, mapPending, onTheMap } from './awaiting-map.ts';
 
 /*
  * THE REAL v2 CONTENT, GUARDED (PLAN.md Phase 9 step B).
@@ -346,25 +345,8 @@ describe('the cast stands on art that exists', () => {
    * a spawn name that is not a spritesheet key in the manifest is a character Phase C would have
    * to paint, which this phase promised it would not (CLAUDE.md rule 5).
    */
-  /*
-   * THE RATCHET FOR RULES 3's NEW OBJECTS (awaiting-map.ts). Each name on AWAITING_MAP must still
-   * be missing; the day the map-and-art work lands one, this fails until it comes off the list --
-   * and an empty list turns the clock and par checks below, and the walk floor's cache check, back
-   * on. Nothing else in the content may be missing from the map.
-   */
-  it('the objects awaiting the map are still missing from it, and are exactly what the content names', () => {
-    for (const name of AWAITING_MAP)
-      expect(onTheMap(name), `${name} has arrived; take it off AWAITING_MAP`).toBe(false);
-    const named = [
-      ...content.characters.map((c) => c.spawn),
-      ...content.skills.flatMap((s) => (s.effect.kind === 'wing-ride' ? [s.effect.lands] : [])),
-    ];
-    for (const name of AWAITING_MAP) expect(named, name).toContain(name);
-  });
-
   it('every character uses a sprite that exists in the shipped manifest, and none is the wolf', () => {
     for (const c of content.characters) {
-      if (AWAITING_MAP.includes(c.spawn)) continue;
       expect(spriteKeys.has(c.spawn), `${c.id}: no sprite "${c.spawn}" in manifest.json`).toBe(
         true,
       );
@@ -374,13 +356,9 @@ describe('the cast stands on art that exists', () => {
 
   it('every character has a spawn on the shipped map today, and every wing ride a landing', () => {
     for (const c of content.characters)
-      if (!AWAITING_MAP.includes(c.spawn))
-        expect(
-          findObject(map, c.spawn),
-          `${c.id}: no "${c.spawn}" on map-forest.json`,
-        ).toBeDefined();
+      expect(findObject(map, c.spawn), `${c.id}: no "${c.spawn}" on map-forest.json`).toBeDefined();
     for (const s of content.skills)
-      if (s.effect.kind === 'wing-ride' && !AWAITING_MAP.includes(s.effect.lands))
+      if (s.effect.kind === 'wing-ride')
         expect(findObject(map, s.effect.lands), `${s.id}: no "${s.effect.lands}"`).toBeDefined();
   });
 
@@ -519,20 +497,16 @@ function paceFor(tiles: number): v2.Pace {
 }
 
 describe('the clock, at the pace of the real map', () => {
-  // Waits for rules 3's map: the tour cannot be walked to a character the map does not have yet.
-  it.skipIf(mapPending)(
-    'a careful reader who reads every card makes it inside three minutes, walking twice the shortest path',
-    () => {
-      const { tiles, legs } = tour();
-      const check = v2.clockCheck(content, paceFor(tiles));
-      const why = `tour ${tiles} tiles (${legs.map((l) => `${l.to} ${l.tiles}`).join(', ')}); careful arrived at ${check.elapsedMs}ms in deal ${check.seed}, ${check.marginMs}ms to spare`;
-      expect(check.ending, why).not.toBe('late');
-      expect(check.ok, why).toBe(true);
-      expect(check.marginMs, why).toBeGreaterThan(0);
-      // And with no perk helping at all -- every walk walked, every knock knocked, no rewind counted.
-      expect(v2.clockCheck(content, paceFor(tiles), { perks: false }).ok, why).toBe(true);
-    },
-  );
+  it('a careful reader who reads every card makes it inside three minutes, walking twice the shortest path', () => {
+    const { tiles, legs } = tour();
+    const check = v2.clockCheck(content, paceFor(tiles));
+    const why = `tour ${tiles} tiles (${legs.map((l) => `${l.to} ${l.tiles}`).join(', ')}); careful arrived at ${check.elapsedMs}ms in deal ${check.seed}, ${check.marginMs}ms to spare`;
+    expect(check.ending, why).not.toBe('late');
+    expect(check.ok, why).toBe(true);
+    expect(check.marginMs, why).toBeGreaterThan(0);
+    // And with no perk helping at all -- every walk walked, every knock knocked, no rewind counted.
+    expect(v2.clockCheck(content, paceFor(tiles), { perks: false }).ok, why).toBe(true);
+  });
 
   /*
    * WHAT THE PACE ASSUMES, FOR PHASE C: the longest content-order tour, in four-connected tiles,
@@ -544,30 +518,26 @@ describe('the clock, at the pace of the real map', () => {
    * bound is TIGHT, from both sides, by playing it. A tour of exactly the bound arrives and a tour
    * one tile longer is late -- so the number Phase C reads is the real edge, not an estimate.
    */
-  it.skipIf(mapPending)(
-    "the longest tour Phase C can lay out is a measured edge, and today's map is inside it",
-    () => {
-      // The worst deal's talking and reading, with no walking at all: the clock check, unwalked.
-      const readingMs = v2.clockCheck(
-        content,
-        { walkMs: 0, talkMs: talkMs() },
-        { perks: false },
-      ).elapsedMs;
-      const maxTourTiles = Math.floor(
-        (((v2.TIME_LIMIT_MS - readingMs) / 1000) * WALK_SPEED) / TILE / WANDER,
-      );
-      const noPerks = { perks: false };
-      expect(
-        v2.clockCheck(content, paceFor(maxTourTiles), noPerks).ok,
-        `${maxTourTiles} tiles`,
-      ).toBe(true);
-      expect(
-        v2.clockCheck(content, paceFor(maxTourTiles + 1), noPerks).ok,
-        `${maxTourTiles + 1} tiles`,
-      ).toBe(false);
-      expect(tour().tiles).toBeLessThanOrEqual(maxTourTiles);
-    },
-  );
+  it("the longest tour Phase C can lay out is a measured edge, and today's map is inside it", () => {
+    // The worst deal's talking and reading, with no walking at all: the clock check, unwalked.
+    const readingMs = v2.clockCheck(
+      content,
+      { walkMs: 0, talkMs: talkMs() },
+      { perks: false },
+    ).elapsedMs;
+    const maxTourTiles = Math.floor(
+      (((v2.TIME_LIMIT_MS - readingMs) / 1000) * WALK_SPEED) / TILE / WANDER,
+    );
+    const noPerks = { perks: false };
+    expect(v2.clockCheck(content, paceFor(maxTourTiles), noPerks).ok, `${maxTourTiles} tiles`).toBe(
+      true,
+    );
+    expect(
+      v2.clockCheck(content, paceFor(maxTourTiles + 1), noPerks).ok,
+      `${maxTourTiles + 1} tiles`,
+    ).toBe(false);
+    expect(tour().tiles).toBeLessThanOrEqual(maxTourTiles);
+  });
 });
 
 /*
@@ -615,36 +585,30 @@ describe('par is the brisk careful run on the shortest walk, in the slowest deal
     };
   };
 
-  it.skipIf(mapPending)(
-    'scoring.parMs is at or over the derived par, and within ten seconds of it',
-    () => {
-      const { ms, why } = derivedPar();
-      expect(content.scoring.parMs, why).toBeGreaterThanOrEqual(ms);
-      expect(content.scoring.parMs, why).toBeLessThanOrEqual(ms + 10_000);
-    },
-  );
+  it('scoring.parMs is at or over the derived par, and within ten seconds of it', () => {
+    const { ms, why } = derivedPar();
+    expect(content.scoring.parMs, why).toBeGreaterThanOrEqual(ms);
+    expect(content.scoring.parMs, why).toBeLessThanOrEqual(ms + 10_000);
+  });
 
-  it.skipIf(mapPending)(
-    'a brisk careful run at par scores the ceiling, and the same run at the slower READING pace does not',
-    () => {
-      const { tiles } = tour();
-      const walkMs = Math.ceil(
-        (((tiles * TILE) / WALK_SPEED) * 1000) / (content.characters.length + 1),
+  it('a brisk careful run at par scores the ceiling, and the same run at the slower READING pace does not', () => {
+    const { tiles } = tour();
+    const walkMs = Math.ceil(
+      (((tiles * TILE) / WALK_SPEED) * 1000) / (content.characters.length + 1),
+    );
+    for (const seed of seeds) {
+      const brisk = v2.play(content, 'careful', {
+        seed,
+        pace: { walkMs, talkMs: briskTalkMs() },
+        reading: v2.BRISK,
+      });
+      expect(brisk.total, `deal ${seed}`).toBe(content.scoring.outOf);
+      const slow = v2.play(content, 'careful', { seed, pace: paceFor(tiles) });
+      expect(slow.ending).toBe('grandma');
+      expect(slow.total, `deal ${seed}`).toBeLessThan(content.scoring.outOf);
+      expect(slow.total).toBeGreaterThanOrEqual(
+        content.scoring.played + content.scoring.clean + content.scoring.good * 3,
       );
-      for (const seed of seeds) {
-        const brisk = v2.play(content, 'careful', {
-          seed,
-          pace: { walkMs, talkMs: briskTalkMs() },
-          reading: v2.BRISK,
-        });
-        expect(brisk.total, `deal ${seed}`).toBe(content.scoring.outOf);
-        const slow = v2.play(content, 'careful', { seed, pace: paceFor(tiles) });
-        expect(slow.ending).toBe('grandma');
-        expect(slow.total, `deal ${seed}`).toBeLessThan(content.scoring.outOf);
-        expect(slow.total).toBeGreaterThanOrEqual(
-          content.scoring.played + content.scoring.clean + content.scoring.good * 3,
-        );
-      }
-    },
-  );
+    }
+  });
 });

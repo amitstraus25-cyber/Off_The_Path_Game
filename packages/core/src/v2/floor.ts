@@ -60,23 +60,16 @@ export const WALK_WORLD: WalkWorld = {
   reach: { start: 0, character: 48, door: 0 },
   start: { x: 176, y: 672 },
   door: { x: 1600, y: 608, width: 64, height: 96 },
-  /*
-   * RULES 3 IS AHEAD OF THE MAP HERE, on purpose and for one merge (2026-10-25). The Gatekeeper's
-   * `npc-gatekeeper` and the far bank's `wing-landing` are not on the map this was derived from, so
-   * neither is listed and the legs to and from them cost nothing -- a weaker floor, never a wrong
-   * one. The Owl and the Magpie are where that map has them. When the map that moves them lands,
-   * test/v2/floor.test.ts derives this again (its AWAITING_MAP ratchet turns the check back on)
-   * and fails until every number here is the new map's.
-   */
   spots: {
     'npc-rabbit': { x: 432, y: 640 },
-    'npc-owl': { x: 592, y: 416 },
-    'bystander-magpie': { x: 976, y: 736 },
+    'npc-gatekeeper': { x: 752, y: 640 },
+    'bystander-magpie': { x: 624, y: 896 },
+    'npc-owl': { x: 1136, y: 640 },
     'bystander-snail': { x: 1232, y: 768 },
     'npc-lantern-keeper': { x: 1200, y: 1088 },
     'bystander-cat': { x: 1264, y: 544 },
   },
-  landings: {},
+  landings: { 'wing-landing': { x: 1136, y: 912 } },
 };
 
 /** Straight-line distance from a point to the nearest point of a rectangle: 0 inside it. */

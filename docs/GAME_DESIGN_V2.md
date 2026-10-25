@@ -6,6 +6,12 @@ the v1 loop on `main` — there is no v1 branch, by their decision, and v1 itsel
 from the repository, so the v1 behaviour recorded in `docs/GAME_DESIGN.md` is history rather than an
 alternative.
 
+**Rules 3 (2026-10-25) changed the cast, the deal and the map: read `docs/GATEKEEPER.md` beside
+this.** The Toadstool and Way Teller are gone (the Gatekeeper and Bridge Key took their place), the
+deal is 8, not 35, and the Magpie and the Owl moved. Sections below that name the Toadstool, the
+Way Teller, `fork-signs` or 35 deals describe rules 2 and have not been rewritten; the clock
+paragraph in section 10 has.
+
 Read `docs/PAUL_BRIEF.md` first, then this. `docs/GAME_DESIGN.md` describes v1, is marked
 superseded, and is a reference only for what this document does not say.
 
@@ -385,17 +391,19 @@ score, question, cta, again. The three endings are `endings.grandma`, `.wolf` an
 
 In every deal exactly one of the 128 verdict combinations scores 100, and it is the careful one.
 
-**The clock.** Walking twice the shortest four-connected path on today's map (113 tiles: rabbit 7,
-toadstool 3, owl 19, magpie 34, snail 9, lantern keeper 10, cat 16, cottage 15), a reader who opens
-every card arrives in the tightest deal with **1.1 seconds to spare with no perk helping** (the
-no-perk tour, knock paid) and 2.0 seconds with the perks the careful basket takes. The longest tour
-that still fits with no perk is 115 tiles. All of these were measured on 2026-10-22 (the same
-helpers as `real-content.test.ts`, run apart from it); this paragraph used to say 107 tiles, 4.3 s
-and 5.2 s, which were the figures before the Cat moved into the clearing (107 to 113 tiles). The
-margin was 13.4 s on draft 7; the 3 s knock and the longer approved cards took most of it, and the
-Cat's move (six more tiles, doubled, at 3.75 tiles a second: 3.2 s) took the rest. It is a conservative model (the walk doubled, 200 words a minute,
-three seconds to decide on every card), so 1.1 s is honest rather than alarming, but it is the
-number to watch if a card grows or a character moves.
+**The clock.** Walking twice the shortest four-connected path on the rules-3 map (91 tiles: rabbit 7,
+gatekeeper 10, magpie 8, owl 20, snail 5, lantern keeper 10, cat 16, cottage 15; measured
+2026-10-25 on the `gatekeeper` branch with the helpers of `real-content.test.ts`), a reader who
+opens every card arrives in the tightest deal with **9.9 seconds to spare with no perk helping**
+(the no-perk tour, knock paid), and 9.9 with the careful basket's perks. The longest tour that
+still fits with no perk is 109 tiles. The tour walks the bridge; the flight route is held to within
+10% of it by the map's own guard (`tools/graybox/src/forest-map.ts`). Before rules 3 the same
+measure read 113 tiles, 1.1 s to spare and a 115-tile edge (2026-10-22); the river's shorter tour
+bought back more than the longer Gatekeeper and Magpie cards cost (the worst deal's reading rose
+from 118.6 s to 121.6 s). Par is unchanged at 107 s: the derived par is 103.4 s, inside the
+ten-second band `real-content.test.ts` holds it to. It is a conservative model (the walk doubled,
+200 words a minute, three seconds to decide on every card); it is still the number to watch if a
+card grows or a character moves.
 
 ### History, briefly
 

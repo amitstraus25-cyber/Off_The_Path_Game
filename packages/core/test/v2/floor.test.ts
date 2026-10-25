@@ -17,7 +17,6 @@ import { parseContent } from '../../src/v2/load.ts';
 import { play } from '../../src/v2/sim.ts';
 import type { RunEvent } from '../../src/v2/state.ts';
 import { content as fixture } from './helpers.ts';
-import { AWAITING_MAP, mapPending } from './awaiting-map.ts';
 
 /*
  * THE WALK FLOOR'S NUMBERS ARE THE MAP'S, AND THE FLOOR IS A FLOOR.
@@ -43,30 +42,26 @@ const talkedToFrom = (o: MapObject) => ({ x: centreOf(o).x, y: centreOf(o).y + T
 const feetAt = (o: MapObject) => ({ x: o.x + TILE / 2, y: o.y + PURPLE_FEET_BELOW_SPAWN });
 
 describe('WALK_WORLD is the shipped map and the game’s walking constants, exactly', () => {
-  // Skipped while rules 3's new objects are not on the shipped map yet (awaiting-map.ts).
-  it.skipIf(mapPending)(
-    `derives every field from the map and logic.ts (waits for: ${AWAITING_MAP.join(', ') || 'nothing'})`,
-    () => {
-      const door = need('trigger-cottage');
-      const derived: WalkWorld = {
-        walkSpeed: WALK_SPEED,
-        // A meeting needs the talking radius and no closer; the door needs her feet inside it.
-        reach: { start: 0, character: INTERACT_RADIUS, door: 0 },
-        start: feetAt(need('spawn-purple')),
-        door: { x: door.x, y: door.y, width: door.width, height: door.height },
-        spots: Object.fromEntries(
-          content.characters.map((c) => [c.spawn, talkedToFrom(need(c.spawn))]),
+  it('derives every field from the map and logic.ts', () => {
+    const door = need('trigger-cottage');
+    const derived: WalkWorld = {
+      walkSpeed: WALK_SPEED,
+      // A meeting needs the talking radius and no closer; the door needs her feet inside it.
+      reach: { start: 0, character: INTERACT_RADIUS, door: 0 },
+      start: feetAt(need('spawn-purple')),
+      door: { x: door.x, y: door.y, width: door.width, height: door.height },
+      spots: Object.fromEntries(
+        content.characters.map((c) => [c.spawn, talkedToFrom(need(c.spawn))]),
+      ),
+      // Where a wing ride sets her down: the landing point itself (a Tiled point has no size).
+      landings: Object.fromEntries(
+        content.skills.flatMap((s) =>
+          s.effect.kind === 'wing-ride' ? [[s.effect.lands, centreOf(need(s.effect.lands))]] : [],
         ),
-        // Where a wing ride sets her down: the landing point itself (a Tiled point has no size).
-        landings: Object.fromEntries(
-          content.skills.flatMap((s) =>
-            s.effect.kind === 'wing-ride' ? [[s.effect.lands, centreOf(need(s.effect.lands))]] : [],
-          ),
-        ),
-      };
-      expect(WALK_WORLD).toEqual(derived);
-    },
-  );
+      ),
+    };
+    expect(WALK_WORLD).toEqual(derived);
+  });
 });
 
 /** A met event for each character in content order, then the door, stamped as given. */
@@ -193,8 +188,8 @@ describe('the floor of a log that took a perk', () => {
   /*
    * RULES 3: the flight lands on the map point its effect names (`lands`, the far bank's
    * `wing-landing`), not beside a character. The floor charges the flight, then walks on from
-   * where she is set down. Tested on worlds that place the landing, because the shipped
-   * WALK_WORLD cannot yet (awaiting-map.ts): with it unplaced, the leg after the flight is free.
+   * where she is set down. Tested on worlds that place the landing where the arithmetic is plain,
+   * then on the shipped WALK_WORLD, then on a world that cannot place it at all.
    */
   it('wing ride: the take charges the flight, and the walk on starts from where she lands', () => {
     const { s, c } = owner('wing-ride');
@@ -229,8 +224,22 @@ describe('the floor of a log that took a perk', () => {
     expect(walkFloor(content, early, short).tooFast).toBe(2);
     // Left, it is a walk like any other, from the giver.
     expect(walkFloor(content, tour(leave(s.id, late)), short).floorMs).not.toBeCloseTo(flown, 3);
+    // The shipped world: from the far bank's landing to the next character, less the talking radius.
+    const landing = WALK_WORLD.landings[lands]!;
+    const shipped =
+      ((Math.hypot(nextSpot.x - landing.x, nextSpot.y - landing.y) - WALK_WORLD.reach.character) /
+        WALK_SPEED) *
+      1000;
+    expect(walkFloor(content, tour(take(s.id, late))).floorMs).toBeCloseTo(
+      to + flightMs + shipped,
+      6,
+    );
     // A landing the world cannot place: the flight is charged and the leg after it is free.
-    expect(walkFloor(content, tour(take(s.id, late))).floorMs).toBeCloseTo(to + flightMs, 6);
+    const unplaced: WalkWorld = { ...WALK_WORLD, landings: {} };
+    expect(walkFloor(content, tour(take(s.id, late)), unplaced).floorMs).toBeCloseTo(
+      to + flightMs,
+      6,
+    );
   });
 
   it('a take the content cannot place -- an unknown skill -- moves nothing', () => {
