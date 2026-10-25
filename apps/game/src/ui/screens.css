@@ -594,13 +594,13 @@
   border-width: 3px;
 }
 
-/* The buttons sit on the field's own line, under the caption, not beside the caption. */
+/* Post sits on the field's own line, under the caption, not beside the caption. */
 .otp-post > .otp-button {
   align-self: flex-end;
 }
 
 /*
- * THE FIELD AND ITS PILLS ARE ONE HEIGHT (Paul's item 28): they differed by 1.2px, which on one line
+ * THE FIELD AND POST ARE ONE HEIGHT (Paul's item 28): they differed by 1.2px, which on one line
  * reads as a misalignment rather than as two sizes. Border boxes, one height, labels centred.
  */
 .otp-handle__input,
@@ -617,7 +617,7 @@
 
 /*
  * The name's problem is inside the form (Paul's item 29): on a wide window it takes the line under
- * the whole row, and on a phone the line directly under the field, before the two pills.
+ * the whole row, and on a phone the line directly under the field, before Post.
  */
 .otp-post > .otp-handle__problem {
   flex: 1 1 100%;
@@ -638,10 +638,9 @@
 }
 
 /*
- * POST IS THE FORM'S PRIMARY, so it is never the smaller of its two pills (the 2026-10-22 review:
- * the filled "Post" was narrower than the outlined "Suggest a name" beside it). The floor is set
- * above what "Suggest a name" measures (191px at --otp-ui 1, 135px at the smallest scale, measured
- * 2026-10-22); e2e/results.spec.ts compares the two boxes, so a longer label fails there.
+ * POST IS THE FORM'S PRIMARY, and a pill a short word would leave stubby (the 2026-10-22 review),
+ * so it keeps the floor it was given when "Suggest a name" stood beside it. That button is gone
+ * (the client, 2026-10-25: players type their own name).
  */
 .otp-post > .otp-button[type='submit'] {
   min-width: max(152px, calc(212px * var(--otp-ui)));
@@ -2480,8 +2479,13 @@ h2.otp-section-label.otp-post__title {
  * in view, with nothing over it but the card. The file is the designer's full frame with its baked-in
  * logo, title, subtitle and button painted out (every word here is live text, golden rule 4), its
  * sky and shore carried 2280px further left, and 600px further right -- the sky above, the village
- * mirrored on below -- so it is 4800x1080. The designer's frame is the 1920 columns from 2280; the
- * rest lets the scene run on to any edge, so a phone can stand Purple in its middle without zooming:
+ * mirrored on below -- 4800x1080 in the frame's own pixels, which is what every number in this file
+ * counts in. The designer's frame is the 1920 columns from 2280; the
+ * rest lets the scene run on to any edge, so a phone can stand Purple in its middle without zooming.
+ * A computer is served a 2x copy (ui/Title.tsx `srcset`, 9600x2160, resampled and sharpened),
+ * because the designer's 1920x1080 is shown at about 1.5x on a laptop's screen and read as soft
+ * (the client, 2026-10-25: "something about the landing picture doesn't feel very crisp"). A 2x
+ * export from the designer would be crisper still, and drops in with no other change:
  *
  *   landscape, card left     the whole frame across the world's width, the card where its title was
  *   beside a side deck       the card is docked right (above), so the picture ends at its edge

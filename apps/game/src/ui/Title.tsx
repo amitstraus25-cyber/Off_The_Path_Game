@@ -5,6 +5,7 @@ import { Highlighted, NotationChip, WorldFrame } from './components';
 import { strings } from './copy';
 import { variants } from '../ab';
 import landingArt from './landing-art.webp';
+import landingArt2x from './landing-art@2x.webp';
 
 export interface TitleProps {
   ui: v2.Content['ui'];
@@ -258,11 +259,24 @@ function TitleCard({
            * skills circling. The designer's whole frame with its baked-in logo, title and button
            * painted out, so every word on this screen is still live text (golden rule 4), and the
            * whole picture is in view around the card: height-fit and right-aligned in landscape,
-           * covering the world with Purple in the middle on a phone (ui/screens.css).
+           * covering the world with Purple in the middle on a phone (ui/screens.css). Two files, the
+           * 2x one for a computer's screen.
            * Decoration only, so it says nothing to a screen reader.
            */
           <div class="otp-title-art" aria-hidden="true">
-            <img class="otp-title-art__img" src={landingArt} alt="" />
+            <img
+              class="otp-title-art__img"
+              src={landingArt}
+              srcset={`${landingArt} 4800w, ${landingArt2x} 9600w`}
+              /*
+               * How wide the picture is drawn, so a browser takes the 2x file only where it shows:
+               * about 2.5 times the window's width on a computer, and a phone's few hundred pixels
+               * of height times 4.4 -- for which the 1x file is already sharp, and the 2x one is
+               * 83MB of decoded pixels a phone has no need to hold.
+               */
+              sizes="(orientation: portrait) 1000px, (max-height: 500px) 1000px, 250vw"
+              alt=""
+            />
           </div>
         )}
         <div class="otp-title-panel" ref={panel}>
