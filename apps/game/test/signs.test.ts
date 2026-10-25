@@ -9,9 +9,10 @@ import { faceOnCanvas, isSign, SIGN_NEAR, signKey, signNear } from '../src/world
 import type { View } from '../src/world/signs';
 
 /*
- * THE THREE CYERA SIGNS (the client, 2026-10-23), on the shipped map: the forest notice lettered
- * "I ♥ Cyera Research", the "Cyera Speed!" board by the waterfall, and the blank board the logo is
- * laid over. What is asserted here is the contract between three files -- the map that places them,
+ * THE THREE SIGNS (the client, 2026-10-23; the middle one re-made 2026-10-25), on the shipped map:
+ * the forest notice lettered "I ♥ Cyera Research", the "Dead end" board at the end of the north
+ * path where the Owl used to stand (docs/GATEKEEPER.md; it was "Cyera Speed!" by the waterfall),
+ * and the blank board the logo is laid over. What is asserted here is the contract between three files -- the map that places them,
  * the content that says what they say, and the scene's pure helpers in world/signs.ts -- and that
  * every sign is a solid thing off the path that a player can walk up to. The picture itself, the
  * logo's alignment and the captions in the running game are e2e/forest-signs.spec.ts.
@@ -69,7 +70,11 @@ const reachable = (() => {
 
 describe('the Cyera signs on the map', () => {
   it('are the three the client asked for, or every test below is vacuous', () => {
-    expect(signs.map((s) => s.name).sort()).toEqual(['sign-logo', 'sign-research', 'sign-speed']);
+    expect(signs.map((s) => s.name).sort()).toEqual([
+      'sign-dead-end',
+      'sign-logo',
+      'sign-research',
+    ]);
   });
 
   it('each have a caption in content, and content captions no sign the map lacks', () => {
@@ -83,7 +88,7 @@ describe('the Cyera signs on the map', () => {
 
   it('say what the client asked them to say', () => {
     expect(words['research']?.caption).toBe('I ♥ Cyera Research');
-    expect(words['speed']?.caption).toBe('Cyera Speed!');
+    expect(words['dead-end']?.caption).toMatch(/dead end/i);
     expect(words['logo']?.caption).toBe('Cyera');
   });
 
@@ -91,17 +96,18 @@ describe('the Cyera signs on the map', () => {
    * The tiles each sign is drawn with, read off the generated gid map rather than written as gids,
    * so this fails on a sign laid without its art -- an invisible wall -- or art without its sign.
    */
-  const DRAWN: Record<string, string[]> = {
-    'sign-research': ['notice-board', 'notice-board-r'],
-    'sign-speed': ['sign-speed'],
-    'sign-logo': ['sign-logo-l', 'sign-logo-r'],
+  const DRAWN: Record<string, string[][]> = {
+    'sign-research': [['notice-board', 'notice-board-r']],
+    // The same board, repainted: the art may keep the old tile's name or take the sign's own.
+    'sign-dead-end': [['sign-dead-end'], ['sign-speed']],
+    'sign-logo': [['sign-logo-l', 'sign-logo-r']],
   };
 
   it.each(signs.map((s) => [s.name, s] as const))(
     '%s is drawn, and solid on every tile',
     (_n, s) => {
       const tiles = cells(s);
-      expect(tiles.map(([x, y]) => nameAt('decor-below', x, y))).toEqual(DRAWN[s.name]);
+      expect(DRAWN[s.name]).toContainEqual(tiles.map(([x, y]) => nameAt('decor-below', x, y)));
       for (const [x, y] of tiles) {
         expect(solid(x, y), `(${x},${y}) is walkable`).toBe(true);
         // Nothing drawn over a sign: no crown, no bush.

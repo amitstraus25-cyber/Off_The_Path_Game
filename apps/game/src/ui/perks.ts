@@ -14,24 +14,38 @@ import { fill, strings } from './copy';
  * rewritten every few frames is a region that never finishes a sentence.
  */
 export function perkLine(perk: v2.Perk): string {
-  switch (perk.kind) {
+  // What was actually given back, which core clamps for a run younger than the rewind.
+  if (perk.kind === 'rewind')
+    return fill(strings['perkRewind'] ?? '', { seconds: Math.round(perk.ms / 1000) });
+  // Read as a plain string so a kind core adds is a line to write here and not a compile break.
+  const kind: string = perk.kind;
+  switch (kind) {
     case 'minimap':
       return strings['perkMinimap'] ?? '';
-    case 'fork-signs':
-      return strings['perkForkSigns'] ?? '';
+    case 'bridge-gate':
+      return strings['perkBridgeGate'] ?? 'The gate swings open.';
     case 'early-welcome':
       return strings['perkEarlyWelcome'] ?? '';
     case 'wing-ride':
-      // `to` is null when nobody was left unmet: the ride does nothing, and says so.
-      return perk.to === null
+      // A ride that was given an explicit nobody to fly to does nothing, and says so. One to the
+      // river's far bank (the landing point) always flies.
+      return wingRideTo(perk) === null
         ? (strings['perkWingRideNobody'] ?? '')
         : (strings['perkWingRide'] ?? '');
     case 'walk-faster':
       return strings['perkWalkFaster'] ?? '';
     case 'lantern':
       return strings['perkLantern'] ?? '';
-    case 'rewind':
-      // What was actually given back, which core clamps for a run younger than the rewind.
-      return fill(strings['perkRewind'] ?? '', { seconds: Math.round(perk.ms / 1000) });
+    default:
+      return '';
   }
+}
+
+/**
+ * Who a wing ride was recorded to land beside: a character's id, null when it was recorded with
+ * nobody to fly to, and undefined when the perk carries no such field at all -- a ride that flies
+ * to the map's landing point (docs/GATEKEEPER.md) and needs no one.
+ */
+export function wingRideTo(perk: v2.Perk): string | null | undefined {
+  return (perk as { to?: string | null }).to;
 }

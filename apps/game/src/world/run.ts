@@ -51,10 +51,12 @@ export interface WorldRun {
   /**
    * THE PERKS, as the forest draws them (core v2 perks.ts, read through `hasPerk` and friends and
    * never by skill id): how much faster Purple walks, whether the fork signs and the lantern are
-   * out, and how dark the dusk is right now (0 until 2:00 left, never past the content's cap).
+   * out, whether the Gatekeeper's key has opened the bridge gate, and how dark the dusk is right now
+   * (0 until 2:00 left, never past the content's cap).
    */
   walkFactor(): number;
-  forkSigns(): boolean;
+  /** The run took Bridge Key (`bridge-gate`): the gate on the bridge stands open. */
+  gateOpen(): boolean;
   lantern(): boolean;
   /** Word went ahead (`early-welcome`): Grandma's door stands open as Purple comes up the lane. */
   welcome(): boolean;
@@ -88,7 +90,9 @@ export function gameRun(store: Store): WorldRun {
     met: (characterId) => store.getState().met.includes(characterId),
     talkingTo: () => store.getState().active,
     walkFactor: () => v2.walkFactor(store.getState()),
-    forkSigns: () => v2.hasPerk(store.getState(), 'fork-signs'),
+    // The effect kind is the contract's (docs/GATEKEEPER.md); cast so this reads on a core that
+    // has the kind and still compiles on one that has not merged it yet.
+    gateOpen: () => v2.hasPerk(store.getState(), 'bridge-gate' as v2.EffectKind),
     lantern: () => v2.hasPerk(store.getState(), 'lantern'),
     welcome: () => v2.hasPerk(store.getState(), 'early-welcome'),
     dusk: () => {

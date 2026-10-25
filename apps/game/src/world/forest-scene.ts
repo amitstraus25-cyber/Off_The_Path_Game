@@ -31,14 +31,26 @@ import {
   placeBubble,
 } from './logic';
 import { bearing } from './beacon';
-import type { BubbleSide, Facing, Interactable, Rect, Vec } from './logic';
+import type { BubbleSide, CollisionMap, Facing, Interactable, Rect, Vec } from './logic';
 import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
 import { sketchMap } from './minimap';
 import type { MapSketch } from './minimap';
-import { readForks } from './forks';
+import {
+  centreOf,
+  gateBump,
+  gateCells,
+  gateLayerName,
+  GATE_NOTICE_COOLDOWN_MS,
+  GATE_OBJECT,
+  GATE_OPEN_TILE,
+  GATE_SHUT_TILE,
+  landingSpot,
+  LANDING_OBJECT,
+  shutGate,
+} from './gate';
+import type { Cell } from './gate';
 import { faceOnCanvas, isSign, NEAR_SIGN, signKey, signNear } from './signs';
-import type { Fork } from './forks';
 import { brightestWarm, openDoor } from './door';
 import gids from '../assets/tileset-forest.gids.json';
 
@@ -736,10 +748,26 @@ export class ForestScene extends Phaser.Scene {
   private readonly step: Vec = { x: 0, y: 0 };
   /** Who the run was talking to last frame, so a character hops once on the meeting's edge. */
   private talking: string | null = null;
-  /** The forks and who lies down each way, read off the map once (world/forks.ts). */
-  private forkList: Fork[] = [];
-  /** One wooden sign per fork, standing only while the run has the `fork-signs` perk. */
-  private forkBoards: Phaser.GameObjects.Sprite[] = [];
+  /**
+   * THE GATE ON THE BRIDGE (world/gate.ts): the two collision maps (the map's own, open, and the
+   * same with the gate's cells solid) and the cells whose picture swaps between `bridge-gate-shut`
+   * and `bridge-gate-open`. Null on a map without a gate, which then has nothing to block and
+   * nothing to open.
+   */
+  private gate: {
+    open: CollisionMap;
+    shut: CollisionMap;
+    art: {
+      layer: Phaser.Tilemaps.TilemapLayer;
+      cells: Cell[];
+      shutGid: number;
+      openGid: number;
+    } | null;
+  } | null = null;
+  /** Whether the gate is standing open now: read off the run every frame (`drawGate`). */
+  private gateOpen = false;
+  /** Milliseconds until a bump against the shut gate may say so again. */
+  private gateQuiet = 0;
   /** The dusk's wash over the world, and the lantern's warm circle over it. */
   private duskWash: Phaser.GameObjects.Rectangle | null = null;
   private glow: Phaser.GameObjects.Sprite | null = null;
@@ -792,6 +820,7 @@ export class ForestScene extends Phaser.Scene {
         { width: TILE, height: TILE },
       );
 
+    this.createGate(phaserMap, tiles, tiled);
     this.createNpcs();
 
     const spawn = findObject(this.map, 'spawn-purple');
@@ -1025,26 +1054,9 @@ export class ForestScene extends Phaser.Scene {
 
   /**
    * What the perks draw on the canvas, laid down hidden at boot and shown by `drawPerks` while the
-   * run has the perk: a wooden sign at every fork, the dusk's wash and the lantern's glow. No words
-   * on any of them -- the fork sign's who-and-which-way is DOM over the board (ui/ForkSigns.tsx).
+   * run has the perk: the dusk's wash and the lantern's glow. No words on either.
    */
   private createPerkProps(): void {
-    if (this.sketched) {
-      const forks = this.map.objects.filter((o) => o.name.startsWith('fork-'));
-      const props = this.map.objects.filter((o) => o.name.startsWith('prop-'));
-      this.forkList = readForks(this.sketched, forks, props);
-    }
-    this.forkBoards = this.forkList.map((f) => {
-      // The board points from its crook towards the road it stands beside (frame 0 left, 1 right).
-      const frame = f.sign.col <= f.col ? 1 : 0;
-      const x = f.sign.col * TILE + TILE / 2;
-      const y = (f.sign.row + 1) * TILE;
-      return this.add
-        .sprite(x, y, 'prop-forksign', frame)
-        .setOrigin(0.5, 1)
-        .setDepth(y)
-        .setVisible(false);
-    });
     this.duskWash = this.add
       // Deep Purple, as the note on DUSK_DEPTH always said (Paul's item 30h): Black at the same
       // 0.45 cap read as a power cut rather than an evening. The cap is content's, unchanged.
@@ -1196,8 +1208,7 @@ export class ForestScene extends Phaser.Scene {
    * (world/run.ts), so a replay that clears the perks clears what they drew with no bookkeeping.
    */
   private drawPerks(): void {
-    const signs = this.run.forkSigns();
-    for (const board of this.forkBoards) if (board.visible !== signs) board.setVisible(signs);
+    this.drawGate(this.run.gateOpen());
 
     const welcome = this.run.welcome();
     const door = this.openedDoor;
@@ -1235,20 +1246,75 @@ export class ForestScene extends Phaser.Scene {
     return this.duskWash?.visible ? this.duskWash.alpha : 0;
   }
 
-  /** The forks and who lies down each way, for the sign labels (ui/ForkSigns.tsx). */
-  get forks(): readonly Fork[] {
-    return this.forkList;
+  /**
+   * THE BRIDGE GATE, built once at boot: the map's `gate-bridge` rectangle, shut. The map leaves its
+   * cells walkable (so the open bridge is the map's own), and the scene shuts them in the collision
+   * it walks on until the run has the key (`drawGate`). The picture is the map's: `bridge-gate-shut`
+   * on whichever tile layer the painter put it, swapped to `bridge-gate-open` when the gate opens.
+   *
+   * A map with no gate, or a tileset without the two tiles, is wrong by omission and never by
+   * invention: no gate means nothing blocks, and no tiles means the block has no picture. The build
+   * must not crash before the art lands, so nothing here throws.
+   */
+  private createGate(
+    phaserMap: Phaser.Tilemaps.Tilemap,
+    tiles: Phaser.Tilemaps.Tileset,
+    tiled: unknown,
+  ): void {
+    const rect = findObject(this.map, GATE_OBJECT);
+    if (!rect) return;
+    const open = this.map.collision;
+    const shut = shutGate(open, rect);
+    this.gate = { open, shut, art: null };
+    this.map.collision = shut;
+    const table = gids as Record<string, number>;
+    const shutGid = table[GATE_SHUT_TILE];
+    const openGid = table[GATE_OPEN_TILE];
+    if (shutGid === undefined || openGid === undefined) return;
+    const cells = gateCells(rect);
+    const name = gateLayerName(tiled as Parameters<typeof gateLayerName>[0], cells, shutGid);
+    if (name === null) return;
+    // The picture is usually on a layer the scene already draws; a layer of its own is drawn above
+    // the ground and with the rest of the world, so Purple walks over the open gate's planks.
+    const layer =
+      [this.ground, this.decorBelow, this.decorAbove].find((l) => l?.layer.name === name) ??
+      phaserMap.createLayer(name, tiles)?.setDepth(1);
+    if (!layer) return;
+    this.gate.art = {
+      layer,
+      cells: cells.filter((c) => layer.getTileAt(c.col, c.row)?.index === shutGid),
+      shutGid,
+      openGid,
+    };
   }
 
   /**
-   * Where the top of a fork's board is, in world pixels: the DOM label stands on it. Null for a
-   * fork the map does not have.
+   * The gate as the run has it, re-read every frame like the other perks (so a replay shuts it again
+   * with no bookkeeping): the collision it blocks with and the tiles it is drawn with.
    */
-  boardTop(name: string): Vec | null {
-    const i = this.forkList.findIndex((f) => f.name === name);
-    const board = this.forkBoards[i];
-    if (!board) return null;
-    return { x: board.x, y: board.y - board.height };
+  private drawGate(open: boolean): void {
+    const gate = this.gate;
+    if (!gate || open === this.gateOpen) return;
+    this.gateOpen = open;
+    this.map.collision = open ? gate.open : gate.shut;
+    const art = gate.art;
+    if (art)
+      for (const c of art.cells)
+        art.layer.putTileAt(open ? art.openGid : art.shutGid, c.col, c.row);
+  }
+
+  /** Whether the bridge gate is standing open, for the specs. */
+  get gateStandsOpen(): boolean {
+    return this.gateOpen;
+  }
+
+  /** Whether this step ran into the shut gate, so the player is told why Purple stopped. */
+  private bumpGate(dx: number, dy: number): void {
+    const gate = this.gate;
+    if (!gate || this.gateOpen || this.gateQuiet > 0) return;
+    if (!gateBump(gate.open, gate.shut, this.position, dx, dy)) return;
+    this.gateQuiet = GATE_NOTICE_COOLDOWN_MS;
+    this.bus.emit('gateLocked', undefined);
   }
 
   /**
@@ -1377,10 +1443,28 @@ export class ForestScene extends Phaser.Scene {
   }
 
   /**
-   * THE MAGPIE'S WING RIDE: Purple is carried to the talking spot of `to` over `ms`, the camera
-   * following, by a copy of the giver's own figure flying above her (the giver steps out of their
-   * spot for the flight). Under reduced motion it is a quick fade out and in instead, and the clock
-   * still runs the whole `ms`. `landed` is called once, when she is down.
+   * THE MAGPIE'S WING RIDE, OVER THE RIVER (docs/GATEKEEPER.md): Purple is carried to the map's
+   * `wing-landing` point on the far bank over `ms`, by `takeOff`'s flight. False when the map has
+   * no such point, and the caller falls back to `flyTo`.
+   */
+  flyToLanding(giver: string | null, ms: number, landed: () => void): boolean {
+    const point = findObject(this.map, LANDING_OBJECT);
+    if (!point) return false;
+    this.takeOff(landingSpot(this.map.collision, centreOf(point)), giver, ms, landed);
+    return true;
+  }
+
+  /** Whether the map has a landing for the Wing Ride (`wing-landing`), for the specs. */
+  get hasLanding(): boolean {
+    return findObject(this.map, LANDING_OBJECT) !== undefined;
+  }
+
+  /**
+   * A WING RIDE TO A FRIEND, the flight's older aim and the fallback of a map with no landing:
+   * Purple is carried to the talking spot of `to` over `ms`, the camera following, by a copy of the
+   * giver's own figure flying above her (the giver steps out of their spot for the flight). Under
+   * reduced motion it is a quick fade out and in instead, and the clock still runs the whole `ms`.
+   * `landed` is called once, when she is down.
    *
    * Collision is not consulted on the way -- she is in the air -- but the landing spot is a walkable
    * place beside the character, within talking reach.
@@ -1388,7 +1472,6 @@ export class ForestScene extends Phaser.Scene {
   flyTo(to: string, giver: string | null, ms: number, landed: () => void): boolean {
     const target = this.npcs.find((n) => n.id === to);
     if (!target) return false;
-    this.endFlight(false);
     const spots = [
       { x: target.x, y: target.y + TILE * 0.75 },
       { x: target.x - TILE, y: target.y + TILE * 0.5 },
@@ -1396,6 +1479,13 @@ export class ForestScene extends Phaser.Scene {
       { x: target.x, y: target.y - TILE },
     ];
     const spot = spots.find((s) => !blocked(this.map.collision, s.x, s.y)) ?? spots[0]!;
+    this.takeOff(spot, giver, ms, landed);
+    return true;
+  }
+
+  /** The flight itself, to a spot already chosen: the carrier, the pause, the clock. */
+  private takeOff(spot: Vec, giver: string | null, ms: number, landed: () => void): void {
+    this.endFlight(false);
     const home = this.npcs.find((n) => n.id === giver) ?? null;
     let carrier: Phaser.GameObjects.Sprite | null = null;
     if (!this.reducedMotion && home) {
@@ -1420,7 +1510,6 @@ export class ForestScene extends Phaser.Scene {
       landed,
     };
     if (this.flight.fade) this.cameras.main.fadeOut(FLIGHT.fadeMs);
-    return true;
   }
 
   /** One frame of the ride. */
@@ -1900,6 +1989,7 @@ export class ForestScene extends Phaser.Scene {
     const input = this.controls.read();
 
     if (!this.arrived && this.run.atCottage()) this.stageArrival();
+    this.gateQuiet = Math.max(0, this.gateQuiet - deltaMs);
     this.drawPerks();
     this.lifeOfCast();
 
@@ -2033,6 +2123,7 @@ export class ForestScene extends Phaser.Scene {
       this.stopWalking();
       return;
     }
+    this.bumpGate(this.step.x, this.step.y);
     this.position = moveWithCollision(this.map.collision, this.position, this.step.x, this.step.y);
     this.facing = facingFrom(direction, this.facing);
     if (!this.walking) {

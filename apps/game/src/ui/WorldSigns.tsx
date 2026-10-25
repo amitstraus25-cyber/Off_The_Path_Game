@@ -19,7 +19,7 @@ import type { Rect } from '../world/logic';
  * box's shape never stretches it.
  *
  * It moves with the camera by a transform written once a frame, and only when it changed, as the
- * Way Teller's labels do (ui/ForkSigns.tsx), and the layer clips to the world's box. Off the camera,
+ * other overlays do, and the layer clips to the world's box. Off the camera,
  * or with Purple standing in front of the board, it is hidden.
  *
  * TO A SCREEN READER it is nothing, which is correct: it is scenery, and what the sign says is said

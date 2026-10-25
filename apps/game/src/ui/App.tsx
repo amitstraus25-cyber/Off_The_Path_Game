@@ -12,8 +12,6 @@ import { ProblemScreen } from './ProblemScreen';
 import { Hud } from './Hud';
 import { Minimap } from './Minimap';
 import { DoorCheck } from './DoorCheck';
-import { ForkSigns } from './ForkSigns';
-import type { SignBoards } from './ForkSigns';
 import { WorldSigns } from './WorldSigns';
 import type { SignFaces } from './WorldSigns';
 import { NEAR_SIGN } from '../world/signs';
@@ -64,11 +62,10 @@ export interface AppProps {
   /** What a screen reader hears after the last choice, or '' (main.ts, P14). Never shown. */
   choiceSaid?: string;
   /**
-   * The forest's view of itself, for what the DOM lays over it: the fork boards the Way Teller's
-   * labels stand on, and where the cast stand so the minimap can step back from them. Null until
-   * the scene is built.
+   * The forest's view of itself, for what the DOM lays over it: the logo's board and where the cast
+   * stand so the minimap can step back from them. Null until the scene is built.
    */
-  signs?: (SignBoards & SignFaces & { castOnCanvas(): readonly Rect[] }) | null;
+  signs?: (SignFaces & { castOnCanvas(): readonly Rect[] }) | null;
 }
 
 const nowhere = (): Vec | null => null;
@@ -369,9 +366,6 @@ export function App({
             basket={hudBasket(state, content)}
             labels={content.ui.hud}
           />
-          {signs && v2.hasPerk(state, 'fork-signs') && (
-            <ForkSigns boards={signs} met={state.met} content={content} />
-          )}
           {/*
             THE MINIMAP IS THE WOOD MAP'S (the client, 2026-10-22): drawn only once a skill with the
             `minimap` effect is taken, good copy or bad. The door's question stays the safety net for

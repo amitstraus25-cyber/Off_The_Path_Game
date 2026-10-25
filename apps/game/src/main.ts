@@ -10,8 +10,9 @@ import type { Manifest } from './world/assets';
 import { BootScene, ForestScene } from './world/scenes';
 import type { MapSketch } from './world/minimap';
 import type { Vec } from './world/logic';
+import { GATE_LOCKED_FALLBACK } from './world/gate';
 import { cardOwed, gameRun, localSeed, outOfTime, walkOn } from './world/run';
-import { perkLine } from './ui/perks';
+import { perkLine, wingRideTo } from './ui/perks';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
 import { createMusicPlayer } from './audio/player';
@@ -439,29 +440,48 @@ async function start(): Promise<void> {
 
   /**
    * A PERK HAS JUST BEEN TAKEN: say it, and start what it does. Everything a perk does as a STATE --
-   * the minimap, the fork signs, the lantern, the dusk, the faster walk, the clock wound back -- is
+   * the minimap, the bridge gate, the lantern, the dusk, the faster walk, the clock wound back -- is
    * read from the store by whoever draws it; only the two MOMENTS are started here: the paper bird
    * taking off, and the wing ride. Read off the perk's kind, never off a skill id.
+   *
+   * THE WING RIDE FLIES OVER THE RIVER (docs/GATEKEEPER.md): to the map's `wing-landing`, and there
+   * is nobody there to meet, so the ride ends with Purple on her feet. On a map with no landing it
+   * falls back to the older aim, the talking spot of the friend core named, and meets them.
    */
   const perkTaken = (perk: v2.Perk): void => {
     say(perkLine(perk));
     if (perk.kind === 'early-welcome') forest.releasePaperBird();
-    if (perk.kind !== 'wing-ride' || perk.to === null) return;
-    const to = perk.to;
+    if (perk.kind !== 'wing-ride') return;
+    const to = wingRideTo(perk);
+    // Recorded with nobody to fly to: the ride does nothing (and the line has said so).
+    if (to === null) return;
     const giver = content.characters.find((c) => c.skillId === perk.s)?.id ?? null;
-    const meet = (): void => {
+    const down = (): void => {
       landing = null;
       flying = false;
       syncWorldChrome();
-      if (store.getState().phase === 'forest') store.dispatch({ type: 'MEET', c: to });
-      draw();
     };
-    flying = forest.flyTo(to, giver, perk.flightMs, () => {
-      // Down on the canvas; the meeting waits for the flight's whole length on the RUN clock.
+    // Down on the canvas; whatever follows waits for the flight's whole length on the RUN clock,
+    // because the server refuses a meeting stamped inside the flight (core floor.ts).
+    const afterFlight = (then: () => void): void => {
       const owed = perk.at + perk.flightMs - store.elapsed();
-      if (owed > 0) landing = setTimeout(meet, owed);
-      else meet();
-    });
+      if (owed > 0) landing = setTimeout(then, owed);
+      else then();
+    };
+    flying = forest.flyToLanding(giver, perk.flightMs, () =>
+      afterFlight(() => {
+        down();
+        draw();
+      }),
+    );
+    if (!flying && to !== undefined)
+      flying = forest.flyTo(to, giver, perk.flightMs, () =>
+        afterFlight(() => {
+          down();
+          if (store.getState().phase === 'forest') store.dispatch({ type: 'MEET', c: to });
+          draw();
+        }),
+      );
     syncWorldChrome();
   };
 
@@ -554,6 +574,10 @@ async function start(): Promise<void> {
     }
     knock();
     draw();
+  });
+  // Purple walked into the shut bridge gate: the scene says so once per bump; the words are content's.
+  bus.on('gateLocked', () => {
+    say(strings['gateLocked'] ?? GATE_LOCKED_FALLBACK);
   });
   bus.on('loadFailed', ({ keys }) => {
     loadFailure = keys;
