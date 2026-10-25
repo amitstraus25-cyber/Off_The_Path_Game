@@ -243,6 +243,9 @@ export const CHROME_KEYS = [
   'doorStill',
   'doorStay',
   'doorGoIn',
+  // P17 (the review of 2026-10-25): the door also names who was met and never answered.
+  'doorAskUnanswered',
+  'doorStillAnswer',
   /*
    * The full UX/UI review on the same evening. The Explore header's notation chip (UI_FOUNDATIONS
    * section 5): `worldGoal` is its label and `worldMetCount` its muted count, carrying {met} and
@@ -253,6 +256,23 @@ export const CHROME_KEYS = [
   'worldMetCount',
   'revealCaught',
   'revealMissed',
+  /*
+   * The client's review of 2026-10-25 (P9, P10). A good skill taken is `revealRight`, not "Caught
+   * it" (nothing was caught); a skill never answered is `revealPast`, neutral, not "Missed it". And
+   * a SAFE tile shows its unsafe copy's giveaway under `revealUnsafeSaid`, so every run teaches all
+   * seven giveaways and not only the dealt-bad four.
+   */
+  'revealRight',
+  'revealPast',
+  'revealUnsafeSaid',
+  /*
+   * The same review: `postJump` is the plain link beside Walk it again that takes a phone down to
+   * the post form (P13), and `saidTook` / `saidLeft` are what a screen reader hears after each
+   * choice (P14), carrying {skill}, {basket} and {left}.
+   */
+  'postJump',
+  'saidTook',
+  'saidLeft',
   /*
    * THE PERKS, as the forest says them (the client, 2026-10-22). One line per effect KIND, never per
    * skill, so a new skill that picks an existing kind needs no new words; `perkRewind` carries
@@ -423,6 +443,8 @@ const ui = z.strictObject({
     emailInvalid: text,
     emailPersonal: text,
     consentMissing: text,
+    /** Beside a greyed Post, what is still missing (the review of 2026-10-25, P13). */
+    postNeeds: text,
     privacy: text,
   }),
 });

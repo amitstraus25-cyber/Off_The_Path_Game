@@ -275,6 +275,10 @@ test('every reveal card is named in words with their commas, and the odd seventh
   await startGame(page);
   await answerAllAndArrive(page, 'leave');
   await toTheReveal(page);
+  // A clean run opens its first caught card by itself (P8); this measures the grid face down.
+  for (const tile of await page.locator('.otp-tile[data-open="true"]').all())
+    await tile.locator('.otp-tile__face').click();
+  await expect(page.locator('.otp-tile[data-open="true"]')).toHaveCount(0);
   const faces = page.locator('.otp-tile__face');
   await expect(faces).toHaveCount(7);
   for (let i = 0; i < 7; i++) {

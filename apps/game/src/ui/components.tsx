@@ -32,7 +32,7 @@ export function Panel({ number, title, children, aside, heading }: PanelProps) {
   return (
     <section class="otp-panel">
       <header class="otp-panel__header">
-        <span class="otp-panel__number">{number}</span>
+        {number && <span class="otp-panel__number">{number}</span>}
         <Title class="otp-panel__title">{title}</Title>
         {aside && <span class="otp-panel__aside">{aside}</span>}
       </header>

@@ -1,7 +1,7 @@
 {
   "rules": 2,
   "version": "2.0.0-draft.8",
-  "status": "draft: copy awaits the human read",
+  "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off)",
   "deal": {
     "good": 3
   },
@@ -109,7 +109,7 @@
       },
       "good": {
         "card": {
-          "take": ["Shows who lives down each path.", "Trusts only its own signposts."],
+          "take": ["Shows who lives down each path.", "Checks every sign against its own map."],
           "leave": "You guess at every fork."
         },
         "reveal": "Showed you who lived down each path."
@@ -187,7 +187,10 @@
       },
       "good": {
         "card": {
-          "take": ["Carries your parcel, so you walk faster.", "Opens for Grandma's hands only."],
+          "take": [
+            "Carries your parcel, so you walk faster.",
+            "Stays sealed until Grandma opens it."
+          ],
           "leave": "You carry it yourself."
         },
         "reveal": "You walked faster. It reached her, sealed."
@@ -210,12 +213,12 @@
       "promise": "It lights your way when the sun goes down.",
       "effect": { "kind": "lantern" },
       "realWorld": {
-        "term": "Autonomy without human approval",
-        "note": "A helper that acts on every sign without asking leaves you out. Keep a human in the loop for steps that matter."
+        "term": "Excessive agency",
+        "note": "A helper that acts without asking can send, pay or delete before you notice. Keep a human approving the steps that matter."
       },
       "good": {
         "card": {
-          "take": ["Waits for you to choose the way.", "Lights your way after dark."],
+          "take": ["Waits at every fork for you to choose.", "Lights your way after dark."],
           "leave": "You walk on in the dusk."
         },
         "reveal": "Lit your way as dusk fell."
@@ -346,7 +349,7 @@
       "realWorld": "In the real world",
       "score": "Your score",
       "outOf": "out of {outOf}",
-      "caught": "You kept {caught} of {bad} bad skills out of your basket.",
+      "caught": "You kept {caught} of {bad} malicious skills out of your basket.",
       "frameTitle": "Reveal",
       "unanswered": "Passed by",
       "question": "Who wrote the instructions your agent follows?",
@@ -435,10 +438,18 @@
       "doorStill": "Still to meet",
       "doorStay": "Keep looking",
       "doorGoIn": "Go in",
+      "doorAskUnanswered": "You haven't answered {count} of the {total} characters yet. Go in anyway?",
+      "doorStillAnswer": "Still to answer",
       "worldGoal": "Find Grandma",
       "worldMetCount": "{met} of {total} met",
       "revealCaught": "Caught it",
       "revealMissed": "Missed it",
+      "revealRight": "Right call",
+      "revealPast": "Walked past",
+      "revealUnsafeSaid": "The unsafe copy said",
+      "postJump": "Post your score ↓",
+      "saidTook": "You took {skill}. Basket: {basket}. {left} left to meet.",
+      "saidLeft": "You left {skill}. {left} left to meet.",
       "revealWatchFor": "What to watch for",
       "perkMinimap": "A map of the wood.",
       "perkForkSigns": "Signs at each fork now show who lives that way.",
@@ -460,6 +471,7 @@
       "emailInvalid": "That does not look like an email address. Check it and try again.",
       "emailPersonal": "Please use your work email, not a personal one.",
       "consentMissing": "Tick the box so Cyera may contact you about this research.",
+      "postNeeds": "Add your work email and tick the box to post.",
       "privacy": "Your name and score go on the public board. Your work email is kept privately, only so Cyera can contact you about this research, and is never shown. No account, no cookies."
     }
   }

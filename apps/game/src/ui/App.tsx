@@ -14,6 +14,7 @@ import { DoorCheck } from './DoorCheck';
 import { ForkSigns } from './ForkSigns';
 import type { SignBoards } from './ForkSigns';
 import { WorldSigns } from './WorldSigns';
+import { Beacon } from './Beacon';
 import type { SignFaces } from './WorldSigns';
 import { NEAR_SIGN } from '../world/signs';
 import { NotationChip, WorldFrame } from './components';
@@ -60,6 +61,8 @@ export interface AppProps {
    * holds it and empties it after a moment). Its region is polite and always mounted in the world.
    */
   toast?: string;
+  /** What a screen reader hears after the last choice, or '' (main.ts, P14). Never shown. */
+  choiceSaid?: string;
   /**
    * The forest's view of itself, for what the DOM lays over it: the fork boards the Way Teller's
    * labels stand on, and where the cast stand so the minimap can step back from them. Null until
@@ -180,9 +183,9 @@ function useNearSign(): string | null {
  * event for the same reason: the scene is the only thing in the build that knows where Purple is
  * standing, the UI holds no bus, and `main.ts` is not on the path between them.
  *
- * NOTHING DISPATCHES THIS YET -- the producer is a handover, recorded in `worldAsText()` below.
- * Until it lands every traveller's line reads exactly as it reads today, which is why the fallback
- * is an empty list rather than a guess.
+ * The forest scene dispatches it on the edge (world/forest-scene.ts `reportBearings`, since the
+ * review of 2026-10-25, P5): until its first event the list is empty, so every traveller's line
+ * reads as before rather than guessing.
  */
 const BEARINGS = 'otp:bearings';
 
@@ -262,6 +265,7 @@ export function App({
   onDoorStay = () => {},
   onDoorGoIn = () => {},
   toast = '',
+  choiceSaid = '',
   signs = null,
 }: AppProps) {
   const state = useStoreState(store);
@@ -358,6 +362,7 @@ export function App({
           </h1>
           {/* Before the HUD, so the clock, the basket and the Way Teller's chips paint over a logo. */}
           {signs && <WorldSigns faces={signs} />}
+          <Beacon />
           <Hud
             remainingMs={remaining}
             faceMs={winding.face}
@@ -422,6 +427,9 @@ export function App({
           <p class="otp-toast" role="status" aria-live="polite" aria-atomic="true" data-toast="">
             {toast || null}
           </p>
+          <p class="otp-visually-hidden" aria-live="polite" aria-atomic="true" data-choice-said="">
+            {choiceSaid || null}
+          </p>
         </div>
       )}
       {/* Mounted BEFORE the panels so the modal layers paint over it (document order is stacking). */}
@@ -477,16 +485,22 @@ export function App({
       case 'forest': {
         if (!doorAsking) return null;
         const unmet = content.characters.filter((c) => !state.met.includes(c.id));
-        if (unmet.length === 0) return null;
+        const unanswered = content.characters.filter(
+          (c) => state.met.includes(c.id) && state.verdicts[c.skillId] === undefined,
+        );
+        if (unmet.length === 0 && unanswered.length === 0) return null;
         return (
           <DoorCheck
             key="door"
             unmet={unmet.map((c) => c.name)}
+            unanswered={unanswered.map((c) => c.name)}
             total={content.characters.length}
             title={strings['arriveTitle'] ?? ''}
             words={{
               ask: strings['doorAsk'] ?? '',
+              askUnanswered: strings['doorAskUnanswered'] ?? '',
               still: strings['doorStill'] ?? '',
+              stillAnswer: strings['doorStillAnswer'] ?? '',
               stay: strings['doorStay'] ?? '',
               goIn: strings['doorGoIn'] ?? '',
             }}

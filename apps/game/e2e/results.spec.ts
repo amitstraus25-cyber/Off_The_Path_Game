@@ -98,10 +98,27 @@ test.describe('the result comes first', () => {
      * Safe/Unsafe, so the four bad skills this run correctly left wore the Haze, the bar and the
      * "!" that UI_FOUNDATIONS section 5 keeps for "Missed it".
      */
-    await expect(page.locator('[data-call="caught"]')).toHaveCount(7);
+    // Four bad skills caught and three good ones taken: "Caught it" and "Right call" (P9).
+    await expect(page.locator('[data-call="caught"]')).toHaveCount(4);
+    await expect(page.locator('[data-call="right"]')).toHaveCount(3);
+    await expect(page.locator('[data-call="caught"] .otp-tile__call')).toHaveText(
+      Array(4).fill(say('revealCaught')),
+    );
+    await expect(page.locator('[data-call="right"] .otp-tile__call')).toHaveText(
+      Array(3).fill(say('revealRight')),
+    );
     await expect(page.locator('.otp-tile--missed')).toHaveCount(0);
-    await expect(page.locator('.otp-tile__call')).toHaveText(Array(7).fill(say('revealCaught')));
     await expect(page.locator('.otp-recap__badge[data-glyph="missed"]')).toHaveCount(0);
+    // A winner still sees one lesson (P8): the first bad skill caught is turned over already.
+    await expect(page.locator('[data-reveal][data-open="true"]')).toHaveCount(1);
+    await expect(page.locator('[data-reveal][data-open="true"]')).toHaveAttribute(
+      'data-kind',
+      'bad',
+    );
+    await expect(page.locator('[data-open="true"] [data-giveaway-line]')).toBeVisible();
+    // And every safe tile carries what its unsafe copy said (P10).
+    await expect(page.locator('[data-kind="good"] [data-unsafe-said]')).toHaveCount(3);
+    await expect(page.locator('[data-kind="bad"] [data-unsafe-said]')).toHaveCount(0);
   });
 
   test('a run the wolf got into keeps the points for playing, and says why in words', async ({
@@ -120,6 +137,17 @@ test.describe('the result comes first', () => {
     );
   });
 });
+
+/**
+ * Turns back over any card the reveal opened by itself: on a clean run the first bad skill caught
+ * is open from the start (the review of 2026-10-25, P8). The layout specs below measure the grid
+ * with every card face down, so they start there.
+ */
+async function faceDown(page: import('@playwright/test').Page): Promise<void> {
+  const open = page.locator('.otp-tile[data-open="true"]');
+  for (const tile of await open.all()) await tile.locator('.otp-tile__face').click();
+  await expect(open).toHaveCount(0);
+}
 
 test.describe('the seven cards', () => {
   test('turn over from the keyboard, and say so to a screen reader', async ({ page }) => {
@@ -156,6 +184,7 @@ test.describe('the seven cards', () => {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await serveEmptyBoard(page);
     await playTo(page, { take: 'good', seconds: 10 });
+    await faceDown(page);
     const tile = page.locator('.otp-tile').nth(3);
     await tile.locator('.otp-tile__face').click();
     expect(
@@ -179,6 +208,7 @@ test.describe('an open card is one box, and the grid keeps its shape', () => {
       await page.setViewportSize({ width, height });
       await serveEmptyBoard(page);
       await playTo(page, { take: 'good', seconds: 10 });
+      await faceDown(page);
       const list = page.locator('.otp-tiles');
       const tiles = page.locator('.otp-tile');
       // The second card: in the right-hand column wherever there are two, which is the case that
@@ -388,6 +418,7 @@ for (const [width, height] of [
     await page.setViewportSize({ width, height });
     await serveEmptyBoard(page);
     await playTo(page, { take: 'good', seconds: 10 });
+    await faceDown(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

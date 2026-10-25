@@ -208,6 +208,7 @@ export const raw = {
       emailInvalid: 'Fixture email invalid',
       emailPersonal: 'Fixture email personal',
       consentMissing: 'Fixture consent missing',
+      postNeeds: 'Fixture post needs',
       privacy: 'Fixture privacy',
     },
   },

@@ -17,25 +17,50 @@ import { fill } from './copy';
  * question is up, and only the walk is paused. If the three minutes run out while it is open, the
  * run ends late and this panel goes with the forest.
  *
- * Neither answer is guarded with `deliberate`: this panel opens because Purple walked onto a step,
- * not under a pointer that just clicked, so there is no double-click's second half to discard.
+ * GO IN is guarded with `deliberate` since the review of 2026-10-25 (P1): on an upright phone it
+ * opens where the A button was, so a thumb still tapping A ended the run. Keep looking is not: it
+ * only steps back, and a stray tap there costs nothing.
+ *
+ * STILL TO ANSWER (the same review, P17). Walk on counts a character as met, so they dropped off
+ * the list above, and a player who meant to go back lost their points without a word. Those are
+ * named in a second row; with everyone met and someone unanswered, the door still asks.
  */
 
 export interface DoorCheckProps {
-  /** Who has not been met yet, by name, in walking order. Never empty: with nobody left, no ask. */
+  /** Who has not been met yet, by name, in walking order. */
   unmet: readonly string[];
+  /** Who was met and walked past without an answer, by name, in walking order. */
+  unanswered: readonly string[];
   /** How many there are in all. */
   total: number;
   /** The panel's frame title (the arrival's own, since this is its doorway). */
   title: string;
-  words: { ask: string; still: string; stay: string; goIn: string };
+  words: {
+    ask: string;
+    askUnanswered: string;
+    still: string;
+    stillAnswer: string;
+    stay: string;
+    goIn: string;
+  };
   onStay(): void;
   onGoIn(): void;
 }
 
-export function DoorCheck({ unmet, total, title, words, onStay, onGoIn }: DoorCheckProps) {
+export function DoorCheck({
+  unmet,
+  unanswered,
+  total,
+  title,
+  words,
+  onStay,
+  onGoIn,
+}: DoorCheckProps) {
   const trap = useFocusTrap(onStay);
-  const question = fill(words.ask, { count: unmet.length, total });
+  const question =
+    unmet.length > 0
+      ? fill(words.ask, { count: unmet.length, total })
+      : fill(words.askUnanswered, { count: unanswered.length, total });
   return (
     <div
       class="otp-layer otp-layer--modal"
@@ -45,17 +70,35 @@ export function DoorCheck({ unmet, total, title, words, onStay, onGoIn }: DoorCh
       aria-labelledby="otp-door-ask"
       data-door="ask"
     >
-      <Panel number="04" title={title} heading>
+      {/*
+        No numeral (the review of 2026-10-25, P24): the question stands over the forest's own
+        "01 Explore" frame, and a second numbered header read as a screen change.
+      */}
+      <Panel number="" title={title} heading>
         <div class="otp-card otp-door">
           <p class="otp-dialogue__line otp-door__ask" id="otp-door-ask">
             {question}
           </p>
-          <p class="otp-dialogue__speaker otp-door__still">{words.still}</p>
-          <ul class="otp-door__who" data-door-unmet="">
-            {unmet.map((name) => (
-              <li key={name}>{name}</li>
-            ))}
-          </ul>
+          {unmet.length > 0 && (
+            <>
+              <p class="otp-dialogue__speaker otp-door__still">{words.still}</p>
+              <ul class="otp-door__who" data-door-unmet="">
+                {unmet.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {unanswered.length > 0 && (
+            <>
+              <p class="otp-dialogue__speaker otp-door__still">{words.stillAnswer}</p>
+              <ul class="otp-door__who" data-door-unanswered="">
+                {unanswered.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            </>
+          )}
           <div class="otp-door__answers">
             <button
               type="button"

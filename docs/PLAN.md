@@ -137,6 +137,31 @@ board reset.
       Supabase SQL editor when convenient (docs/DATABASE.md). The new lines have not been through
       `docs/COPY_REVIEW.md`.
 
+**Paul's final review (2026-10-25), decided item by item in chat.** Twenty-five items from seven
+lenses; the client approved, declined or deferred each one. Built and tested in this round:
+
+- [x] **P1** a stationary touch in a freshly opened offer or door question waits a second
+      (`TOUCH_SETTLE_MS`, components.tsx): a second tap on A no longer answers Leave it or Go in.
+- [x] **P12** the round button reads E with a keyboard and a mouse, A on touch.
+- [x] **P8-P10** the reveal: four calls (Caught it / Right call / Missed it / Walked past), the
+      Missed badge's style finally applies, "malicious" for "bad", a clean run opens its first caught
+      bad card, and safe tiles show what their unsafe copy said.
+- [x] **P13** a "Post your score" link beside Walk it again, a line saying why Post is greyed, and a
+      full-width consent row. **P14** a hidden polite line after each choice.
+- [x] **P17** the door also asks about, and names, characters met and never answered.
+- [x] **P5** the scene dispatches `otp:bearings` (the forest summary now says which way and how far)
+      and `otp:beacon`, a quiet edge arrow to the nearest unmet character while none is on screen
+      (world/beacon.ts, ui/Beacon.tsx).
+- [x] **P24** no numeral on the door question, a Deep Purple favicon that reads on dark tabs, a
+      16px footer logo. **P23 (part)** the reveal's lesson labels at 11px minimum.
+- [x] **P3, P11, P25** copy: Night Light's note is now "Excessive agency" (OWASP's term); two safe
+      lines say concrete behaviour instead of "only"; Night Light's safe line is longer. The status
+      line says the notes had a security read and still await the research team.
+- [ ] **Deferred by the client:** P2 the Vercel rate limit (before launch), P7 the three analytics
+      events and the A/B tests P19-P21 that need them. **Declined:** P4, P6, P15, P16, P18, P22.
+- [ ] **Not done, needs a layout change:** P23's idle controls on a landscape phone and the tablet
+      world growing by whole steps (cabinet.ts / stage.ts), and the high-contrast logo swap.
+
 **The client's art picks (2026-10-25), in the working tree and NOT committed.** Chosen from the
 preview sheets of that morning; both are CLIENT PICKS, not a builder's call.
 

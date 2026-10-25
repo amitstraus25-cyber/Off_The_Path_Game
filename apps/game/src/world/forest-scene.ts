@@ -30,6 +30,7 @@ import {
   overlaps,
   placeBubble,
 } from './logic';
+import { beaconAngle, bearing } from './beacon';
 import type { BubbleSide, Facing, Interactable, Rect, Vec } from './logic';
 import { bystanderSpawns, findObject, npcSpawns, readForestMap } from './map';
 import type { ForestMap, MapObject } from './map';
@@ -326,6 +327,16 @@ const LANE_ROWS = 3;
  * cannot put words of its own into a live region.
  */
 const WITHIN_REACH = 'otp:within-reach';
+
+/*
+ * WHICH WAY EVERYONE IS (the client's review, 2026-10-25, P5), said to the DOM on the edge: the
+ * eight-sector bearing and distance band of each traveller, for the forest summary a screen reader
+ * walks (ui/App.tsx `otp:bearings`), and the angle to the nearest unmet one while nobody unmet is
+ * on screen, for the arrow at the frame's edge (ui/Beacon.tsx `otp:beacon`). Indices and one
+ * number, never words: world/beacon.ts is the arithmetic.
+ */
+const BEARINGS = 'otp:bearings';
+const BEACON = 'otp:beacon';
 
 /**
  * THE UI SAYING HOW MUCH OF THE WORLD A DOCKED PANEL COVERS (Paul's round, 2026-10-22): the share
@@ -1937,6 +1948,40 @@ export class ForestScene extends Phaser.Scene {
     // After the prompts, so the "!" knows whether the talk bubble is up this frame.
     this.drawBeckons();
     this.syncCamera(deltaMs);
+    this.reportBearings(exploring && !this.flight);
+  }
+
+  /** The last bearings and beacon said, so each is dispatched only when it changes. */
+  private saidBearings = '';
+  private saidBeacon: number | null | undefined = undefined;
+
+  /**
+   * Says which way everyone is, and where the arrow points (`BEARINGS`, `BEACON` above). The
+   * arrow is null -- hidden -- whenever the walk is not live (a panel, a flight, the arrival), and
+   * whenever an unmet character is already in the camera's view.
+   */
+  private reportBearings(live: boolean): void {
+    const present = this.npcs.filter((npc) => npc.sprite.visible);
+    const bearings = present.map((npc) => ({ id: npc.id, ...bearing(this.position, npc) }));
+    const key = JSON.stringify(bearings);
+    if (key !== this.saidBearings) {
+      this.saidBearings = key;
+      window.dispatchEvent(new CustomEvent(BEARINGS, { detail: { bearings } }));
+    }
+    const view = this.cameras.main.worldView;
+    const unmet = present.filter((npc) => !this.run.met(npc.id));
+    const raw = live
+      ? beaconAngle(
+          this.position,
+          { x: view.x, y: view.y, width: view.width, height: view.height },
+          unmet,
+        )
+      : null;
+    // Whole degrees, so a walk does not dispatch sixty events a second for a sliver of turn.
+    const angle = raw === null ? null : Math.round((raw * 180) / Math.PI);
+    if (angle === this.saidBeacon) return;
+    this.saidBeacon = angle;
+    window.dispatchEvent(new CustomEvent(BEACON, { detail: { degrees: angle } }));
   }
 
   /**

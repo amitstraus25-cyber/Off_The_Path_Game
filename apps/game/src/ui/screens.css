@@ -704,6 +704,9 @@
  * touch minimum as a row; an unmet consent thickens to an outline, never a red (UI_FOUNDATIONS 5).
  */
 .otp-consent {
+  /* The whole row is the hit target, edge to edge (P13), not only the box and its words. */
+  box-sizing: border-box;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: calc(10px * var(--otp-ui));
@@ -721,6 +724,12 @@
   margin: 0;
   accent-color: var(--cyera-deep-purple);
   cursor: pointer;
+}
+
+/* Why Post is greyed, on its own line under it (P13). */
+.otp-post__needs {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .otp-consent__box[aria-invalid='true'] {
@@ -2063,7 +2072,9 @@ html[data-cabinet='overlay'] .otp-touch {
   min-width: 0;
 }
 .otp-reveal__pairs dt {
-  font-size: max(10px, calc(11px * var(--otp-ui)));
+  /* 11px at the least (the review of 2026-10-25, P23): "It promised / What it did" carry the
+     lesson, and at 10px they were the smallest words on a phone. */
+  font-size: max(11px, calc(11px * var(--otp-ui)));
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -2211,6 +2222,13 @@ html[data-cabinet='overlay'] .otp-touch {
   border-radius: var(--otp-r-panel);
   background: var(--cyera-natural);
 }
+/* The way down to the post form (P13): a text link after Walk it again, on its own line. */
+.otp-replay [data-action='to-post'] {
+  flex-basis: 100%;
+  justify-content: flex-start;
+  margin-top: 0;
+}
+
 .otp-replay__caught {
   margin: 0;
   font-size: calc(20px * var(--otp-ui));
@@ -2396,6 +2414,22 @@ h2.otp-section-label.otp-tiles__title {
  * A missed card's 5px bar is 3px wider than every card's 2px edge, and it pushed the picture and
  * the name 3px right of the caught card beside it (Paul's item 28). The padding gives the 3px back.
  */
+/*
+ * The missed card's badge is the Black disc with a Lilac "!" the spec draws (UI_FOUNDATIONS
+ * section 5). Its rule was written for the old recap rows (`.otp-recap__row--missed`) and never
+ * matched a tile, so a missed tile wore the caught badge's Deep Purple (the review, 2026-10-25).
+ */
+.otp-tile--missed .otp-recap__badge {
+  background: var(--cyera-black);
+  color: var(--cyera-lilac);
+}
+
+/* A card never answered is neither right nor wrong: a quiet Clay disc with a dash (P9). */
+.otp-tile--past .otp-recap__badge {
+  background: var(--cyera-clay);
+  color: var(--cyera-ash);
+}
+
 .otp-tile--missed .otp-tile__face {
   padding-left: calc(16px * var(--otp-ui) - 3px);
 }

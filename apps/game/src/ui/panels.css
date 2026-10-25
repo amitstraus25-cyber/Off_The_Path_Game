@@ -2478,9 +2478,9 @@ html[data-cabinet='overlay'] .otp-ui {
 }
 .otp-foot .otp-mark {
   margin-left: 0;
-  /* Never under 12px (Paul's item 29): at 0.7 the logo was 9.8px tall. Height only, per the logo
-     README, so its aspect ratio is the file's. */
-  height: max(12px, calc(14px * var(--otp-ui)));
+  /* Never under 16px (the review of 2026-10-25, P24; 12px before, Paul's item 29). Height only,
+     per the logo README, so its aspect ratio is the file's. */
+  height: max(16px, calc(16px * var(--otp-ui)));
 }
 
 /* ---------------------------------------------------------------- the door asks first */

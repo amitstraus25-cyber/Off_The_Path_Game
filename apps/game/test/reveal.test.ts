@@ -3,7 +3,7 @@ import { v2 } from '@otp/core';
 import raw from '../../../content/game.v2.json';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { formatElapsed, keptOutOf, spottedOf } from '../src/ui/Results';
+import { formatElapsed, keptOutOf, spottedOf, tileCall } from '../src/ui/Results';
 
 /*
  * The 2026-10-22 afternoon round: the clear instructions, the score-first reveal and the player's
@@ -189,5 +189,21 @@ describe("the player's own row, right after posting", () => {
     expect(chrome['revealPlayed']?.trim()).toBeTruthy();
     expect(chrome).not.toHaveProperty('wolfNotPosted');
     expect(chrome).not.toHaveProperty('postLate');
+  });
+});
+
+describe("each tile's call, in four words (the review of 2026-10-25, P9)", () => {
+  it('names a good skill taken a right call and a bad one kept out a catch', () => {
+    expect(tileCall({ good: true, verdict: 'take', read: true })).toBe('right');
+    expect(tileCall({ good: false, verdict: 'leave', read: true })).toBe('caught');
+    // A bad card opened and walked away from was read and stayed out: still a catch.
+    expect(tileCall({ good: false, verdict: null, read: true })).toBe('caught');
+  });
+
+  it('keeps "missed" for wrong choices only, and calls the unanswered "walked past"', () => {
+    expect(tileCall({ good: false, verdict: 'take', read: true })).toBe('missed');
+    expect(tileCall({ good: true, verdict: 'leave', read: true })).toBe('missed');
+    expect(tileCall({ good: false, verdict: null, read: false })).toBe('past');
+    expect(tileCall({ good: true, verdict: null, read: true })).toBe('past');
   });
 });

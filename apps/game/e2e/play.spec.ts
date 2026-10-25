@@ -15,7 +15,7 @@ const raw = JSON.parse(
   ui: {
     cabinet: { marquee: string };
     reveal: { caught: string; again: string; did: string; wouldHave: string };
-    chrome: { revealCaught: string; revealMissed: string };
+    chrome: { revealCaught: string; revealMissed: string; revealRight: string };
   };
 };
 
@@ -234,9 +234,16 @@ test('the reveal shows every offer in walking order: kind, choice, line, giveawa
      */
     const took = verdicts[s.id] === 'take';
     const right = isGood ? took : !took;
-    await expect(row).toHaveAttribute('data-call', right ? 'caught' : 'missed');
+    // Four words since the review of 2026-10-25 (P9): a good skill taken is a "Right call", a bad
+    // one kept out is "Caught it", and only a wrong choice is "Missed it".
+    const call = !right ? 'missed' : isGood ? 'right' : 'caught';
+    await expect(row).toHaveAttribute('data-call', call);
     await expect(row.locator('.otp-tile__call')).toHaveText(
-      right ? raw.ui.chrome.revealCaught : raw.ui.chrome.revealMissed,
+      call === 'missed'
+        ? raw.ui.chrome.revealMissed
+        : call === 'right'
+          ? raw.ui.chrome.revealRight
+          : raw.ui.chrome.revealCaught,
     );
     await expect(row.locator('.otp-recap__badge')).toHaveAttribute(
       'data-glyph',
@@ -354,7 +361,7 @@ test('the greedy run takes everything and lets the wolf in at 0', async ({ page 
       isGood ? 'false' : 'true',
     );
     await expect(row.locator('.otp-tile__back')).toBeVisible({ visible: !isGood });
-    await expect(row).toHaveAttribute('data-call', isGood ? 'caught' : 'missed');
+    await expect(row).toHaveAttribute('data-call', isGood ? 'right' : 'missed');
   }
 });
 

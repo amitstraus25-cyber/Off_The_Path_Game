@@ -15,11 +15,9 @@
  *    either, so every traveller's line ended at their state and a player who could not see the
  *    canvas had to sweep 1,495 walkable tiles to find three people.
  *
- * The bearing half is a channel with a producer that has not landed yet: `world/forest-scene.ts`
- * is the only thing that knows where Purple is standing. So this file DISPATCHES THE EVENT ITSELF and
- * asserts the consumer end of the contract -- the words it picks, and the words it refuses. When
- * the scene starts dispatching for real these assertions do not change; they stop needing the
- * `page.evaluate` that fakes it.
+ * The producer landed on 2026-10-25 (P5): `world/forest-scene.ts` dispatches the event on the edge.
+ * The first two tests still DISPATCH IT THEMSELVES, to pin the consumer end of the contract -- the
+ * words it picks, and the words it refuses -- and the last asserts the scene's own payload.
  */
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
@@ -109,15 +107,23 @@ test.describe('the forest summary carries bearings', () => {
     expect(lines.find((l) => l.startsWith('Lantern Keeper'))).toBe('Lantern Keeper, not met yet');
   });
 
-  test('no payload leaves every line exactly as it was', async ({ page }) => {
+  test('the scene says every bearing itself now', async ({ page }) => {
     await page.goto('/');
     await startGame(page);
 
-    // The state the game ships in today, and will keep shipping in until the producer lands.
-    expect(await roster(page)).toEqual(
-      ['Rabbit', 'Toadstool', 'Owl', 'Magpie', 'Snail', 'Lantern Keeper', 'Cat'].map(
-        (name) => `${name}, not met yet`,
-      ),
-    );
+    // The producer landed (the review of 2026-10-25, P5): with no faked payload at all, every
+    // traveller's line ends in a direction and a distance, in content's own words.
+    const ends =
+      /, (north|north-east|east|south-east|south|south-west|west|north-west) of you, (a few steps away|a short walk away|a long way off)$/;
+    await expect.poll(async () => (await roster(page)).every((l) => ends.test(l))).toBe(true);
+    expect((await roster(page)).map((l) => l.split(',')[0])).toEqual([
+      'Rabbit',
+      'Toadstool',
+      'Owl',
+      'Magpie',
+      'Snail',
+      'Lantern Keeper',
+      'Cat',
+    ]);
   });
 });

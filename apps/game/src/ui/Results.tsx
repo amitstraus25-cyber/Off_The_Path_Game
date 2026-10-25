@@ -31,13 +31,39 @@ const CheckGlyph = () => (
  * A SHAPE, beside a WORD (`Safe` / `Unsafe`), on a ground -- never a colour alone, and no red or
  * green anywhere (UI_FOUNDATIONS section 5). `data-glyph` is what the specs read.
  */
-function Badge({ glyph }: { glyph: 'check' | 'missed' }) {
+function Badge({ glyph }: { glyph: 'check' | 'missed' | 'past' }) {
   return (
     <span class="otp-recap__badge" data-glyph={glyph} aria-hidden="true">
-      {glyph === 'check' ? <CheckGlyph /> : '!'}
+      {glyph === 'check' ? <CheckGlyph /> : glyph === 'missed' ? '!' : '\u2013'}
     </span>
   );
 }
+
+/**
+ * THE PLAYER'S CALL ON ONE OFFER (the client's review, 2026-10-25, P9). Four words, not two:
+ *
+ *   caught  a bad skill read and kept out of the basket          "Caught it"
+ *   right   a good skill taken                                  "Right call"
+ *   missed  a wrong choice: a bad skill taken, a good one left  "Missed it"
+ *   past    never answered (walked past, or never met at all)   "Walked past"
+ *
+ * A bad card that was opened and walked away from stays "caught": it was read and it stayed out,
+ * which is the whole skill. The two-word version said "Caught it" on a good skill taken (nothing
+ * was caught) and "Missed it" on a bad one never met, right under "you kept every bad skill out".
+ */
+export type TileCall = 'caught' | 'right' | 'missed' | 'past';
+export function tileCall(row: Pick<v2.RevealEntry, 'good' | 'verdict' | 'read'>): TileCall {
+  if (row.verdict === 'take') return row.good ? 'right' : 'missed';
+  if (row.verdict === 'leave') return row.good ? 'missed' : 'caught';
+  return !row.good && row.read ? 'caught' : 'past';
+}
+
+const CALL_WORD = {
+  caught: 'revealCaught',
+  right: 'revealRight',
+  missed: 'revealMissed',
+  past: 'revealPast',
+} as const satisfies Record<TileCall, v2.ChromeKey>;
 
 /**
  * The skill's own picture on its reveal row, so the row is the thing the player was handed and not
@@ -528,10 +554,13 @@ function RevealTile({
   row,
   skill,
   words,
+  autoOpen = false,
 }: {
   row: v2.RevealEntry;
   skill: v2.Skill;
   words: v2.Content['ui']['reveal'];
+  /** Turned over from the start: the first bad skill caught on a clean run (P8). */
+  autoOpen?: boolean;
 }) {
   /*
    * THE PLAYER'S CALL, which is what the face leads with (a reward, not a report): a good skill was
@@ -541,13 +570,16 @@ function RevealTile({
    * carried. The two can differ -- a bad card walked past is kept out and not caught -- and both are
    * true. Safe/Unsafe and what the player did stay on the face as the smaller line under it.
    */
-  const caught = row.good ? row.verdict === 'take' : row.read && row.verdict !== 'take';
+  const call = tileCall(row);
   /*
    * A BAD SKILL THE PLAYER TOOK IS TURNED OVER ALREADY. After "That's not Grandma" and a zero, the
    * card that let the wolf in is the one the player most needs to read, so it is not left face down
    * among six others for them to guess at.
    */
-  const [open, setOpen] = useState(!row.good && row.verdict === 'take');
+  const [open, setOpen] = useState((!row.good && row.verdict === 'take') || autoOpen);
+  // The safe tile's other half: what its unsafe copy said (P10). Null for a bad tile, which shows
+  // its own card with the line marked.
+  const unsafeSaid = row.good ? v2.giveaway(skill) : null;
   const back = `otp-tile-back-${row.skillId}`;
   /*
    * TURNING A CARD MOVES IT, so it is brought back into view. An open card spans the whole row and
@@ -568,10 +600,10 @@ function RevealTile({
   return (
     <li
       ref={tile}
-      class={`otp-tile${caught ? '' : ' otp-tile--missed'}`}
+      class={`otp-tile${call === 'missed' ? ' otp-tile--missed' : call === 'past' ? ' otp-tile--past' : ''}`}
       data-reveal={row.skillId}
       data-kind={row.good ? 'good' : 'bad'}
-      data-call={caught ? 'caught' : 'missed'}
+      data-call={call}
       data-verdict={row.verdict ?? 'none'}
       data-open={open ? 'true' : 'false'}
     >
@@ -588,7 +620,7 @@ function RevealTile({
         class="otp-tile__face"
         aria-label={[
           row.name,
-          s(caught ? 'revealCaught' : 'revealMissed'),
+          s(CALL_WORD[call]),
           row.good ? words.good : words.bad,
           chose,
           s(open ? 'revealFlipBack' : 'revealFlip'),
@@ -604,8 +636,8 @@ function RevealTile({
         <span class="otp-tile__text">
           <span class="otp-tile__name">{row.name}</span>
           <span class="otp-tile__mark">
-            <Badge glyph={caught ? 'check' : 'missed'} />
-            <span class="otp-tile__call">{s(caught ? 'revealCaught' : 'revealMissed')}</span>
+            <Badge glyph={call === 'missed' ? 'missed' : call === 'past' ? 'past' : 'check'} />
+            <span class="otp-tile__call">{s(CALL_WORD[call])}</span>
           </span>
           <span class="otp-tile__what">
             <span class="otp-recap__status">{row.good ? words.good : words.bad}</span>
@@ -647,6 +679,21 @@ function RevealTile({
           line four words wide (the client's screenshot, 2026-10-22). Side by side where the card
           is wide enough for two readable columns: the promise beside what it did.
         */}
+        {unsafeSaid !== null && (
+          /*
+           * A SAFE TILE TEACHES ITS UNSAFE TWIN TOO (P10): a deal shows each skill in one variant
+           * only, so without this a run taught four of the seven giveaways. The line is the one
+           * the bad card swaps in, marked as the bad tile marks it.
+           */
+          <div class="otp-recap__hidden" data-unsafe-said="">
+            <span class="otp-recap__hidden-title">{s('revealUnsafeSaid')}</span>
+            <ul class="otp-reveal__card">
+              <li class="otp-reveal__line" data-unsafe-line="">
+                <mark class="otp-reveal__mark">{unsafeSaid}</mark>
+              </li>
+            </ul>
+          </div>
+        )}
         <dl class="otp-reveal__pairs">
           <div class="otp-reveal__pair">
             <dt>{words.promised}</dt>
@@ -834,6 +881,14 @@ export function Results({
   const dealtBad = run.entries.filter((row) => !row.good).length;
   const kept = keptOutOf(run.entries);
   const clean = run.ending === 'grandma';
+  /*
+   * ON A CLEAN RUN THE LESSON STILL SHOWS (the client's review, 2026-10-25, P8): the first bad
+   * skill the player caught is turned over already, as the culprit is on a wolf run, so a winner
+   * sees "the line that gave it away" without having to ask.
+   */
+  const lessonOn = clean
+    ? run.entries.find((row) => !row.good && tileCall(row) === 'caught')
+    : undefined;
 
   return (
     <div class="otp-screen">
@@ -894,6 +949,30 @@ export function Results({
                 <button type="button" class="otp-button" data-action="replay" onClick={onReplay}>
                   {r.again}
                 </button>
+                {/*
+                  THE WAY DOWN TO THE BOARD (the review of 2026-10-25, P13): on a phone the post
+                  form starts about 1,000px down, under the cards and the research band. A quiet
+                  text link, never Lime (the one Lime is the research), that scrolls to the form
+                  and puts the cursor in the name.
+                */}
+                {cannotPost === null && (
+                  <button
+                    type="button"
+                    class="otp-link"
+                    data-action="to-post"
+                    onClick={() => {
+                      const still =
+                        typeof matchMedia === 'function' &&
+                        matchMedia('(prefers-reduced-motion: reduce)').matches;
+                      document
+                        .getElementById('otp-post')
+                        ?.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+                      field.current?.focus({ preventScroll: true });
+                    }}
+                  >
+                    {s('postJump')}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -910,6 +989,7 @@ export function Results({
                     row={row}
                     skill={content.skills.find((k) => k.id === row.skillId)!}
                     words={r}
+                    autoOpen={row.skillId === lessonOn?.skillId}
                   />
                 ))}
               </ol>
@@ -941,7 +1021,9 @@ export function Results({
             </div>
 
             {/* ---------------------------------------------- 4. your name, and the board */}
-            <h2 class="otp-section-label otp-post__title">{s('postHeading')}</h2>
+            <h2 class="otp-section-label otp-post__title" id="otp-post">
+              {s('postHeading')}
+            </h2>
             {cannotPost !== null ? (
               <p class="otp-fine" data-post="unavailable">
                 {cannotPost}
@@ -1088,9 +1170,16 @@ export function Results({
                     type="submit"
                     class="otp-button"
                     aria-disabled={posting || !ready ? 'true' : undefined}
+                    aria-describedby={asking && !ready ? 'otp-post-needs' : undefined}
                   >
                     {s('post')}
                   </button>
+                  {/* Why Post is greyed, in words, beside it (P13): it used to say nothing. */}
+                  {asking && !ready && !posting && (
+                    <p class="otp-fine otp-post__needs" id="otp-post-needs" data-post-needs="">
+                      {words.postNeeds}
+                    </p>
+                  )}
                 </form>
                 {/*
                   THE PRIVACY LINE IS TRUE IN BOTH MODES. Without the email it is chrome

@@ -19,7 +19,7 @@ import { watchStage } from './ui/stage';
 import { cabinetFor } from './ui/cabinet';
 import { App } from './ui/App';
 import { ProblemScreen } from './ui/ProblemScreen';
-import { marqueeText, strings } from './ui/copy';
+import { fill, marqueeText, strings } from './ui/copy';
 import { mountMarquee } from './ui/marquee';
 import { contactMessages, startRun, submit } from './net/leaderboard';
 import type { ContactInput, RunStart } from './net/leaderboard';
@@ -293,6 +293,12 @@ async function start(): Promise<void> {
   /** The toast's one line, or ''. `said` counts lines, so the same line twice is said twice. */
   let toast = { text: '', said: 0 };
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  /*
+   * WHAT A SCREEN READER HEARS AFTER A CHOICE (the review of 2026-10-25, P14): "You took Way
+   * Teller. Basket: 1. 4 left to meet." After Leave it it used to hear nothing at all. Its own
+   * hidden region (ui/App.tsx), so the visible toast keeps saying only the perk.
+   */
+  let choiceSaid = '';
 
   const walkable = (): boolean =>
     loadFailure === null &&
@@ -372,9 +378,12 @@ async function start(): Promise<void> {
   };
 
   /** Who in the cast has not been met this run. The door asks first while this is not zero. */
+  /** Who the door still asks about: not met yet, or met and walked past without an answer (P17). */
   const unmetCount = (): number => {
-    const { met } = store.getState();
-    return content.characters.filter((c) => !met.includes(c.id)).length;
+    const { met, verdicts } = store.getState();
+    return content.characters.filter(
+      (c) => !met.includes(c.id) || verdicts[c.skillId] === undefined,
+    ).length;
   };
   const closeDoor = (): void => {
     doorAsking = false;
@@ -474,6 +483,7 @@ async function start(): Promise<void> {
           draw();
         },
         toast: toast.text,
+        choiceSaid,
         signs: sketch ? forest : null,
         music: {
           on: music.wanted,
@@ -495,6 +505,7 @@ async function start(): Promise<void> {
         },
         onGo: () => void startTheRun(),
         onReplay: () => {
+          choiceSaid = '';
           askForStart();
           void startTheRun(true);
         },
@@ -586,6 +597,12 @@ async function start(): Promise<void> {
     if (count > lastVerdicts) {
       const [skillId, verdict] = Object.entries(state.verdicts).at(-1)!;
       emit('otp:verdict', { skillId, verdict });
+      const skill = content.skills.find((k) => k.id === skillId);
+      choiceSaid = fill(strings[verdict === 'take' ? 'saidTook' : 'saidLeft'] ?? '', {
+        skill: skill?.name ?? '',
+        basket: Object.values(state.verdicts).filter((v) => v === 'take').length,
+        left: content.characters.length - state.met.length,
+      });
     }
     lastVerdicts = count;
     const ended = state.phase === 'cottage' || state.phase === 'late';

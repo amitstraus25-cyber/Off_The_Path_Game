@@ -163,12 +163,37 @@ test('Go in enters exactly as the door always did', async ({ page }) => {
   expect(await phase(page)).toBe('cottage');
 });
 
-test('with everyone met the door opens without asking', async ({ page }) => {
+test('with everyone met and answered the door opens without asking', async ({ page }) => {
   await intoTheForest(page);
-  await meetEveryone(page);
+  await page.evaluate(() => {
+    const { store, content } = window.__otp!;
+    for (const c of content.characters) {
+      store.dispatch({ type: 'MEET', c: c.id });
+      store.dispatch({ type: 'VERDICT', s: c.skillId, v: 'leave' });
+    }
+  });
   await walkUpToTheDoor(page);
   await expect(page.locator('[data-arrive]')).toBeVisible();
   await expect(page.locator('[data-door]')).toHaveCount(0);
+});
+
+/*
+ * STILL TO ANSWER (the review of 2026-10-25, P17): Walk on counts a character as met, so a cast
+ * met and walked past used to open the door with no word about the points left on the path.
+ */
+test('with everyone met but some unanswered, the door names who is still to answer', async ({
+  page,
+}) => {
+  await intoTheForest(page);
+  await meetEveryone(page);
+  const names = await page.evaluate(() => window.__otp!.content.characters.map((c) => c.name));
+  await walkUpToTheDoor(page);
+  await expect(page.locator('[data-door="ask"]')).toBeVisible();
+  await expect(page.locator('[data-door-unmet]')).toHaveCount(0);
+  await expect(page.locator('[data-door-unanswered] li')).toHaveText(names);
+  await expect(page.locator('#otp-door-ask')).toContainText(
+    `${names.length} of the ${names.length}`,
+  );
 });
 
 test('the clock running out while the door asks ends the run late, and the question goes', async ({
