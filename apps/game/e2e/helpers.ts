@@ -1,5 +1,7 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 // The real constants, not copies: `logic.ts` is pure TypeScript with no Phaser and no DOM, so the
 // walking helpers below pace themselves off the same numbers the game walks at. They used to carry
 // a hardcoded 60 px/s and a 20px tolerance, which were right for 16px tiles and silently wrong the
@@ -42,9 +44,11 @@ declare global {
       };
       content: {
         characters: { id: string; name: string; spawn: string; skillId: string }[];
+        world: { crossing?: string[] };
         skills: {
           id: string;
           name: string;
+          effect: { kind: string };
           good: { card: { take: string[]; leave: string }; reveal: string };
           bad: { card: { take: string[]; leave: string }; reveal: string };
           realWorld: { term: string; note: string };
@@ -133,18 +137,168 @@ export async function toTheReveal(page: Page): Promise<void> {
 
 /**
  * Answers every offer through the store and walks in: a whole run with no walking, for the specs
- * that need the end of a run and not the path to it. `take` takes everything; otherwise all left.
+ * that need the end of a run and not the path to it. `take` takes everything.
+ *
+ * `leave` leaves everything BUT THE HONEST WAY OVER THE RIVER. Since rules 3 (docs/GATEKEEPER.md)
+ * the cottage is across the river and the door refuses a run that took no crossing skill
+ * ('not-across'), so "leave all seven" never reaches the door at all -- it is the late ending. The
+ * nearest run that does is the careful player's answer at the river and a leave everywhere else:
+ * take whichever of the two crossings (`world.crossing`) this deal dealt good, which keeps the run
+ * clean and on Grandma's ending, as "leave everything" was before the river.
  */
 export async function answerAllAndArrive(page: Page, verdict: 'take' | 'leave'): Promise<void> {
   await page.evaluate((v) => {
     const { store, content } = window.__otp!;
+    const good = store.getState().good;
+    const crossing = content.world.crossing ?? [];
+    const honestCrossing = content.skills.find(
+      (s) => crossing.includes(s.effect.kind) && good.includes(s.id),
+    )?.id;
     for (const c of content.characters) {
       store.dispatch({ type: 'MEET', c: c.id });
       store.dispatch({ type: 'INSPECT', s: c.skillId });
-      store.dispatch({ type: 'VERDICT', s: c.skillId, v });
+      const take = v === 'take' || c.skillId === honestCrossing;
+      store.dispatch({ type: 'VERDICT', s: c.skillId, v: take ? 'take' : 'leave' });
     }
     store.dispatch({ type: 'ENTER_COTTAGE' });
   }, verdict);
+}
+
+/**
+ * TAKES THE HONEST WAY OVER THE RIVER, through the store: the one of the two crossings
+ * (`world.crossing`, docs/GATEKEEPER.md) this deal dealt good, from its giver -- and waits out the
+ * Wing Ride's flight if that is the one, so whatever the spec does next starts with Purple on her
+ * feet. Since rules 3 the door refuses a run that crossed by neither ('not-across'), so a spec that
+ * places Purple at the cottage without walking there takes this first. Answers the skill taken.
+ */
+export async function crossTheRiver(page: Page): Promise<string> {
+  const taken = await page.evaluate(() => {
+    const { store, content } = window.__otp!;
+    const { good } = store.getState();
+    const crossing = content.world.crossing ?? [];
+    const skill = content.skills.find(
+      (s) => crossing.includes(s.effect.kind) && good.includes(s.id),
+    )!;
+    const giver = content.characters.find((c) => c.skillId === skill.id)!;
+    store.dispatch({ type: 'MEET', c: giver.id });
+    store.dispatch({ type: 'VERDICT', s: skill.id, v: 'take' });
+    return skill.id;
+  });
+  await expect
+    .poll(() => page.evaluate((s) => window.__otp!.store.getState().verdicts[s], taken))
+    .toBe('take');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => (window.__otp!.scene as { flying?: boolean } | undefined)?.flying ?? false,
+        ),
+      {
+        timeout: 10_000,
+      },
+    )
+    .toBe(false);
+  return taken;
+}
+
+/** Whether this run has taken either way over the river yet (`world.crossing`). */
+export const hasCrossed = (page: Page): Promise<boolean> =>
+  page.evaluate(() => {
+    const { store, content } = window.__otp!;
+    const crossing = content.world.crossing ?? [];
+    return store
+      .getState()
+      .basket.some((b) =>
+        crossing.includes(content.skills.find((s) => s.id === b.s)?.effect.kind ?? ''),
+      );
+  });
+
+/**
+ * Puts Purple on the road midway between the first two characters in walking order (the Rabbit and
+ * the Gatekeeper), so a wide window frames three figures. Since rules 3 the opening shot frames
+ * Purple and the Rabbit only -- the Toadstool who stood near the spawn is now the Gatekeeper, at
+ * the bridge's west end -- and the specs that measure figures "in shot" need more than two.
+ *
+ * ON A PATH TILE, the nearest one to the midpoint, read from the shipped map: her contact shadow is
+ * tinted from the ground it sits on, and on the dark lawn it reads at a tenth of what it does on the
+ * path (measured 3 pixels against 68), which is a fact about the lawn and not the shadow. The
+ * opening shot she replaces stood her on the path. Returns once the camera is still on her.
+ */
+export async function standBetweenTheFirstTwo(page: Page): Promise<{ x: number; y: number }> {
+  const objects = await page.evaluate(() => {
+    const otp = window.__otp!;
+    return otp.content.characters
+      .slice(0, 2)
+      .map((c) => otp.mapObjects!.find((o) => o.name === c.spawn)!);
+  });
+  const mid = {
+    x: (objects[0]!.x + objects[1]!.x) / 2 + TILE / 2,
+    y: (objects[0]!.y + objects[1]!.y) / 2 + TILE,
+  };
+  const asset = (name: string): unknown =>
+    JSON.parse(
+      readFileSync(fileURLToPath(new URL(`../src/assets/${name}`, import.meta.url)), 'utf8'),
+    );
+  const map = asset('map-forest.json') as {
+    width: number;
+    height: number;
+    layers: { name: string; data?: number[] }[];
+  };
+  const names = new Map(
+    Object.entries(asset('tileset-forest.gids.json') as Record<string, number>).map(([k, v]) => [
+      v,
+      k,
+    ]),
+  );
+  const layer = (n: string) => map.layers.find((l) => l.name === n)!.data!;
+  const ground = layer('ground');
+  const collision = layer('collision');
+  let best: { x: number; y: number; d: number } | null = null;
+  for (let row = 0; row < map.height; row++)
+    for (let col = 0; col < map.width; col++) {
+      const i = row * map.width + col;
+      // The top three bits of a Tiled gid are flips, not the tile.
+      const name = names.get(ground[i]! & 0x1fffffff) ?? '';
+      if (collision[i] !== 0 || !name.startsWith('path')) continue;
+      const at = { x: (col + 0.5) * TILE, y: (row + 0.75) * TILE };
+      const d = Math.hypot(at.x - mid.x, at.y - mid.y);
+      if (!best || d < best.d) best = { ...at, d };
+    }
+  const at = { x: best!.x, y: best!.y };
+  await page.evaluate(
+    ([x, y]) => {
+      const otp = window.__otp!;
+      otp.scene!.position = { x: x!, y: y! };
+      otp.scene!.placePurple();
+    },
+    [at.x, at.y] as const,
+  );
+  expect(
+    await page.evaluate(([x, y]) => window.__otp!.isSolidAt!(x!, y!), [at.x, at.y] as const),
+    `(${at.x}, ${at.y}) between the first two is not on the road`,
+  ).toBe(false);
+  // And the camera has come to rest on her: a shot measured mid-pan is two different pictures.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const main = (
+          window.__otp!.scene as unknown as {
+            cameras: { main: { scrollX: number; scrollY: number } };
+          }
+        ).cameras.main;
+        let last = '';
+        let still = 0;
+        const tick = (): void => {
+          const now = `${main.scrollX},${main.scrollY}`;
+          still = now === last ? still + 1 : 0;
+          last = now;
+          if (still >= 20) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+  return at;
 }
 
 export async function probe(page: Page): Promise<Probe> {

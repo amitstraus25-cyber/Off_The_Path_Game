@@ -58,6 +58,7 @@ const manifest = JSON.parse(read('../src/assets/manifest.json')) as { tilesets: 
 
 const SKILL_OF: Record<string, string> = {
   rabbit: 'cottage-finder',
+  gatekeeper: 'bridge-key',
   owl: 'word-weaver',
   'lantern-keeper': 'night-light',
 };
@@ -256,10 +257,12 @@ async function expectReadable(
 const toTheDoor = (page: Page): Promise<void> =>
   page.evaluate((skillOf) => {
     const { store } = window.__otp!;
+    // Leave everything but the Bridge Key: the door is over the river (rules 3) and refuses a run
+    // that crossed by neither way. The bridge rather than the flight, so Purple stays at the door.
     for (const [c, s] of Object.entries(skillOf)) {
       store.dispatch({ type: 'MEET', c });
       store.dispatch({ type: 'INSPECT', s });
-      store.dispatch({ type: 'VERDICT', s, v: 'leave' });
+      store.dispatch({ type: 'VERDICT', s, v: s === 'bridge-key' ? 'take' : 'leave' });
     }
     store.dispatch({ type: 'ENTER_COTTAGE' });
   }, SKILL_OF);

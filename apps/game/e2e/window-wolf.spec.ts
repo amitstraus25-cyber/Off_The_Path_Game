@@ -65,9 +65,18 @@ async function answer(page: Page, ending: 'wolf' | 'grandma', weaver: boolean): 
   await page.evaluate(
     ([wolf, w]) => {
       const { store, content } = window.__otp!;
-      if (w && !wolf && !store.getState().good.includes('word-weaver')) {
-        for (let seed = 0; !store.getState().good.includes('word-weaver'); seed++)
-          store.dispatch({ type: 'RESET', seed });
+      /*
+       * Over the river by the Bridge Key (rules 3: the door refuses a run that never crossed), never
+       * by the Wing Ride, whose flight carries Purple off the doorstep (design-round.spec.ts). So
+       * Grandma's ending needs the Bridge Key's good copy too, and is re-dealt for it like the
+       * Word Weaver's.
+       */
+      const wanted = (): boolean => {
+        const good = store.getState().good;
+        return wolf || (good.includes('bridge-key') && (!w || good.includes('word-weaver')));
+      };
+      if (!wanted()) {
+        for (let seed = 0; !wanted(); seed++) store.dispatch({ type: 'RESET', seed });
         store.dispatch({ type: 'START', runId: crypto.randomUUID() });
         store.dispatch({ type: 'BEGIN' });
       }
@@ -78,8 +87,11 @@ async function answer(page: Page, ending: 'wolf' | 'grandma', weaver: boolean): 
         store.dispatch({ type: 'INSPECT', s: c.skillId });
         let take = false;
         if (c.skillId === 'word-weaver') take = w;
-        // Never the Wing Ride: its flight carries Purple off the doorstep (design-round.spec.ts).
-        else if (wolf && !taken && c.skillId !== 'short-cut' && !good.includes(c.skillId))
+        else if (c.skillId === 'bridge-key') {
+          take = true;
+          // The bad copy lets the wolf in by itself.
+          if (!good.includes(c.skillId)) taken = true;
+        } else if (wolf && !taken && c.skillId !== 'short-cut' && !good.includes(c.skillId))
           take = taken = true;
         store.dispatch({ type: 'VERDICT', s: c.skillId, v: take ? 'take' : 'leave' });
       }

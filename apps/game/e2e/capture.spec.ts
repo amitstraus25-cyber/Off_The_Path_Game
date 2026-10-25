@@ -122,6 +122,7 @@ test.describe('capture', () => {
         const { store } = window.__otp!;
         store.dispatch({ type: 'VERDICT', s: 'cottage-finder', v: 'take' });
         for (const [c, s] of [
+          ['gatekeeper', 'bridge-key'],
           ['owl', 'word-weaver'],
           ['lantern-keeper', 'night-light'],
         ]) {

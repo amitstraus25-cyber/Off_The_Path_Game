@@ -62,6 +62,14 @@ const settle = (page: Page, frames = 3): Promise<void> =>
 async function reachTheDoor(page: Page): Promise<void> {
   await page.evaluate(() => {
     const { store } = window.__otp!;
+    // Over the river by the Bridge Key: the door refuses a run that never crossed (rules 3). Its
+    // good copy, so the run arrives on Grandma's ending as leaving everything used to: a deal that
+    // made it bad is re-dealt from seed 0, which makes it good, as main.ts starts every run.
+    if (!store.getState().good.includes('bridge-key')) {
+      store.dispatch({ type: 'RESET', seed: 0 });
+      store.dispatch({ type: 'START', runId: crypto.randomUUID() });
+      store.dispatch({ type: 'BEGIN' });
+    }
     for (const [c, s] of [
       ['rabbit', 'cottage-finder'],
       ['owl', 'word-weaver'],
@@ -73,6 +81,9 @@ async function reachTheDoor(page: Page): Promise<void> {
         { type: 'VERDICT', s, v: 'leave' },
       ])
         store.dispatch(action);
+    // Then take it, and in at the door.
+    store.dispatch({ type: 'MEET', c: 'gatekeeper' });
+    store.dispatch({ type: 'VERDICT', s: 'bridge-key', v: 'take' });
     store.dispatch({ type: 'ENTER_COTTAGE' });
   });
   await page.waitForFunction(() => (window.__otp!.scene as unknown as SceneProbe).arrived === true);

@@ -9,7 +9,8 @@ import type { MapObject } from './helpers';
 /*
  * THE THREE CYERA SIGNS IN THE WOOD, IN THE RUNNING GAME (the client, 2026-10-23).
  *
- * The forest notice lettered "I ♥ Cyera Research", the wooden "Cyera Speed!" board by the waterfall,
+ * The forest notice lettered "I ♥ Cyera Research", the "Dead end" board at the end of the north path
+ * (rules 3: the "Cyera Speed!" board, moved and repainted),
  * and the blank board the supplied logo is laid over. test/signs.test.ts holds the map and content
  * contract without a browser; this is the picture and the DOM over it, at the two reviewed sizes:
  *
@@ -46,8 +47,8 @@ const SIZES = [
 const STAND: Record<string, (o: MapObject) => { x: number; y: number }> = {
   // On the road under the notice, the lower of its two rows: the due-east walker's row.
   research: (o) => ({ x: o.x + o.width / 2, y: o.y + TILE * 2.75 }),
-  // On the lawn west of the board, in the same row, so her figure does not stand across it.
-  speed: (o) => ({ x: o.x - TILE / 2, y: o.y + TILE * 0.875 }),
+  // At the end of the north path, on the cell under the board, where the Owl used to stand.
+  'dead-end': (o) => ({ x: o.x + TILE / 2, y: o.y + TILE * 1.75 }),
   // On the road above the board, so her figure is clear of its face.
   logo: (o) => ({ x: o.x + o.width / 2, y: o.y - TILE * 1.25 }),
 };
@@ -189,7 +190,7 @@ for (const size of SIZES) {
       const signs = await page.evaluate(() =>
         window.__otp!.mapObjects!.filter((o) => o.name.startsWith('sign-')).map((o) => o.name),
       );
-      expect(signs.sort()).toEqual(['sign-logo', 'sign-research', 'sign-speed']);
+      expect(signs.sort()).toEqual(['sign-dead-end', 'sign-logo', 'sign-research']);
       for (const name of signs) {
         const o = await mapObject(page, name);
         for (let x = o.x; x < o.x + o.width; x += TILE) {
@@ -354,14 +355,16 @@ for (const size of SIZES) {
       await page.keyboard.up('ArrowRight');
       expect(await watch, 'the logo trails the board it sits on').toEqual([]);
 
-      // And at rest a few steps further on, placed rather than held, so the board is whole in frame.
+      // And at rest a few steps back west, placed rather than held, so the board is whole in frame.
+      // West, not east: three tiles east of the stand is the drawbridge's first cell (rules 3), which
+      // is raised and solid until the Bridge Key is taken.
       const before = await page.evaluate(() => {
         const main = (window.__otp!.scene as unknown as { cameras: { main: { scrollX: number } } })
           .cameras.main;
         return main.scrollX;
       });
       const stand = STAND['logo']!(o);
-      await standAt(page, { x: stand.x + TILE * 3, y: stand.y });
+      await standAt(page, { x: stand.x - TILE * 3, y: stand.y });
       const there = await page.evaluate(() => {
         const scene = window.__otp!.scene as unknown as {
           signFace(k: string): { x: number; y: number; width: number; height: number } | null;
@@ -390,13 +393,13 @@ for (const size of SIZES) {
   });
 }
 
-test('the notice and the speed sign are seen in frame at both sizes', async ({ browser }) => {
+test('the notice and the dead-end sign are seen in frame at both sizes', async ({ browser }) => {
   // The two lettered signs are canvas art: what is asserted is that the camera can show them whole.
   for (const size of SIZES) {
     const page = await browser.newPage({ viewport: size });
     await page.goto('/');
     await startGame(page);
-    for (const key of ['research', 'speed'] as const) {
+    for (const key of ['research', 'dead-end'] as const) {
       const o = await mapObject(page, `sign-${key}`);
       await standAt(page, STAND[key]!(o));
       const inView = await page.evaluate((r) => {

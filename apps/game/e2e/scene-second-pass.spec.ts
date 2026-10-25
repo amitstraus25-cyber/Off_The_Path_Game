@@ -27,7 +27,7 @@
  */
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { startGame, toTheReveal } from './helpers';
+import { standBetweenTheFirstTwo, startGame, toTheReveal } from './helpers';
 import { TILE } from '../src/world/logic';
 
 /** Enough of the scene for these three tests; the rest is private and stays that way. */
@@ -188,7 +188,10 @@ test('the ground under every figure in shot is darker for their standing on it',
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await startGame(page);
-  // The opening shot, settled: a puff of Purple's dust mid-fade would be in the difference too.
+  // Since rules 3 the opening shot frames Purple and the Rabbit only (the Toadstool who stood by the
+  // spawn is the Gatekeeper now, at the bridge): she stands between the first two, so three are in.
+  await standBetweenTheFirstTwo(page);
+  // The shot, settled: a puff of Purple's dust mid-fade would be in the difference too.
   await page.waitForTimeout(500);
 
   const measured = await page.evaluate(
@@ -363,6 +366,14 @@ async function reachTheDoor(page: Page): Promise<void> {
   await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
   await page.evaluate(() => {
     const { store } = window.__otp!;
+    // Over the river by the Bridge Key: the door refuses a run that never crossed (rules 3). Its
+    // good copy, so the run arrives on Grandma's ending as leaving everything used to: a deal that
+    // made it bad is re-dealt from seed 0, which makes it good, as main.ts starts every run.
+    if (!store.getState().good.includes('bridge-key')) {
+      store.dispatch({ type: 'RESET', seed: 0 });
+      store.dispatch({ type: 'START', runId: crypto.randomUUID() });
+      store.dispatch({ type: 'BEGIN' });
+    }
     for (const [c, s] of [
       ['rabbit', 'cottage-finder'],
       ['owl', 'word-weaver'],
@@ -372,6 +383,9 @@ async function reachTheDoor(page: Page): Promise<void> {
       store.dispatch({ type: 'INSPECT', s });
       store.dispatch({ type: 'VERDICT', s, v: 'leave' });
     }
+    // Then take it, and in at the door.
+    store.dispatch({ type: 'MEET', c: 'gatekeeper' });
+    store.dispatch({ type: 'VERDICT', s: 'bridge-key', v: 'take' });
     store.dispatch({ type: 'ENTER_COTTAGE' });
   });
   await page.waitForFunction(

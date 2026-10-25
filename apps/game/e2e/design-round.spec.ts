@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
-import { answerAllAndArrive, startGame, toTheReveal } from './helpers';
+import { answerAllAndArrive, crossTheRiver, startGame, toTheReveal } from './helpers';
 
 /*
  * PAUL'S DESIGN ROUND OF 2026-10-22, MEASURED. One spec for the fixes in that round a browser can
@@ -37,6 +37,7 @@ async function pageAt(browser: Browser, width: number, height: number): Promise<
 /**
  * Answers every offer through the store and walks in, letting the wolf in with one bad skill (never
  * the Wing Ride, whose flight carries Purple off the doorstep) and taking the Word Weaver or not.
+ * It crosses the river by the Bridge Key, which lets the wolf in itself when it is the bad one.
  */
 async function arriveAsWolf(page: Page, weaver: boolean): Promise<void> {
   await page.evaluate((w) => {
@@ -48,7 +49,11 @@ async function arriveAsWolf(page: Page, weaver: boolean): Promise<void> {
       store.dispatch({ type: 'INSPECT', s: c.skillId });
       let v: 'take' | 'leave' = 'leave';
       if (c.skillId === 'word-weaver') v = w ? 'take' : 'leave';
-      else if (!wolf && c.skillId !== 'short-cut' && !good.includes(c.skillId)) {
+      else if (c.skillId === 'bridge-key') {
+        // Over the river by the bridge, never the flight (rules 3: no crossing, no door).
+        v = 'take';
+        if (!good.includes(c.skillId)) wolf = true;
+      } else if (!wolf && c.skillId !== 'short-cut' && !good.includes(c.skillId)) {
         v = 'take';
         wolf = true;
       }
@@ -317,6 +322,8 @@ test('a card walked past says so on one line at every width', async ({ browser }
     const page = await pageAt(browser, width, height);
     await page.goto('/');
     await startGame(page);
+    // Over the river first (rules 3): the door refuses a run that has not crossed.
+    await crossTheRiver(page);
     await page.evaluate(() => window.__otp!.store.dispatch({ type: 'ENTER_COTTAGE' }));
     await toTheReveal(page);
     const labels = page.locator('.otp-reveal__chose');

@@ -3,8 +3,15 @@ import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { v2 } from '@otp/core';
-import { INTERACT_RADIUS, TILE } from '../src/world/logic';
-import { answerAllAndArrive, ready, toTheReveal } from './helpers';
+import { TILE } from '../src/world/logic';
+import {
+  answerAllAndArrive,
+  crossTheRiver,
+  mapObject,
+  ready,
+  talkingDistance,
+  toTheReveal,
+} from './helpers';
 
 /*
  * THE SEVEN PERKS, PLAYED (the client, 2026-10-22). Each skill's `effect` is what taking it does in
@@ -29,11 +36,15 @@ const skillOf = (kind: v2.EffectKind) => content.skills.find((s) => s.effect.kin
 const giverOf = (kind: v2.EffectKind) =>
   content.characters.find((c) => c.skillId === skillOf(kind).id)!;
 
-/** Pinned seeds and what each deals good. Checked against the real deal in `deal()`. */
+/**
+ * Pinned seeds and what each deals good. Checked against the real deal in `deal()`. Rules 3 deals
+ * 8 ways: the Wood Map always good, one of Bridge Key and Wing Ride, one of the other four.
+ */
 const DEALS: Readonly<Record<number, readonly string[]>> = {
-  1: ['cottage-finder', 'way-teller', 'short-cut'],
-  27: ['word-weaver', 'short-cut', 'latch-lifter'],
-  28: ['word-weaver', 'slow-post', 'night-light'],
+  0: ['cottage-finder', 'bridge-key', 'word-weaver'],
+  3: ['cottage-finder', 'bridge-key', 'latch-lifter'],
+  5: ['cottage-finder', 'short-cut', 'slow-post'],
+  6: ['cottage-finder', 'short-cut', 'night-light'],
 };
 
 /** A seed that deals `kind`'s skill in the variant asked for. */
@@ -98,6 +109,23 @@ async function meetAllBut(page: Page, keep: readonly string[]): Promise<void> {
 
 const toast = (page: Page) => page.locator('[data-toast]');
 
+/** Puts Purple's feet at a point, as the scene's own placement does. */
+async function standAt(page: Page, at: { x: number; y: number }): Promise<void> {
+  await page.evaluate(
+    ([x, y]) => {
+      const otp = window.__otp!;
+      otp.scene!.position = { x: x!, y: y! };
+      otp.scene!.placePurple();
+    },
+    [at.x, at.y] as const,
+  );
+  await page.waitForTimeout(100);
+}
+
+/** Whether the collision Purple walks on is solid at a world point. */
+const isSolid = (page: Page, x: number, y: number): Promise<boolean> =>
+  page.evaluate(([px, py]) => window.__otp!.isSolidAt!(px!, py!), [x, y] as const);
+
 interface Scene {
   npcs: {
     id: string;
@@ -105,7 +133,11 @@ interface Scene {
     y: number;
     sprite: { texture: { key: string }; flipX: boolean };
   }[];
-  forkBoards: { visible: boolean }[];
+  gateStandsOpen: boolean;
+  gateFalling: number | null;
+  gate: {
+    art: { layer: { getTileAt(c: number, r: number): { index: number } | null } } | null;
+  } | null;
   glow: { visible: boolean; alpha: number; blendMode: number; x: number; y: number } | null;
   flight: { fade: boolean } | null;
   flying: boolean;
@@ -131,77 +163,24 @@ interface Scene {
 const scene = <T>(page: Page, read: (s: Scene) => T): Promise<T> =>
   page.evaluate(`(${read.toString()})(window.__otp.scene)`) as Promise<T>;
 
+/*
+ * THE WOOD MAP IS ALWAYS DEALT GOOD (rules 3, `deal.always`): the first card teaches what a good card
+ * looks like, so there is no bad copy to play and it is taken once.
+ */
+test('the Wood Map is always good, and draws the minimap, which nobody has without it', async ({
+  page,
+}) => {
+  expect(content.deal.always).toContain(skillOf('minimap').id);
+  await intoTheForest(page);
+  await deal(page, 0);
+  await expect(page.locator('[data-minimap]')).toHaveCount(0);
+  await take(page, 'minimap');
+  await expect(page.locator('[data-minimap]')).toBeVisible();
+  await expect(toast(page)).toHaveText(say('perkMinimap'));
+});
+
 for (const variant of ['good', 'bad'] as const) {
   test.describe(`taken ${variant}`, () => {
-    test(`the Wood Map draws the minimap, which nobody has without it (${variant})`, async ({
-      page,
-    }) => {
-      await intoTheForest(page);
-      await deal(page, seedFor('minimap', variant));
-      await expect(page.locator('[data-minimap]')).toHaveCount(0);
-      await take(page, 'minimap');
-      await expect(page.locator('[data-minimap]')).toBeVisible();
-      await expect(toast(page)).toHaveText(say('perkMinimap'));
-    });
-
-    test(`the Way Teller stands a sign at each fork naming who lives that way (${variant})`, async ({
-      page,
-    }) => {
-      await intoTheForest(page);
-      await deal(page, seedFor('fork-signs', variant));
-      await expect(page.locator('[data-fork-signs]')).toHaveCount(0);
-      expect(await scene(page, (s) => s.forkBoards.map((b) => b.visible))).not.toContain(true);
-      await take(page, 'fork-signs');
-      await expect(toast(page)).toHaveText(say('perkForkSigns'));
-      // The toast is said in the store subscriber; the boards are shown by drawPerks() on the next
-      // Phaser frame, so a single read straight after the toast can land before that frame.
-      await expect
-        .poll(() => scene(page, (s) => s.forkBoards.map((b) => b.visible)))
-        .not.toContain(false);
-
-      const chips = page.locator('.otp-forksign__chip');
-      await expect(chips.first()).toBeAttached();
-      const cast = new Set(content.characters.map((c) => c.id));
-      const named = await chips.evaluateAll((all) =>
-        all.map((c) => ({ who: c.getAttribute('data-who')!, heading: c.dataset['heading']! })),
-      );
-      const met = await page.evaluate(() => window.__otp!.store.getState().met);
-      for (const n of named) {
-        // A character, never the cottage, and somebody not met yet.
-        expect(cast.has(n.who), n.who).toBe(true);
-        expect(met, `${n.who} is already met and still on a sign`).not.toContain(n.who);
-      }
-      // The labels are DOM, over the canvas, and the canvas draws no words: the chip carries the name.
-      await expect(chips.first().locator('.otp-forksign__name')).not.toBeEmpty();
-
-      // Meet whoever the first fork names, and that heading moves on to somebody else (or empties).
-      const first = page.locator('[data-fork="fork-1"] .otp-forksign__chip').first();
-      const heading = await first.getAttribute('data-heading');
-      const who = (await first.getAttribute('data-who'))!;
-      await page.evaluate((id) => {
-        const { store } = window.__otp!;
-        store.dispatch({ type: 'MEET', c: id });
-        store.dispatch({ type: 'BACK' });
-        store.dispatch({ type: 'BACK' });
-      }, who);
-      await expect(
-        page.locator(`[data-fork="fork-1"] [data-heading="${heading}"][data-who="${who}"]`),
-      ).toHaveCount(0);
-
-      // The sign near the spawn stands on screen, inside the world, on top of its board.
-      const sign = (await page.locator('[data-fork="fork-1"] .otp-forksign__list').boundingBox())!;
-      const world = (await page.locator('.otp-world-anchor').boundingBox())!;
-      expect(sign.width).toBeGreaterThan(0);
-      expect(sign.x).toBeGreaterThanOrEqual(world.x - 0.5);
-      expect(sign.y + sign.height).toBeLessThanOrEqual(world.y + world.height + 0.5);
-      await expect(page.locator('[data-fork-signs]')).toHaveAttribute('aria-hidden', 'true');
-
-      // With everyone met the signs name nobody, and an empty bubble draws nothing, tail and all.
-      await meetAllBut(page, []);
-      await expect(page.locator('.otp-forksign__chip')).toHaveCount(0);
-      await expect(page.locator('[data-fork="fork-1"] .otp-forksign__list')).toBeHidden();
-    });
-
     test(`the Word Weaver's bird flies towards Grandma, her door stands open, and there is no knock (${variant})`, async ({
       page,
     }) => {
@@ -232,6 +211,7 @@ for (const variant of ['good', 'bad'] as const) {
       expect(flight!.flipped).toBe(flight!.door.x < flight!.from.x);
       // And the door stands open for the walk up the lane, on the next frame the forest draws.
       await expect.poll(() => scene(page, (s) => s.doorOpen), { timeout: 2000 }).toBe(true);
+      await crossTheRiver(page);
       await meetAllBut(page, []);
       const waited = await knockAtTheDoor(page);
       expect(waited, 'the welcome still made her knock and wait').toBeLessThan(
@@ -243,44 +223,56 @@ for (const variant of ['good', 'bad'] as const) {
       );
     });
 
-    test(`the Magpie's Wing Ride lands Purple at the next unmet friend (${variant})`, async ({
+    test(`the Magpie's Wing Ride flies Purple over the river to the far bank (${variant})`, async ({
       page,
     }) => {
       await intoTheForest(page);
       await deal(page, seedFor('wing-ride', variant));
-      const giver = giverOf('wing-ride');
-      const expected = v2.wingRideTarget(content, [giver.id], giver.id)!;
-      const ride = skillOf('wing-ride').effect as { flightMs: number };
+      const ride = skillOf('wing-ride').effect as { flightMs: number; lands: string };
+      const landing = await mapObject(page, ride.lands);
+      const gate = await mapObject(page, 'gate-bridge');
+      await standAt(page, await talkingDistance(page, giverOf('wing-ride').spawn));
       const scrollBefore = await scene(page, (s) => s.cameras.main.scrollX);
       await take(page, 'wing-ride');
       await expect(toast(page)).toHaveText(say('perkWingRide'));
       expect(await scene(page, (s) => s.flying), 'no flight took off').toBe(true);
-      // Still in the forest while she is in the air; then the offer opens beside the right friend.
+      // In the air, and still in the forest: there is nobody at the landing to meet.
       expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('forest');
       await expect
-        .poll(() => page.evaluate(() => window.__otp!.store.getState().active), {
-          timeout: ride.flightMs + 5000,
-        })
-        .toBe(expected);
-      await expect(page.locator('#game')).toHaveAttribute('data-phase', 'card');
+        .poll(() => scene(page, (s) => s.flying), { timeout: ride.flightMs + 5000 })
+        .toBe(false);
 
+      // Set down at the far bank's landing (or a step from it, if it is a pixel into a tree), and
+      // across the river: east of the whole drawbridge span, which is still raised.
       const landed = await scene(page, (s) => s.purplePosition);
-      const spot = await page.evaluate(
-        (spawn) => window.__otp!.mapObjects!.find((o) => o.name === spawn)!,
-        content.characters.find((c) => c.id === expected)!.spawn,
+      expect(Math.hypot(landed.x - landing.x, landed.y - landing.y)).toBeLessThanOrEqual(TILE * 2);
+      expect(landed.x).toBeGreaterThan(gate.x + gate.width);
+      expect(await scene(page, (s) => s.gateStandsOpen), 'the flight lowered the bridge').toBe(
+        false,
       );
-      const feet = { x: spot.x + TILE / 2, y: spot.y + TILE };
-      expect(Math.hypot(landed.x - feet.x, landed.y - feet.y)).toBeLessThan(INTERACT_RADIUS);
+      expect(await page.evaluate(() => window.__otp!.store.getState().active)).toBeNull();
+      expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('forest');
       // The camera came with her.
-      const scrollAfter = await scene(page, (s) => s.cameras.main.scrollX);
-      expect(scrollAfter).not.toBe(scrollBefore);
-      // And the meeting was stamped no sooner than the flight allows: the server refuses one inside it.
-      const log = await page.evaluate(() => window.__otp!.store.getState().log);
-      const took = log.find((e) => e.e === 'verdict')!;
-      const met = log.filter((e) => e.e === 'met').at(-1)!;
-      expect(met.at - took.at).toBeGreaterThanOrEqual(ride.flightMs);
+      expect(await scene(page, (s) => s.cameras.main.scrollX)).not.toBe(scrollBefore);
+      // And she can walk on from there: a step east moves her.
+      const before = await scene(page, (s) => s.purplePosition);
+      await page.keyboard.down('ArrowRight');
+      await page.waitForTimeout(300);
+      await page.keyboard.up('ArrowRight');
+      expect((await scene(page, (s) => s.purplePosition)).x).toBeGreaterThan(before.x);
     });
 
+    test(`the Bridge Key lowers the drawbridge, and only then is it walkable (${variant})`, async ({
+      page,
+    }) => {
+      await intoTheForest(page);
+      await deal(page, seedFor('bridge-gate', variant));
+      const gate = await mapObject(page, 'gate-bridge');
+      await take(page, 'bridge-gate');
+      await expect(toast(page)).toHaveText(say('perkBridgeGate'));
+      await expect.poll(() => scene(page, (s) => s.gateStandsOpen)).toBe(true);
+      expect(await isSolid(page, gate.x + TILE / 2, gate.y + TILE / 2)).toBe(false);
+    });
     test(`the Slow Post makes Purple walk faster (${variant})`, async ({ page }) => {
       await intoTheForest(page);
       await deal(page, seedFor('walk-faster', variant));
@@ -355,7 +347,9 @@ for (const variant of ['good', 'bad'] as const) {
       expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('forest');
       expect(await seconds()).toBeGreaterThan(0);
 
-      // In through the door: the score counts the rewound time, faster than the real one.
+      // In through the door, over the river first (rules 3): the score counts the rewound time,
+      // faster than the real one.
+      await crossTheRiver(page);
       await page.evaluate(() => window.__otp!.store.dispatch({ type: 'ENTER_COTTAGE' }));
       const state = (await page.evaluate(() =>
         window.__otp!.store.getState(),
@@ -421,6 +415,7 @@ async function knockAtTheDoor(page: Page): Promise<number> {
 
 test('without word sent ahead, Purple knocks and waits the whole knock', async ({ page }) => {
   await intoTheForest(page);
+  await crossTheRiver(page);
   await meetAllBut(page, []);
   const waited = await knockAtTheDoor(page);
   expect(waited).toBeGreaterThanOrEqual(content.world.knockMs);
@@ -430,29 +425,183 @@ test('without word sent ahead, Purple knocks and waits the whole knock', async (
   );
 });
 
-test('a Wing Ride with nobody left to meet does nothing, and says so', async ({ page }) => {
-  await intoTheForest(page);
-  await meetAllBut(page, [giverOf('wing-ride').id]);
-  const before = await scene(page, (s) => s.purplePosition);
-  await take(page, 'wing-ride');
-  await expect(toast(page)).toHaveText(say('perkWingRideNobody'));
-  expect(await scene(page, (s) => s.flying)).toBe(false);
-  expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('forest');
-  expect(await scene(page, (s) => s.purplePosition)).toEqual(before);
-});
-
-test('under reduced motion the Wing Ride is a quick fade, and lands at the same friend', async ({
+test('under reduced motion the Wing Ride is a quick fade, and lands on the far bank all the same', async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await intoTheForest(page);
-  const giver = giverOf('wing-ride');
-  const expected = v2.wingRideTarget(content, [giver.id], giver.id)!;
+  const ride = skillOf('wing-ride').effect as { flightMs: number; lands: string };
+  const landing = await mapObject(page, ride.lands);
   await take(page, 'wing-ride');
   expect(await scene(page, (s) => s.flight?.fade)).toBe(true);
   await expect
-    .poll(() => page.evaluate(() => window.__otp!.store.getState().active), { timeout: 8000 })
-    .toBe(expected);
+    .poll(() => scene(page, (s) => s.flying), { timeout: ride.flightMs + 5000 })
+    .toBe(false);
+  const landed = await scene(page, (s) => s.purplePosition);
+  expect(Math.hypot(landed.x - landing.x, landed.y - landing.y)).toBeLessThanOrEqual(TILE * 2);
+});
+
+/* ---------------------------------------------------------------------- the river and the bridge */
+
+/**
+ * THE DRAWBRIDGE (docs/GATEKEEPER.md, and the client's late change of 2026-10-25: the gate is a
+ * drawbridge, raised over the whole span until the key is taken, and seen coming down).
+ */
+test.describe('the drawbridge', () => {
+  /** Purple a tile west of the span, on the deck's row, facing it. */
+  const westOfTheSpan = async (page: Page) => {
+    const gate = await mapObject(page, 'gate-bridge');
+    const at = { x: gate.x - TILE, y: gate.y + gate.height / 2 + TILE / 4 };
+    await standAt(page, at);
+    expect(await isSolid(page, at.x, at.y), 'the west bank end of the bridge is walkable').toBe(
+      false,
+    );
+    return { gate, at };
+  };
+  /** The tile the drawbridge's layer shows at a cell. */
+  const tileAt = (page: Page, col: number, row: number) =>
+    page.evaluate(
+      ([c, r]) => {
+        const s = window.__otp!.scene as unknown as Scene;
+        return s.gate?.art?.layer.getTileAt(c!, r!)?.index ?? null;
+      },
+      [col, row] as const,
+    );
+  const gids = JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL('../src/assets/tileset-forest.gids.json', import.meta.url)),
+      'utf8',
+    ),
+  ) as Record<string, number>;
+
+  test('is raised from the start: Purple cannot walk onto it, and bumping it says why', async ({
+    page,
+  }) => {
+    await intoTheForest(page);
+    const { gate, at } = await westOfTheSpan(page);
+    // Raised over every cell of the span: the river shows where the deck will be.
+    const row = Math.floor(gate.y / TILE);
+    const col0 = Math.floor(gate.x / TILE);
+    const cols = Math.round(gate.width / TILE);
+    expect(await tileAt(page, col0, row)).toBe(gids['bridge-gate-shut-0']);
+    for (let i = 1; i < cols - 1; i++)
+      expect(await tileAt(page, col0 + i, row)).toBe(gids['bridge-gate-shut-1']);
+    expect(await tileAt(page, col0 + cols - 1, row)).toBe(gids['bridge-gate-shut-2']);
+
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(900);
+    await page.keyboard.up('ArrowRight');
+    const stopped = await scene(page, (s) => s.purplePosition);
+    expect(stopped.x, 'she walked onto the raised drawbridge').toBeLessThan(gate.x);
+    expect(stopped.x, 'she never reached it').toBeGreaterThan(at.x);
+    await expect(toast(page)).toHaveText(say('gateLocked'));
+    expect(await scene(page, (s) => s.gateStandsOpen)).toBe(false);
+  });
+
+  test('comes down when the Bridge Key is taken -- falling, then down -- and is walkable once it is', async ({
+    page,
+  }) => {
+    await intoTheForest(page);
+    const { gate } = await westOfTheSpan(page);
+    const mid = { x: gate.x + gate.width / 2, y: gate.y + gate.height / 2 };
+    // Watch every frame from the take: how far it has fallen, and whether the deck is solid.
+    const watched = page.evaluate(
+      ([x, y]) =>
+        new Promise<{ fall: (number | null)[]; solidWhileFalling: boolean[]; open: boolean }>(
+          (resolve) => {
+            const otp = window.__otp!;
+            const s = otp.scene as unknown as Scene;
+            const fall: (number | null)[] = [];
+            const solidWhileFalling: boolean[] = [];
+            const t0 = performance.now();
+            const tick = (): void => {
+              const f = s.gateFalling;
+              fall.push(f);
+              if (f !== null) solidWhileFalling.push(otp.isSolidAt!(x!, y!));
+              if (performance.now() - t0 < 2500 && !s.gateStandsOpen) requestAnimationFrame(tick);
+              else resolve({ fall, solidWhileFalling, open: s.gateStandsOpen });
+            };
+            tick();
+          },
+        ),
+      [mid.x, mid.y] as const,
+    );
+    await take(page, 'bridge-gate');
+    const { fall, solidWhileFalling, open } = await watched;
+    expect(open, 'the drawbridge never came down').toBe(true);
+    const falling = fall.filter((f): f is number => f !== null);
+    expect(falling.length, 'it was down at once: nothing was seen falling').toBeGreaterThan(2);
+    expect(
+      falling.some((f) => f > 0 && f < 1),
+      'never part-way down',
+    ).toBe(true);
+    for (let i = 1; i < falling.length; i++)
+      expect(falling[i]!, 'it went back up').toBeGreaterThanOrEqual(falling[i - 1]!);
+    // Not walkable in the air: the deck is solid for every frame it is falling.
+    expect(solidWhileFalling.every(Boolean), 'walkable before it was down').toBe(true);
+
+    // Down: the lowered tiles on every cell, the collision lifted, and Purple walks across.
+    const row = Math.floor(gate.y / TILE);
+    const col0 = Math.floor(gate.x / TILE);
+    expect(await tileAt(page, col0, row)).toBe(gids['bridge-gate-open-0']);
+    expect(await tileAt(page, col0 + 1, row)).toBe(gids['bridge-gate-open-1']);
+    expect(await tileAt(page, col0 + Math.round(gate.width / TILE) - 1, row)).toBe(
+      gids['bridge-gate-open-2'],
+    );
+    expect(await isSolid(page, mid.x, mid.y)).toBe(false);
+    await page.keyboard.down('ArrowRight');
+    await expect
+      .poll(async () => (await scene(page, (s) => s.purplePosition)).x, { timeout: 6000 })
+      .toBeGreaterThan(gate.x + gate.width);
+    await page.keyboard.up('ArrowRight');
+  });
+
+  test('under reduced motion it is simply down, with nothing seen falling', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await intoTheForest(page);
+    const { gate } = await westOfTheSpan(page);
+    const watched = page.evaluate(
+      () =>
+        new Promise<(number | null)[]>((resolve) => {
+          const s = window.__otp!.scene as unknown as Scene;
+          const seen: (number | null)[] = [];
+          const t0 = performance.now();
+          const tick = (): void => {
+            seen.push(s.gateFalling);
+            if (performance.now() - t0 < 600) requestAnimationFrame(tick);
+            else resolve(seen);
+          };
+          tick();
+        }),
+    );
+    await take(page, 'bridge-gate');
+    expect((await watched).every((f) => f === null)).toBe(true);
+    await expect.poll(() => scene(page, (s) => s.gateStandsOpen)).toBe(true);
+    expect(await isSolid(page, gate.x + gate.width / 2, gate.y + gate.height / 2)).toBe(false);
+  });
+
+  test('a replay raises it again', async ({ page }) => {
+    await intoTheForest(page);
+    const gate = await mapObject(page, 'gate-bridge');
+    await take(page, 'bridge-gate');
+    await expect.poll(() => scene(page, (s) => s.gateStandsOpen)).toBe(true);
+    await deal(page, 0);
+    await expect.poll(() => scene(page, (s) => s.gateStandsOpen)).toBe(false);
+    expect(await isSolid(page, gate.x + gate.width / 2, gate.y + gate.height / 2)).toBe(true);
+    expect(await tileAt(page, Math.floor(gate.x / TILE), Math.floor(gate.y / TILE))).toBe(
+      gids['bridge-gate-shut-0'],
+    );
+  });
+});
+
+test('the door refuses a run that never crossed the river', async ({ page }) => {
+  await intoTheForest(page);
+  await meetAllBut(page, []);
+  const refused = await page.evaluate(() =>
+    window.__otp!.store.dispatch({ type: 'ENTER_COTTAGE' }),
+  );
+  expect(refused).toBe('not-across');
+  expect(await page.evaluate(() => window.__otp!.store.getState().phase)).toBe('forest');
 });
 
 /* -------------------------------------------------------------------------- the cast comes alive */

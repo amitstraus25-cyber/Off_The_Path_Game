@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { TILE } from '../src/world/logic';
-import { ready } from './helpers';
+import { crossTheRiver, ready } from './helpers';
 
 /*
  * THE DOOR ASKS FIRST (ui/DoorCheck.tsx). The client, 2026-10-22, finished a run with the Cat's
@@ -155,8 +155,14 @@ test('Keep looking puts Purple a step back off the step, and the door asks again
   expect(await phase(page)).toBe('forest');
 });
 
+/*
+ * THE DOOR IS OVER THE RIVER (rules 3): it refuses a run that crossed by neither way, and a player
+ * standing at it has crossed. Purple is PLACED at the door here, so the specs that go in take the
+ * honest crossing first (helpers.ts `crossTheRiver`).
+ */
 test('Go in enters exactly as the door always did', async ({ page }) => {
   await intoTheForest(page);
+  await crossTheRiver(page);
   await walkUpToTheDoor(page);
   await page.locator('[data-door] [data-action="go-in"]').click();
   await expect(page.locator('[data-arrive]')).toBeVisible();
@@ -165,6 +171,7 @@ test('Go in enters exactly as the door always did', async ({ page }) => {
 
 test('with everyone met and answered the door opens without asking', async ({ page }) => {
   await intoTheForest(page);
+  await crossTheRiver(page);
   await page.evaluate(() => {
     const { store, content } = window.__otp!;
     for (const c of content.characters) {
@@ -185,14 +192,19 @@ test('with everyone met but some unanswered, the door names who is still to answ
   page,
 }) => {
   await intoTheForest(page);
+  // Over the river first, so the crossing's giver is answered and everyone else is not.
+  const crossed = await crossTheRiver(page);
   await meetEveryone(page);
-  const names = await page.evaluate(() => window.__otp!.content.characters.map((c) => c.name));
+  const names = await page.evaluate(
+    (s) => window.__otp!.content.characters.filter((c) => c.skillId !== s).map((c) => c.name),
+    crossed,
+  );
   await walkUpToTheDoor(page);
   await expect(page.locator('[data-door="ask"]')).toBeVisible();
   await expect(page.locator('[data-door-unmet]')).toHaveCount(0);
   await expect(page.locator('[data-door-unanswered] li')).toHaveText(names);
   await expect(page.locator('#otp-door-ask')).toContainText(
-    `${names.length} of the ${names.length}`,
+    `${names.length} of the ${raw.characters.length}`,
   );
 });
 

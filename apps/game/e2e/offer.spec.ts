@@ -59,9 +59,17 @@ const deal = (page: Page, seed: number): Promise<string[]> =>
     return store.getState().good;
   }, seed);
 
-/** The fewest seeds, from the first forty, that show every skill both good and bad. */
+/**
+ * The fewest seeds, from the first forty, that show every skill both good and bad -- but a skill
+ * the deal always deals good (`deal.always`, rules 3: the Wood Map) has no bad copy to show.
+ */
 async function seedsForBothVariants(page: Page, skills: string[]): Promise<number[]> {
-  const want = new Set(skills.flatMap((s) => [`${s}:good`, `${s}:bad`]));
+  const always = await page.evaluate(
+    () => (window.__otp!.content as unknown as { deal: { always?: string[] } }).deal.always ?? [],
+  );
+  const want = new Set(
+    skills.flatMap((s) => (always.includes(s) ? [`${s}:good`] : [`${s}:good`, `${s}:bad`])),
+  );
   const picked: number[] = [];
   for (let seed = 0; seed < 40 && want.size > 0; seed++) {
     const good = await deal(page, seed);

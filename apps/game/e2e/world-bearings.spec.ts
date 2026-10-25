@@ -118,9 +118,9 @@ test.describe('the forest summary carries bearings', () => {
     await expect.poll(async () => (await roster(page)).every((l) => ends.test(l))).toBe(true);
     expect((await roster(page)).map((l) => l.split(',')[0])).toEqual([
       'Rabbit',
-      'Toadstool',
-      'Owl',
+      'Gatekeeper',
       'Magpie',
+      'Owl',
       'Snail',
       'Lantern Keeper',
       'Cat',

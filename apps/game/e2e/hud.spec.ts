@@ -74,7 +74,7 @@ test.afterAll(() => {
 /** The seven skills as the content draws them: every icon exists since 2026-10-22. */
 const FULL_BASKET: HudBasketItem[] = [
   { skillId: 'cottage-finder', name: 'Cottage Finder', icon: 'item-compass' },
-  { skillId: 'way-teller', name: 'Way Teller', icon: 'item-signpost' },
+  { skillId: 'bridge-key', name: 'Bridge Key', icon: 'item-key' },
   { skillId: 'night-light', name: 'Night Light', icon: 'item-lantern' },
   { skillId: 'slow-post', name: 'Slow Post', icon: 'item-parcel' },
   { skillId: 'word-weaver', name: 'Word Weaver', icon: 'item-weaver' },
@@ -315,7 +315,7 @@ test.describe('what a screen reader hears', () => {
     await set(page, { basket: FULL_BASKET.slice(0, 4) });
     const tree = await page.locator('.otp-hud2__basket').ariaSnapshot();
     expect(tree).toContain('group "Basket"');
-    for (const name of ['Cottage Finder', 'Way Teller', 'Night Light', 'Slow Post'])
+    for (const name of ['Cottage Finder', 'Bridge Key', 'Night Light', 'Slow Post'])
       expect(tree).toContain(name);
     expect(tree).not.toContain('limited');
     // Four carried, so four list items: the three empty wells are furniture.
@@ -354,7 +354,7 @@ test.describe('the basket', () => {
     const order = await page
       .locator('.otp-hud2__slot[data-skill]')
       .evaluateAll((els) => els.map((e) => e.getAttribute('data-skill')));
-    expect(order).toEqual(['cottage-finder', 'way-teller', 'night-light']);
+    expect(order).toEqual(['cottage-finder', 'bridge-key', 'night-light']);
     await close();
   });
 

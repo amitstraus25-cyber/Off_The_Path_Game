@@ -3,7 +3,7 @@ import type { Browser, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { TILE } from '../src/world/logic';
-import { ready, tag, tagOf } from './helpers';
+import { crossTheRiver, ready, tag, tagOf } from './helpers';
 
 /*
  * THE MINIMAP, in the real game (ui/Minimap.tsx, world/minimap.ts). The client, 2026-10-22: "how do
@@ -240,7 +240,10 @@ test('the map steps back whenever a character is under it, so it never hides one
   });
   expect(placed).toBe(true);
   await expect(map).toHaveAttribute('data-yield', 'true', { timeout: 4000 });
-  expect(Number(await map.evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(1);
+  // The step back is a transition, so the opacity is read once it has had a frame to start.
+  await expect
+    .poll(async () => Number(await map.evaluate((el) => getComputedStyle(el).opacity)))
+    .toBeLessThan(1);
 });
 
 test('nobody has the minimap until the Wood Map is taken', async ({ page }) => {
@@ -383,6 +386,8 @@ test('under reduced motion the dots fill without a fade', async ({ page }) => {
 
 test('the minimap leaves with the forest', async ({ page }) => {
   await intoTheForest(page);
+  // Over the river first (rules 3): the door refuses a run that has not crossed.
+  await crossTheRiver(page);
   await page.evaluate(() => window.__otp!.store.dispatch({ type: 'ENTER_COTTAGE' }));
   await expect(page.locator('[data-arrive]')).toBeVisible();
   await expect(page.locator('[data-minimap]')).toHaveCount(0);

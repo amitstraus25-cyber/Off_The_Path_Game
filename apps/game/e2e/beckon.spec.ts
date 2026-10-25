@@ -22,7 +22,7 @@
  */
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { startGame } from './helpers';
+import { standBetweenTheFirstTwo, startGame } from './helpers';
 import { TILE } from '../src/world/logic';
 
 interface Rect {
@@ -85,10 +85,13 @@ const overlap = (a: Rect, b: Rect): boolean =>
 
 test('every unmet character stands in a ring and under a "!", on the canvas', async ({ page }) => {
   test.setTimeout(60_000);
-  // The opening shot e2e/scene-second-pass.spec.ts measures the shadows in: three figures in frame.
+  // The shot e2e/scene-second-pass.spec.ts measures the shadows in: three figures in frame. Since
+  // rules 3 the opening shot holds only Purple and the Rabbit, so she stands between the first two.
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await startGame(page);
+  await standBetweenTheFirstTwo(page);
+  await page.waitForTimeout(500);
   await frames(page);
 
   const all = await beckons(page);

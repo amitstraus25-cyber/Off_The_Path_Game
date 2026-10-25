@@ -94,10 +94,16 @@ async function toTheReveal(game: Page | Frame): Promise<void> {
   await game.waitForFunction(() => window.__otp?.store.getState().phase === 'forest');
   await game.evaluate(() => {
     const { store, content } = window.__otp!;
+    // Leave everything but the Bridge Key: the door is over the river (rules 3) and refuses a run
+    // that crossed by neither way.
     for (const c of content.characters) {
       store.dispatch({ type: 'MEET', c: c.id });
       store.dispatch({ type: 'INSPECT', s: c.skillId });
-      store.dispatch({ type: 'VERDICT', s: c.skillId, v: 'leave' });
+      store.dispatch({
+        type: 'VERDICT',
+        s: c.skillId,
+        v: c.skillId === 'bridge-key' ? 'take' : 'leave',
+      });
     }
     store.dispatch({ type: 'ENTER_COTTAGE' });
   });

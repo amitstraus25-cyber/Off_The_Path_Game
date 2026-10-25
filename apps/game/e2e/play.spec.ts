@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { TILE } from '../src/world/logic';
-import { ready, typeAName } from './helpers';
+import { crossTheRiver, hasCrossed, ready, typeAName } from './helpers';
 import type { RunState } from './helpers';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,8 @@ const raw = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
 ) as {
   skills: { id: string; icon: string }[];
-  scoring: { played: number; clean: number };
+  scoring: { played: number; clean: number; good: number; speed: number };
+  deal: { good: number };
   ui: {
     cabinet: { marquee: string };
     reveal: { caught: string; again: string; did: string; wouldHave: string };
@@ -24,8 +25,8 @@ const raw = JSON.parse(
  * arrival, the reveal, the post and the board.
  *
  * THE DEAL COMES FROM `POST /api/start`, so a spec chooses it by answering that route: `serveStart`
- * hands back a seed and a token, exactly as apps/api would. Seeds 0 to 34 are the 35 deals in
- * order (core v2/deal.ts). With the route left alone the preview server answers it with a 404, the
+ * hands back a seed and a token, exactly as apps/api would. Seeds 0 to 7 are the 8 deals in
+ * order (core v2/deal.ts, rules 3), and a seed past 7 deals as itself modulo 8. With the route left alone the preview server answers it with a 404, the
  * game deals from its own seed, and the reveal says posting is unavailable for that run.
  *
  * Purple is PLACED beside each character rather than walked there: the walk is what
@@ -34,7 +35,7 @@ const raw = JSON.parse(
  * walks the first one for real.
  */
 
-const WALKING_ORDER = ['rabbit', 'toadstool', 'owl', 'magpie', 'snail', 'lantern-keeper', 'cat'];
+const WALKING_ORDER = ['rabbit', 'gatekeeper', 'magpie', 'owl', 'snail', 'lantern-keeper', 'cat'];
 const TOKEN = 'dGVzdA.c2lnbmF0dXJl';
 
 /** Answers `POST /api/start` with this seed. Returns how many times the game asked. */
@@ -89,8 +90,13 @@ async function standBeside(page: Page, spawn: string): Promise<void> {
  * Onto the doorstep. A run that has not met all seven is asked first (ui/DoorCheck.tsx, and
  * e2e/door.spec.ts for the question itself); these specs are about what lies through the door, so
  * they answer Go in.
+ *
+ * The doorstep is over the river (rules 3), and the door refuses a run that crossed by neither way
+ * ('not-across'). Purple is PLACED here, not walked, so a run that has not crossed takes the honest
+ * crossing first (`crossTheRiver`): the one thing a player standing at this door must have done.
  */
 async function walkIntoCottage(page: Page): Promise<void> {
+  if (!(await hasCrossed(page))) await crossTheRiver(page);
   await page.evaluate(() => {
     const otp = window.__otp!;
     const door = otp.mapObjects!.find((m) => m.name === 'trigger-cottage')!;
@@ -133,6 +139,12 @@ async function walkTheCast(
     await page.waitForTimeout(320);
     await panel.locator(`[data-action="${choose(c.skillId, good.includes(c.skillId))}"]`).click();
     await expect(page.locator('#game')).toHaveAttribute('data-phase', 'forest');
+    // A Wing Ride taken flies her over the river: the next friend is met once she is down.
+    await expect
+      .poll(() => page.evaluate(() => (window.__otp!.scene as { flying?: boolean }).flying), {
+        timeout: 10_000,
+      })
+      .toBe(false);
   }
   return shown;
 }
@@ -198,7 +210,7 @@ test('the careful run reads every card, sorts the seven, scores 100 and posts', 
   );
   const body = posted as { handle: string; token: string; log: { rules: number; seed: number } };
   expect(body.token).toBe(TOKEN);
-  expect(body.log.rules).toBe(2);
+  expect(body.log.rules).toBe(3);
   expect(body.log.seed).toBe(0);
 });
 
@@ -410,10 +422,15 @@ test('with no board the game deals its own seed and says posting is unavailable'
   expect(run.good).toHaveLength(3);
   await walkIntoCottage(page);
   await throughTheDoor(page, 'grandma');
-  // Nothing taken: a clean empty basket, the points for playing and the clean weight.
+  // Nothing taken but the honest way over the river: a clean basket of one good skill, inside par.
   await expect(page.locator('[data-score]')).toHaveAttribute(
     'data-score',
-    String(raw.scoring.played + raw.scoring.clean),
+    String(
+      raw.scoring.played +
+        raw.scoring.clean +
+        raw.scoring.good +
+        Math.round(raw.scoring.speed / raw.deal.good),
+    ),
   );
   await expect(page.locator('[data-post="unavailable"]')).toHaveText(
     'Posting is unavailable for this run.',
@@ -637,8 +654,8 @@ for (const [width, height] of [
         if (ending === 'wolf') {
           const { good } = await state(page);
           /*
-           * Any bad skill lets the wolf in, but not the Wing Ride: its perk flies Purple on and
-           * opens the next friend's offer, so the door is not where the run stands afterwards
+           * Any bad skill lets the wolf in, but not the Wing Ride: its perk flies Purple over the
+           * river to the far bank, and this spec is about the door, not the flight
            * (e2e/perks.spec.ts plays that one).
            */
           const rides = (await skills(page))
