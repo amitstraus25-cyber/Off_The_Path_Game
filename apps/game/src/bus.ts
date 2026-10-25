@@ -10,6 +10,8 @@ export interface GameEvents {
   reachedNotice: { noticeId: string };
   /** A replay began: the world must put Purple back at the spawn. */
   restartRun: void;
+  /** Purple walked into the shut bridge gate: say the Gatekeeper has the key (once per bump). */
+  gateLocked: void;
   /** The cottage is still locked; show the hint line. */
   cottageLocked: void;
   /** Phaser finished booting the forest. */

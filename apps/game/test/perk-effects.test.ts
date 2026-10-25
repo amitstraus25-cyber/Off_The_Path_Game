@@ -12,7 +12,7 @@ import { v2 } from '@otp/core';
 import raw from '../../../content/game.v2.json';
 import { createStore } from '../src/store';
 import { gameRun, outOfTime, remainingMs } from '../src/world/run';
-import { perkLine } from '../src/ui/perks';
+import { perkLine, wingRideTo } from '../src/ui/perks';
 import { Hud } from '../src/ui/Hud';
 import { strings } from '../src/ui/copy';
 
@@ -90,18 +90,51 @@ describe('what the forest is told about the perks', () => {
       const run = forest(seed);
       const world = gameRun(run.store);
       expect(world.walkFactor()).toBe(1);
-      expect(world.forkSigns()).toBe(false);
+      expect(world.gateOpen()).toBe(false);
       expect(world.lantern()).toBe(false);
       answer(run.store, 'walk-faster', 'take');
-      answer(run.store, 'fork-signs', 'take');
       answer(run.store, 'lantern', 'take');
       const faster = content.skills.find((s) => s.effect.kind === 'walk-faster')!.effect as {
         factor: number;
       };
       expect(world.walkFactor()).toBe(faster.factor);
-      expect(world.forkSigns()).toBe(true);
       expect(world.lantern()).toBe(true);
     }
+  });
+
+  /*
+   * THE BRIDGE GATE (docs/GATEKEEPER.md): shut until the run has a `bridge-gate` perk, open from the
+   * take whatever copy it was, and shut again on a replay. Read by KIND, so the first test hands the
+   * world a store whose only perk is that kind and does not wait on the content that carries it.
+   */
+  it('reads the gate as open exactly when the run holds a bridge-gate perk', () => {
+    const run = forest();
+    const real = gameRun(run.store);
+    expect(real.gateOpen()).toBe(false);
+    const perk = { kind: 'bridge-gate', s: 'a-key', at: 1000 };
+    const held = (perks: unknown[]) =>
+      gameRun({
+        ...run.store,
+        getState: () => ({ ...run.store.getState(), perks }),
+      } as unknown as typeof run.store);
+    expect(held([]).gateOpen()).toBe(false);
+    expect(held([{ kind: 'lantern', s: 'x', at: 0 }]).gateOpen()).toBe(false);
+    expect(held([perk]).gateOpen()).toBe(true);
+  });
+
+  const key = content.skills.find((s) => (s.effect.kind as string) === 'bridge-gate');
+  // Content carries Bridge Key only once the rules builder's change has merged.
+  it.skipIf(!key)('opens the gate on a take of Bridge Key and leaves it shut on a leave', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const run = forest(seed);
+      const world = gameRun(run.store);
+      expect(world.gateOpen()).toBe(false);
+      answer(run.store, 'bridge-gate' as v2.EffectKind, 'take');
+      expect(world.gateOpen()).toBe(true);
+    }
+    const left = forest();
+    answer(left.store, 'bridge-gate' as v2.EffectKind, 'leave');
+    expect(gameRun(left.store).gateOpen()).toBe(false);
   });
 
   it('a leave gives nothing', () => {
@@ -199,19 +232,28 @@ describe('each perk says one line, from the content, by kind', () => {
     expect(perkLine(perk)).toContain(String(Math.round(rewind.ms / 1000)));
   });
 
-  it('a ride with nobody left to fly to says so', () => {
-    const run = forest();
-    const ride = content.skills.find((s) => s.effect.kind === 'wing-ride')!;
-    const giver = content.characters.find((c) => c.skillId === ride.id)!;
-    for (const c of content.characters) {
-      if (c.id === giver.id) continue;
-      run.store.dispatch({ type: 'MEET', c: c.id });
-      run.store.dispatch({ type: 'VERDICT', s: c.skillId, v: 'leave' });
-    }
-    answer(run.store, 'wing-ride', 'take');
-    const perk = run.store.getState().perks.at(-1)!;
-    expect(perk.kind === 'wing-ride' && perk.to).toBeNull();
+  it('a ride recorded with nobody to fly to says so', () => {
+    const perk = {
+      kind: 'wing-ride',
+      s: 'x',
+      at: 0,
+      flightMs: 1000,
+      to: null,
+    } as unknown as v2.Perk;
+    expect(wingRideTo(perk)).toBeNull();
     expect(perkLine(perk)).toBe(strings['perkWingRideNobody']);
+  });
+
+  it('a ride with no friend to land beside is the flight over the river, and says the ride line', () => {
+    // The Wing Ride's landing is the map's point, so its perk needs no `to` at all.
+    const perk = { kind: 'wing-ride', s: 'x', at: 0, flightMs: 1000 } as unknown as v2.Perk;
+    expect(wingRideTo(perk)).toBeUndefined();
+    expect(perkLine(perk)).toBe(strings['perkWingRide']);
+  });
+
+  it('a perk core adds is a line of its own and never a blank toast', () => {
+    const perk = { kind: 'bridge-gate', s: 'x', at: 0 } as unknown as v2.Perk;
+    expect(perkLine(perk)).not.toBe('');
   });
 });
 
