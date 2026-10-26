@@ -49,7 +49,13 @@ const MAX_ROWS_READ = 100;
  * the floor -- a wolf run at 0 and unposted, a clean empty basket at 10 -- and would rank by a rule
  * the board no longer uses. Set to a minute or two after the deploy that ships the floor.
  */
-export const BOARD_SINCE = '2026-10-25T13:40:00Z';
+/*
+ * Moved to 2026-10-25T22:50:00Z for rules 3, the Gatekeeper and the river (docs/GATEKEEPER.md),
+ * at the client's word on 2026-10-26: a run must now cross the river, and only eight deals remain,
+ * so rows scored under rules 2 rank a different game. The push that shipped rules 3 landed at
+ * 22:44Z; the cut is a few minutes after it, once the deploy was live.
+ */
+export const BOARD_SINCE = '2026-10-25T22:50:00Z';
 
 /**
  * The status PostgREST answers to an insert on a table.

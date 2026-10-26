@@ -176,8 +176,8 @@ the repo.
   time since the token must cover the walk; this replaced the flat 10 s `MIN_RUN_MS` in `8c4dc49`.
   A post more than five minutes off the game clock is a 410. One token is one row (409), per
   instance. Thirty writes a minute per instance, then 429.
-- `GET /api/top` answers the top ten, rows from `BOARD_SINCE` (2026-10-25T13:40:00Z, the client's reset for the 25-point floor; before
-  it 2026-10-22T21:25:00Z, the reset for speed, first set at 09:25Z; it replaced the v2-launch cut) and above 0, cached 10 s plus 20 s stale,
+- `GET /api/top` answers the top ten, rows from `BOARD_SINCE` (2026-10-25T22:50:00Z, the client's reset for rules 3; before it
+  2026-10-25T13:40:00Z for the 25-point floor and 2026-10-22T21:25:00Z, the reset for speed, first set at 09:25Z; it replaced the v2-launch cut) and above 0, cached 10 s plus 20 s stale,
   so never more than 30 s old. The post's own answer carries its rank and the board, so a player
   sees their row at once.
 - The discriminators: `GET /api/start` and `GET /api/score` answer **405 `Allow: POST`** when

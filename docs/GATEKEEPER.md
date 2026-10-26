@@ -121,5 +121,5 @@ Each builder works in its own git worktree, and the lead merges the three. Brows
 - The Magpie's exact spot: the client's picture replaces the default above.
 - The real-world note for Bridge Key is a draft and needs the research team's sign-off, like the
   others.
-- Resetting the leaderboard when this ships (scores from rules 2 and rules 3 are not comparable).
-  The client decides when.
+- ~~Resetting the leaderboard when this ships~~ Decided 2026-10-26: reset. `BOARD_SINCE` is
+  2026-10-25T22:50:00Z, so the board ranks only rules 3 runs.

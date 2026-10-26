@@ -143,6 +143,8 @@ describe('the table adapter', () => {
     expect(asked.searchParams.get('created_at')).toBe(`gte.${BOARD_SINCE}`);
     // Later than the v2 launch it replaced, so the v1 rows out of 1,000 stay out too.
     expect(Date.parse(BOARD_SINCE)).toBeGreaterThan(Date.parse('2026-10-21T23:45:00Z'));
+    // And after the push that shipped rules 3, so no run from before the river is ranked.
+    expect(Date.parse(BOARD_SINCE)).toBeGreaterThan(Date.parse('2026-10-25T22:44:44Z'));
   });
 
   it('reads no zero: the wolf runs written before they stopped being posted stay off the board', async () => {
