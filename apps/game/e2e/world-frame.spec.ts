@@ -130,7 +130,7 @@ test('the frame and the wordmark stay put through a whole encounter', async ({ p
   await tag(page, ANNOUNCE, 'announce');
 
   for (const [label, action, phase] of [
-    // Meeting the Owl opens the conversation before her card (2026-10-26).
+    // Meeting the Owl opens her greeting before her card (2026-10-26).
     ['02 Offer', { type: 'MEET', c: 'owl' }, 'talk'],
   ] as const) {
     await step(page, action, phase);

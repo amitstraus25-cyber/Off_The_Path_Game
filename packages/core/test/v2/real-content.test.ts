@@ -428,8 +428,8 @@ describe('the cast stands on art that exists', () => {
  * they look around, overshoot, and walk back. A careful reader must make it even so.
  *
  * TALKING AND READING. One rate for everything, `v2.READING` (sim.ts, where its source is cited):
- * a conversation is the longest greeting and offer read at that rate, plus a second for each of
- * Purple's two replies; a card is
+ * a conversation is the longest greeting read at that rate, plus a second for Purple's reply; a
+ * card is
  * charged by the simulator itself, from the words on the card THE DEAL SHOWS -- so a bad card's
  * giveaway line costs its reading time too, and the check is run over every deal (8 since rules 3).
  *
@@ -502,13 +502,13 @@ function tour(): { legs: { to: string; tiles: number }[]; tiles: number } {
 }
 
 /**
- * The longest conversation, read, plus pressing on twice: the greeting, Purple's ask, the offer and
- * Purple's "Show me" (the conversation before the card, 2026-10-26). The simulator charges one talk
- * per character.
+ * The longest greeting, read, plus pressing on once: what they have and how it helps, then Purple's
+ * "Tell me more" (the client, 2026-10-26). The simulator charges one talk per character, and the
+ * card's own lines on top.
  */
-const talkWords = (c: v2.Character): number => words(c.greet) + words(c.offer);
+const talkWords = (c: v2.Character): number => words(c.greet);
 const talkMs = (): number =>
-  Math.max(...content.characters.map(talkWords)) * v2.READING.msPerWord + 2 * PRESS_ON_MS;
+  Math.max(...content.characters.map(talkWords)) * v2.READING.msPerWord + PRESS_ON_MS;
 
 /** The pace for a tour of `tiles`, doubled for wandering, spread evenly over every leg. */
 function paceFor(tiles: number): v2.Pace {

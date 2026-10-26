@@ -170,29 +170,30 @@ test "the giveaway is not always on the same line"). Content version `3.0.0-draf
 | `skills[night-light].realWorld`            | Excessive agency: A helper that acts without asking can send, pay or delete before you notice. Keep a human approving the steps that matter. | Anyone-with-the-link sharing: A link anyone can open is open to attackers too. Share what a skill makes with the people who need it, nobody else. | **Research sign-off.** Prompt injection moved to the Wing Ride (below).                                                                   |
 | `skills[short-cut].realWorld`              | Supply-chain risk: A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight.      | Prompt injection: A skill that follows instructions a stranger hid in what it reads can be steered by an attacker. Ask who wrote its plan.        | **Research sign-off.** The client, 2026-10-26: the research's own lesson is back, on the card whose giveaway is a stranger's flight plan. |
 
-### 0e. The conversation before the card (the client, 2026-10-26)
+### 0e. The greeting before the card (the client, 2026-10-26)
 
-Meeting someone opens a short exchange before the card: their greeting, Purple's "What have you
-got?", their offer, and Purple's "Show me". The offer is new copy, one line per character in their
-own voice, and the same for the good and the bad deal, so nothing before the card gives it away. It
-is also the line over the open card. The card copy itself is unchanged. Content version
-`3.0.0-draft.5`. All lines **DRAFT** for the human read.
+Meeting someone opens ONE line in their voice, saying what they have and how it helps you (the
+client: "I want it to be clear what each person has and how it can help you"), and Purple's two
+replies: "Tell me more" opens the card, which is the more information, and "No thanks" walks on.
+The line is on the character, so it is the same for the good and the bad deal and gives nothing
+away; it heads the card too. The shape is "I have a [thing]. It helps you [benefit].", kept to about 15
+words, because the clock charges the longest of them to every meeting. Each line keeps its
+character's opener from before (Hello!, Hoo!, Evening!, Slow, but sure). The card's lines are
+unchanged. Content version `3.0.0-draft.7`. All lines **DRAFT** for the human read.
 
-| Path                                      | Line                                                       |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `characters[rabbit].offer`                | I can draw you a map of the whole wood.                    |
-| `characters[gatekeeper].offer`            | My key lowers the drawbridge, so you can cross.            |
-| `characters[magpie].offer`                | I'll fly you over the river to the far bank.               |
-| `characters[owl].offer`                   | Her words go ahead, so Grandma expects you.                |
-| `characters[snail].offer`                 | I'll carry your heavy things, sealed. You walk light.      |
-| `characters[lantern-keeper].offer`        | It lights up the path when the sun goes down.              |
-| `characters[cat].offer`                   | It holds back the dark a little longer.                    |
-| `ui.offer.purple`                         | Little Purple                                              |
-| `ui.offer.ask`                            | What have you got?                                         |
-| `ui.offer.showMe`                         | Show me                                                    |
-| `ui.offer.noThanks`                       | No thanks                                                  |
-| `ui.howTo.steps[2]`                       | Reach Grandma in 3:30. Faster scores more.                 |
-| `ui.chrome.startPar` (the one-screen A/B) | Beat par {par} for the speed bonus. The walk ends at 3:30. |
+| Path                                      | Was                                                        | Now                                                                            |
+| ----------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `characters[rabbit].greet`                | Hello! I drew this map myself. Never once lost.            | Hello! I have a map of the whole wood. It'll help you find your way.           |
+| `characters[gatekeeper].greet`            | Nobody crosses without my key. I keep this bridge.         | I keep this bridge, and I have its key. It lets you cross the river.           |
+| `characters[magpie].greet`                | Can't swim? Hop on. Wings are quicker than bridges.        | Can't swim? I have wings. I'll fly you over the river.                         |
+| `characters[owl].greet`                   | Hoo! My sister wove these words. Finest hand in the wood.  | Hoo! I have my sister's woven words. They tell Grandma you're coming.          |
+| `characters[snail].greet`                 | Slow, but sure. I'll carry your parcel.                    | Slow, but sure. I have a sealed bag. It carries your load, so you walk light.  |
+| `characters[lantern-keeper].greet`        | Evening! I made this lamp for the dark pines.              | Evening! I have a lamp for the dark pines. It lights your path at dusk.        |
+| `characters[cat].greet`                   | Grandma made this for you. The kettle's on.                | I have something Grandma made for you. It holds back the dark a little longer. |
+| `ui.offer.ask`                            | (new)                                                      | Tell me more                                                                   |
+| `ui.offer.noThanks`                       | (new)                                                      | No thanks                                                                      |
+| `ui.howTo.steps[2]`                       | Reach Grandma in 3:00. Faster scores more.                 | Reach Grandma in 3:30. Faster scores more.                                     |
+| `ui.chrome.startPar` (the one-screen A/B) | Beat par {par} for the speed bonus. The walk ends at 3:00. | Beat par {par} for the speed bonus. The walk ends at 3:30.                     |
 
 ## 1. The fine print (the whole lesson)
 

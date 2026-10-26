@@ -214,31 +214,34 @@ takes the seed from `POST /api/start` (the server signs it into the run's token)
 `crypto.getRandomValues` when the start does not answer, then passes it to
 `createState(content, seed)` and to `RESET { seed }`; a bad seed is refused (`bad-seed`). The state carries `seed` and `good`.
 
-### The conversation before the card (the client, 2026-10-26)
+### The greeting before the card (the client, 2026-10-26)
 
-Meeting someone no longer opens their card. It opens a short exchange, "like a ping pong": the
-character's greeting (`greet`), Purple's reply button "What have you got?", the character's offer
-(`offer`, one line in their own voice), and Purple's "Show me", which sends the INSPECT that opens
-the card and logs it as read. "No thanks", or the panel's Walk on, leaves for the forest with
-nothing read; the character waits, and meeting them again starts the conversation over. The clock
-keeps running through it (the client's choice), so it is two of their lines and two taps.
+Meeting someone no longer opens their card. It opens ONE line in the character's voice (`greet`),
+saying what they have and how it helps you, and Purple's two replies: "Tell me more" sends the
+INSPECT that opens the card and logs it as read, and "No thanks", or the panel's Walk on, leaves
+for the forest with nothing read; the character waits, and meeting them again greets again. One
+interaction, at the client's word: a first build that day had a second line and a "Show me" after
+it, and the client asked to go straight to the card and to have the one line say plainly what each
+person has and how it helps.
 
-The greeting and the offer live on the CHARACTER, not on a variant, so nothing said before the card
-differs between a good deal and a bad one: only the card can give it away. The reducer needed no new
-rule -- MEET has always landed in `talk` and INSPECT in `card`; between 2026-10-22 and this change
-the client opened the card itself on every MEET, and now the player does.
+The greeting lives on the CHARACTER, not on a variant, so nothing before the card's lines differs
+between a good deal and a bad one. The reducer needed no new rule -- MEET has always landed in
+`talk` and INSPECT in `card`; between 2026-10-22 and this change the client opened the card itself
+on every MEET, and now the player does.
 
-What it cost, measured with the project's own clock check (`test/v2/real-content.test.ts`): a
-careful reader's talk went from 4.3 s to 7.7 s a character, and at 3:00 they arrived 14.5 s late.
-So the walk is 3:30 (`TIME_LIMIT_MS`) and par moved to 2:02, and the board was reset at launch
-(`BOARD_SINCE`), because the same play now scores differently.
+What it cost, measured with the project's own clock check (`test/v2/real-content.test.ts`, the tour
+101 tiles with the Cat up her lane): each talk is charged the longest greeting read plus one tap.
+With the lines at about 15 words, a careful reader arrives at 3:06.6, so at 3:00 they would be
+late. The walk is 3:30 (`TIME_LIMIT_MS`), 23.4 s to spare; par re-derives at 1:55.4 and stays
+2:02, inside its ten-second band. The board was reset at launch (`BOARD_SINCE`), because the same
+play now scores differently.
 
 ### Verdicts, clock, run log
 
 - **`Verdict = 'take' | 'leave'`**, from the conversation or the card; reading is optional. A skill
   walked past counts as left.
-- **`TIME_LIMIT_MS = 210_000`** (3:30; 180_000 until 2026-10-26, when the conversation before the
-  card cost a careful reader about thirty seconds over the walk), a rule constant, injected as elapsed ms since BEGIN. An action at
+- **`TIME_LIMIT_MS = 210_000`** (3:30; 180_000 until 2026-10-26, when the greeting before the card
+  and its tap cost a careful reader about twenty seconds over the walk), a rule constant, injected as elapsed ms since BEGIN. An action at
   or after the run's deadline is not applied and the run ends `late`, stamped at the deadline. The
   deadline is the limit plus whatever a `rewind` perk gave back (`deadlineMs`, perks.ts); stamps
   stay real elapsed time (section 11).
@@ -279,9 +282,9 @@ describes (apps/api). The bonus is rounded to a whole point with integer arithme
 division, so browser and server cannot round apart (`speedBonus`, scoring.ts).
 
 **Par is 2:02 (`scoring.parMs` 122000) since 2026-10-26, derived, not chosen** (it was 1:47 until
-every meeting became a conversation; see "The conversation before the card" below). Re-measured that
-day on draft 5 of rules 3, with the Cat up her own lane: the slowest brisk careful run is 120.7 s on
-a 101-tile tour, each talk charged the greeting and the offer read plus two presses. What follows is
+every meeting opened with a greeting first; see "The greeting before the card" below). Re-measured
+that day on rules 3, with the Cat up her own lane and the longer greetings: the derived par is
+1:55.4 on a 101-tile tour, and 2:02 sits inside the band above it. What follows is
 the derivation as first written on 2026-10-22: It is the arrival time of a careful
 run that walks the shortest content-order tour of the shipped map once (113 four-connected tiles at
 `WALK_SPEED`, about 30 s, since the Cat moved into the clearing on 2026-10-22), knocks at the door (`world.knockMs`, 3 s) and reads every greeting and every

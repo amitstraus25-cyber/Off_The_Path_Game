@@ -4,25 +4,25 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { startGame } from './helpers';
 
-/** The content file: the Rabbit's two lines and Purple's replies, as the game renders them. */
+/** The content file: the Rabbit's lines and Purple's replies, as the game renders them. */
 const v2 = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
 ) as {
-  characters: { id: string; skillId: string; greet: string; offer: string }[];
-  ui: { offer: { purple: string; ask: string } };
+  characters: { id: string; skillId: string; greet: string }[];
+  ui: { offer: { ask: string; noThanks: string } };
 };
 
 /*
- * THE CONVERSATION BEFORE THE CARD (the client, 2026-10-26: "like a ping pong"). Meeting someone
- * opens a short exchange: they greet, Purple asks "What have you got?", they say what they offer,
- * and "Show me" opens the card. "No thanks" walks on and the character waits. What has to hold, at
- * the sizes the client looks at:
+ * THE GREETING BEFORE THE CARD (the client, 2026-10-26). Meeting someone opens their one line --
+ * what they have and how it helps you -- and Purple's two replies: "Tell me more" opens the card at
+ * once (one interaction, the client's word the same day), and "No thanks" walks on while the
+ * character waits. What has to hold, at the sizes the client looks at:
  *
- *   - no card before "Show me", and nothing logged as read;
- *   - each turn says who is speaking, Purple's on the right;
+ *   - no card before "Tell me more", and nothing logged as read;
+ *   - the greeting says who is speaking;
  *   - Purple's replies are on screen and are what a pointer at their centre lands on;
- *   - "No thanks" leaves for the forest with nothing read, and meeting again starts over;
- *   - "Show me" opens the card and logs it as read;
+ *   - "No thanks" leaves for the forest with nothing read, and meeting again greets again;
+ *   - "Tell me more" opens the card, headed by the same greeting, and logs it as read;
  *   - no Lime anywhere on the panel (UI_FOUNDATIONS section 2: the offer's pills are outlines).
  */
 
@@ -36,7 +36,7 @@ const SIZES = [
 const meet = (page: Page, c: string) =>
   page.evaluate((id) => window.__otp!.store.dispatch({ type: 'MEET', c: id }), c);
 
-/** The centre of `selector`, and whether a pointer there lands on it. */
+/** Whether `selector` is inside the viewport and is what a pointer at its centre lands on. */
 async function reachable(page: Page, selector: string): Promise<boolean> {
   return page.locator(selector).evaluate((el) => {
     const r = el.getBoundingClientRect();
@@ -46,20 +46,18 @@ async function reachable(page: Page, selector: string): Promise<boolean> {
 }
 
 for (const size of SIZES) {
-  test(`the conversation comes before the card, at ${size.width}x${size.height}`, async ({
-    page,
-  }) => {
+  test(`the greeting comes before the card, at ${size.width}x${size.height}`, async ({ page }) => {
     await page.setViewportSize(size);
     await page.goto('/');
     await startGame(page);
-    const greet = v2.characters.find((c) => c.id === 'rabbit')!;
-    const words = v2.ui.offer;
+    const rabbit = v2.characters.find((c) => c.id === 'rabbit')!;
 
     await meet(page, 'rabbit');
     const talk = page.locator('[data-offer="rabbit"][data-talk]');
-    await expect(talk).toHaveAttribute('data-talk', 'greet');
-    await expect(talk.locator('.otp-chat__turn')).toHaveCount(1);
-    await expect(talk.locator('.otp-chat__turn .otp-dialogue__line')).toHaveText(greet.greet);
+    await expect(talk.locator('.otp-dialogue__speaker')).toHaveText('Rabbit');
+    await expect(talk.locator('.otp-dialogue__line')).toHaveText(rabbit.greet);
+    await expect(talk.locator('[data-action="ask"]')).toHaveText(v2.ui.offer.ask);
+    await expect(talk.locator('[data-action="no-thanks"]')).toHaveText(v2.ui.offer.noThanks);
     await expect(page.locator('[data-card-take]')).toHaveCount(0);
     expect(await page.evaluate(() => window.__otp!.store.getState().inspected)).toEqual([]);
 
@@ -73,45 +71,25 @@ for (const size of SIZES) {
         return [s.backgroundColor, s.borderTopColor, s.color].includes('rgb(191, 255, 162)');
       }),
     );
-    expect(lime, 'Lime on the conversation').toBe(false);
+    expect(lime, 'Lime on the greeting').toBe(false);
 
+    // "No thanks": back to the forest, nothing read, and the Rabbit greets again.
     await page.waitForTimeout(320);
-    await talk.locator('[data-action="ask"]').click();
-    await expect(talk).toHaveAttribute('data-talk', 'offer');
-    const turns = talk.locator('.otp-chat__turn');
-    await expect(turns).toHaveCount(3);
-    await expect(turns.nth(1).locator('.otp-dialogue__speaker')).toHaveText(words.purple);
-    await expect(turns.nth(1).locator('.otp-dialogue__line')).toHaveText(words.ask);
-    await expect(turns.nth(2).locator('.otp-dialogue__line')).toHaveText(greet.offer);
-    // Purple's turn sits on the right, the Rabbit's on the left.
-    const [theirs, mine] = await Promise.all([
-      turns.nth(0).boundingBox(),
-      turns.nth(1).boundingBox(),
-    ]);
-    expect(mine!.x + mine!.width).toBeGreaterThan(theirs!.x + theirs!.width);
-    expect(mine!.x).toBeGreaterThan(theirs!.x);
-    for (const sel of ['[data-action="show-me"]', '[data-action="no-thanks"]'])
-      expect(await reachable(page, `[data-offer] ${sel}`), sel).toBe(true);
-    await expect(page.locator('[data-card-take]')).toHaveCount(0);
-
-    // "No thanks": back to the forest, nothing read, and the Rabbit starts over.
     await talk.locator('[data-action="no-thanks"]').click();
     await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
     expect(await page.evaluate(() => window.__otp!.store.getState().inspected)).toEqual([]);
     await meet(page, 'rabbit');
-    await expect(talk).toHaveAttribute('data-talk', 'greet');
-    await expect(talk.locator('.otp-chat__turn')).toHaveCount(1);
+    await expect(talk.locator('.otp-dialogue__line')).toHaveText(rabbit.greet);
 
-    // "Show me": the card, and now it is read.
+    // "Tell me more": straight to the card, under the greeting, and now it is read.
     await page.waitForTimeout(320);
     await talk.locator('[data-action="ask"]').click();
-    await talk.locator('[data-action="show-me"]').click();
-    await expect(
-      page.locator('[data-offer="rabbit"][data-card] [data-card-take] li').first(),
-    ).toBeVisible();
-    await expect(page.locator('[data-offer="rabbit"][data-card] .otp-card')).toBeFocused();
+    const card = page.locator('[data-offer="rabbit"][data-card]');
+    await expect(card.locator('[data-card-take] li').first()).toBeVisible();
+    await expect(card.locator('.otp-offer__voice .otp-dialogue__line')).toHaveText(rabbit.greet);
+    await expect(card.locator('.otp-card').first()).toBeFocused();
     expect(await page.evaluate(() => window.__otp!.store.getState().inspected)).toEqual([
-      greet.skillId,
+      rabbit.skillId,
     ]);
     expect(
       await page.evaluate(() => document.scrollingElement!.scrollWidth - innerWidth),
@@ -120,7 +98,18 @@ for (const size of SIZES) {
   });
 }
 
-test('a finger that taps through the replies cannot answer a card it has not had a second with', async ({
+test('Enter on "Tell me more" opens the card with focus on it', async ({ page }) => {
+  await page.goto('/');
+  await startGame(page);
+  await meet(page, 'rabbit');
+  const ask = page.locator('[data-offer][data-talk] [data-action="ask"]');
+  await expect(ask).toBeVisible();
+  await ask.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-offer][data-card] .otp-card').first()).toBeFocused();
+});
+
+test('a finger that taps through the greeting cannot answer a card it has not had a second with', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -133,14 +122,13 @@ test('a finger that taps through the replies cannot answer a card it has not had
   await startGame(page);
   await meet(page, 'rabbit');
   await page.waitForTimeout(1100);
-  await page.locator('[data-action="ask"]').tap();
-  const showMe = (await page.locator('[data-action="show-me"]').boundingBox())!;
-  const x = showMe.x + showMe.width / 2;
-  const y = showMe.y + showMe.height / 2;
+  const ask = (await page.locator('[data-action="ask"]').boundingBox())!;
+  const x = ask.x + ask.width / 2;
+  const y = ask.y + ask.height / 2;
   await page.touchscreen.tap(x, y);
   await expect(page.locator('[data-offer][data-card]')).toBeVisible();
   // The card mounts fresh, so a second tap on the same spot -- where Take it now is -- is still
-  // the finger that tapped "Show me", and answers nothing.
+  // the finger that asked, and answers nothing.
   await page.touchscreen.tap(x, y);
   await page.waitForTimeout(200);
   expect(await page.evaluate(() => window.__otp!.store.getState().verdicts)).toEqual({});

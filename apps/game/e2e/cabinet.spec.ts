@@ -136,14 +136,14 @@ test('the joystick walks with a mouse: a click steps, a hold walks until let go'
   expect((await probe(page)).position.x).toBeCloseTo(released, 0);
 });
 
-test('A talks with a mouse, and opens the conversation before the card', async ({ page }) => {
+test('A talks with a mouse, and opens the greeting before the card', async ({ page }) => {
   await page.setViewportSize(REFERENCE_VIEWPORTS.desktop);
   await page.goto('/');
   await startGame(page);
   await walkTo(page, await talkingDistance(page, 'npc-rabbit'));
 
   await page.locator('.otp-a-button').click();
-  // One press opens the conversation; the card waits for Purple's "Show me".
+  // One press opens the greeting; the card waits for Purple's "Tell me more".
   await page.waitForFunction(() => window.__otp!.store.getState().phase === 'talk');
   await expect(page.locator('[data-offer="rabbit"][data-talk] [data-action="ask"]')).toBeVisible();
   // In the offer A is idle: an answer is the player's, never a button mashed through.

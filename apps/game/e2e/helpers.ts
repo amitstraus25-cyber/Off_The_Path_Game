@@ -136,9 +136,9 @@ export async function toTheReveal(page: Page): Promise<void> {
 }
 
 /**
- * THROUGH THE CONVERSATION TO THE CARD (the client, 2026-10-26): "What have you got?", then "Show
- * me". Meeting someone opens the conversation, not the card. Waits out the double-click guard first
- * (components.tsx `activationIsDeliberate`), because a spec is faster than any player.
+ * PAST THE GREETING TO THE CARD (the client, 2026-10-26): "Tell me more" opens it. Meeting
+ * someone opens the greeting, not the card. Waits out the double-click guard first (components.tsx
+ * `activationIsDeliberate`), because a spec is faster than any player.
  */
 export async function askToSee(page: Page, who?: string): Promise<void> {
   const offer = who ? `[data-offer="${who}"]` : '[data-offer]';
@@ -146,7 +146,6 @@ export async function askToSee(page: Page, who?: string): Promise<void> {
   await expect(talk).toBeVisible();
   await page.waitForTimeout(320);
   await talk.locator('[data-action="ask"]').click();
-  await talk.locator('[data-action="show-me"]').click();
   await expect(page.locator(`${offer}[data-card]`)).toBeVisible();
 }
 

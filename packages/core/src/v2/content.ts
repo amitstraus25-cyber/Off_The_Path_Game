@@ -140,13 +140,13 @@ const character = z.strictObject({
   spawn: slug,
   /** The ONE skill this character offers. */
   skillId: slug,
-  /** The first line of the conversation: who they are. */
-  greet: text,
   /**
-   * The second line, after Purple asks what they have: what they offer, in their own voice. One
-   * copy for both variants, like the greeting, so nothing said before the card gives it away.
+   * Their one opening line: what they have and how it helps you, in their own voice (the client,
+   * 2026-10-26: "I want it to be clear what each person has and how it can help you"). Purple's
+   * "Tell me more" opens the card. One copy for both variants, so nothing before the card's lines
+   * gives it away.
    */
-  offer: text,
+  greet: text,
 });
 
 const ending = z.strictObject({ title: text, lines: z.array(text).min(1) });
@@ -389,20 +389,17 @@ const ui = z.strictObject({
     }),
   }),
   /**
-   * 02 Offer: the frame title, the two answers and the way out, and Purple's three replies in the
-   * conversation before the card (the client, 2026-10-26: "like a ping pong"). The character greets,
-   * Purple `ask`s, they offer, and `showMe` opens the card -- which is what logs it as read.
-   * `noThanks` is Walk on in Purple's voice: no answer, and the character waits. `purple` is the
-   * name over her side of the conversation.
+   * 02 Offer: the frame title, the two answers and the way out, and Purple's two replies to the
+   * greeting before the card (the client, 2026-10-26). `ask` ("Tell me more") opens the card at once
+   * -- which is what logs it as read; `noThanks` is Walk on in Purple's voice: no answer, and the
+   * character waits.
    */
   offer: z.strictObject({
     title: text,
     take: text,
     leave: text,
     walkOn: text,
-    purple: text,
     ask: text,
-    showMe: text,
     noThanks: text,
   }),
   /** The card inside the offer: the two row eyebrows, what taking it does and what leaving costs. */

@@ -50,7 +50,6 @@ export const raw = {
       spawn: 'spawn-magpie',
       skillId: 'courier',
       greet: 'Fixture greeting two.',
-      offer: 'Fixture offer two.',
     },
     {
       id: 'glowworm',
@@ -58,7 +57,6 @@ export const raw = {
       spawn: 'spawn-glowworm',
       skillId: 'lantern',
       greet: 'Fixture greeting one.',
-      offer: 'Fixture offer one.',
     },
     {
       id: 'fox',
@@ -66,7 +64,6 @@ export const raw = {
       spawn: 'spawn-fox',
       skillId: 'locksmith',
       greet: 'Fixture greeting three.',
-      offer: 'Fixture offer three.',
     },
   ],
   skills: [
@@ -163,9 +160,7 @@ export const raw = {
       take: 'Fixture take',
       leave: 'Fixture leave',
       walkOn: 'Fixture walk on',
-      purple: 'Fixture purple',
       ask: 'Fixture ask',
-      showMe: 'Fixture show me',
       noThanks: 'Fixture no thanks',
     },
     card: {

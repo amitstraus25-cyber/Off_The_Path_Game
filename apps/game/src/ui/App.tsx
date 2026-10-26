@@ -522,9 +522,9 @@ export function App({
       case 'howto':
         return <HowTo ui={content.ui} onGo={onGo} busy={starting} />;
       /*
-       * The conversation, then the card (the client, 2026-10-26): `talk` is the two lines and
-       * Purple's replies, and "Show me" sends the INSPECT that moves the run to `card`. Two panels
-       * with two keys, so the card mounts fresh and its answers get their own settle time.
+       * The greeting, then the card (the client, 2026-10-26): `talk` is the greeting and Purple's
+       * two replies, and "Tell me more" sends the INSPECT that moves the run to `card`. Two
+       * panels with two keys, so the card mounts fresh and its answers get their own settle time.
        */
       case 'talk':
         return character && skill ? (
@@ -532,7 +532,7 @@ export function App({
             key={`talk-${character.id}`}
             words={content.ui.offer}
             character={character}
-            onShowMe={() => void store.dispatch({ type: 'INSPECT', s: skill.id })}
+            onAsk={() => void store.dispatch({ type: 'INSPECT', s: skill.id })}
             onWalkOn={() => walkOn(store)}
           />
         ) : null;

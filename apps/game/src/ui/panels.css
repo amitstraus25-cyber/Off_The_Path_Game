@@ -992,46 +992,25 @@
 }
 
 /*
- * THE CONVERSATION BEFORE THE CARD (the client, 2026-10-26: "like a ping pong"; Dialogue.tsx
- * `Conversation`). Turns stack top to bottom like a chat: the character's on the left on Natural,
- * Purple's on the right on Haze, her colour. Black text on both, 15:1 and 13:1. The speaker's name
- * rides on each turn, so neither side is told apart by colour alone.
+ * THE GREETING BEFORE THE CARD (the client, 2026-10-26; Dialogue.tsx `Conversation`): the
+ * character's line on Natural, with their name over it, and Purple's two replies under it as the
+ * same outline pills the verdicts use. Black on Natural is 15:1.
  */
-.otp-chat__log {
-  display: flex;
-  flex-direction: column;
-  gap: calc(8px * var(--otp-ui));
-  padding-bottom: calc(10px * var(--otp-ui));
-}
-
 .otp-chat__turn {
-  align-self: flex-start;
   max-width: 85%;
+  margin-bottom: calc(10px * var(--otp-ui));
   padding: calc(8px * var(--otp-ui)) calc(12px * var(--otp-ui));
   border-radius: var(--otp-r-inset);
   background: var(--cyera-natural);
-  animation: otp-panel-in var(--otp-motion-slow) ease-out both;
-}
-
-.otp-chat__turn[data-mine] {
-  align-self: flex-end;
-  background: var(--cyera-haze);
-  text-align: right;
 }
 
 .otp-chat__turn .otp-dialogue__speaker {
   margin-bottom: calc(2px * var(--otp-ui));
 }
 
-/* A line is as tall as it is here: the turns stack, so there is no greeting cell to hold still. */
+/* As tall as the line is: the greeting holds no cell still for a line that types in. */
 .otp-chat .otp-dialogue__line {
   min-height: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .otp-chat__turn {
-    animation: none;
-  }
 }
 
 /*

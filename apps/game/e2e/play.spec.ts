@@ -110,8 +110,8 @@ async function walkIntoCottage(page: Page): Promise<void> {
 
 /**
  * Meets the seven in walking order and answers each with `choose`. Every offer opens with the
- * conversation, and "Show me" opens the card (the client, 2026-10-26); with `read`, its lines are
- * collected before answering.
+ * greeting, and "Tell me more" opens the card (the client, 2026-10-26); with `read`, its
+ * lines are collected before answering.
  */
 async function walkTheCast(
   page: Page,
@@ -476,15 +476,12 @@ test('keyboard only: begin, talk, read, answer, arrive, reveal, replay', async (
   for (const c of await cast(page)) {
     await standBeside(page, c.spawn);
     await page.keyboard.press('t');
-    // The conversation by keyboard: Tab to Purple's reply, then Enter twice -- "What have you
-    // got?" and "Show me" are one button, so focus stays on it between the two.
+    // The greeting by keyboard: Tab to Purple's "Tell me more", and Enter opens the card.
     const ask = page.locator(`[data-offer="${c.id}"][data-talk] [data-action="ask"]`);
     await expect(ask).toBeVisible();
     for (let n = 0; n < 6 && !(await ask.evaluate((b) => b === document.activeElement)); n++)
       await page.keyboard.press('Tab');
     await expect(ask).toBeFocused();
-    await page.keyboard.press('Enter');
-    await expect(page.locator(`[data-offer="${c.id}"] [data-action="show-me"]`)).toBeFocused();
     await page.keyboard.press('Enter');
     const card = page.locator(`[data-offer="${c.id}"][data-card="${c.skillId}"]`);
     // The card is open and focus lands on it, so nothing is pre-selected; then Take, Leave, Walk on.

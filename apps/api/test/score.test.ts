@@ -152,11 +152,11 @@ describe('the score the board stores', () => {
   });
 
   it('posts a late run at `played` too', async () => {
-    // Ended, but the clock ran out on the way (core scoring.ts). Played honestly at thirty seconds
-    // a walk, so the reducer itself ended it.
+    // Ended, but the clock ran out on the way (core scoring.ts). Played honestly at thirty-four
+    // seconds a walk, so the reducer itself ended it.
     const h = harness();
     const { seed, token } = TOKENS.issue(h.clock.now);
-    const log = v2.toRunLog(runOf('careful', seed, { walkMs: 30_000, talkMs: 1000 }));
+    const log = v2.toRunLog(runOf('careful', seed, { walkMs: 34_000, talkMs: 1000 }));
     expect(log.events.at(-1)?.e).toBe('late');
     h.clock.now += claimedMs(log) + 10_000;
 
