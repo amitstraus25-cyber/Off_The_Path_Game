@@ -2948,3 +2948,12 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
     right: 18%;
   }
 }
+
+/* On an upright phone the way in and the controls line sit in the middle of the board, not at its
+   left edge (the client, 2026-10-26: "should be centered in the middle"). The pill is inline-flex,
+   so centring the foot's text centres it too. */
+@media (orientation: portrait) {
+  .otp-title-dock[data-sign] .otp-title__foot {
+    text-align: center;
+  }
+}
