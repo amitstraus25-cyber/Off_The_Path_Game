@@ -873,7 +873,7 @@ specs and Paul's review.
 - [ ] **Human:** approve COPY_REVIEW 0e: the seven opening lines are approved (the client, 2026-10-26); Purple's two replies are not yet
 - [x] The card does not say the greeting again (the client, 2026-10-26): it opens on the skill itself, the greeting said once before it
 - [x] A finger's tap on the joystick is a one-tile nudge (the client, 2026-10-26: Purple "starts walking without stopping"): `TAP_PX`, one tile, for a touch tap; a mouse click and the walk buttons keep the four-tile step, a hold still walks until let go (`e2e/touch-pad.spec.ts`)
-- [x] A shared link previews as the landing (the client, 2026-10-26: LinkedIn): Open Graph and `twitter:card` tags in `index.html`, `public/og-image.png` the real landing at 1200x627, guarded in `test/public-page.test.ts`. The host is the Vercel address until the research-page URL arrives; a page that embeds the game needs its own `og:image`
+- [x] A shared link previews as the landing (the client, 2026-10-26: LinkedIn): Open Graph and `twitter:card` tags in `index.html`, `public/og-landing.png` the real landing in its wide layout, scaled to 1200x627 (a new picture takes a new name; LinkedIn keeps images by URL), guarded in `test/public-page.test.ts`. The host is the Vercel address until the research-page URL arrives; a page that embeds the game needs its own `og:image`
 
 ## Readiness findings (sweep of 2026-10-21)
 

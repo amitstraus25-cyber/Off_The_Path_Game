@@ -77,8 +77,12 @@ describe('the page a visitor downloads', () => {
  * landing page to show up"). LinkedIn, Slack, X and iMessage draw their preview from these tags in
  * the static HTML; none of them runs the script, so nothing rendered later can stand in for them.
  *
- * `public/og-image.png` is the landing itself, captured at LinkedIn's own 1200x627 from the real
- * page, not drawn for the purpose. The image URL must be absolute, so it names the live host; when
+ * `public/og-landing.png` is the landing itself, not drawn for the purpose: the real page in its
+ * wide layout (the client, 2026-10-26: "the landing picture of a web page like this"), captured at
+ * 1716x940 with the deck's stick and T hidden, cut to the header and the framed scene and scaled to
+ * LinkedIn's own 1200x627. A capture at 1200x627 itself is the narrow cabinet, controls at the
+ * sides, and was the wrong picture. A NEW picture takes a NEW file name: LinkedIn keeps an image by
+ * its URL. The image URL must be absolute, so it names the live host; when
  * the game moves to its research-page address, these move with it. (A page that embeds the game in
  * an iframe shares ITS tags, not these: the research page needs its own og:image.)
  */
@@ -89,7 +93,7 @@ describe('a link to the game, shared', () => {
 
   it('previews as the landing, large', () => {
     expect(tag('og:title')).toBe("Off the Path: That's Not My Grandma");
-    expect(tag('og:image')).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
+    expect(tag('og:image')).toMatch(/^https:\/\/[^/]+\/og-landing\.png$/);
     expect(tag('og:image:width')).toBe('1200');
     expect(tag('og:image:height')).toBe('627');
     expect(tag('twitter:card')).toBe('summary_large_image');
@@ -97,7 +101,7 @@ describe('a link to the game, shared', () => {
   });
 
   it('points at an image that ships, at the size it claims', () => {
-    const png = readFileSync(fileURLToPath(new URL('public/og-image.png', APP)));
+    const png = readFileSync(fileURLToPath(new URL('public/og-landing.png', APP)));
     // The IHDR chunk: width and height, big-endian, at bytes 16 and 20.
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 627]);
   });
