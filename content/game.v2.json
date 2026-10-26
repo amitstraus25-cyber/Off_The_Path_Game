@@ -1,6 +1,6 @@
 {
   "rules": 3,
-  "version": "3.0.0-draft.3",
+  "version": "3.0.0-draft.4",
   "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off); the Bridge Key's note is new in rules 3 (2026-10-25), not yet security-read, and pending the same sign-off",
   "deal": {
     "good": 3,
@@ -143,8 +143,8 @@
         "lands": "wing-landing"
       },
       "realWorld": {
-        "term": "Supply-chain risk",
-        "note": "A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight."
+        "term": "Prompt injection",
+        "note": "A skill that follows instructions a stranger hid in what it reads can be steered by an attacker. Ask who wrote its plan."
       },
       "good": {
         "card": {
