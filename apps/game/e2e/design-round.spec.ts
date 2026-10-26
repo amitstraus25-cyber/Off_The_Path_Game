@@ -149,7 +149,7 @@ test('the late ending says After dark, shows Purple and does not invite anyone i
 }) => {
   await page.goto('/');
   await startGame(page);
-  await page.evaluate(() => window.__otp!.testClock.advance(180_000));
+  await page.evaluate(() => window.__otp!.testClock.advance(210_000));
   const arrive = page.locator('[data-arrive="late"]');
   await expect(arrive).toBeVisible();
   const finish = arrive.locator('[data-action="finish"]');
@@ -367,7 +367,7 @@ for (const [width, height] of [
     expect(Math.abs(well.width - well.height)).toBeLessThanOrEqual(0.5);
     // Item 21: the pill is the same width either side of the 0:30 change.
     const timer = page.locator('.otp-hud2__timer');
-    await page.evaluate(() => window.__otp!.testClock.advance(180_000 - 31_500));
+    await page.evaluate(() => window.__otp!.testClock.advance(210_000 - 31_500));
     await expect(page.locator('.otp-hud2__clock')).toHaveText('0:31');
     const calm = (await timer.boundingBox())!.width;
     await page.evaluate(() => window.__otp!.testClock.advance(2_000));
@@ -421,8 +421,12 @@ test('at 375x812 the offer sits on the canvas edges, steps its type and puts Wal
   const tops: number[] = [];
   const heights: number[] = [];
   for (const id of ['rabbit', 'owl', 'cat']) {
-    await page.evaluate((c) => window.__otp!.store.dispatch({ type: 'MEET', c }), id);
-    const offer = page.locator(`[data-offer="${id}"]`);
+    await page.evaluate((c) => {
+      const { store, content } = window.__otp!;
+      store.dispatch({ type: 'MEET', c });
+      store.dispatch({ type: 'INSPECT', s: content.characters.find((k) => k.id === c)!.skillId });
+    }, id);
+    const offer = page.locator(`[data-offer="${id}"][data-card]`);
     await expect(offer).toBeVisible();
     await page.waitForTimeout(300);
     const m = await offer.evaluate((root) => {

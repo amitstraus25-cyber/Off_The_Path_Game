@@ -122,7 +122,7 @@ describe('the rewind: time given back to the clock, and taken off the time the s
     expect(rewoundMs(s)).toBe(20_000);
     expect(deadlineMs(s)).toBe(TIME_LIMIT_MS + 20_000);
     expect(clockMs(s, 100_000)).toBe(80_000);
-    expect(timeLeftMs(s, 100_000)).toBe(100_000);
+    expect(timeLeftMs(s, 100_000)).toBe(TIME_LIMIT_MS - 80_000);
     expect(timeLeftMs(s, 500_000)).toBe(0);
   });
 
@@ -167,19 +167,23 @@ describe('the rewind: time given back to the clock, and taken off the time the s
     expect(r.speed).toBeGreaterThan(speedBonus(timed, 1, 150_000));
   });
 
-  it('replays on the server: a rewound run past three minutes is legal, and its late event sits at the new deadline', () => {
+  it('replays on the server: a rewound run past the bare limit is legal, and its late event sits at the new deadline', () => {
     const inTime = drive(timed, [
-      ...decide(timed, 'lantern', 'take', 170_000),
-      { type: 'ENTER_COTTAGE', at: 190_000 },
+      ...decide(timed, 'lantern', 'take', TIME_LIMIT_MS - 10_000),
+      { type: 'ENTER_COTTAGE', at: TIME_LIMIT_MS + 10_000 },
     ]);
     const replay = checkRunLog(toRunLog(inTime), timed);
     expect(replay).toMatchObject({ legal: true, ended: true });
     expect(replay.legal && result(replay.state, timed).total).toBe(result(inTime, timed).total);
 
     const lateLog = toRunLog(
-      tryReduce(rewound(170_000), { type: 'TIME_UP', at: 250_000 }, timed).state,
+      tryReduce(
+        rewound(TIME_LIMIT_MS - 10_000),
+        { type: 'TIME_UP', at: TIME_LIMIT_MS + 70_000 },
+        timed,
+      ).state,
     );
-    expect(lateLog.events.at(-1)).toEqual({ e: 'late', at: 200_000 });
+    expect(lateLog.events.at(-1)).toEqual({ e: 'late', at: TIME_LIMIT_MS + 20_000 });
     expect(checkRunLog(lateLog, timed)).toMatchObject({ legal: true, ended: true });
     // A late event at the bare limit, after a rewind, is not what the reducer would have stamped.
     const forged = {
@@ -270,10 +274,10 @@ describe('the simulator gives a careful basket the time its perks save', () => {
   });
 
   it('the clock check holds each run to its own deadline with the perks, and to the bare limit without', () => {
-    // Every skill rewinds, so every deal's careful basket takes one: about three minutes eight
-    // seconds of walking and reading is late on the bare clock and in time on the rewound one.
+    // Every skill rewinds, so every deal's careful basket takes one: about three minutes and
+    // forty seconds of walking and reading is late on the bare 3:30 and in time on the rewound one.
     const c = withPerks({ lantern: REWIND, courier: REWIND, locksmith: REWIND });
-    const slow = { walkMs: 40_000, talkMs: 0 };
+    const slow = { walkMs: 47_500, talkMs: 0 };
     const withThem = clockCheck(c, slow);
     const without = clockCheck(c, slow, { perks: false });
     expect(withThem.elapsedMs).toBeGreaterThan(TIME_LIMIT_MS);

@@ -55,7 +55,12 @@ const MAX_ROWS_READ = 100;
  * so rows scored under rules 2 rank a different game. The push that shipped rules 3 landed at
  * 22:44Z; the cut is a few minutes after it, once the deploy was live.
  */
-export const BOARD_SINCE = '2026-10-25T22:50:00Z';
+/*
+ * Moved to 2026-10-26T13:10:00Z for the conversation before the card, at the client's word the same
+ * day: the walk is 3:30 and par 2:02, so the same play scores differently and the rows before it
+ * rank by the old clock. A few minutes after the push that shipped it, once the deploy was live.
+ */
+export const BOARD_SINCE = '2026-10-26T13:10:00Z';
 
 /**
  * The status PostgREST answers to an insert on a table.

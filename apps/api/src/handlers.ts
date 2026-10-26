@@ -275,7 +275,7 @@ export async function handleScore(request: Request, deps: Deps): Promise<Respons
    *   - claimed > seen: the log says more time passed than had. Not a run anyone played.
    *   - seen - claimed > POST_WINDOW_MS: too long off the clock. This is the bound on restamping a
    *     slow run, and it also makes the token short-lived: since claimed is under the run's
-   *     deadline -- 3:00, plus 20 s for a Long Evening rewind (core perks.ts) -- no token older
+   *     deadline -- 3:30, plus 20 s for a Long Evening rewind (core perks.ts) -- no token older
    *     than that plus the window can pass it. 410, because the run was real and its window shut.
    *   - any meeting, or the arrival, stamped sooner than walking there allows, or `seen` under the
    *     whole walk (`v2.walkFloor`): faster than the map. Not a run.

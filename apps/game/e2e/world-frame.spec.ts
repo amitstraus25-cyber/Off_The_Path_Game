@@ -130,8 +130,8 @@ test('the frame and the wordmark stay put through a whole encounter', async ({ p
   await tag(page, ANNOUNCE, 'announce');
 
   for (const [label, action, phase] of [
-    // One panel since 2026-10-22: meeting the Owl opens her card by itself.
-    ['02 Offer', { type: 'MEET', c: 'owl' }, 'card'],
+    // Meeting the Owl opens the conversation before her card (2026-10-26).
+    ['02 Offer', { type: 'MEET', c: 'owl' }, 'talk'],
   ] as const) {
     await step(page, action, phase);
     const now = await furniture(page);
@@ -223,7 +223,7 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
    *
    * Hit-testing cannot see that: `.otp-world-frame` is `pointer-events: none`, so the card takes
    * the pointer at its centre whichever way round they are, and an elementFromPoint assertion
-   * passes on the broken case. What a player sees is light: with the card open the wordmark is
+   * passes on the broken case. What a player sees is light: with the offer open the wordmark is
    * under a 55% Black wash and goes dull; painted over the wash it stays at full white.
    *
    * The bound is the same wordmark measured on Explore moments earlier, not a number typed in, so
@@ -233,7 +233,7 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
   const undimmed = await maxLuma(page, LIT);
   expect(undimmed, 'the header title is near white with nothing over it').toBeGreaterThan(200);
 
-  await step(page, { type: 'MEET', c: 'rabbit' }, 'card');
+  await step(page, { type: 'MEET', c: 'rabbit' }, 'talk');
 
   const card = page.locator('.otp-card');
   await expect(card).toBeVisible();
@@ -250,7 +250,7 @@ test('a panel is still painted over the frame it is laid over', async ({ page })
   );
   expect(inCard, 'the card takes the pointer at its own centre').toBe(true);
   await page
-    .getByRole('button', { name: /Leave it/ })
+    .getByRole('button', { name: /No thanks/ })
     .first()
     .click();
   await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');
@@ -281,7 +281,7 @@ for (const [width, height] of [
     await expect(chip.locator('.otp-chip__label')).toHaveText('Find Grandma');
     await expect(chip.locator('.otp-chip__count')).toHaveText(`0 of ${total} met`);
 
-    await step(page, { type: 'MEET', c: 'rabbit' }, 'card');
+    await step(page, { type: 'MEET', c: 'rabbit' }, 'talk');
     await expect(chip.locator('.otp-chip__count')).toHaveText(`1 of ${total} met`);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => window.__otp!.store.getState().phase === 'forest');

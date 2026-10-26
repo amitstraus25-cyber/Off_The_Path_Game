@@ -202,9 +202,9 @@ describe('the clock is injected, and it only goes forward', () => {
   });
 });
 
-describe('three minutes, and then it is over', () => {
-  it('names three minutes, and the running phases are the forest, a conversation and a card', () => {
-    expect(TIME_LIMIT_MS).toBe(3 * 60 * 1000);
+describe('three and a half minutes, and then it is over', () => {
+  it('names three and a half minutes, and the running phases are the forest, a conversation and a card', () => {
+    expect(TIME_LIMIT_MS).toBe(3.5 * 60 * 1000);
     expect([...RUNNING].sort()).toEqual(['card', 'forest', 'talk']);
   });
 

@@ -28,16 +28,20 @@ test('every screen has exactly one h1', async ({ page }) => {
   expect(await h1s(page), 'reveal').toBe(1);
 });
 
-test('the offer is one modal panel with its card open, holds focus, and Esc walks on', async ({
+test('the card is one modal panel once Purple asks to see it, holds focus, and Esc walks on', async ({
   page,
 }) => {
   await page.goto('/');
   await startGame(page);
-  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
+  await page.evaluate(() => {
+    const { store } = window.__otp!;
+    store.dispatch({ type: 'MEET', c: 'rabbit' });
+    store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
+  });
 
   const offer = page.getByRole('dialog', { name: /Rabbit/ });
   await expect(offer).toHaveAttribute('aria-modal', 'true');
-  // The card is open without being asked for, and focus is on it, not on an answer.
+  // The card is open, and focus is on it, not on an answer.
   await expect(page.locator('#game')).toHaveAttribute('data-phase', 'card');
   await expect(offer.locator('[data-card-take] li').first()).toBeVisible();
   await expect(offer.locator('.otp-card')).toBeFocused();

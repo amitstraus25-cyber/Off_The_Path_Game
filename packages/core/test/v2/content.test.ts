@@ -30,6 +30,7 @@ import {
   variantOf,
 } from '../../src/v2/deal.ts';
 import { loadContent, parseContent } from '../../src/v2/load.ts';
+import { TIME_LIMIT_MS } from '../../src/v2/state.ts';
 import { raw, variant } from './fixture.ts';
 
 const parsed = (): Content => contentSchema.parse(variant());
@@ -193,7 +194,7 @@ describe('schema', () => {
       ['a dusk that never starts', (v) => void (v.world.dusk.fromLeftMs = 0), /fromLeftMs/],
       [
         'a dusk from before the clock starts',
-        (v) => void (v.world.dusk.fromLeftMs = 180_001),
+        (v) => void (v.world.dusk.fromLeftMs = TIME_LIMIT_MS + 1),
         /would open in the dark/,
       ],
     ];

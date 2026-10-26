@@ -62,8 +62,16 @@ for (const gap of [250, 600]) {
     expect(await page.evaluate(() => window.__otp!.store.getState().verdicts)).toEqual({});
     await expect(page.locator('[data-offer]')).toBeVisible();
 
-    // And a deliberate tap, once the card has had its second, still answers.
-    await page.waitForTimeout(800);
+    // Through the conversation to the card, which mounts fresh; a deliberate tap, once the card
+    // has had its second, still answers.
+    await page.evaluate(() => {
+      const { store } = window.__otp!;
+      const s = store.getState();
+      const c = window.__otp!.content.characters.find((k) => k.id === s.active)!;
+      store.dispatch({ type: 'INSPECT', s: c.skillId });
+    });
+    await expect(page.locator('[data-offer] [data-action="leave"]')).toBeVisible();
+    await page.waitForTimeout(1100);
     const leave = await page.locator('[data-offer] [data-action="leave"]').evaluate((el) => {
       const r = el.getBoundingClientRect();
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };

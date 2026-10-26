@@ -32,9 +32,13 @@ const PHONE_WIDTHS = [320, 360, 375, 390, 393, 414, 430, 641] as const;
 async function openDialogue(page: Page): Promise<void> {
   await page.goto('/');
   await startGame(page);
-  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
-  // One panel since 2026-10-22: the greeting and the card it opens with, together.
-  await expect(page.locator('[data-offer] .otp-card')).toBeVisible();
+  await page.evaluate(() => {
+    const { store } = window.__otp!;
+    store.dispatch({ type: 'MEET', c: 'rabbit' });
+    store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
+  });
+  // The card, past the conversation: the offer line and the card under it.
+  await expect(page.locator('[data-offer][data-card] .otp-card')).toBeVisible();
   await expect(page.locator('.otp-dialogue__line')).toBeVisible();
 }
 

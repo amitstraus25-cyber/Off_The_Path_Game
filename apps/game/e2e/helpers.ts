@@ -136,6 +136,21 @@ export async function toTheReveal(page: Page): Promise<void> {
 }
 
 /**
+ * THROUGH THE CONVERSATION TO THE CARD (the client, 2026-10-26): "What have you got?", then "Show
+ * me". Meeting someone opens the conversation, not the card. Waits out the double-click guard first
+ * (components.tsx `activationIsDeliberate`), because a spec is faster than any player.
+ */
+export async function askToSee(page: Page, who?: string): Promise<void> {
+  const offer = who ? `[data-offer="${who}"]` : '[data-offer]';
+  const talk = page.locator(`${offer}[data-talk]`);
+  await expect(talk).toBeVisible();
+  await page.waitForTimeout(320);
+  await talk.locator('[data-action="ask"]').click();
+  await talk.locator('[data-action="show-me"]').click();
+  await expect(page.locator(`${offer}[data-card]`)).toBeVisible();
+}
+
+/**
  * Answers every offer through the store and walks in: a whole run with no walking, for the specs
  * that need the end of a run and not the path to it. `take` takes everything.
  *

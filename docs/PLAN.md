@@ -32,8 +32,8 @@ environment, not an assertion (PAUL_BRIEF trap 9), and the run above had its ser
   expects you, so the knock is skipped), Wing Ride (a flight to the next friend), Slow Post (a
   faster walk), Night Light (a lantern at dusk) and Long Evening (20 seconds back). **Every run
   deals 3 good and 4 bad** from a seed, so replaying meets the same characters with a different
-  set of malicious ones. Take it or leave it; a 3:00 hard timer; **score out of 100 = correct
-  choices plus speed**, par 1:47; any bad skill taken is 0. A door check asks before you go in with
+  set of malicious ones. A short conversation, then the card (2026-10-26); take it or leave it; a 3:30 hard timer (3:00
+  until 2026-10-26); **score out of 100 = correct choices plus speed**, par 2:02; any bad skill taken is 0. A door check asks before you go in with
   anyone unmet; the minimap shows who you have met; the reveal puts the score first and then seven
   flip tiles (promise against what it did, the real-world note); Walk it again starts a fresh
   deal.
@@ -869,6 +869,8 @@ specs and Paul's review.
 - [x] The Cat moved up into the wood (2026-10-26): her own lane north off the road at column 39 and a clearing round her at (38,11), cut late in the generator so nothing else on the map moved; the verge bound 27 -> 33 for the lane's six sides
 - [x] The door panel's advance arrow sits in the middle of the panel on a phone (2026-10-26)
 - [ ] Research sign-off on the Bridge Key note
+- [x] A conversation before every card (the client, 2026-10-26, "like a ping pong"): the greeting, Purple's "What have you got?", the character's offer, then "Show me" opens the card; "No thanks" walks on. Content `3.0.0-draft.5` (`characters[].offer`, `ui.offer` purple/ask/showMe/noThanks; COPY_REVIEW 0e). The clock runs through it, so the walk is **3:30** and par **2:02** (measured: at 3:00 a careful reader arrived 14.5 s late); the board was reset at launch (`BOARD_SINCE` 2026-10-26T13:10:00Z; older rows are hidden, not deleted)
+- [ ] **Human:** approve COPY_REVIEW 0e (the seven offer lines and Purple's three replies)
 
 ## Readiness findings (sweep of 2026-10-21)
 

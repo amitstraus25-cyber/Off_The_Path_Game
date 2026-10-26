@@ -118,7 +118,7 @@ test('start=one puts the rules and par on the landing, and its button starts the
   await page.goto('/?start=one');
   await ready(page);
   await expect(page.locator('[data-howto] li')).toHaveCount(4);
-  await expect(page.locator('[data-par]')).toContainText('1:47');
+  await expect(page.locator('[data-par]')).toContainText('2:02');
   await page.getByRole('button', { name: /Start walking/ }).click();
   await page.waitForFunction(() => window.__otp?.store.getState().phase === 'forest');
 });

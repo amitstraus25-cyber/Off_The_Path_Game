@@ -80,19 +80,19 @@ describe('the score: a clean arrival plus each good skill, and the wolf takes it
   });
 });
 
-/** The real weights, on the fixture's rules: three dealt good, 25 played, 15 / 15 / 15, par 1:47. */
+/** The real weights, on the fixture's rules: three dealt good, 25 played, 15 / 15 / 15, par 2:02. */
 const shipped = {
   ...content,
   deal: { good: 3 },
-  scoring: { outOf: 100, played: 25, clean: 15, good: 15, speed: 15, parMs: 107_000 },
+  scoring: { outOf: 100, played: 25, clean: 15, good: 15, speed: 15, parMs: 122_000 },
 } as Content;
 
 describe('speed: a bonus on being right, never a second way to score', () => {
   it('is whole at or under par, falls in a straight line, and is nothing at the limit', () => {
     expect(speedBonus(shipped, 3, 0)).toBe(15);
-    expect(speedBonus(shipped, 3, 107_000)).toBe(15);
+    expect(speedBonus(shipped, 3, 122_000)).toBe(15);
     // Halfway from par to the buzzer is half the bonus: 7.5, rounded to the whole point above.
-    expect(speedBonus(shipped, 3, (107_000 + TIME_LIMIT_MS) / 2)).toBe(8);
+    expect(speedBonus(shipped, 3, (122_000 + TIME_LIMIT_MS) / 2)).toBe(8);
     expect(speedBonus(shipped, 3, TIME_LIMIT_MS - 1)).toBe(0);
     expect(speedBonus(shipped, 3, TIME_LIMIT_MS)).toBe(0);
     expect(speedBonus(shipped, 3, TIME_LIMIT_MS + 60_000)).toBe(0);
@@ -117,18 +117,19 @@ describe('speed: a bonus on being right, never a second way to score', () => {
   });
 
   it('is read off the run: the arrival stamp, the choices and the bonus, and the par it was measured against', () => {
+    // Halfway from the 60 s par to the buzzer: half of 20.
+    const halfway = (60_000 + TIME_LIMIT_MS) / 2;
     const slow = run([
       ...begin,
       ...encounter('lantern', 'take'),
-      { type: 'ENTER_COTTAGE', at: 120_000 },
+      { type: 'ENTER_COTTAGE', at: halfway },
     ]);
-    expect(arrivalMs(slow)).toBe(120_000);
-    // 60 s past a 60 s par, 120 s from par to the buzzer: half of 20.
+    expect(arrivalMs(slow)).toBe(halfway);
     expect(result(slow, content)).toMatchObject({
       total: 90,
       choices: 80,
       speed: 10,
-      timeMs: 120_000,
+      timeMs: halfway,
       parMs: 60_000,
       ending: 'grandma',
     });
@@ -141,7 +142,9 @@ describe('speed: a bonus on being right, never a second way to score', () => {
   it('a par the clock cannot reach is refused at load', () => {
     const v = variant();
     v.scoring.parMs = TIME_LIMIT_MS;
-    expect(() => loadContent(v)).toThrow(/scoring\.parMs 180000 is not under the 180000ms limit/);
+    expect(() => loadContent(v)).toThrow(
+      `scoring.parMs ${TIME_LIMIT_MS} is not under the ${TIME_LIMIT_MS}ms limit`,
+    );
   });
 });
 

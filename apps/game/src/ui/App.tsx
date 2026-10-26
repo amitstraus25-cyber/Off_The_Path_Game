@@ -3,7 +3,7 @@ import { v2 } from '@otp/core';
 import type { ContactInput, PostOutcome } from '../net/leaderboard';
 import type { Store } from '../store';
 import { hudBasket, remainingMs, walkOn } from '../world/run';
-import { Dialogue } from './Dialogue';
+import { Conversation, Dialogue } from './Dialogue';
 import { HowTo, Title, hasKeyboard } from './Title';
 import { Cottage } from './Cottage';
 import { formatElapsed, Results } from './Results';
@@ -522,10 +522,20 @@ export function App({
       case 'howto':
         return <HowTo ui={content.ui} onGo={onGo} busy={starting} />;
       /*
-       * One panel for both: the card is open whenever an offer is (Dialogue.tsx). `talk` is only
-       * ever on screen for the instant between MEET and the INSPECT main.ts sends after it.
+       * The conversation, then the card (the client, 2026-10-26): `talk` is the two lines and
+       * Purple's replies, and "Show me" sends the INSPECT that moves the run to `card`. Two panels
+       * with two keys, so the card mounts fresh and its answers get their own settle time.
        */
       case 'talk':
+        return character && skill ? (
+          <Conversation
+            key={`talk-${character.id}`}
+            words={content.ui.offer}
+            character={character}
+            onShowMe={() => void store.dispatch({ type: 'INSPECT', s: skill.id })}
+            onWalkOn={() => walkOn(store)}
+          />
+        ) : null;
       case 'card':
         return character && skill ? (
           <Dialogue

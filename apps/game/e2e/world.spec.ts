@@ -107,7 +107,7 @@ test('Purple never stands inside a solid tile, whatever route she takes', async 
  * Space, the same phase check -- and then added the two lines now in the middle here. Both tests
  * depend on exactly the same state, so splitting them bought nothing and cost a second walk.
  */
-test('the interact prompt opens the offer with its card read, which swallows the walk keys, and Esc walks on', async ({
+test('the interact prompt opens the conversation, which swallows the walk keys, and Esc walks on', async ({
   page,
 }) => {
   await walkTo(page, await talkingDistance(page, 'npc-rabbit'));
@@ -115,10 +115,11 @@ test('the interact prompt opens the offer with its card read, which swallows the
   await page.keyboard.press('Space');
   await page.waitForTimeout(120);
   const talking = await probe(page);
-  // The card opens by itself, and is logged as read the moment it is on screen.
-  expect(talking.phase).toBe('card');
+  // The conversation, not the card: nothing is read until Purple asks to see it.
+  expect(talking.phase).toBe('talk');
   expect(talking.activeCharacter).toBe('rabbit');
-  expect(talking.log.map((e) => e.e)).toEqual(expect.arrayContaining(['met', 'inspected']));
+  expect(talking.log.map((e) => e.e)).toContain('met');
+  expect(talking.log.map((e) => e.e)).not.toContain('inspected');
 
   // The world stops listening while a panel owns the screen: Purple must not walk out from under it.
   await hold(page, 'ArrowRight', 600);

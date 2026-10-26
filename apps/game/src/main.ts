@@ -11,7 +11,7 @@ import { BootScene, ForestScene } from './world/scenes';
 import type { MapSketch } from './world/minimap';
 import type { Vec } from './world/logic';
 import { GATE_LOCKED_FALLBACK } from './world/gate';
-import { cardOwed, gameRun, gateNotice, localSeed, outOfTime, stranded, walkOn } from './world/run';
+import { gameRun, gateNotice, localSeed, outOfTime, stranded, walkOn } from './world/run';
 import { perkLine } from './ui/perks';
 import { createInput } from './world/input';
 import { createTouchControls } from './ui/touch-controls';
@@ -612,18 +612,6 @@ async function start(): Promise<void> {
     const fresh = state.perks.slice(lastPerks);
     lastPerks = state.perks.length;
     for (const perk of fresh) perkTaken(perk);
-    /*
-     * THE CARD OPENS BY ITSELF. A MEET has just put the run in `talk`: read its card now, and let
-     * the nested dispatch do this listener's work for the state it produces. `lastPhase` is moved
-     * first, so the nested call sees the step it is answering and this one is not repeated. Should
-     * the INSPECT ever be refused without moving the run, this call carries on as it would have.
-     */
-    const owed = cardOwed(lastPhase, state, content);
-    if (owed) {
-      lastPhase = state.phase;
-      store.dispatch({ type: 'INSPECT', s: owed });
-      if (store.getState() !== state) return;
-    }
     syncWorldChrome();
     const count = Object.keys(state.verdicts).length;
     if (count > lastVerdicts) {

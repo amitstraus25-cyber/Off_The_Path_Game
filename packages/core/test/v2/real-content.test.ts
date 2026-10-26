@@ -428,7 +428,8 @@ describe('the cast stands on art that exists', () => {
  * they look around, overshoot, and walk back. A careful reader must make it even so.
  *
  * TALKING AND READING. One rate for everything, `v2.READING` (sim.ts, where its source is cited):
- * a conversation is the longest greeting read at that rate, plus a second to press on; a card is
+ * a conversation is the longest greeting and offer read at that rate, plus a second for each of
+ * Purple's two replies; a card is
  * charged by the simulator itself, from the words on the card THE DEAL SHOWS -- so a bad card's
  * giveaway line costs its reading time too, and the check is run over every deal (8 since rules 3).
  *
@@ -500,9 +501,14 @@ function tour(): { legs: { to: string; tiles: number }[]; tiles: number } {
   return { legs, tiles: legs.reduce((n, l) => n + l.tiles, 0) };
 }
 
-/** The longest greeting, read, plus pressing on. The simulator charges one talk per character. */
+/**
+ * The longest conversation, read, plus pressing on twice: the greeting, Purple's ask, the offer and
+ * Purple's "Show me" (the conversation before the card, 2026-10-26). The simulator charges one talk
+ * per character.
+ */
+const talkWords = (c: v2.Character): number => words(c.greet) + words(c.offer);
 const talkMs = (): number =>
-  Math.max(...content.characters.map((c) => words(c.greet))) * v2.READING.msPerWord + PRESS_ON_MS;
+  Math.max(...content.characters.map(talkWords)) * v2.READING.msPerWord + 2 * PRESS_ON_MS;
 
 /** The pace for a tour of `tiles`, doubled for wandering, spread evenly over every leg. */
 function paceFor(tiles: number): v2.Pace {
@@ -539,9 +545,10 @@ describe('the clock, at the pace of the real map', () => {
       { walkMs: 0, talkMs: talkMs() },
       { perks: false },
     ).elapsedMs;
-    const maxTourTiles = Math.floor(
-      (((v2.TIME_LIMIT_MS - readingMs) / 1000) * WALK_SPEED) / TILE / WANDER,
-    );
+    // The edge itself arrives with no margin, and the check wants some: the tile below it, so a
+    // bound that lands on a whole tile is not counted as reachable.
+    const maxTourTiles =
+      Math.ceil((((v2.TIME_LIMIT_MS - readingMs) / 1000) * WALK_SPEED) / TILE / WANDER) - 1;
     const noPerks = { perks: false };
     expect(v2.clockCheck(content, paceFor(maxTourTiles), noPerks).ok, `${maxTourTiles} tiles`).toBe(
       true,
@@ -560,7 +567,7 @@ describe('the clock, at the pace of the real map', () => {
  * The client's rule is "a combination of time and correct answers", correctness first. Par is the
  * arrival time of a careful run -- every card read, the three good taken -- by a player who walks
  * the shortest content-order tour of the shipped map ONCE (no wandering: `tour()` above, so the
- * same four-connected walk the clock check doubles) and reads every greeting and every card at
+ * same four-connected walk the clock check doubles) and reads every conversation and every card at
  * `v2.BRISK`: the adult silent-reading rate itself, 238 words a minute, with no pause to decide.
  * Taken in the SLOWEST deal, so a brisk reader can earn the whole bonus in every deal, not only in
  * the deals whose bad cards happen to be short.
@@ -577,7 +584,7 @@ describe('the clock, at the pace of the real map', () => {
  */
 describe('par is the brisk careful run on the shortest walk, in the slowest deal', () => {
   const briskTalkMs = (): number =>
-    Math.max(...content.characters.map((c) => words(c.greet))) * v2.BRISK.msPerWord;
+    Math.max(...content.characters.map(talkWords)) * v2.BRISK.msPerWord;
 
   const derivedPar = (): { ms: number; why: string } => {
     const { tiles } = tour();

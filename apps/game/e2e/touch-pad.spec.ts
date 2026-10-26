@@ -89,7 +89,7 @@ test.describe('one tap of A is one press and nothing else', () => {
 
     const cdp = await context.newCDPSession(page);
     await tap(page, cdp, '.otp-a-button');
-    await page.waitForFunction(() => window.__otp!.store.getState().phase === 'card');
+    await page.waitForFunction(() => window.__otp!.store.getState().phase === 'talk');
     // A dozen frames: long enough that a click which was going to be synthesised has been.
     await page.waitForTimeout(250);
     expect(

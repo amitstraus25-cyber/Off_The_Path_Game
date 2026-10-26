@@ -34,8 +34,8 @@ that was shipping to players. Read trap 10 before investigating anything the cli
   strategies (`careful`, `greedy`, `leave-all`, `random`).
 - The live game: seven characters in walking order, each offering one skill with a real in-game
   effect that is the same in the good and the bad copy; every run deals 3 good and 4 bad from a
-  seed; take it or leave it; a 3:00 hard timer; score out of 100 = correct choices plus speed (par
-  1:47); a door check; a flip-tile reveal; typed names; a leaderboard; a work-email gate that is
+  seed; a conversation before each card; take it or leave it; a 3:30 hard timer (since 2026-10-26); score
+  out of 100 = correct choices plus speed (par 2:02); a door check; a flip-tile reveal; typed names; a leaderboard; a work-email gate that is
   built and OFF. All of it is committed (the tree was clean at `3c88684`). **Not clean now:**
   another builder's round is in the checkout, uncommitted -- `ui/cabinet.ts`, `hud.css`,
   `panels.css`, `stage.ts`, `world/forest-scene.ts`, `world/logic.ts`, two graybox painters, edits
@@ -176,7 +176,7 @@ the repo.
   time since the token must cover the walk; this replaced the flat 10 s `MIN_RUN_MS` in `8c4dc49`.
   A post more than five minutes off the game clock is a 410. One token is one row (409), per
   instance. Thirty writes a minute per instance, then 429.
-- `GET /api/top` answers the top ten, rows from `BOARD_SINCE` (2026-10-25T22:50:00Z, the client's reset for rules 3; before it
+- `GET /api/top` answers the top ten, rows from `BOARD_SINCE` (2026-10-26T13:10:00Z, the client's reset for the 3:30 clock; 2026-10-25T22:50:00Z before it, the reset for rules 3; before it
   2026-10-25T13:40:00Z for the 25-point floor and 2026-10-22T21:25:00Z, the reset for speed, first set at 09:25Z; it replaced the v2-launch cut) and above 0, cached 10 s plus 20 s stale,
   so never more than 30 s old. The post's own answer carries its rank and the board, so a player
   sees their row at once.

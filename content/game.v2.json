@@ -1,6 +1,6 @@
 {
   "rules": 3,
-  "version": "3.0.0-draft.4",
+  "version": "3.0.0-draft.5",
   "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off); the Bridge Key's note is new in rules 3 (2026-10-25), not yet security-read, and pending the same sign-off",
   "deal": {
     "good": 3,
@@ -13,7 +13,7 @@
     "good": 15,
     "clean": 15,
     "speed": 15,
-    "parMs": 107000
+    "parMs": 122000
   },
   "world": {
     "knockMs": 3000,
@@ -29,49 +29,56 @@
       "name": "Rabbit",
       "spawn": "npc-rabbit",
       "skillId": "cottage-finder",
-      "greet": "Hello! I drew this map myself. Never once lost."
+      "greet": "Hello! I drew this map myself. Never once lost.",
+      "offer": "I can draw you a map of the whole wood."
     },
     {
       "id": "gatekeeper",
       "name": "Gatekeeper",
       "spawn": "npc-gatekeeper",
       "skillId": "bridge-key",
-      "greet": "Nobody crosses without my key. I keep this bridge."
+      "greet": "Nobody crosses without my key. I keep this bridge.",
+      "offer": "My key lowers the drawbridge, so you can cross."
     },
     {
       "id": "magpie",
       "name": "Magpie",
       "spawn": "bystander-magpie",
       "skillId": "short-cut",
-      "greet": "Can't swim? Hop on. Wings are quicker than bridges."
+      "greet": "Can't swim? Hop on. Wings are quicker than bridges.",
+      "offer": "I'll fly you over the river to the far bank."
     },
     {
       "id": "owl",
       "name": "Owl",
       "spawn": "npc-owl",
       "skillId": "word-weaver",
-      "greet": "Hoo! My sister wove these words. Finest hand in the wood."
+      "greet": "Hoo! My sister wove these words. Finest hand in the wood.",
+      "offer": "Her words go ahead, so Grandma expects you."
     },
     {
       "id": "snail",
       "name": "Snail",
       "spawn": "bystander-snail",
       "skillId": "slow-post",
-      "greet": "Slow, but sure. I'll carry your parcel."
+      "greet": "Slow, but sure. I'll carry your parcel.",
+      "offer": "I'll carry your heavy things, sealed. You walk light."
     },
     {
       "id": "lantern-keeper",
       "name": "Lantern Keeper",
       "spawn": "npc-lantern-keeper",
       "skillId": "night-light",
-      "greet": "Evening! I made this lamp for the dark pines."
+      "greet": "Evening! I made this lamp for the dark pines.",
+      "offer": "It lights up the path when the sun goes down."
     },
     {
       "id": "cat",
       "name": "Cat",
       "spawn": "bystander-cat",
       "skillId": "latch-lifter",
-      "greet": "Grandma made this for you. The kettle's on."
+      "greet": "Grandma made this for you. The kettle's on.",
+      "offer": "It holds back the dark a little longer."
     }
   ],
   "skills": [
@@ -311,7 +318,7 @@
       "steps": [
         "Seven skills: three good, four malicious.",
         "Read each card. Take only the good, leave the malicious.",
-        "Reach Grandma in 3:00. Faster scores more.",
+        "Reach Grandma in 3:30. Faster scores more.",
         "From 2:00 left, the forest slowly darkens."
       ],
       "stress": [1, 3],
@@ -339,7 +346,11 @@
       "title": "Offer",
       "take": "Take it",
       "leave": "Leave it",
-      "walkOn": "Walk on"
+      "walkOn": "Walk on",
+      "purple": "Little Purple",
+      "ask": "What have you got?",
+      "showMe": "Show me",
+      "noThanks": "No thanks"
     },
     "card": {
       "ifTake": "If you take it",
@@ -472,7 +483,7 @@
       "saidLeft": "You left {skill}. {left} left to meet.",
       "postNext": "Next",
       "postNextNote": "A work email is needed to post. You add it next.",
-      "startPar": "Beat par {par} for the speed bonus. The walk ends at 3:00.",
+      "startPar": "Beat par {par} for the speed bonus. The walk ends at 3:30.",
       "revealWatchFor": "What to watch for",
       "perkMinimap": "A map of the wood.",
       "perkBridgeGate": "The drawbridge comes down.",

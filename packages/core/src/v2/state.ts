@@ -18,7 +18,13 @@ import { deal } from './deal.ts';
  * server bounds against its own clock, and the deadline becomes this plus what was given back
  * (`deadlineMs`, perks.ts). Read the deadline from there, not from this constant.
  */
-export const TIME_LIMIT_MS = 180_000;
+/*
+ * 3:30 SINCE 2026-10-26, when every meeting became a short conversation before the card: two more
+ * lines and two more taps a character cost a careful reader about thirty seconds over the walk, and
+ * at 3:00 the clock check in test/v2/real-content.test.ts had them arriving late. The client kept
+ * the clock running through the conversation, so the walk got the thirty seconds instead.
+ */
+export const TIME_LIMIT_MS = 210_000;
 
 export type Phase = 'title' | 'howto' | 'forest' | 'talk' | 'card' | 'cottage' | 'late';
 

@@ -992,6 +992,49 @@
 }
 
 /*
+ * THE CONVERSATION BEFORE THE CARD (the client, 2026-10-26: "like a ping pong"; Dialogue.tsx
+ * `Conversation`). Turns stack top to bottom like a chat: the character's on the left on Natural,
+ * Purple's on the right on Haze, her colour. Black text on both, 15:1 and 13:1. The speaker's name
+ * rides on each turn, so neither side is told apart by colour alone.
+ */
+.otp-chat__log {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--otp-ui));
+  padding-bottom: calc(10px * var(--otp-ui));
+}
+
+.otp-chat__turn {
+  align-self: flex-start;
+  max-width: 85%;
+  padding: calc(8px * var(--otp-ui)) calc(12px * var(--otp-ui));
+  border-radius: var(--otp-r-inset);
+  background: var(--cyera-natural);
+  animation: otp-panel-in var(--otp-motion-slow) ease-out both;
+}
+
+.otp-chat__turn[data-mine] {
+  align-self: flex-end;
+  background: var(--cyera-haze);
+  text-align: right;
+}
+
+.otp-chat__turn .otp-dialogue__speaker {
+  margin-bottom: calc(2px * var(--otp-ui));
+}
+
+/* A line is as tall as it is here: the turns stack, so there is no greeting cell to hold still. */
+.otp-chat .otp-dialogue__line {
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .otp-chat__turn {
+    animation: none;
+  }
+}
+
+/*
  * THE CARD, AS A GRID OF THREE AREAS (SkillCard.tsx). Wide: the picture down the left and the name,
  * the promise and the two rows beside it, as the deck draws the card. Narrow or short: the picture
  * beside the name only, and the rows full width under both, so a phone reads the lines at the

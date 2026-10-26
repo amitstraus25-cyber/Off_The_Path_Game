@@ -403,10 +403,14 @@ for (const size of SIZES) {
       await expect(page.locator('.otp-world-frame')).toBeVisible();
       await expectReadable(page, at('forest'), []);
 
-      // 02 Offer, its card open by itself: the panel's h2 and the card's own title (an h3 on a
-      // light surface) alongside.
-      await page.evaluate(() => window.__otp!.store.dispatch({ type: 'MEET', c: 'rabbit' }));
-      await expect(page.locator('[data-offer]')).toBeVisible();
+      // 02 Offer, its card open: the panel's h2 and the card's own title (an h3 on a light
+      // surface) alongside.
+      await page.evaluate(() => {
+        const { store } = window.__otp!;
+        store.dispatch({ type: 'MEET', c: 'rabbit' });
+        store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
+      });
+      await expect(page.locator('[data-offer][data-card]')).toBeVisible();
       await expect(page.locator('.otp-card')).toBeFocused();
       await expectReadable(page, at('offer'), ['Offer']);
       await page.keyboard.press('Escape');

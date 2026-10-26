@@ -301,7 +301,7 @@ for (const [width, height] of [
       store.dispatch({ type: 'VERDICT', s: c.skillId, v: 'take' });
       store.dispatch({ type: 'BACK' });
       store.dispatch({ type: 'BACK' });
-      window.__otp!.testClock.advance(180_000);
+      window.__otp!.testClock.advance(210_000);
     });
     await expect(page.locator('[data-arrive="late"]')).toBeVisible();
     await page.waitForTimeout(SETTLED_MS);

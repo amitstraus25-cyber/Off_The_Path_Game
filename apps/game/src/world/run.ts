@@ -112,23 +112,10 @@ export const runAt = (state: v2.State, elapsed: number): number =>
   v2.RUNNING.has(state.phase) ? elapsed : state.now;
 
 /**
- * THE CARD OPENS BY ITSELF (the client, 2026-10-22). The skill whose card a run is owed, or null.
- *
- * Owed exactly when the run has just stepped from the forest into a conversation: a MEET, from
- * whatever sent it. Not when it arrives in `talk` from the card, which is BACK on its way out
- * (`walkOn` below) and must be let through, or Walk on could never leave. main.ts dispatches the
- * INSPECT, which is what logs the card as read -- so the reveal's `read` is true because the card
- * was on screen, not because the panel that showed it said so.
- */
-export function cardOwed(before: v2.Phase, state: v2.State, content: v2.Content): string | null {
-  if (before !== 'forest' || state.phase !== 'talk' || state.active === null) return null;
-  return v2.findCharacter(content, state.active)?.skillId ?? null;
-}
-
-/**
  * Back to the forest from an open offer, whichever of its two phases the reducer is in: BACK takes
- * `card` to `talk` and `talk` to the forest, and since the card opens by itself there is no
- * conversation without it to go back to. Esc and Walk on both land here (main.ts, ui/App.tsx).
+ * `card` to `talk` and `talk` to the forest. Walk on and "No thanks" leave the offer altogether,
+ * from the card or the conversation, rather than stepping back one panel. Esc lands here too
+ * (main.ts, ui/App.tsx).
  */
 export function walkOn(store: Pick<Store, 'getState' | 'dispatch'>): void {
   for (let step = 0; step < 2; step++) {

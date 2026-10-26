@@ -105,7 +105,14 @@ for (const size of SIZES) {
         const good = await deal(page, seed);
         for (const c of cast) {
           const where = `${size.width}x${size.height}, seed ${seed}, ${c.id} (${good.includes(c.skillId) ? 'good' : 'bad'})`;
-          await page.evaluate((id) => window.__otp!.store.dispatch({ type: 'MEET', c: id }), c.id);
+          await page.evaluate(
+            ({ id, s }) => {
+              const { store } = window.__otp!;
+              store.dispatch({ type: 'MEET', c: id });
+              store.dispatch({ type: 'INSPECT', s });
+            },
+            { id: c.id, s: c.skillId },
+          );
           const offer = page.locator(`[data-offer="${c.id}"][data-card="${c.skillId}"]`);
           await expect(offer, where).toBeVisible();
 

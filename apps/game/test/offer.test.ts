@@ -1,12 +1,12 @@
 /*
- * THE OFFER, AS THE CLIENT ASKED FOR IT ON 2026-10-22: the card opens by itself, and the deck's
- * joystick leans the way the keys walk.
+ * THE OFFER, AS THE CLIENT ASKED FOR IT ON 2026-10-26: a short conversation first, and the card
+ * only when Purple asks to see it ("like a ping pong"); and the deck's joystick leans the way the
+ * keys walk.
  *
- * `cardOwed` and `walkOn` are the two halves of one decision. main.ts sends the INSPECT a MEET is
- * owed, which is what logs the card as read; `walkOn` takes the run back out through `talk`, which
- * must NOT be mistaken for a fresh meeting or Walk on would reopen the card it was closing. Both
- * are driven here through the real store over the real content, so a reducer change that moved
- * either phase fails here rather than in a browser.
+ * A MEET lands in `talk` and reads nothing. "Show me" sends the INSPECT, which is what logs the card
+ * as read, so a player who says "No thanks" has not read it and the reveal says so. `walkOn` takes
+ * the run back to the forest from either panel. All driven through the real store over the real
+ * content, so a reducer change that moved either phase fails here rather than in a browser.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,56 +15,60 @@ import { v2 } from '@otp/core';
 import raw from '../../../content/game.v2.json';
 import { createStore } from '../src/store';
 import type { Store } from '../src/store';
-import { cardOwed, walkOn } from '../src/world/run';
+import { walkOn } from '../src/world/run';
 import { KEY_TILT_PX, KEY_TILT_REDUCED_PX, keyTilt } from '../src/ui/touch-controls';
 
 const content = v2.loadContent(raw);
 
-/** A store in the forest, and a listener wired the way main.ts wires it. */
+/** A store in the forest. */
 function forest(): Store {
   let clock = 0;
   const store = createStore(content, () => (clock += 10), 7);
-  let last = store.getState().phase;
-  store.subscribe((state) => {
-    const owed = cardOwed(last, state, content);
-    last = state.phase;
-    if (owed) store.dispatch({ type: 'INSPECT', s: owed });
-  });
   store.dispatch({ type: 'START', runId: 'r' });
   store.dispatch({ type: 'BEGIN' });
   return store;
 }
 
-describe('the card opens by itself', () => {
-  it('meeting someone lands on their card, and the card is logged as read', () => {
+const readOf = (store: Store, skillId: string): boolean =>
+  v2.reveal(store.getState(), content).find((r) => r.skillId === skillId)!.read;
+
+describe('the conversation comes before the card', () => {
+  it('meeting someone opens the conversation, and nothing is read yet', () => {
     const store = forest();
     store.dispatch({ type: 'MEET', c: 'owl' });
-    const state = store.getState();
-    expect(state.phase).toBe('card');
-    expect(state.inspected).toEqual(['word-weaver']);
-    expect(v2.reveal(state, content).find((r) => r.skillId === 'word-weaver')!.read).toBe(true);
+    expect(store.getState().phase).toBe('talk');
+    expect(store.getState().inspected).toEqual([]);
+    expect(readOf(store, 'word-weaver')).toBe(false);
   });
 
-  it('is owed only on the step from the forest into a conversation', () => {
+  it('"Show me" opens the card and logs it as read', () => {
     const store = forest();
-    store.dispatch({ type: 'MEET', c: 'rabbit' });
-    const state = { ...store.getState(), phase: 'talk' as const };
-    expect(cardOwed('forest', state, content)).toBe('cottage-finder');
-    // BACK from the card passes through `talk` on its way out: that is not a meeting.
-    expect(cardOwed('card', state, content)).toBeNull();
-    expect(cardOwed('forest', { ...state, active: null }, content)).toBeNull();
-    expect(cardOwed('forest', store.getState(), content)).toBeNull();
+    store.dispatch({ type: 'MEET', c: 'owl' });
+    store.dispatch({ type: 'INSPECT', s: 'word-weaver' });
+    expect(store.getState().phase).toBe('card');
+    expect(store.getState().inspected).toEqual(['word-weaver']);
+    expect(readOf(store, 'word-weaver')).toBe(true);
   });
 
-  it('Walk on leaves the offer for the forest, and meeting again opens the card again', () => {
+  it('"No thanks" leaves the conversation for the forest, and meeting again starts it over', () => {
     const store = forest();
     store.dispatch({ type: 'MEET', c: 'cat' });
     walkOn(store);
     expect(store.getState().phase).toBe('forest');
     expect(store.getState().active).toBeNull();
     store.dispatch({ type: 'MEET', c: 'cat' });
-    expect(store.getState().phase).toBe('card');
-    // Read once is read: a second look adds nothing to the log.
+    expect(store.getState().phase).toBe('talk');
+  });
+
+  it('Walk on from the card leaves for the forest too, and a second look adds nothing to the log', () => {
+    const store = forest();
+    store.dispatch({ type: 'MEET', c: 'cat' });
+    store.dispatch({ type: 'INSPECT', s: 'latch-lifter' });
+    walkOn(store);
+    expect(store.getState().phase).toBe('forest');
+    store.dispatch({ type: 'MEET', c: 'cat' });
+    expect(store.getState().phase).toBe('talk');
+    store.dispatch({ type: 'INSPECT', s: 'latch-lifter' });
     expect(store.getState().log.filter((e) => e.e === 'inspected')).toHaveLength(1);
   });
 

@@ -214,11 +214,31 @@ takes the seed from `POST /api/start` (the server signs it into the run's token)
 `crypto.getRandomValues` when the start does not answer, then passes it to
 `createState(content, seed)` and to `RESET { seed }`; a bad seed is refused (`bad-seed`). The state carries `seed` and `good`.
 
+### The conversation before the card (the client, 2026-10-26)
+
+Meeting someone no longer opens their card. It opens a short exchange, "like a ping pong": the
+character's greeting (`greet`), Purple's reply button "What have you got?", the character's offer
+(`offer`, one line in their own voice), and Purple's "Show me", which sends the INSPECT that opens
+the card and logs it as read. "No thanks", or the panel's Walk on, leaves for the forest with
+nothing read; the character waits, and meeting them again starts the conversation over. The clock
+keeps running through it (the client's choice), so it is two of their lines and two taps.
+
+The greeting and the offer live on the CHARACTER, not on a variant, so nothing said before the card
+differs between a good deal and a bad one: only the card can give it away. The reducer needed no new
+rule -- MEET has always landed in `talk` and INSPECT in `card`; between 2026-10-22 and this change
+the client opened the card itself on every MEET, and now the player does.
+
+What it cost, measured with the project's own clock check (`test/v2/real-content.test.ts`): a
+careful reader's talk went from 4.3 s to 7.7 s a character, and at 3:00 they arrived 14.5 s late.
+So the walk is 3:30 (`TIME_LIMIT_MS`) and par moved to 2:02, and the board was reset at launch
+(`BOARD_SINCE`), because the same play now scores differently.
+
 ### Verdicts, clock, run log
 
 - **`Verdict = 'take' | 'leave'`**, from the conversation or the card; reading is optional. A skill
   walked past counts as left.
-- **`TIME_LIMIT_MS = 180_000`**, a rule constant, injected as elapsed ms since BEGIN. An action at
+- **`TIME_LIMIT_MS = 210_000`** (3:30; 180_000 until 2026-10-26, when the conversation before the
+  card cost a careful reader about thirty seconds over the walk), a rule constant, injected as elapsed ms since BEGIN. An action at
   or after the run's deadline is not applied and the run ends `late`, stamped at the deadline. The
   deadline is the limit plus whatever a `rewind` perk gave back (`deadlineMs`, perks.ts); stamps
   stay real elapsed time (section 11).
@@ -253,12 +273,16 @@ Shipped weights since 2026-10-25: `played` 25, `clean` 15, `good` 15, `speed` 15
 25 + 15 + 45 + 15 = 100 (they were `clean` 10, `good` 20, `speed` 30, and a wolf or late run 0 and
 not posted, from 2026-10-22). Every wolf run still ranks below every clean one (25 against at least
 40), and a full basket at the buzzer (85) still beats the fastest basket one good skill short (80). **f(t)** is 1 at or
-under par, falls in a straight line to 0 at 3:00, and is never negative; t is the run's own
+under par, falls in a straight line to 0 at 3:30 (3:00 until 2026-10-26), and is never negative; t is the run's own
 `arrived` stamp less what a rewind gave back, the stamp itself being what the server bounds from above by its clock and from below by the walk the log
 describes (apps/api). The bonus is rounded to a whole point with integer arithmetic until the one
 division, so browser and server cannot round apart (`speedBonus`, scoring.ts).
 
-**Par is 1:47 (`scoring.parMs` 107000), derived, not chosen.** It is the arrival time of a careful
+**Par is 2:02 (`scoring.parMs` 122000) since 2026-10-26, derived, not chosen** (it was 1:47 until
+every meeting became a conversation; see "The conversation before the card" below). Re-measured that
+day on draft 5 of rules 3, with the Cat up her own lane: the slowest brisk careful run is 120.7 s on
+a 101-tile tour, each talk charged the greeting and the offer read plus two presses. What follows is
+the derivation as first written on 2026-10-22: It is the arrival time of a careful
 run that walks the shortest content-order tour of the shipped map once (113 four-connected tiles at
 `WALK_SPEED`, about 30 s, since the Cat moved into the clearing on 2026-10-22), knocks at the door (`world.knockMs`, 3 s) and reads every greeting and every
 card at `v2.BRISK` -- 238 words a minute, the Brysbaert meta-analysis rate the clock check's 200 is
@@ -275,12 +299,12 @@ par.
 
 | Run                          | Score |
 | ---------------------------- | ----- |
-| three good, at or under 1:47 | 100   |
-| three good, 2:00             | 97    |
-| three good, 2:30             | 91    |
-| three good, 2:59             | 85    |
+| three good, at or under 2:02 | 100   |
+| three good, 2:30             | 95    |
+| three good, 3:00             | 90    |
+| three good, 3:29             | 85    |
 | two good, 1:00 (fast)        | 80    |
-| two good, 2:30               | 74    |
+| two good, 2:30               | 77    |
 | one good, 1:00               | 60    |
 | leave everything, 0:30       | 40    |
 | any bad skill, any time      | 25    |
@@ -373,7 +397,7 @@ which is the client's framing and research's to confirm.
 ### The screens' words (`ui`)
 
 `landing`: title, titleHighlight, subtitle, start. `howTo`: title, steps (four lines: walk, open and
-read each card, take or leave, reach Grandma's door before 3:00 -- the time is held to
+read each card, take or leave, reach Grandma's door before 3:30 -- the time is held to
 `TIME_LIMIT_MS` by a real-content test). `hud`: time, basket, twoMinutes, oneMinute, thirtySeconds,
 timeUp. `reveal`: title, titleHighlight, took, left, good, bad, promised, did, giveaway, realWorld,
 score, question, cta, again. The three endings are `endings.grandma`, `.wolf` and `.late`.

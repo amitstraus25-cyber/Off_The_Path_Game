@@ -72,7 +72,7 @@ async function playTo(
 test.describe('the result comes first', () => {
   test('the score, its three parts and the time, as core counted them', async ({ page }) => {
     await serveEmptyBoard(page);
-    await playTo(page, { take: 'good', seconds: 120 });
+    await playTo(page, { take: 'good', seconds: 150 });
 
     const hero = page.locator('.otp-hero');
     const total = Number(await hero.getAttribute('data-score'));
@@ -82,13 +82,13 @@ test.describe('the result comes first', () => {
     const choices = await part('choices');
     const speed = await part('speed');
     expect(played + choices + speed, 'the parts do not add up to the score').toBe(total);
-    // 25 for playing; 15 clean and 15 for each of the three good; and at 2:00, past par, some of
+    // 25 for playing; 15 clean and 15 for each of the three good; and at 2:30, past par, some of
     // the bonus and not all of it.
     expect(played).toBe(content.scoring.played);
     expect(choices).toBe(content.scoring.clean + 3 * content.scoring.good);
     expect(speed).toBeGreaterThan(0);
     expect(speed).toBeLessThan(content.scoring.speed);
-    await expect(page.locator('[data-part="time"]')).toContainText('2:00');
+    await expect(page.locator('[data-part="time"]')).toContainText('2:30');
     await expect(hero.locator('h1')).toHaveText('Clean arrival');
     await expect(page.locator('.otp-replay__caught')).toHaveText(
       content.ui.reveal.caught.replace('{caught}', '4').replace('{bad}', '4'),

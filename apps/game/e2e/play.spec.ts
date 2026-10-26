@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { TILE } from '../src/world/logic';
-import { crossTheRiver, hasCrossed, ready, typeAName } from './helpers';
+import { askToSee, crossTheRiver, hasCrossed, ready, typeAName } from './helpers';
 import type { RunState } from './helpers';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -109,8 +109,9 @@ async function walkIntoCottage(page: Page): Promise<void> {
 }
 
 /**
- * Meets the seven in walking order and answers each with `choose`. Every offer opens with its card
- * already showing (the client, 2026-10-22); with `read`, its lines are collected before answering.
+ * Meets the seven in walking order and answers each with `choose`. Every offer opens with the
+ * conversation, and "Show me" opens the card (the client, 2026-10-26); with `read`, its lines are
+ * collected before answering.
  */
 async function walkTheCast(
   page: Page,
@@ -126,7 +127,7 @@ async function walkTheCast(
     await page.keyboard.press('t');
     const offer = page.locator(`[data-offer="${c.id}"]`);
     await expect(offer, `${c.id} opens their own offer`).toBeVisible();
-    // The card is the offer's own body: no step between meeting someone and reading it.
+    await askToSee(page, c.id);
     const panel = offer;
     await expect(panel, `${c.id} shows their card`).toHaveAttribute('data-card', c.skillId);
     await expect(panel.locator('[data-card-take] li').first()).toBeVisible();
@@ -384,8 +385,8 @@ test('the clock override ends a run late, and a late run is posted at 25 like an
   await serveStart(page, 7);
   await serveEmptyBoard(page);
   await begin(page);
-  await expect(page.locator('.otp-hud2__clock')).toHaveText(/^(3:00|2:5\d)$/);
-  await page.evaluate(() => window.__otp!.testClock.advance(180_000));
+  await expect(page.locator('.otp-hud2__clock')).toHaveText(/^(3:30|3:2\d)$/);
+  await page.evaluate(() => window.__otp!.testClock.advance(210_000));
   await throughTheDoor(page, 'late');
   const run = await state(page);
   expect(run.phase).toBe('late');
@@ -475,6 +476,16 @@ test('keyboard only: begin, talk, read, answer, arrive, reveal, replay', async (
   for (const c of await cast(page)) {
     await standBeside(page, c.spawn);
     await page.keyboard.press('t');
+    // The conversation by keyboard: Tab to Purple's reply, then Enter twice -- "What have you
+    // got?" and "Show me" are one button, so focus stays on it between the two.
+    const ask = page.locator(`[data-offer="${c.id}"][data-talk] [data-action="ask"]`);
+    await expect(ask).toBeVisible();
+    for (let n = 0; n < 6 && !(await ask.evaluate((b) => b === document.activeElement)); n++)
+      await page.keyboard.press('Tab');
+    await expect(ask).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.locator(`[data-offer="${c.id}"] [data-action="show-me"]`)).toBeFocused();
+    await page.keyboard.press('Enter');
     const card = page.locator(`[data-offer="${c.id}"][data-card="${c.skillId}"]`);
     // The card is open and focus lands on it, so nothing is pre-selected; then Take, Leave, Walk on.
     await expect(card.locator('.otp-card'), 'focus starts on reading').toBeFocused();
@@ -592,8 +603,9 @@ for (const [width, height] of [
     const rabbit = (await cast(page))[0]!;
     await standBeside(page, rabbit.spawn);
     await page.keyboard.press('t');
-    // One panel, card open: both answers and the way past are on screen without scrolling the
-    // page, and the page itself never scrolls -- a card too tall scrolls inside its panel.
+    await askToSee(page);
+    // The card: both answers and the way past are on screen without scrolling the page, and the
+    // page itself never scrolls -- a card too tall scrolls inside its panel.
     await onScreen('[data-offer] [data-action="take"]', 'offer');
     await onScreen('[data-offer] [data-action="leave"]', 'offer');
     await onScreen('[data-offer] [data-action="walk-on"]', 'offer');
@@ -649,7 +661,7 @@ for (const [width, height] of [
       await serveEmptyBoard(page);
       await begin(page);
       if (ending === 'late') {
-        await page.evaluate(() => window.__otp!.testClock.advance(180_000));
+        await page.evaluate(() => window.__otp!.testClock.advance(210_000));
       } else {
         if (ending === 'wolf') {
           const { good } = await state(page);
@@ -666,6 +678,7 @@ for (const [width, height] of [
           )!;
           await standBeside(page, bad.spawn);
           await page.keyboard.press('t');
+          await askToSee(page, bad.id);
           await page.waitForTimeout(320);
           await page.locator(`[data-offer="${bad.id}"] [data-action="take"]`).click();
           await expect(page.locator('#game')).toHaveAttribute('data-phase', 'forest');
