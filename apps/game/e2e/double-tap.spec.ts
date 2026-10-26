@@ -50,9 +50,12 @@ for (const gap of [250, 600]) {
     });
     const tap = await tapper(page);
 
+    // The gap runs from the first tap, not from when the card was seen: on a slow runner seeing it
+    // takes a few hundred milliseconds more, and the second tap drifted past the settle window.
+    const firstTapAt = Date.now();
     await tap(a.x, a.y);
     await expect(page.locator('[data-offer]')).toBeVisible();
-    await page.waitForTimeout(gap);
+    await page.waitForTimeout(Math.max(0, gap - (Date.now() - firstTapAt)));
     await tap(a.x, a.y);
     await page.waitForTimeout(400);
 
