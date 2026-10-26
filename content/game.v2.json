@@ -1,6 +1,6 @@
 {
   "rules": 3,
-  "version": "3.0.0-draft.2",
+  "version": "3.0.0-draft.3",
   "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off); the Bridge Key's note is new in rules 3 (2026-10-25), not yet security-read, and pending the same sign-off",
   "deal": {
     "good": 3,
@@ -89,7 +89,7 @@
       },
       "good": {
         "card": {
-          "take": ["Draws the wood as you walk.", "Keeps your map for you alone."],
+          "take": ["Draws the wood as you walk.", "Keeps your map for you only."],
           "leave": "You walk without a map."
         },
         "reveal": "Drew the wood as you walked. Kept the map for you."
@@ -116,7 +116,10 @@
       },
       "good": {
         "card": {
-          "take": ["Lowers the drawbridge for you.", "Hands the key back once you're across."],
+          "take": [
+            "Lowers the drawbridge for you.",
+            "Hands the key back once you're across, to you only."
+          ],
           "leave": "The drawbridge stays up. Find another way over."
         },
         "reveal": "Lowered the drawbridge and gave the key back."
@@ -223,27 +226,27 @@
       "id": "night-light",
       "name": "Night Light",
       "icon": "item-lantern",
-      "promise": "It lights your way when the sun goes down.",
+      "promise": "It lights up the path when the sun goes down.",
       "effect": {
         "kind": "lantern"
       },
       "realWorld": {
-        "term": "Prompt injection",
-        "note": "Anyone can write a sign. A skill that obeys whatever it reads can be steered by an attacker, so keep a human approving."
+        "term": "Anyone-with-the-link sharing",
+        "note": "A link anyone can open is open to attackers too. Share what a skill makes with the people who need it, nobody else."
       },
       "good": {
         "card": {
-          "take": ["Asks you before it follows any sign.", "Lights your way after dark."],
+          "take": ["Lights up the path for you only.", "Shines all the way to Grandma's."],
           "leave": "You walk on in the dusk."
         },
-        "reveal": "Lit your way, and asked you at every sign."
+        "reveal": "Lit up the path for you alone."
       },
       "bad": {
         "card": {
-          "take": ["Follows any sign it reads, without asking.", "Lights your way after dark."],
+          "take": ["Lights up the path for anyone to see.", "Shines all the way to Grandma's."],
           "leave": "You walk on in the dusk."
         },
-        "reveal": "One sign was the wolf's. The light followed it."
+        "reveal": "Anyone could see the light. The wolf followed it."
       }
     },
     {

@@ -861,7 +861,7 @@ specs and Paul's review.
 - [ ] The Magpie's exact spot from the client's picture
 - [x] Leaderboard reset for rules 3 (the client's call, 2026-10-26): `BOARD_SINCE` is 2026-10-25T22:50:00Z, a few minutes after the push that shipped rules 3. Older rows are hidden, not deleted; `supabase/migrations/0008_clear_pre_rules3_rows.sql` deletes them (keeping any with a work email)
 - [ ] **Human:** run `0008` in the Supabase SQL editor
-- [x] Clearer safe and unsafe card lines on all seven skills (the client, 2026-10-26; `docs/COPY_REVIEW.md` 0d, content `3.0.0-draft.2`). Night Light's real-world lesson is now Prompt injection
+- [x] Clearer safe and unsafe card lines on all seven skills (the client, 2026-10-26; `docs/COPY_REVIEW.md` 0d, content `3.0.0-draft.3`). Second pass the same day: Wood Map and Bridge Key say "you only"; Night Light's lesson is now who the light is for (Anyone-with-the-link sharing)
 - [ ] **Human:** approve 0d's lines; research sign-off on the two real-world changes (Slow Post, Night Light)
 - [x] The phone's landing loses its card as the computer's did (2026-10-26): the picture on top, Purple centred, the words under it on the sky's top colour
 - [ ] Research sign-off on the Bridge Key note
