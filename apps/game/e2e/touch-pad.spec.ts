@@ -10,7 +10,7 @@
 import { expect, test } from '@playwright/test';
 import type { CDPSession, Page } from '@playwright/test';
 import { TAP_PX } from '../src/ui/touch-controls';
-import { probe, startGame } from './helpers';
+import { probe, ready, startGame } from './helpers';
 
 /**
  * Parks Purple where a named map object can be talked to, without walking there.
@@ -237,4 +237,38 @@ test('holding those two back holds nothing else back', async ({ page }) => {
     Math.hypot(after.x - before.x, after.y - before.y),
     'an arrow key pressed on a focused walk button no longer walks her',
   ).toBeGreaterThan(AWAY);
+});
+
+/* ------------------------------------------- the deck at full strength, ringing Lime when touched */
+
+// The client, 2026-10-26: the buttons stay their colour "at every stage", turn green on hover, and
+// show a press. Measured as computed colour, which is what a player sees.
+test('the deck is never dimmed, and a held stick goes Black inside a Lime ring', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1716, height: 940 });
+  await page.goto('/');
+  await ready(page);
+  const stick = page.locator('.otp-stick');
+  const look = () =>
+    stick.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { opacity: s.opacity, ground: s.backgroundColor, ring: s.borderTopColor };
+    });
+  expect((await look()).opacity, 'on the title').toBe('1');
+  await page.getByRole('button', { name: /Begin the walk/ }).click();
+  expect((await look()).opacity, 'on the how-to').toBe('1');
+  await page.getByRole('button', { name: /Start walking/ }).click();
+  await page.waitForFunction(() => window.__otp?.store.getState().phase === 'forest');
+
+  const box = (await stick.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  expect((await look()).ring, 'hovered: a Lime ring').toBe('rgb(191, 255, 162)');
+  await page.mouse.down();
+  const held = await look();
+  expect(held.ground, 'held: Black').toBe('rgb(22, 9, 35)');
+  expect(held.ring).toBe('rgb(191, 255, 162)');
+  await page.mouse.up();
+  await page.mouse.move(0, 0);
+  expect((await look()).ground, 'let go: Deep Purple again').toBe('rgb(68, 19, 99)');
 });

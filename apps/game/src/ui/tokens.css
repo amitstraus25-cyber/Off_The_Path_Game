@@ -482,11 +482,38 @@ body::before {
 }
 
 /* An idle control takes no pointer: nothing it could do, and nothing under it it may stand on.
-   It is dimmed too, so on Title, the card, arrive and Results it reads as resting rather than as
-   a full-strength button that does nothing when clicked (review of 2026-10-22). */
+   NOT DIMMED any more (the client, 2026-10-26: the buttons "should stay this color ... at every
+   stage"): the deck is drawn at full strength on every screen, as it is while you walk. It was 55%
+   from the review of 2026-10-22. What still tells the screens apart is A's Lime, which is the
+   walk's alone, since the title, the how-to and Results own their screen's one Lime. */
 .otp-touch[data-mode='idle'] :is(.otp-stick, .otp-a-button) {
   pointer-events: none;
-  opacity: 0.55;
+}
+
+/*
+ * HOVER AND PRESS, WHILE YOU WALK (the client, 2026-10-26). A pointer over either control rings it
+ * in Lime. Pressed, the stick's ground goes from Deep Purple to Black for as long as the thumb is
+ * down (`data-held`, set by ui/touch-controls.ts, since the drag captures the pointer), and A's
+ * Deep Purple rim thickens so its Lime face sinks. Palette colours only, nothing tinted or darkened:
+ * the "darker" press is the next colour down the brand's own ramp, not a mixed shade.
+ */
+@media (hover: hover) {
+  .otp-touch[data-mode='play'] .otp-stick:hover {
+    border-color: var(--cyera-lime);
+  }
+
+  .otp-touch[data-mode='play'] .otp-a-button:hover {
+    box-shadow: 0 0 0 3px var(--cyera-lime);
+  }
+}
+
+.otp-touch[data-mode='play'] .otp-stick[data-held] {
+  border-color: var(--cyera-lime);
+  background: var(--cyera-black);
+}
+
+.otp-touch[data-mode='play'] .otp-a-button:is(:active, [data-held]) {
+  border-width: 7px;
 }
 
 .otp-stick:focus-visible,

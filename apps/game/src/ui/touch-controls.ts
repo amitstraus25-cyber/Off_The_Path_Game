@@ -363,6 +363,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
 
   const reset = (): void => {
     stickPointer = null;
+    delete stick.dataset['held'];
     pointed = { x: 0, y: 0 };
     knob.style.transform = '';
     knob.dataset['keys'] = '';
@@ -386,6 +387,7 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
     if (stickPointer !== null || mode !== 'play') return;
     // A thumb on the stick takes the stick back from a walk button mid-step (setStick ends a carry).
     stickPointer = e.pointerId;
+    stick.dataset['held'] = '';
     pressedAt = e.timeStamp;
     stick.setPointerCapture(e.pointerId);
     moveKnob(e);
@@ -406,7 +408,13 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   };
   const onButton = (e: PointerEvent): void => {
     e.preventDefault();
+    // Shown pressed while the finger or the mouse button is down (tokens.css): the pointer's own
+    // default is cancelled just above, which on some browsers keeps `:active` from ever applying.
+    button.dataset['held'] = '';
     press();
+  };
+  const onButtonRelease = (): void => {
+    delete button.dataset['held'];
   };
 
   /** A, whichever way it was pressed: talk in the forest, else nothing. */
@@ -503,6 +511,8 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
   stick.addEventListener('pointerup', onStickUp);
   stick.addEventListener('pointercancel', onStickUp);
   button.addEventListener('pointerdown', onButton);
+  for (const type of ['pointerup', 'pointercancel', 'pointerleave'] as const)
+    button.addEventListener(type, onButtonRelease);
   button.addEventListener('touchend', onButtonUp);
   button.addEventListener('click', onButtonClick);
 
