@@ -642,3 +642,19 @@ body::before {
   /* The sky's top stop alone: the phone's open landing sets its words on it, above the picture. */
   --otp-art-sky-top: #330e48;
 }
+
+/*
+ * THE FOREST'S TIMBER (ui/Title.tsx `sign`): the how-to-play is one of the wood's signboards (the
+ * client, 2026-10-26: "look like the game, like the sign post"). These are the world art's own
+ * ramps, tools/graybox/src/paint.ts PALETTE `wood` and `trunk`, so the board in the DOM is the
+ * board on the canvas and not a brown chosen here. Like the sky above they belong to the artwork
+ * and are used nowhere else.
+ */
+.otp-ui {
+  --otp-art-wood-0: #6b4522;
+  --otp-art-wood-1: #9a6a36;
+  --otp-art-wood-2: #c08f55;
+  --otp-art-wood-3: #dcb882;
+  --otp-art-trunk-0: #4e3520;
+  --otp-art-trunk-1: #6b4a2b;
+}

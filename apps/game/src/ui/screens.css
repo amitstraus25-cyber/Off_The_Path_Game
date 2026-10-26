@@ -329,6 +329,12 @@
       'face text'
       'control control';
   }
+
+  /* On its own row the control sits in the middle of the panel, not in its corner (the client,
+     2026-10-26: the arrow "centralized in the middle of the pop-up"). */
+  .otp-arrive .otp-arrive__control {
+    justify-items: center;
+  }
 }
 
 .otp-arrive > .otp-portrait {
@@ -2796,5 +2802,149 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
       color-mix(in srgb, var(--cyera-aubergine) 55%, var(--cyera-deep-purple)),
       var(--cyera-deep-purple)
     );
+  }
+}
+
+/* ===========================================================================
+   THE HOW-TO AS A SIGNBOARD (the client, 2026-10-26: "fix this landing page so it looks like the
+   game, like the sign post"). ui/Title.tsx `sign`, on the how-to only.
+
+   The board is the wood's own timber board, drawn as tools/graybox paints the logo board and the
+   notice: a lit two-pixel timber frame round a dark recess, the frame's shadow falling into the
+   recess from the top-left light, a near-black keyline outside, and two stakes into the ground.
+   Every colour is the world art's (tokens.css, "THE FOREST'S TIMBER"); nothing is rounded, because
+   nothing in the wood is.
+
+   THE WORDS ARE OFFWHITE, the cream paint the canvas boards carry, and every line is measured on
+   the darkest and the lightest plank: 7.7:1 on wood-0, 7.5:1 on trunk-1, 10.4:1 on a seam. Wood-3
+   was tried for the numerals and the controls line and is 4.49:1 on wood-0, a hair under AA, so
+   it is the pegs' colour and nobody's text.
+
+   WHAT DOES NOT MOVE: the scroll box and the foot, which the fit ladder measures (Title.tsx
+   `useTitleFit`), and the ladder's own `padding-block`, which this leaves to it. The board is
+   12px narrower than the landing's column and stands 12px off the canvas's edge, so its right
+   edge is where the column's always was and Purple keeps her air.
+   =========================================================================== */
+.otp-title-dock[data-sign] .otp-title-panel {
+  --sign-rim: round(calc(6px * var(--otp-ui)), 1px);
+  --sign-plank: round(calc(32px * var(--otp-ui)), 1px);
+  --sign-seam: max(2px, round(calc(3px * var(--otp-ui)), 1px));
+  --sign-peg: max(4px, round(calc(6px * var(--otp-ui)), 1px));
+  --sign-peg-in: round(calc(9px * var(--otp-ui)), 1px);
+  --sign-peg-shade: var(--otp-art-trunk-0);
+  padding-inline: calc(22px * var(--otp-ui));
+  border: var(--sign-rim) solid;
+  /* Lit from the top left, as every surface in the wood is. */
+  border-color: var(--otp-art-wood-2) var(--otp-art-wood-1) var(--otp-art-wood-1)
+    var(--otp-art-wood-2);
+  border-radius: 0;
+  box-shadow:
+    0 0 0 2px var(--otp-art-trunk-0),
+    inset calc(3px * var(--otp-ui)) calc(3px * var(--otp-ui)) 0
+      color-mix(in srgb, var(--otp-art-trunk-0) 80%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background:
+    /* Four pegs, one in each corner of the recess, each with its shadow down and to the right. */
+    linear-gradient(var(--otp-art-wood-3), var(--otp-art-wood-3)) left var(--sign-peg-in) top
+      var(--sign-peg-in) / var(--sign-peg) var(--sign-peg) no-repeat,
+    linear-gradient(var(--otp-art-wood-3), var(--otp-art-wood-3)) right var(--sign-peg-in) top
+      var(--sign-peg-in) / var(--sign-peg) var(--sign-peg) no-repeat,
+    linear-gradient(var(--otp-art-wood-3), var(--otp-art-wood-3)) left var(--sign-peg-in) bottom
+      var(--sign-peg-in) / var(--sign-peg) var(--sign-peg) no-repeat,
+    linear-gradient(var(--otp-art-wood-3), var(--otp-art-wood-3)) right var(--sign-peg-in) bottom
+      var(--sign-peg-in) / var(--sign-peg) var(--sign-peg) no-repeat,
+    linear-gradient(var(--sign-peg-shade), var(--sign-peg-shade)) left
+      calc(var(--sign-peg-in) + 2px) top calc(var(--sign-peg-in) + 2px) / var(--sign-peg)
+      var(--sign-peg) no-repeat,
+    linear-gradient(var(--sign-peg-shade), var(--sign-peg-shade)) right
+      calc(var(--sign-peg-in) - 2px) top calc(var(--sign-peg-in) + 2px) / var(--sign-peg)
+      var(--sign-peg) no-repeat,
+    linear-gradient(var(--sign-peg-shade), var(--sign-peg-shade)) left
+      calc(var(--sign-peg-in) + 2px) bottom calc(var(--sign-peg-in) - 2px) / var(--sign-peg)
+      var(--sign-peg) no-repeat,
+    linear-gradient(var(--sign-peg-shade), var(--sign-peg-shade)) right
+      calc(var(--sign-peg-in) - 2px) bottom calc(var(--sign-peg-in) - 2px) / var(--sign-peg)
+      var(--sign-peg) no-repeat,
+    /* The planks: two tones of the timber, each laid against a dark seam. */
+    repeating-linear-gradient(
+        180deg,
+        var(--otp-art-wood-0) 0 var(--sign-plank),
+        var(--otp-art-trunk-0) var(--sign-plank) calc(var(--sign-plank) + var(--sign-seam)),
+        var(--otp-art-trunk-1) calc(var(--sign-plank) + var(--sign-seam))
+          calc(2 * var(--sign-plank) + var(--sign-seam)),
+        var(--otp-art-trunk-0) calc(2 * var(--sign-plank) + var(--sign-seam))
+          calc(2 * (var(--sign-plank) + var(--sign-seam)))
+      );
+}
+/* The numeral is its own rule: a pseudo-element cannot sit inside :is(). */
+.otp-title-dock[data-sign] .otp-title-panel :is(.otp-title__mark, .otp-howto, .otp-hint),
+.otp-title-dock[data-sign] .otp-title-panel .otp-howto > li::before {
+  color: var(--cyera-offwhite);
+}
+.otp-title-dock[data-sign] .otp-title-panel .otp-hint {
+  font-weight: 400;
+}
+
+/*
+ * Stood in the ground, beside the world: a board of the copy's own height, centred in the canvas,
+ * on two stakes that run down out of the frame. The dock clips them at the canvas's bottom edge,
+ * which is the ground they go into. A phone held upright docks the card under the world instead,
+ * where there is no ground to stand it in, so it keeps the board and loses the stakes.
+ *
+ * A phone held sideways (500px tall or less) has no height to spare for them either: the stakes'
+ * 48px and the air above the board pushed the steps under a fold at 844x390. So there the board
+ * is the full column the card always was, on a thinner rim, and the stakes are left out.
+ */
+@media (orientation: landscape) and (max-height: 500px) {
+  .otp-title-dock[data-sign] .otp-title-panel {
+    --sign-rim: 3px;
+  }
+}
+@media (orientation: landscape) and (min-height: 501px) {
+  .otp-title-dock[data-sign] {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: calc(16px * var(--otp-ui)) 0 calc(48px * var(--otp-ui)) calc(12px * var(--otp-ui));
+    overflow: hidden;
+  }
+  html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-dock[data-sign] {
+    padding-left: 0;
+    padding-right: calc(12px * var(--otp-ui));
+  }
+  .otp-title-dock[data-sign] .otp-title-panel {
+    position: relative;
+    width: calc(min(calc(306px * var(--otp-ui)), 62%) - 12px * var(--otp-ui));
+    height: auto;
+    max-height: 100%;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .otp-title-dock[data-sign] .otp-title-panel::before,
+  .otp-title-dock[data-sign] .otp-title-panel::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    top: calc(100% + var(--sign-rim) + 2px);
+    width: round(calc(14px * var(--otp-ui)), 1px);
+    height: 100vh;
+    box-sizing: border-box;
+    border: 2px solid var(--otp-art-trunk-0);
+    border-top: 0;
+    pointer-events: none;
+    /* Lit on its left half; the board's shadow across its top, which the stake sits under. */
+    background:
+      linear-gradient(var(--otp-art-trunk-0), var(--otp-art-trunk-0)) top / 100%
+        calc(4px * var(--otp-ui)) no-repeat,
+      linear-gradient(90deg, var(--otp-art-wood-1) 0 50%, var(--otp-art-wood-0) 50% 100%);
+  }
+  .otp-title-dock[data-sign] .otp-title-panel::before {
+    left: 18%;
+  }
+  .otp-title-dock[data-sign] .otp-title-panel::after {
+    right: 18%;
   }
 }

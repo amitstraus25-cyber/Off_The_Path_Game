@@ -261,8 +261,18 @@ async function expectReadable(
  * made transparent. The worst pixel decides, so a run passes only if it clears AA everywhere it
  * sits. The title, the subtitle, the two lines of premise and the controls line on the shore are
  * all held to it, not the h1 alone.
+ *
+ * THE HOW-TO'S SIGNBOARD is measured the same way (the client, 2026-10-26): its planks are a
+ * gradient, so there is no single background colour either, and its four steps are held to AA as
+ * well as its heading. `first` is the run that must have been measured; `reload` is off there,
+ * because a reload would take the walk back to the landing mid-test, and the style tag is removed
+ * instead.
  */
-async function expectReadableOverPicture(page: Page, where: string): Promise<void> {
+async function expectReadableOverPicture(
+  page: Page,
+  where: string,
+  { first = 'Off the', reload = true }: { first?: string; reload?: boolean } = {},
+): Promise<void> {
   const runs = await page.evaluate(() => {
     const out: {
       text: string;
@@ -272,7 +282,7 @@ async function expectReadableOverPicture(page: Page, where: string): Promise<voi
     }[] = [];
     const panel = document.querySelector('.otp-title-panel')!;
     for (const el of panel.querySelectorAll<HTMLElement>(
-      '.otp-title__mark, .otp-title__mark *, .otp-title__sub, .otp-title__agent, .otp-title__premise, .otp-hint',
+      '.otp-title__mark, .otp-title__mark *, .otp-title__sub, .otp-title__agent, .otp-title__premise, .otp-hint, .otp-howto > li, .otp-howto > li *',
     )) {
       const own = [...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent ?? '').trim());
       if (!own) continue;
@@ -292,11 +302,13 @@ async function expectReadableOverPicture(page: Page, where: string): Promise<voi
     return out;
   });
   expect(
-    runs.some((r) => r.text.startsWith('Off the')),
+    runs.some((r) => r.text.startsWith(first)),
     `${where}: the title was not measured`,
   ).toBe(true);
-  await page.addStyleTag({
-    content: '.otp-title-panel, .otp-title-panel * { color: transparent !important; }',
+  const hide = await page.addStyleTag({
+    // The numerals too: `*` does not reach a pseudo-element that sets its own colour.
+    content:
+      '.otp-title-panel, .otp-title-panel *, .otp-title-panel *::before { color: transparent !important; }',
   });
   for (const r of runs) {
     const shot = (await page.screenshot({ clip: r.box })).toString('base64');
@@ -338,8 +350,12 @@ async function expectReadableOverPicture(page: Page, where: string): Promise<voi
       )
       .toBeGreaterThanOrEqual(r.large ? AA_LARGE : AA_NORMAL);
   }
-  await page.reload();
-  await ready(page);
+  if (reload) {
+    await page.reload();
+    await ready(page);
+  } else {
+    await hide.evaluate((el) => (el as Element).remove());
+  }
 }
 
 /** Plays the three encounters through the store, the way a run is played, ending at the door. */
@@ -376,7 +392,9 @@ for (const size of SIZES) {
       if (pictured) await expectReadableOverPicture(page, at('title'));
       else await expectReadable(page, at('title'), ['Off the']);
       await page.getByRole('button', { name: /Begin the walk/ }).click();
-      await expectReadable(page, at('how-to'), ['How to play']);
+      // The how-to is a timber signboard, its planks a gradient: measured pixel by pixel.
+      await page.locator('[data-howto]').waitFor();
+      await expectReadableOverPicture(page, at('how-to'), { first: 'How to play', reload: false });
       await page.getByRole('button', { name: /Start walking/ }).click();
 
       // 01 Explore: the frame's own title is aria-hidden and the h1 is visually hidden, so there

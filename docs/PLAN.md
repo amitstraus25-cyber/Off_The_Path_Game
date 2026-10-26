@@ -864,6 +864,7 @@ specs and Paul's review.
 - [x] Clearer safe and unsafe card lines on all seven skills (the client, 2026-10-26; `docs/COPY_REVIEW.md` 0d, content `3.0.0-draft.4`). Second pass the same day: Wood Map and Bridge Key say "you only"; Night Light's lesson is now who the light is for (Anyone-with-the-link sharing); Wing Ride's lesson is now Prompt injection (was Supply-chain risk)
 - [ ] **Human:** approve 0d's lines; research sign-off on the three real-world changes (Slow Post, Night Light, Wing Ride)
 - [x] The phone's landing loses its card as the computer's did (2026-10-26): the picture on top, Purple centred, the words under it on the sky's top colour
+- [x] The how-to-play is one of the wood's timber signboards (2026-10-26): the world art's wood ramps, a lit frame, pegs, planks, two stakes on a computer; the words in Offwhite, measured pixel by pixel in heading-contrast
 - [ ] Research sign-off on the Bridge Key note
 
 ## Readiness findings (sweep of 2026-10-21)

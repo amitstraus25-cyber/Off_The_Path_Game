@@ -215,6 +215,7 @@ function TitleCard({
   focus = false,
   art = false,
   open = false,
+  sign = false,
 }: {
   children: ComponentChildren;
   /** The frame's title: the landing's `ui.landing.frameTitle`, the how-to's own `ui.howTo.title`. */
@@ -237,6 +238,11 @@ function TitleCard({
    * screens.css applies it in landscape only; a phone keeps its card.
    */
   open?: boolean;
+  /**
+   * The card as one of the wood's timber signboards (the client, 2026-10-26: "look like the game,
+   * like the sign post"): the how-to's. screens.css draws the board, its nails and its two stakes.
+   */
+  sign?: boolean;
 }) {
   const cta = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -263,6 +269,7 @@ function TitleCard({
         class="otp-title-dock"
         data-art={art ? 'true' : undefined}
         data-open={art && open ? 'true' : undefined}
+        data-sign={sign ? 'true' : undefined}
       >
         {art && (
           /*
@@ -399,6 +406,7 @@ export function HowTo({ ui, onGo, busy }: HowToProps) {
       onAction={onGo}
       busy={busy}
       focus
+      sign
     >
       <h1 class="otp-title__mark otp-howto__title">{ui.howTo.title}</h1>
       {/*
