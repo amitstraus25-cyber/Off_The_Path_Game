@@ -859,7 +859,8 @@ specs and Paul's review.
 - [x] Paul's review (2026-10-26: ship with fixes), pushed to main
 - [x] Paul's review fixes (2026-10-26): drawbridge and lent-key copy; `gateLockedLeft` and `noWayOver`; the raised east end's bank and rest sill; the leaf sweeps across as it falls; the Gatekeeper one tile west at (22,19); COPY_REVIEW 0c; `prop-forksign` removed (e2e 431 passed, 6 skipped)
 - [ ] The Magpie's exact spot from the client's picture
-- [x] Leaderboard reset for rules 3 (the client's call, 2026-10-26): `BOARD_SINCE` is 2026-10-25T22:50:00Z, a few minutes after the push that shipped rules 3. Older rows are hidden, not deleted (docs/DATABASE.md)
+- [x] Leaderboard reset for rules 3 (the client's call, 2026-10-26): `BOARD_SINCE` is 2026-10-25T22:50:00Z, a few minutes after the push that shipped rules 3. Older rows are hidden, not deleted; `supabase/migrations/0008_clear_pre_rules3_rows.sql` deletes them (keeping any with a work email)
+- [ ] **Human:** run `0008` in the Supabase SQL editor
 - [ ] Research sign-off on the Bridge Key note
 
 ## Readiness findings (sweep of 2026-10-21)

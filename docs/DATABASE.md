@@ -256,18 +256,19 @@ total and silent.
 
 Files in `supabase/migrations/`, run by pasting into the Supabase SQL editor. Each one states at the
 top what it does, why, whether it is safe on a table that already has rows, and how to reverse it.
-There is no migration runner wired into this project and none is proposed: five files over the life
-of a marketing asset does not earn a tool.
+There is no migration runner wired into this project and none is proposed: eight files over the life
+of a marketing asset do not earn a tool.
 
-| File                                 | Decision | Safe to run now?                                   |
-| ------------------------------------ | -------- | -------------------------------------------------- |
-| `0001_leaderboard_baseline.sql`      | —        | **Yes.** Idempotent; changes nothing live.         |
-| `0002_leaderboard_log_hash.sql`      | 1        | **Only after D10 is reopened.** See below.         |
-| `0003_leaderboard_retention.sql`     | 2        | **Yes.** Implements a policy already decided.      |
-| `0004_leaderboard_delete_path.sql`   | 3        | **Yes.** Changes no row.                           |
-| `0005_leaderboard_rank_tiebreak.sql` | 4        | **Yes, and optional.** Pair with the code change.  |
-| `0006_clear_v1_rows.sql`             | —        | **Client's call.** Deletes the v1 rows for good.   |
-| `0007_leaderboard_work_email.sql`    | 5        | **Only after Legal signs off.** Then set the flag. |
+| File                                 | Decision | Safe to run now?                                                                                                               |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `0001_leaderboard_baseline.sql`      | —        | **Yes.** Idempotent; changes nothing live.                                                                                     |
+| `0002_leaderboard_log_hash.sql`      | 1        | **Only after D10 is reopened.** See below.                                                                                     |
+| `0003_leaderboard_retention.sql`     | 2        | **Yes.** Implements a policy already decided.                                                                                  |
+| `0004_leaderboard_delete_path.sql`   | 3        | **Yes.** Changes no row.                                                                                                       |
+| `0005_leaderboard_rank_tiebreak.sql` | 4        | **Yes, and optional.** Pair with the code change.                                                                              |
+| `0006_clear_v1_rows.sql`             | —        | **Client's call.** Deletes the v1 rows for good.                                                                               |
+| `0007_leaderboard_work_email.sql`    | 5        | **Only after Legal signs off.** Then set the flag.                                                                             |
+| `0008_clear_pre_rules3_rows.sql`     | —        | **Client's call (made 2026-10-26).** Deletes the rows before rules 3 for good, keeping any with a work email. Supersedes 0006. |
 
 Run them in order. `0001` first, always — it is also the drift check.
 
