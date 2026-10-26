@@ -179,7 +179,9 @@ The line is on the character, so it is the same for the good and the bad deal an
 away; it heads the card too. The shape is "I have a [thing]. It helps you [benefit].", kept to about 15
 words, because the clock charges the longest of them to every meeting. Each line keeps its
 character's opener from before (Hello!, Hoo!, Evening!, Slow, but sure). The card's lines are
-unchanged. Content version `3.0.0-draft.7`. All lines **DRAFT** for the human read.
+unchanged. Content version `3.0.0-draft.7`. The seven `greet` lines are **APPROVED (client)**: the
+client approved them as they are in chat on 2026-10-26, so they are not to be reworded here. The
+other rows stay **DRAFT** for the human read.
 
 | Path                                      | Was                                                        | Now                                                                            |
 | ----------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
