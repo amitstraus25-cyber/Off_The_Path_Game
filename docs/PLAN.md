@@ -874,6 +874,7 @@ specs and Paul's review.
 - [x] The card does not say the greeting again (the client, 2026-10-26): it opens on the skill itself, the greeting said once before it
 - [x] A finger's tap on the joystick is a one-tile nudge (the client, 2026-10-26: Purple "starts walking without stopping"): `TAP_PX`, one tile, for a touch tap; a mouse click and the walk buttons keep the four-tile step, a hold still walks until let go (`e2e/touch-pad.spec.ts`)
 - [x] A shared link previews as the landing (the client, 2026-10-26: LinkedIn): Open Graph and `twitter:card` tags in `index.html`, `public/og-landing.png` the real landing in its wide layout, scaled to 1200x627 (a new picture takes a new name; LinkedIn keeps images by URL), guarded in `test/public-page.test.ts`. The host is the Vercel address until the research-page URL arrives; a page that embeds the game needs its own `og:image`
+- [x] The how-to signboard, the client's pass (2026-10-26): its title, way in and controls line centred, the steps' numbers kept down the left; the controls line says "T or Space to talk" (Space always worked); the river's Cyera board carries its logo behind the how-to too, not only during the walk (`e2e/forest-signs.spec.ts`, at the client's 1716x940, since at 1280 the board is out of frame); the landing's shore line at 2.1% of the canvas so the longer line clears the pale cloud
 
 ## Readiness findings (sweep of 2026-10-21)
 

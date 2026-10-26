@@ -2681,14 +2681,16 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
     .otp-title-dock[data-open]
     .otp-title-panel
     .otp-hint {
-    /* On the dark band of the shore, rows 955 to 1005 of the picture's 1080, on one line. */
+    /* On the dark band of the shore, rows 955 to 1005 of the picture's 1080, on one line. 2.1% of
+       the canvas's height, not 2.4, since "T or Space to talk" (the client, 2026-10-26): the longer
+       line at 2.4 ran into the pale cloud on the shore and fell to 2.89:1 at 1280 (heading-contrast). */
     position: absolute;
     left: 0;
     bottom: calc(var(--otp-canvas-h, 0px) * 0.071);
     margin: 0;
     white-space: nowrap;
     line-height: 1.1;
-    font-size: max(12px, calc(var(--otp-canvas-h, 0px) * 0.024));
+    font-size: max(12px, calc(var(--otp-canvas-h, 0px) * 0.021));
     color: var(--cyera-offwhite);
   }
 
@@ -2949,11 +2951,10 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
   }
 }
 
-/* On an upright phone the way in and the controls line sit in the middle of the board, not at its
-   left edge (the client, 2026-10-26: "should be centered in the middle"). The pill is inline-flex,
-   so centring the foot's text centres it too. */
-@media (orientation: portrait) {
-  .otp-title-dock[data-sign] .otp-title__foot {
-    text-align: center;
-  }
+/* The title, the way in and the controls line sit in the middle of the board, on every screen,
+   while the steps keep their numbers down the left edge (the client, 2026-10-26: "center that in
+   the middle ... the numbers you can leave on the left"). The pill is inline-flex, so centring the
+   foot's text centres it too. */
+.otp-title-dock[data-sign] :is(.otp-howto__title, .otp-title__foot) {
+  text-align: center;
 }

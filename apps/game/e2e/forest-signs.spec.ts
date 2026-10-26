@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { TILE } from '../src/world/logic';
-import { mapObject, startGame } from './helpers';
+import { mapObject, ready, startGame } from './helpers';
 import type { MapObject } from './helpers';
 
 /*
@@ -422,4 +422,24 @@ test('the notice and the dead-end sign are seen in frame at both sizes', async (
     }
     await page.close();
   }
+});
+
+/*
+ * BEHIND THE HOW-TO, TOO (the client, 2026-10-26: the board by the river was "missing ... the Cyera
+ * logo" there). The world stands behind the signboard on that screen and the board is in frame on a
+ * computer, so its face carries the logo before the walk begins, not only during it.
+ */
+test('the board carries the logo behind the how-to, before the walk', async ({ page }) => {
+  // A wide computer window, the client's: at 1280 the camera stops short of the river's board.
+  await page.setViewportSize({ width: 1716, height: 940 });
+  await page.goto('/');
+  await ready(page);
+  await page.getByRole('button', { name: /Begin the walk/ }).click();
+  await expect(page.getByRole('button', { name: /Start walking/ })).toBeVisible();
+  const logo = page.locator('[data-world-signs] [data-sign="logo"]');
+  await expect(logo).toBeVisible();
+  const box = (await logo.boundingBox())!;
+  const canvas = (await page.locator('#game canvas').boundingBox())!;
+  expect(box.x, 'the logo is on the world, not off it').toBeGreaterThanOrEqual(canvas.x);
+  expect(box.x + box.width).toBeLessThanOrEqual(canvas.x + canvas.width + 0.5);
 });

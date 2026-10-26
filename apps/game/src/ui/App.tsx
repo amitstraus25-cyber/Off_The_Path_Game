@@ -352,6 +352,16 @@ export function App({
         type when the vnode at a position changes, and a live region handed another's node is
         rebuilt silently (UX_REVIEW finding 14).
       */}
+      {/*
+        THE LOGO ON THE BOARD BEHIND THE HOW-TO (the client, 2026-10-26): the world stands behind the
+        signboard there, and the board by the river was showing its blank face. Only the logo
+        layer; the HUD and the rest wait for the walk.
+      */}
+      {state.phase === 'howto' && signs && (
+        <div class="otp-world-anchor" key="howto-signs">
+          <WorldSigns faces={signs} />
+        </div>
+      )}
       {inWorld && (
         <div class="otp-world-anchor" key="world-hud">
           <h1 class="otp-visually-hidden" ref={forestHome} tabIndex={-1} data-autofocus>
