@@ -64,6 +64,15 @@ export const BASE_GID = 0x1fffffff;
  * centre. It moves the flight's half of the balance, so the audit checks it too.
  */
 export const MAGPIE_SPOT = { x: 19, y: 27 } as const;
+
+/*
+ * THE CAT'S CLEARING (the client, 2026-10-26: "create another path into that opening in the woods,
+ * move the cat up to that opening and create a path to him"). She stood at (39,16), in the lane of
+ * lawn just above the climb past the snail; now she sits five rows further up, in a glade of her
+ * own in the wood north of the road (`GLADES`), at the end of a one-wide lane that leaves the road
+ * at column 39 (`catLane`). Like the Magpie, she stands at the end of her lane, on the grass.
+ */
+export const CAT_SPOT = { x: 38, y: 11 } as const;
 export const WING_LANDING = { x: 35, y: 28 } as const;
 
 type Layer = number[];
@@ -5614,14 +5623,11 @@ export function generateForestMap(): GeneratedMap {
    * middle of a tree. Reachability is not asserted here; the audit's flood and `map.test.ts` both
    * walk to every member of the cast on the finished map, which is the only map that counts.
    */
-  const inTheClearing = (name: string, x: number, y: number) => {
-    if (isPath(x, y) || NEIGHBOURS.some(([dx, dy]) => isPath(x + dx, y + dy)))
-      throw new Error(`${name} at ${x},${y} is on the track or beside it, not in the clearing`);
-    if (isWater(x, y) || at(below, x, y) !== 0 || at(collision, x, y) !== 0)
-      throw new Error(`${name} at ${x},${y} is not open ground: something already stands there`);
-    clearArea(x, y, 1, 1);
-    return { name, x: x * TILE, y: y * TILE, width: TILE, height: TILE };
-  };
+  /*
+   * (`inTheClearing`, which seated the Cat off the track in the lane above the snail, stood here.
+   * She moved up into a glade of her own at the end of her own lane on 2026-10-26, so `bystander`
+   * seats her again, and an unused helper is lint's to refuse.)
+   */
 
   /**
    * The row just south of the track at this column.
@@ -5662,6 +5668,43 @@ export function generateForestMap(): GeneratedMap {
     }
   for (let y = spawnY - 1; y <= spawnY + 2; y++)
     for (let x = spawnX - 1; x <= spawnX + 2; x++) if (isPath(x, y)) pathEdge(x, y);
+
+  /*
+   * THE CAT'S CLEARING AND HER LANE (the client, 2026-10-26: "create another path into that opening
+   * in the woods, move the cat up to that opening and create a path to him").
+   *
+   * CUT HERE, LATE, AND NOT AS A GLADE AND A FOOTPATH UP TOP, which is what was tried first. A glade
+   * changes the wood's density field, the planting pass draws `rnd()` on every fringe cell of that
+   * field, and one draw more or less re-rolls every random choice after it: the whole map moved, and
+   * two of the audit's invariants broke at the far side of it (verge sides, crowns over the river).
+   * Cutting after everything random has run moves nothing but what is cut. Purple's pad above is the
+   * same pattern: `clearArea` fells every tree it touches whole (trunk, crown and collision), and the
+   * lane is TRACK, in `pathTiles`, with its rims drawn, rather than sand painted to look like it.
+   *
+   * The lane leaves the road at column 39, climbs the lawn between the two woods, steps west, and
+   * ends a tile below her; the clearing is the four columns round her, from her row up two.
+   *
+   * NOTHING EAST OF COLUMN 39 IS CUT. The elder whose trunk stands at (40-42,12) is the crown the
+   * arrival camera's top edge needs over column 42 (the audit wants nine of its twenty columns
+   * closed, and the map has exactly nine), and `clearArea` fells a whole tree for any cell of it.
+   */
+  const catLaneCells: [number, number][] = [];
+  {
+    const x0 = CAT_SPOT.x + 1;
+    let y = trackTop(x0) - 1;
+    for (; y > CAT_SPOT.y + 2; y--) catLaneCells.push([x0, y]);
+    catLaneCells.push([x0, y], [CAT_SPOT.x, y]);
+    for (y--; y > CAT_SPOT.y; y--) catLaneCells.push([CAT_SPOT.x, y]);
+  }
+  clearArea(CAT_SPOT.x - 2, CAT_SPOT.y - 1, 5, 2);
+  for (const [x, y] of catLaneCells) {
+    clearArea(x, y, 1, 1);
+    set(ground, x, y, gid('path'));
+    pathTiles.add(y * MAP_W + x);
+  }
+  for (const [x, y] of catLaneCells)
+    for (const [dx, dy] of [[0, 0], ...NEIGHBOURS] as const)
+      if (isPath(x + dx, y + dy)) pathEdge(x + dx, y + dy);
 
   const objects = [
     { name: 'spawn-purple', x: spawnX * TILE, y: spawnY * TILE, width: TILE, height: TILE },
@@ -5754,8 +5797,8 @@ export function generateForestMap(): GeneratedMap {
      */
     /*
      * ===========================================================================
-     * OFF THE TRACK AND UP INTO THE CLEARING: (39,16). Moved 2026-10-22, second time that day, on
-     * the client's word, and the (39,19) block below it is now HISTORY too.
+     * HISTORY (until 2026-10-26): OFF THE TRACK AND UP INTO THE CLEARING: (39,16). Moved 2026-10-22,
+     * second time that day, on the client's word, and the (39,19) block below it is HISTORY too.
      * ===========================================================================
      *
      * The client, on a screenshot of Purple at the cottage approach (they call her "the fox"):
@@ -5784,7 +5827,14 @@ export function generateForestMap(): GeneratedMap {
      * two things that matter off the track: that she is not standing on or beside it, and that the
      * cell is open ground rather than a tree she would be carved out of.
      */
-    inTheClearing('bystander-cat', 39, 16),
+    /*
+     * UP HER OWN LANE, INTO THE WOOD (the client, 2026-10-26): `CAT_SPOT`, at the end of the lane
+     * cut for her below the objects (`catLaneCells`), so `bystander` seats her again -- the lane is
+     * the track she touches. Still the last face before the door, still well clear of the trigger,
+     * and her talking ring is clear of the Owl's and the snail's; the guards named in the block
+     * above still run over the committed map.
+     */
+    bystander('bystander-cat', CAT_SPOT.x, CAT_SPOT.y),
     /*
      * ===========================================================================
      * HISTORY (until the second move, 2026-10-22): OFF THE DOORSTEP, ONTO THE MAIN TRACK: (39,19),
@@ -8780,8 +8830,12 @@ export function generateForestMap(): GeneratedMap {
      * has four such tiles -- (13,27), (15,28), (16,28) and (18,27) -- after it was routed as a
      * staircase to keep the count that low. The worst run did not move. Same ratchet, same rule: the
      * six missing gids bring it down.
+     *
+     * 27 -> 33 ON 2026-10-26, and the six are the Cat's lane (`catLaneCells`), for the same reason:
+     * a one-wide lane climbing north has grass on its east and west, the opposite pair the tileset
+     * cannot draw. The worst run did not move.
      */
-    const VERGE_GAP = { sides: 27, run: 6 } as const;
+    const VERGE_GAP = { sides: 33, run: 6 } as const;
     if (bareSides.length > VERGE_GAP.sides || worstRun > VERGE_GAP.run)
       faults.push(
         `${bareSides.length} track side(s) have no verge drawn on them (want at most ` +

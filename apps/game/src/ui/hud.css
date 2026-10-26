@@ -359,9 +359,15 @@ html[data-cabinet='overlay'] .otp-ui {
 }
 
 /* Purple: a different SHAPE (a diamond) in the colour the brand gives her controls, ringed in Black
-   so she reads on the path and on the open ground alike. The biggest mark on the map, and the same
-   size in CSS pixels at every map scale -- a 12px diamond -- because the scale divides out the
-   map's own pixels a tile. */
+   so she reads on the path and on the open ground alike. The biggest mark on the map: a 12px
+   diamond wherever the map has two pixels a tile or more, because the scale divides out the map's
+   own pixels a tile.
+
+   NOT ON THE ONE-PIXEL MAP (the client, 2026-10-26: on the phone "the character is too big for the
+   rest of the map"). There the map is only about a hundred pixels wide and every other mark shrinks
+   with it, so a 12px diamond stood out of proportion. The scale is capped at 1.25, so on a phone she
+   is a 6px diamond: still the biggest mark, about twice a character's dot, and in scale with the
+   paths and the cottage. */
 .otp-minimap__purple {
   fill: var(--cyera-lilac);
   stroke: var(--cyera-offwhite);
@@ -369,7 +375,7 @@ html[data-cabinet='overlay'] .otp-ui {
 }
 
 .otp-minimap__purple path {
-  transform: scale(calc(2.5 / var(--otp-map-px)));
+  transform: scale(min(1.25, calc(2.5 / var(--otp-map-px))));
 }
 
 /* A figure under the map: the map steps back so it never hides them. */

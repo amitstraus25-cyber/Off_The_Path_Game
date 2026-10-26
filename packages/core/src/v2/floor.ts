@@ -67,7 +67,7 @@ export const WALK_WORLD: WalkWorld = {
     'npc-owl': { x: 1136, y: 640 },
     'bystander-snail': { x: 1232, y: 768 },
     'npc-lantern-keeper': { x: 1200, y: 1088 },
-    'bystander-cat': { x: 1264, y: 544 },
+    'bystander-cat': { x: 1232, y: 384 },
   },
   landings: { 'wing-landing': { x: 1136, y: 912 } },
 };

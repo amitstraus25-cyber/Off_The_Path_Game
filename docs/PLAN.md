@@ -865,6 +865,9 @@ specs and Paul's review.
 - [ ] **Human:** approve 0d's lines; research sign-off on the three real-world changes (Slow Post, Night Light, Wing Ride)
 - [x] The phone's landing loses its card as the computer's did (2026-10-26): the picture on top, Purple centred, the words under it on the sky's top colour
 - [x] The how-to-play is one of the wood's timber signboards (2026-10-26): the world art's wood ramps, a lit frame, pegs, planks, two stakes on a computer; the words in Offwhite, measured pixel by pixel in heading-contrast
+- [x] The phone's minimap keeps Purple in scale (2026-10-26): her diamond is capped at 6px on the one-pixel map, still the biggest mark, no longer a third of its height
+- [x] The Cat moved up into the wood (2026-10-26): her own lane north off the road at column 39 and a clearing round her at (38,11), cut late in the generator so nothing else on the map moved; the verge bound 27 -> 33 for the lane's six sides
+- [x] The door panel's advance arrow sits in the middle of the panel on a phone (2026-10-26)
 - [ ] Research sign-off on the Bridge Key note
 
 ## Readiness findings (sweep of 2026-10-21)

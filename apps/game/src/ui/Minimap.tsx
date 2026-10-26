@@ -46,7 +46,8 @@ export interface MinimapProps {
 /**
  * A dot's radius and Purple's half-diagonal, in tiles, sized to read at two CSS pixels a tile.
  * Purple's is the biggest mark on the map (the review of 2026-10-22: "a larger, easier-to-find
- * Purple marker"), and hud.css keeps it that size in CSS pixels where the map is drawn smaller.
+ * Purple marker"), and hud.css keeps it that size in CSS pixels where the map is drawn smaller --
+ * down to the one-pixel phone map, where it shrinks with the map rather than dwarf it.
  */
 const DOT_R = 1.4;
 const PURPLE_HALF = 2.4;
