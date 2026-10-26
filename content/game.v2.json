@@ -1,6 +1,6 @@
 {
   "rules": 3,
-  "version": "3.0.0-draft.1",
+  "version": "3.0.0-draft.2",
   "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off); the Bridge Key's note is new in rules 3 (2026-10-25), not yet security-read, and pending the same sign-off",
   "deal": {
     "good": 3,
@@ -80,24 +80,26 @@
       "name": "Wood Map",
       "icon": "item-compass",
       "promise": "It draws you a map of the whole wood.",
-      "effect": { "kind": "minimap" },
+      "effect": {
+        "kind": "minimap"
+      },
       "realWorld": {
         "term": "Data exfiltration",
         "note": "Your map is your data. A skill can do its job and still send that data to someone you never chose."
       },
       "good": {
         "card": {
-          "take": ["Draws the wood as you walk.", "Keeps the map for you alone."],
+          "take": ["Draws the wood as you walk.", "Keeps your map for you alone."],
           "leave": "You walk without a map."
         },
         "reveal": "Drew the wood as you walked. Kept the map for you."
       },
       "bad": {
         "card": {
-          "take": ["Draws the wood as you walk.", "Sends your map to a stranger."],
+          "take": ["Draws the wood as you walk.", "Sends a copy of your map to a stranger."],
           "leave": "You walk without a map."
         },
-        "reveal": "Your map went to the wolf. He knew where you'd be."
+        "reveal": "It sent your map to the wolf. He knew where you were."
       }
     },
     {
@@ -105,7 +107,9 @@
       "name": "Bridge Key",
       "icon": "item-key",
       "promise": "It lowers the drawbridge, so you can cross the river.",
-      "effect": { "kind": "bridge-gate" },
+      "effect": {
+        "kind": "bridge-gate"
+      },
       "realWorld": {
         "term": "Leaked credentials",
         "note": "A skill that saves a key it was only lent leaves it where others can find it. That is how API keys leak."
@@ -119,7 +123,7 @@
       },
       "bad": {
         "card": {
-          "take": ["Lowers the drawbridge for you.", "Keeps a copy of the key for next time."],
+          "take": ["Lowers the drawbridge for you.", "Keeps a copy of the key for later."],
           "leave": "The drawbridge stays up. Find another way over."
         },
         "reveal": "It kept a copy of the key. The wolf found it."
@@ -130,24 +134,28 @@
       "name": "Wing Ride",
       "icon": "item-wings",
       "promise": "It flies you over the river to the far bank.",
-      "effect": { "kind": "wing-ride", "flightMs": 2000, "lands": "wing-landing" },
+      "effect": {
+        "kind": "wing-ride",
+        "flightMs": 2000,
+        "lands": "wing-landing"
+      },
       "realWorld": {
         "term": "Supply-chain risk",
         "note": "A skill that fetches its instructions from someone else can change after you said yes, like a map redrawn overnight."
       },
       "good": {
         "card": {
-          "take": ["Plans the flight from its own map.", "Flies you over the river."],
+          "take": ["Plans the flight from its own map only.", "Flies you over the river."],
           "leave": "You stay on this side of the river."
         },
-        "reveal": "Flew you over the river."
+        "reveal": "Flew you over the river by its own map."
       },
       "bad": {
         "card": {
-          "take": ["Takes the flight plan from a stranger's map.", "Flies you over the river."],
+          "take": ["Takes its flight plan from a stranger.", "Flies you over the river."],
           "leave": "You stay on this side of the river."
         },
-        "reveal": "It flew you where the wolf's map said."
+        "reveal": "It flew by the stranger's map. The wolf drew it."
       }
     },
     {
@@ -155,9 +163,11 @@
       "name": "Word Weaver",
       "icon": "item-weaver",
       "promise": "It sends word ahead, so Grandma expects you.",
-      "effect": { "kind": "early-welcome" },
+      "effect": {
+        "kind": "early-welcome"
+      },
       "realWorld": {
-        "term": "Oversharing and public exposure",
+        "term": "Public exposure",
         "note": "A copy pinned at a crossing is public data anyone can read. Sending word ahead should not mean telling the whole wood."
       },
       "good": {
@@ -169,10 +179,10 @@
       },
       "bad": {
         "card": {
-          "take": ["Sends word ahead to Grandma.", "Pins a copy up at every crossing."],
+          "take": ["Sends word ahead to Grandma.", "Pins a copy at every crossing for anyone."],
           "leave": "You knock and wait."
         },
-        "reveal": "She expected you. So did the wolf."
+        "reveal": "She expected you. So did the wolf. He read it."
       }
     },
     {
@@ -180,10 +190,13 @@
       "name": "Slow Post",
       "icon": "item-parcel",
       "promise": "It carries your heavy things, sealed. You walk light.",
-      "effect": { "kind": "walk-faster", "factor": 1.15 },
+      "effect": {
+        "kind": "walk-faster",
+        "factor": 1.15
+      },
       "realWorld": {
         "term": "Third-party data sharing",
-        "note": "A friend who peeks is a third party you never agreed to. A skill can deliver your data and share it along the way."
+        "note": "Anyone who looks inside on the way is a third party you never chose. A skill can deliver your data and share it too."
       },
       "good": {
         "card": {
@@ -199,11 +212,11 @@
         "card": {
           "take": [
             "Carries your parcel, so you walk faster.",
-            "Lets a friend peek inside on the way."
+            "Lets a stranger look inside on the way."
           ],
           "leave": "You carry it yourself."
         },
-        "reveal": "It reached her. The peeking friend was the wolf."
+        "reveal": "It reached her. The stranger who looked was the wolf."
       }
     },
     {
@@ -211,24 +224,23 @@
       "name": "Night Light",
       "icon": "item-lantern",
       "promise": "It lights your way when the sun goes down.",
-      "effect": { "kind": "lantern" },
+      "effect": {
+        "kind": "lantern"
+      },
       "realWorld": {
-        "term": "Excessive agency",
-        "note": "A helper that acts without asking can send, pay or delete before you notice. Keep a human approving the steps that matter."
+        "term": "Prompt injection",
+        "note": "Anyone can write a sign. A skill that obeys whatever it reads can be steered by an attacker, so keep a human approving."
       },
       "good": {
         "card": {
-          "take": ["Waits at every fork for you to choose.", "Lights your way after dark."],
+          "take": ["Asks you before it follows any sign.", "Lights your way after dark."],
           "leave": "You walk on in the dusk."
         },
-        "reveal": "Lit your way as dusk fell."
+        "reveal": "Lit your way, and asked you at every sign."
       },
       "bad": {
         "card": {
-          "take": [
-            "Goes wherever the signs say, without asking you.",
-            "Lights your way after dark."
-          ],
+          "take": ["Follows any sign it reads, without asking.", "Lights your way after dark."],
           "leave": "You walk on in the dusk."
         },
         "reveal": "One sign was the wolf's. The light followed it."
@@ -239,7 +251,10 @@
       "name": "Long Evening",
       "icon": "item-hourglass",
       "promise": "It holds back the dark a little longer.",
-      "effect": { "kind": "rewind", "ms": 20000 },
+      "effect": {
+        "kind": "rewind",
+        "ms": 20000
+      },
       "realWorld": {
         "term": "Over-broad access",
         "note": "A skill is an identity too, a non-human one. Give it only the access its job needs."
