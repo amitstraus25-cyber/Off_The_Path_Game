@@ -74,15 +74,16 @@ test('on a wide window the picture fills the world and the card is only as tall 
 
 /*
  * PURPLE IN THE MIDDLE OF A PHONE (the client, 2026-10-25: "make sure little purple is centered on
- * the phone"), and her feet above the card, on a tall phone and on a short one. She stands at
- * column 3610 of the 6000px file (ui/screens.css, "the landing's art").
+ * the phone"), on a tall phone and on a short one. She stands at column 3610 of the 6000px file
+ * (ui/screens.css, "the landing's art"). Since 2026-10-26 the phone's words have no card, as on a
+ * computer, and sit under the picture: her boots (row 860) stand above the words.
  */
 for (const [w, h] of [
   [375, 812],
   [393, 660],
   [360, 640],
 ] as const) {
-  test(`at ${w}x${h} Purple stands in the middle of the picture, above the card`, async ({
+  test(`at ${w}x${h} Purple stands in the middle of the picture, above the words`, async ({
     browser,
   }) => {
     const page = await browser.newPage({
@@ -95,15 +96,18 @@ for (const [w, h] of [
     const seen = await page.evaluate(() => {
       const box = document.querySelector('.otp-title-art')!.getBoundingClientRect();
       const img = document.querySelector('.otp-title-art img')!.getBoundingClientRect();
-      const card = document.querySelector('.otp-title-panel')!.getBoundingClientRect();
+      const panel = document.querySelector('.otp-title-panel')!;
+      const words = panel.getBoundingClientRect();
       const s = img.height / 1080;
       return {
         offCentre: img.left + 3610 * s - (box.left + box.width / 2),
-        feetToCard: card.top - (img.top + 860 * s),
+        bootsToWords: words.top - (img.top + 860 * s),
+        card: getComputedStyle(panel).backgroundColor,
       };
     });
     expect(Math.abs(seen.offCentre)).toBeLessThan(2);
-    expect(seen.feetToCard).toBeGreaterThan(0);
+    expect(seen.bootsToWords).toBeGreaterThan(0);
+    expect(seen.card).toBe('rgba(0, 0, 0, 0)');
     await page.close();
   });
 }

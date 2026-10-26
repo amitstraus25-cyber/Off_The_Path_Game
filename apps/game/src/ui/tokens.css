@@ -639,4 +639,6 @@ body::before {
     #8153b9 90%,
     #7e4db4 100%
   );
+  /* The sky's top stop alone: the phone's open landing sets its words on it, above the picture. */
+  --otp-art-sky-top: #330e48;
 }

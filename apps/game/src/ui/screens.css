@@ -2619,8 +2619,8 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
  * the title, the subtitle, the two lines of premise and the Lime pill straight on the sky at the
  * left, sized off the world's height as the designer sized them off the frame's, and kept in its
  * upper part, where the sky is dark enough to read on. The controls line, which the pale sky under
- * the pill cannot carry, moves down to the dark shore at the bottom left. A phone, and a phone held
- * sideways beside its deck, keep the card. e2e/heading-contrast.spec.ts measures the title against
+ * the pill cannot carry, moves down to the dark shore at the bottom left. A phone held upright has
+ * its own open landing (below); a phone held sideways beside its deck keeps the card. e2e/heading-contrast.spec.ts measures the title against
  * the picture's own pixels behind it.
  */
 @media (orientation: landscape) {
@@ -2691,6 +2691,64 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
     font-size: max(16px, calc(var(--otp-canvas-h, 0px) * 0.036));
     padding: calc(var(--otp-canvas-h, 0px) * 0.024) calc(var(--otp-canvas-h, 0px) * 0.042);
     margin-top: calc(var(--otp-canvas-h, 0px) * 0.02);
+  }
+}
+
+/*
+ * THE PHONE'S OPEN LANDING (the client, 2026-10-26: "take the redesign we did for the home page to
+ * the mobile home page too", then, of the phone, "not the pic and how it's centered but the text
+ * and the layout of the text"). The picture stays where the phone had it -- on top, Purple in the
+ * middle -- and the words lose their card as on a computer: the large title, the lines in
+ * Offwhite, the Lime pill, straight on the sky's own top colour under the picture, whose bottom
+ * fades into that sky as its left edge does on a computer. The phone's slice of the picture has
+ * no empty sky to set words ON (the cubes fill its top, the pale crystal its bottom), so they sit
+ * below it. The fit ladder still gives up the premise on a short phone.
+ */
+@media (orientation: portrait) {
+  /* The sky behind the picture and the words both, on the world's box from its top edge down. */
+  .otp-title-dock[data-art][data-open]::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    top: calc(var(--otp-canvas-y, 0px) - var(--otp-cab-top));
+    left: max(0px, var(--otp-canvas-x, 4px));
+    right: max(0px, calc(100vw - var(--otp-canvas-x, 4px) - var(--otp-canvas-w, 100vw)));
+    bottom: calc(10px * var(--otp-ui) + env(safe-area-inset-bottom));
+    background: var(--otp-art-sky-top);
+    border-radius: 0 0 var(--otp-r-panel) var(--otp-r-panel);
+    pointer-events: none;
+  }
+
+  .otp-title-dock[data-art][data-open] .otp-title-art {
+    margin-bottom: 0;
+    background: none;
+  }
+
+  .otp-title-dock[data-art][data-open] .otp-title-art__img {
+    -webkit-mask-image: linear-gradient(180deg, #000 86%, transparent 100%);
+    mask-image: linear-gradient(180deg, #000 86%, transparent 100%);
+  }
+
+  .otp-title-dock[data-art][data-open] .otp-title-panel {
+    padding: calc(10px * var(--otp-ui)) 20px calc(8px * var(--otp-ui));
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .otp-title-dock[data-art][data-open] .otp-title-panel::before {
+    content: none;
+  }
+
+  /* The title large, as on a computer: one line across most of the phone's width. */
+  .otp-title-dock[data-art][data-open] .otp-title-panel .otp-title__mark {
+    font-size: min(14vw, calc(64px * var(--otp-ui)));
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .otp-title-dock[data-art][data-open] .otp-title-panel :is(.otp-title__agent, .otp-body-text) {
+    color: var(--cyera-offwhite);
   }
 }
 
