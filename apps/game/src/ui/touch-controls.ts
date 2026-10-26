@@ -117,6 +117,15 @@ export const STEP_TILES = 4;
 export const STEP_PX = TILE * STEP_TILES;
 
 /**
+ * A FINGER'S TAP on the stick is a nudge of one tile, not a step of four (the client, 2026-10-26:
+ * on the phone "if I just touch the direction Purple starts walking without stopping"). Four tiles
+ * is about a second of walking at WALK_SPEED, which is a step for a mouse click or a screen
+ * reader's single activation and reads as a runaway under a thumb, where holding is how you walk.
+ * So a touch tap moves her a tile and stops; a hold walks until the thumb lifts, as before.
+ */
+export const TAP_PX = TILE;
+
+/**
  * A press on the stick shorter than this is a CLICK, and a click walks one step the way it
  * pointed; held longer, the stick is a stick and walks for as long as it is held. "Click or hold
  * the joystick to walk" (the client). Long enough for a deliberate tap, short enough that a thumb
@@ -266,9 +275,9 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
    * direction replaces the first rather than queueing behind it. The walk is owed as DISTANCE
    * (`Input.walkFor`), so a slow frame rate makes it slower and never shorter.
    */
-  const stepWalk = (x: number, y: number): void => {
+  const stepWalk = (x: number, y: number, distance = STEP_PX): void => {
     if (mode !== 'play') return;
-    input.walkFor(x, y, STEP_PX);
+    input.walkFor(x, y, distance);
   };
 
   /**
@@ -392,8 +401,8 @@ export function createTouchControls(input: Input, labels: TouchLabels): TouchCon
     reset();
     // Keys still held when the thumb lets go: the knob goes back to showing them.
     showKeys();
-    // A click on an arrow walks a step that way: the mouse's way to walk, and a tap's.
-    if (step) stepWalk(step.x, step.y);
+    // A click on an arrow walks a step that way, the mouse's way to walk; a finger's tap, a tile.
+    if (step) stepWalk(step.x, step.y, e.pointerType === 'touch' ? TAP_PX : STEP_PX);
   };
   const onButton = (e: PointerEvent): void => {
     e.preventDefault();

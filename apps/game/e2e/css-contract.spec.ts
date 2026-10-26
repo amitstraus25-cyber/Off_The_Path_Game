@@ -37,9 +37,8 @@ async function openDialogue(page: Page): Promise<void> {
     store.dispatch({ type: 'MEET', c: 'rabbit' });
     store.dispatch({ type: 'INSPECT', s: 'cottage-finder' });
   });
-  // The card, past the conversation: the offer line and the card under it.
+  // The card, past the greeting, which it does not say again.
   await expect(page.locator('[data-offer][data-card] .otp-card')).toBeVisible();
-  await expect(page.locator('.otp-dialogue__line')).toBeVisible();
 }
 
 async function openResults(page: Page): Promise<void> {
@@ -260,7 +259,10 @@ test('the section 3 type roles match the table at full scale', async ({ page }) 
     weight: 500,
   });
 
-  // Dialogue: 18 / 120% / 0% / Regular. Measured on the line itself, which carried weight 500.
+  // Dialogue: 18 / 120% / 0% / Regular. Measured on the line itself, which carried weight 500 --
+  // on the greeting, one step back, since the card no longer says it again (2026-10-26).
+  await page.evaluate(() => window.__otp!.store.dispatch({ type: 'BACK' }));
+  await expect(page.locator('[data-offer]:not([data-card]) .otp-dialogue__line')).toBeVisible();
   expect(await typeRole(page, '.otp-dialogue__line')).toEqual({
     size: 18,
     leading: 1.2,

@@ -38,10 +38,9 @@ const SIZES = [
 const SHORT_LANDSCAPE = (size: { width: number; height: number }): boolean =>
   size.width > size.height && size.height <= 580;
 
-/** Everything the offer says before its answers, by what it is. */
+/** Everything the card shows before its answers, by what it is. The greeting is not among them:
+    it is said once, before the card (the client, 2026-10-26). */
 const PARTS = {
-  speaker: '.otp-dialogue__speaker',
-  greeting: '.otp-dialogue__line',
   picture: '.otp-card__icon',
   name: '.otp-card__title',
   promise: '.otp-card__promise',

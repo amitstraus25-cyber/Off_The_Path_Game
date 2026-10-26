@@ -9,6 +9,7 @@
  */
 import { expect, test } from '@playwright/test';
 import type { CDPSession, Page } from '@playwright/test';
+import { TAP_PX } from '../src/ui/touch-controls';
 import { probe, startGame } from './helpers';
 
 /**
@@ -96,6 +97,41 @@ test.describe('one tap of A is one press and nothing else', () => {
       await page.evaluate(() => (window as unknown as { __clicks: number }).__clicks),
       'the tap left a stray click loose in the panel that replaced the pad',
     ).toBe(0);
+  });
+});
+
+/* ------------------------------------------------------ a tap on the stick is a nudge, not a run */
+
+test.describe('a finger tapping the stick nudges Purple a tile and stops', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 375, height: 812 } });
+
+  // The client, 2026-10-26: on the phone "if I just touch the direction Purple starts walking
+  // without stopping". A tap was a four-tile step, a second of walking; it is one tile now.
+  test('one tap on the right arrow walks her right, one tile at most', async ({
+    page,
+    context,
+  }) => {
+    await page.goto('/');
+    await startGame(page);
+    const box = (await page.locator('.otp-stick').boundingBox())!;
+    const point = { x: box.x + box.width - 8, y: box.y + box.height / 2 };
+    const before = (await probe(page)).position.x;
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+    await page.waitForTimeout(80);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+    await expect.poll(async () => (await probe(page)).position.x - before).toBeGreaterThan(0);
+    let last = (await probe(page)).position.x;
+    for (let i = 0; i < 20; i += 1) {
+      await page.waitForTimeout(200);
+      const now = (await probe(page)).position.x;
+      if (now === last) break;
+      last = now;
+    }
+    // A tile, plus the few pixels the stick walked while the finger was down (about 10 in 80ms):
+    // two tiles is the bound, and the four-tile step this replaced is twice that.
+    expect(last - before, 'a tap is a nudge, not a step').toBeLessThanOrEqual(2 * TAP_PX);
   });
 });
 

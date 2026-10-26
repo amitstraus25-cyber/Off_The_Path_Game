@@ -870,7 +870,9 @@ specs and Paul's review.
 - [x] The door panel's advance arrow sits in the middle of the panel on a phone (2026-10-26)
 - [ ] Research sign-off on the Bridge Key note
 - [x] A greeting before every card (the client, 2026-10-26): ONE line in the character's voice saying what they have and how it helps you, then Purple's "Tell me more" opens the card and "No thanks" walks on (a first build had a second line and "Show me"; the client asked for one interaction). Content `3.0.0-draft.7` (seven new `greet` lines, `ui.offer` ask/noThanks; COPY_REVIEW 0e). The clock runs through it, so the walk is **3:30** and par **2:02** (measured: a careful reader arrives at 3:06.6, late at 3:00, 23.4 s to spare at 3:30); the board was reset at launch (`BOARD_SINCE` 2026-10-26T13:10:00Z; older rows are hidden, not deleted)
-- [ ] **Human:** approve COPY_REVIEW 0e (the seven opening lines and Purple's two replies)
+- [ ] **Human:** approve COPY_REVIEW 0e: the seven opening lines are approved (the client, 2026-10-26); Purple's two replies are not yet
+- [x] The card does not say the greeting again (the client, 2026-10-26): it opens on the skill itself, the greeting said once before it
+- [x] A finger's tap on the joystick is a one-tile nudge (the client, 2026-10-26: Purple "starts walking without stopping"): `TAP_PX`, one tile, for a touch tap; a mouse click and the walk buttons keep the four-tile step, a hold still walks until let go (`e2e/touch-pad.spec.ts`)
 
 ## Readiness findings (sweep of 2026-10-21)
 

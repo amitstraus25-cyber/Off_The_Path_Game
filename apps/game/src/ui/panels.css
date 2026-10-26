@@ -969,17 +969,6 @@
   box-shadow: var(--otp-ring);
 }
 
-/*
- * THE OFFER IS ONE PANEL (the client, 2026-10-22: the card opens by itself). Who is speaking and
- * what they say, a Clay hairline, then the card, then the answers -- all on the one Shell card, so
- * there is no second panel to go back from and nothing above the card to press first.
- */
-.otp-offer__voice {
-  padding-bottom: calc(10px * var(--otp-ui));
-  margin-bottom: calc(12px * var(--otp-ui));
-  border-bottom: 1px solid var(--cyera-clay);
-}
-
 .otp-offer .otp-dialogue__line {
   font-size: max(15px, calc(18px * var(--otp-ui)));
   line-height: 1.2;
@@ -1216,9 +1205,9 @@
  *
  * So where the window is landscape and short -- the same `max-height: 580px` the scale step and the
  * card's compact grid already use -- the offer is one grid and the card's three areas join it
- * (`display: contents` on `.otp-card__top`, which is a plain div with no role to lose): who is
- * speaking across the left, the picture and the name under them, the two rows down the right beside
- * both, and the answers across the foot. The tallest column, not the sum of them, is now the
+ * (`display: contents` on `.otp-card__top`, which is a plain div with no role to lose): the picture
+ * and the name on the left, the two rows down the right beside them, and the answers across the
+ * foot. The tallest column, not the sum of them, is now the
  * card's height. The answers stay sticky at the scrollport's foot, so a window shorter than every
  * reviewed device still reaches them (e2e/offer.spec.ts measures that nothing scrolls at 844x390).
  */
@@ -1288,22 +1277,15 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-      'voice voice rows'
       'icon head rows'
       'answers answers answers';
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: 1fr auto;
     column-gap: calc(16px * var(--otp-ui));
     align-items: start;
   }
 
   .otp-offer .otp-card__top {
     display: contents;
-  }
-
-  .otp-offer__voice {
-    grid-area: voice;
-    padding-bottom: calc(8px * var(--otp-ui));
-    margin-bottom: calc(8px * var(--otp-ui));
   }
 
   .otp-offer .otp-card__icon {

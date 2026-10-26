@@ -99,12 +99,13 @@ export interface OfferProps {
 }
 
 /**
- * 02 Offer, THE CARD: who is speaking and what they offered, then their card, then the answer.
+ * 02 Offer, THE CARD: the skill's card, then the answer.
  *
  * Opened by Purple's "Tell me more" after the greeting (`Conversation` above, 2026-10-26). It used
  * to open by itself the moment someone was met (2026-10-22); the greeting is the step in between
- * again, and the INSPECT the reply sends is what logs the card as read. The greeting heads the card
- * too, so the player reads the card under the words that offered it.
+ * again, and the INSPECT the reply sends is what logs the card as read. The greeting is NOT said
+ * again above the card (the client, 2026-10-26: "no need for the top line ... it was already" said):
+ * the panel opens on the card itself, and the dialog's name still says who is offering it.
  *
  * NOTHING ABOVE THE CARD DIFFERS BETWEEN A GOOD AND A BAD DEAL. The greeting and the promise are one
  * copy in the content (GAME_DESIGN_V2 section 4), so only the card's lines can give a verdict away,
@@ -114,8 +115,7 @@ export interface OfferProps {
  * tabs on to Take it, Leave it and Walk on, in that order. The answers sit at the foot of the
  * panel's scrollport and stay in view when the card has to scroll (panels.css `.otp-offer__answers`).
  *
- * PORTRAIT-LESS, for all seven: the skill's own picture is the one image on the panel, and the
- * speaker's name carries who is talking.
+ * PORTRAIT-LESS, for all seven: the skill's own picture is the one image on the panel.
  *
  * The answers are guarded with `deliberate`: the panel mounts under the pointer that opened it,
  * and a double-click's second half must not become a verdict (components.tsx).
@@ -149,11 +149,6 @@ export function Dialogue({
     >
       <Panel number="02" title={words.title} heading>
         <div class="otp-card otp-offer" tabIndex={-1} data-autofocus>
-          <div class="otp-offer__voice">
-            <p class="otp-dialogue__speaker">{character.name}</p>
-            <p class="otp-dialogue__line">{character.greet}</p>
-          </div>
-
           <SkillCard words={cardWords} skill={skill} card={card} />
 
           <div class="otp-offer__answers">

@@ -438,7 +438,6 @@ test('at 375x812 the offer sits on the canvas edges, steps its type and puts Wal
       const lines = root.querySelectorAll('[data-card-take] li');
       const row = fs('.otp-row__heading');
       return {
-        line: fs('.otp-dialogue__line'),
         promise: fs('.otp-card__promise'),
         row,
         eyebrow: fs('.otp-row__eyebrow'),
@@ -463,7 +462,6 @@ test('at 375x812 the offer sits on the canvas edges, steps its type and puts Wal
         rowSize: row,
       };
     });
-    expect(m.line).toBeGreaterThan(m.promise);
     expect(m.promise).toBeGreaterThan(m.row);
     expect(m.row).toBeGreaterThan(m.eyebrow);
     for (const e of m.edges) expect(Math.abs(e)).toBeLessThanOrEqual(0.5);

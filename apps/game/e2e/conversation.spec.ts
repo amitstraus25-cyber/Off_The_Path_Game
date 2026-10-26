@@ -81,12 +81,12 @@ for (const size of SIZES) {
     await meet(page, 'rabbit');
     await expect(talk.locator('.otp-dialogue__line')).toHaveText(rabbit.greet);
 
-    // "Tell me more": straight to the card, under the greeting, and now it is read.
+    // "Tell me more": straight to the card, which does not say the greeting again, and now it is read.
     await page.waitForTimeout(320);
     await talk.locator('[data-action="ask"]').click();
     const card = page.locator('[data-offer="rabbit"][data-card]');
     await expect(card.locator('[data-card-take] li').first()).toBeVisible();
-    await expect(card.locator('.otp-offer__voice .otp-dialogue__line')).toHaveText(rabbit.greet);
+    await expect(card.getByText(rabbit.greet)).toHaveCount(0);
     await expect(card.locator('.otp-card').first()).toBeFocused();
     expect(await page.evaluate(() => window.__otp!.store.getState().inspected)).toEqual([
       rabbit.skillId,

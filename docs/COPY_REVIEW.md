@@ -176,7 +176,7 @@ Meeting someone opens ONE line in their voice, saying what they have and how it 
 client: "I want it to be clear what each person has and how it can help you"), and Purple's two
 replies: "Tell me more" opens the card, which is the more information, and "No thanks" walks on.
 The line is on the character, so it is the same for the good and the bad deal and gives nothing
-away; it heads the card too. The shape is "I have a [thing]. It helps you [benefit].", kept to about 15
+away. It is said once: the card does not repeat it (the client, 2026-10-26). The shape is "I have a [thing]. It helps you [benefit].", kept to about 15
 words, because the clock charges the longest of them to every meeting. Each line keeps its
 character's opener from before (Hello!, Hoo!, Evening!, Slow, but sure). The card's lines are
 unchanged. Content version `3.0.0-draft.7`. The seven `greet` lines are **APPROVED (client)**: the
