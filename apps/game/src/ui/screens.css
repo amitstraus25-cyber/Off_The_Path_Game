@@ -2750,6 +2750,12 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
   .otp-title-dock[data-art][data-open] .otp-title-panel :is(.otp-title__agent, .otp-body-text) {
     color: var(--cyera-offwhite);
   }
+
+  /* The controls line centred across the bottom of the phone (the client, 2026-10-26). */
+  .otp-title-dock[data-art][data-open] .otp-title-panel .otp-hint {
+    align-self: stretch;
+    text-align: center;
+  }
 }
 
 .otp-title-dock[data-art] .otp-title-panel :is(.otp-title__mark, .otp-title__agent) {
