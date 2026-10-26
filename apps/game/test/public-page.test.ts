@@ -71,3 +71,34 @@ describe('the page a visitor downloads', () => {
     }
   });
 });
+
+/*
+ * A SHARED LINK SHOWS THE LANDING (the client, 2026-10-26: "when posting on LinkedIn I want the
+ * landing page to show up"). LinkedIn, Slack, X and iMessage draw their preview from these tags in
+ * the static HTML; none of them runs the script, so nothing rendered later can stand in for them.
+ *
+ * `public/og-image.png` is the landing itself, captured at LinkedIn's own 1200x627 from the real
+ * page, not drawn for the purpose. The image URL must be absolute, so it names the live host; when
+ * the game moves to its research-page address, these move with it. (A page that embeds the game in
+ * an iframe shares ITS tags, not these: the research page needs its own og:image.)
+ */
+describe('a link to the game, shared', () => {
+  const html = readFileSync(SOURCE, 'utf8');
+  const tag = (property: string): string | undefined =>
+    html.match(new RegExp(`<meta[^>]+(?:property|name)="${property}"[^>]+content="([^"]*)"`))?.[1];
+
+  it('previews as the landing, large', () => {
+    expect(tag('og:title')).toBe("Off the Path: That's Not My Grandma");
+    expect(tag('og:image')).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
+    expect(tag('og:image:width')).toBe('1200');
+    expect(tag('og:image:height')).toBe('627');
+    expect(tag('twitter:card')).toBe('summary_large_image');
+    expect(tag('og:description')).toBe(tag('description'));
+  });
+
+  it('points at an image that ships, at the size it claims', () => {
+    const png = readFileSync(fileURLToPath(new URL('public/og-image.png', APP)));
+    // The IHDR chunk: width and height, big-endian, at bytes 16 and 20.
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 627]);
+  });
+});
