@@ -30,8 +30,8 @@ function randomAction(rnd: () => number, at: number): Action {
 
 describe('property: random play under a random clock', () => {
   /*
-   * The clock is drawn so that a good share of runs cross the 3:30 line mid-encounter: steps of
-   * up to 14s over up to 45 steps is up to ten and a half minutes. That is the case the late rule
+   * The clock is drawn so that a good share of runs cross the three-minute line mid-encounter:
+   * steps of up to 12s over up to 45 steps is up to nine minutes. That is the case the late rule
    * exists for, so the generator is built to reach it rather than to avoid it. The step count
    * varies by seed so that some runs also stop short, still in the forest: with a fixed 40 steps
    * every run ended, and the "not ended" half of `ended` was never once exercised.
@@ -47,7 +47,7 @@ describe('property: random play under a random clock', () => {
       let clock = 0;
       const steps = 5 + Math.floor(rnd() * 41);
       for (let step = 0; step < steps; step++) {
-        clock += Math.floor(rnd() * 14_000);
+        clock += Math.floor(rnd() * 12_000);
         const r = tryReduce(state, randomAction(rnd, clock), content);
         if (!r.ok && r.reason !== 'out-of-time') {
           expect(r.state).toBe(state); // a refusal changes nothing...

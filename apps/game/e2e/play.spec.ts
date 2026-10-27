@@ -385,8 +385,8 @@ test('the clock override ends a run late, and a late run is posted at 25 like an
   await serveStart(page, 7);
   await serveEmptyBoard(page);
   await begin(page);
-  await expect(page.locator('.otp-hud2__clock')).toHaveText(/^(3:30|3:2\d)$/);
-  await page.evaluate(() => window.__otp!.testClock.advance(210_000));
+  await expect(page.locator('.otp-hud2__clock')).toHaveText(/^(3:00|2:5\d)$/);
+  await page.evaluate(() => window.__otp!.testClock.advance(180_000));
   await throughTheDoor(page, 'late');
   const run = await state(page);
   expect(run.phase).toBe('late');
@@ -658,7 +658,7 @@ for (const [width, height] of [
       await serveEmptyBoard(page);
       await begin(page);
       if (ending === 'late') {
-        await page.evaluate(() => window.__otp!.testClock.advance(210_000));
+        await page.evaluate(() => window.__otp!.testClock.advance(180_000));
       } else {
         if (ending === 'wolf') {
           const { good } = await state(page);

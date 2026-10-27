@@ -424,8 +424,17 @@ describe('the cast stands on art that exists', () => {
  * CONTENT ORDER (the simulator meets them in that order, so it is the order the pace must model),
  * then into `trigger-cottage`. Four-connected is the conservative choice: Purple walks diagonals
  * at full speed (`movementVector` normalises), so the true shortest walk is up to a root-two
- * shorter. Then the whole tour is DOUBLED, because a visitor does not walk the shortest path --
- * they look around, overshoot, and walk back. A careful reader must make it even so.
+ * shorter. Then the whole tour is walked HALF AGAIN (`WANDER`), because a visitor does not walk the
+ * shortest path -- they look around, overshoot, and walk back. A careful reader must make it even so.
+ *
+ * WHY HALF AGAIN AND NOT TWICE: THE CLIENT'S DECISION OF 2026-10-27. The tour was doubled until
+ * then. With the greeting before every card, a doubled tour had the careful reader arriving at
+ * 3:06.6 on a 3:00 clock (6.6 s late; 101 tiles, deal 2), and the walk went to 3:30 for a day to
+ * pay for it. The client took it back to 3:00 with no pause on the card or the greeting and no
+ * shorter lines: "he will make it". So the model's visitor wanders less than it did -- half again
+ * the shortest walk, not twice it -- and arrives at 2:53.1, 6.9 s to spare. Everything else here
+ * (the reading rate, the second a reply, four-connected walking) is unchanged, so this one number
+ * is where the client's call lives; do not raise it again without moving the clock with it.
  *
  * TALKING AND READING. One rate for everything, `v2.READING` (sim.ts, where its source is cited):
  * a conversation is the longest greeting read at that rate, plus a second for Purple's reply; a
@@ -440,7 +449,7 @@ describe('the cast stands on art that exists', () => {
  * edge below is the no-perk one.
  */
 const PRESS_ON_MS = 1_000;
-const WANDER = 2;
+const WANDER = 1.5;
 
 type Tile = readonly [number, number];
 const key = ([x, y]: Tile): string => `${x},${y}`;
@@ -510,14 +519,14 @@ const talkWords = (c: v2.Character): number => words(c.greet);
 const talkMs = (): number =>
   Math.max(...content.characters.map(talkWords)) * v2.READING.msPerWord + PRESS_ON_MS;
 
-/** The pace for a tour of `tiles`, doubled for wandering, spread evenly over every leg. */
+/** The pace for a tour of `tiles`, walked half again for wandering, spread evenly over every leg. */
 function paceFor(tiles: number): v2.Pace {
   const walkTotalMs = ((tiles * TILE) / WALK_SPEED) * 1000 * WANDER;
   return { walkMs: Math.ceil(walkTotalMs / (content.characters.length + 1)), talkMs: talkMs() };
 }
 
 describe('the clock, at the pace of the real map', () => {
-  it('a careful reader who reads every card makes it inside three minutes, walking twice the shortest path', () => {
+  it('a careful reader who reads every card makes it inside three minutes, walking half again the shortest path', () => {
     const { tiles, legs } = tour();
     const check = v2.clockCheck(content, paceFor(tiles));
     const why = `tour ${tiles} tiles (${legs.map((l) => `${l.to} ${l.tiles}`).join(', ')}); careful arrived at ${check.elapsedMs}ms in deal ${check.seed}, ${check.marginMs}ms to spare`;
@@ -567,8 +576,9 @@ describe('the clock, at the pace of the real map', () => {
  * The client's rule is "a combination of time and correct answers", correctness first. Par is the
  * arrival time of a careful run -- every card read, the three good taken -- by a player who walks
  * the shortest content-order tour of the shipped map ONCE (no wandering: `tour()` above, so the
- * same four-connected walk the clock check doubles) and reads every conversation and every card at
- * `v2.BRISK`: the adult silent-reading rate itself, 238 words a minute, with no pause to decide.
+ * same four-connected walk the clock check walks half again) and reads every conversation and
+ * every card at `v2.BRISK`: the adult silent-reading rate itself, 238 words a minute, with no pause
+ * to decide.
  * Taken in the SLOWEST deal, so a brisk reader can earn the whole bonus in every deal, not only in
  * the deals whose bad cards happen to be short.
  *

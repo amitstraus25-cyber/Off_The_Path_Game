@@ -145,6 +145,8 @@ describe('the table adapter', () => {
     expect(Date.parse(BOARD_SINCE)).toBeGreaterThan(Date.parse('2026-10-21T23:45:00Z'));
     // And after the push that shipped rules 3, so no run from before the river is ranked.
     expect(Date.parse(BOARD_SINCE)).toBeGreaterThan(Date.parse('2026-10-26T12:51:00Z'));
+    // And after the 3:30 day, so no run timed on the longer clock is ranked against a 3:00 one.
+    expect(Date.parse(BOARD_SINCE)).toBeGreaterThan(Date.parse('2026-10-27T08:00:00Z'));
   });
 
   it('reads no zero: the wolf runs written before they stopped being posted stay off the board', async () => {

@@ -274,10 +274,10 @@ describe('the simulator gives a careful basket the time its perks save', () => {
   });
 
   it('the clock check holds each run to its own deadline with the perks, and to the bare limit without', () => {
-    // Every skill rewinds, so every deal's careful basket takes one: about three minutes and
-    // forty seconds of walking and reading is late on the bare 3:30 and in time on the rewound one.
+    // Every skill rewinds, so every deal's careful basket takes one: about three minutes eight
+    // seconds of walking and reading is late on the bare clock and in time on the rewound one.
     const c = withPerks({ lantern: REWIND, courier: REWIND, locksmith: REWIND });
-    const slow = { walkMs: 47_500, talkMs: 0 };
+    const slow = { walkMs: 40_000, talkMs: 0 };
     const withThem = clockCheck(c, slow);
     const without = clockCheck(c, slow, { perks: false });
     expect(withThem.elapsedMs).toBeGreaterThan(TIME_LIMIT_MS);

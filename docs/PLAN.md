@@ -32,8 +32,8 @@ environment, not an assertion (PAUL_BRIEF trap 9), and the run above had its ser
   expects you, so the knock is skipped), Wing Ride (a flight to the next friend), Slow Post (a
   faster walk), Night Light (a lantern at dusk) and Long Evening (20 seconds back). **Every run
   deals 3 good and 4 bad** from a seed, so replaying meets the same characters with a different
-  set of malicious ones. A short conversation, then the card (2026-10-26); take it or leave it; a 3:30 hard timer (3:00
-  until 2026-10-26); **score out of 100 = correct choices plus speed**, par 2:02; any bad skill taken is 0. A door check asks before you go in with
+  set of malicious ones. A short conversation, then the card (2026-10-26); take it or leave it; a 3:00 hard timer (3:30
+  on 2026-10-26 only); **score out of 100 = correct choices plus speed**, par 2:02; any bad skill taken is 0. A door check asks before you go in with
   anyone unmet; the minimap shows who you have met; the reveal puts the score first and then seven
   flip tiles (promise against what it did, the real-world note); Walk it again starts a fresh
   deal.
@@ -870,6 +870,7 @@ specs and Paul's review.
 - [x] The door panel's advance arrow sits in the middle of the panel on a phone (2026-10-26)
 - [ ] Research sign-off on the Bridge Key note
 - [x] A greeting before every card (the client, 2026-10-26): ONE line in the character's voice saying what they have and how it helps you, then Purple's "Tell me more" opens the card and "No thanks" walks on (a first build had a second line and "Show me"; the client asked for one interaction). Content `3.0.0-draft.7` (seven new `greet` lines, `ui.offer` ask/noThanks; COPY_REVIEW 0e). The clock runs through it, so the walk is **3:30** and par **2:02** (measured: a careful reader arrives at 3:06.6, late at 3:00, 23.4 s to spare at 3:30); the board was reset at launch (`BOARD_SINCE` 2026-10-26T13:10:00Z; older rows are hidden, not deleted)
+- [x] The walk back to 3:00 (the client, 2026-10-27: "he will make it"): `TIME_LIMIT_MS` 180_000, the how-to and `startPar` say 3:00, no pause on the greeting or the card and no shorter lines. The clock check's visitor walks the tour half again instead of twice (`WANDER` 1.5 in `real-content.test.ts`, the decision noted beside it): a careful reader arrives at 2:53.1, 6.9 s to spare (3:06.6 on the doubled tour); the layout edge is 118 tiles. Par re-derives at 1:55.4 and stays **2:02**. Content `3.0.0-draft.8`. The board was reset (`BOARD_SINCE` 2026-10-27T08:45:00Z; older rows are hidden, not deleted)
 - [ ] **Human:** approve COPY_REVIEW 0e: the seven opening lines are approved (the client, 2026-10-26); Purple's two replies are not yet
 - [x] The card does not say the greeting again (the client, 2026-10-26): it opens on the skill itself, the greeting said once before it
 - [x] A finger's tap on the joystick is a one-tile nudge (the client, 2026-10-26: Purple "starts walking without stopping"): `TAP_PX`, one tile, for a touch tap; a mouse click and the walk buttons keep the four-tile step, a hold still walks until let go (`e2e/touch-pad.spec.ts`)

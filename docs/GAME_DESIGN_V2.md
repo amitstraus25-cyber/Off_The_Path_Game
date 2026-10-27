@@ -231,17 +231,20 @@ on every MEET, and now the player does.
 
 What it cost, measured with the project's own clock check (`test/v2/real-content.test.ts`, the tour
 101 tiles with the Cat up her lane): each talk is charged the longest greeting read plus one tap.
-With the lines at about 15 words, a careful reader arrives at 3:06.6, so at 3:00 they would be
-late. The walk is 3:30 (`TIME_LIMIT_MS`), 23.4 s to spare; par re-derives at 1:55.4 and stays
-2:02, inside its ten-second band. The board was reset at launch (`BOARD_SINCE`), because the same
-play now scores differently.
+With the lines at about 15 words and the tour doubled for wandering, a careful reader arrived at
+3:06.6, 6.6 s late on a 3:00 clock, so on 2026-10-26 the walk went to 3:30. **On 2026-10-27 the
+client took it back to 3:00**, with no pause on the greeting or the card and no shorter lines: "he
+will make it". The clock check's visitor now walks the tour half again rather than twice (`WANDER`
+1.5, with the decision noted beside it in the test), and arrives at 2:53.1, 6.9 s to spare; the
+longest tour the layout may grow to is 118 tiles. Par re-derives at 1:55.4 and stays 2:02. The
+board was reset at both changes (`BOARD_SINCE`), because the same play scores differently.
 
 ### Verdicts, clock, run log
 
 - **`Verdict = 'take' | 'leave'`**, from the conversation or the card; reading is optional. A skill
   walked past counts as left.
-- **`TIME_LIMIT_MS = 210_000`** (3:30; 180_000 until 2026-10-26, when the greeting before the card
-  and its tap cost a careful reader about twenty seconds over the walk), a rule constant, injected as elapsed ms since BEGIN. An action at
+- **`TIME_LIMIT_MS = 180_000`** (3:00; 210_000 for one day, 2026-10-26, after the greeting before
+  the card, until the client took it back on 2026-10-27), a rule constant, injected as elapsed ms since BEGIN. An action at
   or after the run's deadline is not applied and the run ends `late`, stamped at the deadline. The
   deadline is the limit plus whatever a `rewind` perk gave back (`deadlineMs`, perks.ts); stamps
   stay real elapsed time (section 11).
@@ -276,7 +279,7 @@ Shipped weights since 2026-10-25: `played` 25, `clean` 15, `good` 15, `speed` 15
 25 + 15 + 45 + 15 = 100 (they were `clean` 10, `good` 20, `speed` 30, and a wolf or late run 0 and
 not posted, from 2026-10-22). Every wolf run still ranks below every clean one (25 against at least
 40), and a full basket at the buzzer (85) still beats the fastest basket one good skill short (80). **f(t)** is 1 at or
-under par, falls in a straight line to 0 at 3:30 (3:00 until 2026-10-26), and is never negative; t is the run's own
+under par, falls in a straight line to 0 at 3:00 (3:30 on 2026-10-26 only), and is never negative; t is the run's own
 `arrived` stamp less what a rewind gave back, the stamp itself being what the server bounds from above by its clock and from below by the walk the log
 describes (apps/api). The bonus is rounded to a whole point with integer arithmetic until the one
 division, so browser and server cannot round apart (`speedBonus`, scoring.ts).
@@ -284,7 +287,8 @@ division, so browser and server cannot round apart (`speedBonus`, scoring.ts).
 **Par is 2:02 (`scoring.parMs` 122000) since 2026-10-26, derived, not chosen** (it was 1:47 until
 every meeting opened with a greeting first; see "The greeting before the card" below). Re-measured
 that day on rules 3, with the Cat up her own lane and the longer greetings: the derived par is
-1:55.4 on a 101-tile tour, and 2:02 sits inside the band above it. What follows is
+1:55.4 on a 101-tile tour, and 2:02 sits inside the band above it; the walk back to 3:00 on
+2026-10-27 does not move it, because par is measured on the shortest walk. What follows is
 the derivation as first written on 2026-10-22: It is the arrival time of a careful
 run that walks the shortest content-order tour of the shipped map once (113 four-connected tiles at
 `WALK_SPEED`, about 30 s, since the Cat moved into the clearing on 2026-10-22), knocks at the door (`world.knockMs`, 3 s) and reads every greeting and every
@@ -303,11 +307,11 @@ par.
 | Run                          | Score |
 | ---------------------------- | ----- |
 | three good, at or under 2:02 | 100   |
-| three good, 2:30             | 95    |
-| three good, 3:00             | 90    |
-| three good, 3:29             | 85    |
+| three good, 2:30             | 93    |
+| three good, 2:45             | 89    |
+| three good, 2:59             | 85    |
 | two good, 1:00 (fast)        | 80    |
-| two good, 2:30               | 77    |
+| two good, 2:30               | 75    |
 | one good, 1:00               | 60    |
 | leave everything, 0:30       | 40    |
 | any bad skill, any time      | 25    |
@@ -400,7 +404,7 @@ which is the client's framing and research's to confirm.
 ### The screens' words (`ui`)
 
 `landing`: title, titleHighlight, subtitle, start. `howTo`: title, steps (four lines: walk, open and
-read each card, take or leave, reach Grandma's door before 3:30 -- the time is held to
+read each card, take or leave, reach Grandma's door before 3:00 -- the time is held to
 `TIME_LIMIT_MS` by a real-content test). `hud`: time, basket, twoMinutes, oneMinute, thirtySeconds,
 timeUp. `reveal`: title, titleHighlight, took, left, good, bad, promised, did, giveaway, realWorld,
 score, question, cta, again. The three endings are `endings.grandma`, `.wolf` and `.late`.

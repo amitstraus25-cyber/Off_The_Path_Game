@@ -183,19 +183,19 @@ unchanged. Content version `3.0.0-draft.7`. The seven `greet` lines are **APPROV
 client approved them as they are in chat on 2026-10-26, so they are not to be reworded here. The
 other rows stay **DRAFT** for the human read.
 
-| Path                                      | Was                                                        | Now                                                                            |
-| ----------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `characters[rabbit].greet`                | Hello! I drew this map myself. Never once lost.            | Hello! I have a map of the whole wood. It'll help you find your way.           |
-| `characters[gatekeeper].greet`            | Nobody crosses without my key. I keep this bridge.         | I keep this bridge, and I have its key. It lets you cross the river.           |
-| `characters[magpie].greet`                | Can't swim? Hop on. Wings are quicker than bridges.        | Can't swim? I have wings. I'll fly you over the river.                         |
-| `characters[owl].greet`                   | Hoo! My sister wove these words. Finest hand in the wood.  | Hoo! I have my sister's woven words. They tell Grandma you're coming.          |
-| `characters[snail].greet`                 | Slow, but sure. I'll carry your parcel.                    | Slow, but sure. I have a sealed bag. It carries your load, so you walk light.  |
-| `characters[lantern-keeper].greet`        | Evening! I made this lamp for the dark pines.              | Evening! I have a lamp for the dark pines. It lights your path at dusk.        |
-| `characters[cat].greet`                   | Grandma made this for you. The kettle's on.                | I have something Grandma made for you. It holds back the dark a little longer. |
-| `ui.offer.ask`                            | (new)                                                      | Tell me more                                                                   |
-| `ui.offer.noThanks`                       | (new)                                                      | No thanks                                                                      |
-| `ui.howTo.steps[2]`                       | Reach Grandma in 3:00. Faster scores more.                 | Reach Grandma in 3:30. Faster scores more.                                     |
-| `ui.chrome.startPar` (the one-screen A/B) | Beat par {par} for the speed bonus. The walk ends at 3:00. | Beat par {par} for the speed bonus. The walk ends at 3:30.                     |
+| Path                                      | Was                                                        | Now                                                                                                    |
+| ----------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `characters[rabbit].greet`                | Hello! I drew this map myself. Never once lost.            | Hello! I have a map of the whole wood. It'll help you find your way.                                   |
+| `characters[gatekeeper].greet`            | Nobody crosses without my key. I keep this bridge.         | I keep this bridge, and I have its key. It lets you cross the river.                                   |
+| `characters[magpie].greet`                | Can't swim? Hop on. Wings are quicker than bridges.        | Can't swim? I have wings. I'll fly you over the river.                                                 |
+| `characters[owl].greet`                   | Hoo! My sister wove these words. Finest hand in the wood.  | Hoo! I have my sister's woven words. They tell Grandma you're coming.                                  |
+| `characters[snail].greet`                 | Slow, but sure. I'll carry your parcel.                    | Slow, but sure. I have a sealed bag. It carries your load, so you walk light.                          |
+| `characters[lantern-keeper].greet`        | Evening! I made this lamp for the dark pines.              | Evening! I have a lamp for the dark pines. It lights your path at dusk.                                |
+| `characters[cat].greet`                   | Grandma made this for you. The kettle's on.                | I have something Grandma made for you. It holds back the dark a little longer.                         |
+| `ui.offer.ask`                            | (new)                                                      | Tell me more                                                                                           |
+| `ui.offer.noThanks`                       | (new)                                                      | No thanks                                                                                              |
+| `ui.howTo.steps[2]`                       | Reach Grandma in 3:00. Faster scores more.                 | Reach Grandma in 3:00. Faster scores more. (3:30 for one day; back to 3:00 2026-10-27)                 |
+| `ui.chrome.startPar` (the one-screen A/B) | Beat par {par} for the speed bonus. The walk ends at 3:00. | Beat par {par} for the speed bonus. The walk ends at 3:00. (3:30 for one day; back to 3:00 2026-10-27) |
 
 ## 1. The fine print (the whole lesson)
 

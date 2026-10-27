@@ -149,7 +149,7 @@ test('the late ending says After dark, shows Purple and does not invite anyone i
 }) => {
   await page.goto('/');
   await startGame(page);
-  await page.evaluate(() => window.__otp!.testClock.advance(210_000));
+  await page.evaluate(() => window.__otp!.testClock.advance(180_000));
   const arrive = page.locator('[data-arrive="late"]');
   await expect(arrive).toBeVisible();
   const finish = arrive.locator('[data-action="finish"]');
@@ -367,7 +367,7 @@ for (const [width, height] of [
     expect(Math.abs(well.width - well.height)).toBeLessThanOrEqual(0.5);
     // Item 21: the pill is the same width either side of the 0:30 change.
     const timer = page.locator('.otp-hud2__timer');
-    await page.evaluate(() => window.__otp!.testClock.advance(210_000 - 31_500));
+    await page.evaluate(() => window.__otp!.testClock.advance(180_000 - 31_500));
     await expect(page.locator('.otp-hud2__clock')).toHaveText('0:31');
     const calm = (await timer.boundingBox())!.width;
     await page.evaluate(() => window.__otp!.testClock.advance(2_000));

@@ -162,11 +162,11 @@ describe('the river: a log that arrives without crossing is refused', () => {
 });
 
 describe('the long evening: twenty seconds back on the clock, replayed by the same rule', () => {
-  // Twenty-five seconds a walk: the careful run reaches the door past 3:30 of real time.
-  const slow: v2.Pace = { walkMs: 25_000, talkMs: 1_000 };
+  // Twenty-one seconds a walk: the careful run reaches the door past three minutes of real time.
+  const slow: v2.Pace = { walkMs: 21_000, talkMs: 1_000 };
   const seed = dealFor('rewind', ['walk-faster', 'wing-ride', 'early-welcome']);
 
-  it('a run that arrives after 3:30 but inside the rewound deadline is a row, scored on the rewound clock', async () => {
+  it('a run that arrives after 3:00 but inside the rewound deadline is a row, scored on the rewound clock', async () => {
     const run = careful(seed, slow);
     const arrived = run.log.events.at(-1)!;
     expect(arrived.e).toBe('arrived');
@@ -188,8 +188,8 @@ describe('the long evening: twenty seconds back on the clock, replayed by the sa
   });
 
   it('a run that ran out even of its rewound clock is late, stamped at the new deadline, and posted at `played`', async () => {
-    // Twenty-seven and a half seconds a walk: the Cat is met inside 3:30 and the door is past 3:50.
-    const run = careful(seed, { walkMs: 27_500, talkMs: 1_000 });
+    // Twenty-three seconds a walk: the Cat is met inside three minutes and the door is past 3:20.
+    const run = careful(seed, { walkMs: 23_000, talkMs: 1_000 });
     expect(run.state.perks.map((p) => p.kind)).toContain('rewind');
     expect(run.log.events.at(-1)).toEqual({ e: 'late', at: v2.deadlineMs(run.state) });
     expect(v2.deadlineMs(run.state)).toBe(v2.TIME_LIMIT_MS + 20_000);

@@ -214,7 +214,7 @@ test('the clock running out while the door asks ends the run late, and the quest
   await intoTheForest(page);
   await walkUpToTheDoor(page);
   await expect(page.locator('[data-door="ask"]')).toBeVisible();
-  await page.evaluate(() => window.__otp!.testClock.advance(210_000));
+  await page.evaluate(() => window.__otp!.testClock.advance(180_000));
   await expect(page.locator('[data-arrive="late"]')).toBeVisible();
   await expect(page.locator('[data-door]')).toHaveCount(0);
 });

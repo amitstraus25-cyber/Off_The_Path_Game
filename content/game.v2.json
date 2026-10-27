@@ -1,6 +1,6 @@
 {
   "rules": 3,
-  "version": "3.0.0-draft.7",
+  "version": "3.0.0-draft.8",
   "status": "draft: real-world notes checked 2026-10-25 (security read, pending the research team's sign-off); the Bridge Key's note is new in rules 3 (2026-10-25), not yet security-read, and pending the same sign-off",
   "deal": {
     "good": 3,
@@ -311,7 +311,7 @@
       "steps": [
         "Seven skills: three good, four malicious.",
         "Read each card. Take only the good, leave the malicious.",
-        "Reach Grandma in 3:30. Faster scores more.",
+        "Reach Grandma in 3:00. Faster scores more.",
         "From 2:00 left, the forest slowly darkens."
       ],
       "stress": [1, 3],
@@ -474,7 +474,7 @@
       "saidLeft": "You left {skill}. {left} left to meet.",
       "postNext": "Next",
       "postNextNote": "A work email is needed to post. You add it next.",
-      "startPar": "Beat par {par} for the speed bonus. The walk ends at 3:30.",
+      "startPar": "Beat par {par} for the speed bonus. The walk ends at 3:00.",
       "revealWatchFor": "What to watch for",
       "perkMinimap": "A map of the wood.",
       "perkBridgeGate": "The drawbridge comes down.",

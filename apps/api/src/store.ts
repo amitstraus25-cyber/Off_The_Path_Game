@@ -60,7 +60,12 @@ const MAX_ROWS_READ = 100;
  * day: the walk is 3:30 and par 2:02, so the same play scores differently and the rows before it
  * rank by the old clock. A few minutes after the push that shipped it, once the deploy was live.
  */
-export const BOARD_SINCE = '2026-10-26T13:10:00Z';
+/*
+ * Moved to 2026-10-27T08:45:00Z for the walk back to 3:00, at the client's word on 2026-10-27: the
+ * same play scores differently on a 3:00 clock than on the day's 3:30 one, so the rows before it
+ * rank by the old clock. A few minutes after the push that shipped it, once the deploy was live.
+ */
+export const BOARD_SINCE = '2026-10-27T08:45:00Z';
 
 /**
  * The status PostgREST answers to an insert on a table.
