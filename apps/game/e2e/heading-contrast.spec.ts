@@ -437,7 +437,7 @@ for (const size of SIZES) {
       await expect(page.locator('.otp-hero__score')).toBeVisible();
       await expectReadable(page, at('reveal'), [
         'What each skill',
-        'Your score',
+        'How secure are',
         named('leaderboardTitle'),
       ]);
     } finally {

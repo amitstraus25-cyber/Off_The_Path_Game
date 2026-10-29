@@ -474,6 +474,16 @@
   line-height: 1.35;
 }
 
+/* The research line under the score (2026-10-29): the breakdown's voice, a step apart from it. */
+.otp-hero__research {
+  margin: calc(10px * var(--otp-ui)) 0 0;
+  max-width: 34em;
+  font-size: max(13px, calc(15px * var(--otp-ui)));
+  color: var(--cyera-black);
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
 .otp-recap {
   list-style: none;
   margin: 0;

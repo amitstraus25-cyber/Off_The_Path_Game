@@ -188,6 +188,7 @@ export const raw = {
       giveaway: 'Fixture giveaway',
       realWorld: 'Fixture real world',
       score: 'Fixture score',
+      scoreResearch: 'Fixture score research',
       outOf: 'Fixture of {outOf}',
       caught: 'Fixture caught {caught} of {bad}',
       frameTitle: 'Fixture frame',

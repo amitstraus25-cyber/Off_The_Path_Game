@@ -879,6 +879,10 @@ export function Results({
                   })}
                 </p>
               )}
+              {/* What a grade misses, from the AMOS research (the client, 2026-10-29). */}
+              <p class="otp-hero__research" data-score-research="">
+                {r.scoreResearch}
+              </p>
               {/*
                 THE REPLAY HOOK: how many of the wolf's skills stayed out of the basket, and the way back
                 in beside it. The next deal is a new one (main.ts asks the server for a fresh seed),

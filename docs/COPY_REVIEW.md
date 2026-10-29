@@ -197,6 +197,19 @@ other rows stay **DRAFT** for the human read.
 | `ui.howTo.steps[2]`                       | Reach Grandma in 3:00. Faster scores more.                 | Reach Grandma in 3:00. Faster scores more. (3:30 for one day; back to 3:00 2026-10-27)                 |
 | `ui.chrome.startPar` (the one-screen A/B) | Beat par {par} for the speed bonus. The walk ends at 3:00. | Beat par {par} for the speed bonus. The walk ends at 3:00. (3:30 for one day; back to 3:00 2026-10-27) |
 
+### 0f. The score, in the research's terms (the client, 2026-10-29)
+
+The score's heading asks the question the game is about, and a line from Cyera Research's AMOS
+blog (draft, "Tracking AMOS Across the Poisoned AI Agent Skills Ecosystem") says what a skill's
+grade misses. Both chosen by the client in chat on 2026-10-29, the research line "live now", before
+the blog is published: **Research sign-off** is still wanted on the figure (70 confirmed-malicious
+skills, all graded A or B by a marketplace's automated scanner).
+
+| Path                      | Was        | Now                                                                                                              |
+| ------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `ui.reveal.score`         | Your score | How secure are your skills?                                                                                      |
+| `ui.reveal.scoreResearch` | (new)      | Marketplace scanners gave 70 malicious skills an A or a B. Grades read the label; Cyera reads what a skill does. |
+
 ## 1. The fine print (the whole lesson)
 
 These are the lines the game is about. They are written the way real permission prompts read.

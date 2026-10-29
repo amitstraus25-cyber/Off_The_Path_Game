@@ -429,7 +429,16 @@ const ui = z.strictObject({
     wouldHave: text,
     giveaway: text,
     realWorld: text,
+    /**
+     * The score's heading. A question since 2026-10-29 (the client: "how secure are your skills"),
+     * so the number under it reads as the answer, in the research's own terms.
+     */
     score: text,
+    /**
+     * One line from Cyera Research under the score (the client, 2026-10-29, from the AMOS blog):
+     * what a skill's grade misses, so the number is read against the real world.
+     */
+    scoreResearch: text,
     /** The score's denominator, filled from `scoring.outOf` so the two cannot disagree. */
     outOf: template('outOf'),
     /**
