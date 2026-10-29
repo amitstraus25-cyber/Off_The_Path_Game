@@ -18,8 +18,8 @@ export const TESTS = {
   results: ['below', 'above'],
   /** The start (P20): landing then how-to, or one screen with the rules and par on it. */
   start: ['two', 'one'],
-  /** The post form (P21): name, email and consent at once, or the email as a second step. */
-  post: ['one', 'two'],
+  // The post form's test (P21, `post`: the email at once or as a second step) went with the work
+  // email (the client, 2026-10-29): there is one field to post with, so nothing to split.
 } as const;
 
 export type TestName = keyof typeof TESTS;
@@ -36,7 +36,7 @@ export function readVariants(search: string): Variants {
   return out as Variants;
 }
 
-/** The variants as one short tag for an event, e.g. "landing:art,results:below,start:two,post:one". */
+/** The variants as one short tag for an event, e.g. "landing:art,results:below,start:two". */
 export const variantTag = (v: Variants): string =>
   (Object.keys(TESTS) as TestName[]).map((name) => `${name}:${v[name]}`).join(',');
 

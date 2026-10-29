@@ -202,7 +202,7 @@ one or two plain sentences linking them, for the reveal. One per skill, shared b
 `ui` is every other word the v2 screens say, strictly keyed (an unknown or missing key fails the
 schema): `landing`, `howTo` (three or four steps), `cabinet`, `world`, `offer`, `card`, `hud`
 (exactly the HUD's `HudLabels`), `reveal`, `chrome` (a strict object of `v2.CHROME_KEYS`) and
-`contact` (the work email's lines and its consent version). A `titleHighlight` must be a word of its title. The endings stay in `endings`. The old
+and, until 2026-10-29, `contact` (the work email's lines, removed with it). A `titleHighlight` must be a word of its title. The endings stay in `endings`. The old
 free-form `strings` record is gone, so a screen cannot read a key that was never validated.
 
 ### The deal (`deal.ts`)

@@ -18,10 +18,10 @@ describe('POST /api/start', () => {
     const res = handleStart(start(), h.deps);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { seed: number; token: string; emailRequired: boolean };
-    expect(Object.keys(body).sort()).toEqual(['emailRequired', 'seed', 'token']);
-    // OTP_WORK_EMAIL is off by default, and the start says so.
-    expect(body.emailRequired).toBe(false);
+    const body = (await res.json()) as { seed: number; token: string };
+    // A seed and a token, and nothing else: no `emailRequired` since the work email came out
+    // (the client, 2026-10-29), so the game is never asked for an address.
+    expect(Object.keys(body).sort()).toEqual(['seed', 'token']);
     expect(v2.isSeed(body.seed)).toBe(true);
     expect(TOKENS.open(body.token)).toMatchObject({ seed: body.seed, issuedAt: T0 });
     // Never cached: two visitors behind one cache must not share a run.
@@ -45,14 +45,6 @@ describe('POST /api/start', () => {
 
     expect(res.status).toBe(200);
     expect(h.written()).toEqual({ handle: 'brave-lantern-42', score: 100 });
-  });
-
-  it('tells the game a work email is required exactly when the flag says so', async () => {
-    const on = harness(undefined, { emailRequired: true });
-    const body = (await handleStart(start(), on.deps).json()) as { emailRequired: unknown };
-    expect(body.emailRequired).toBe(true);
-    // A boolean, never a string: the game reads `=== true`.
-    expect(typeof body.emailRequired).toBe('boolean');
   });
 
   it('refuses every method but POST, and says which one it wanted', () => {

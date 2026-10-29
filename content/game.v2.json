@@ -472,8 +472,6 @@
       "postJump": "Post your score ↓",
       "saidTook": "You took {skill}. Basket: {basket}. {left} left to meet.",
       "saidLeft": "You left {skill}. {left} left to meet.",
-      "postNext": "Next",
-      "postNextNote": "A work email is needed to post. You add it next.",
       "startPar": "Beat par {par} for the speed bonus. The walk ends at 3:00.",
       "revealWatchFor": "What to watch for",
       "perkMinimap": "A map of the wood.",
@@ -485,18 +483,6 @@
       "perkRewind": "The dark holds back. {seconds} seconds more.",
       "doorKnock": "You knock and wait.",
       "doorWelcome": "No need to knock. Word went ahead of you."
-    },
-    "contact": {
-      "consentVersion": "research-contact-v1",
-      "emailLabel": "Work email",
-      "emailHint": "Never shown on the board.",
-      "consent": "Cyera may contact me about this research.",
-      "emailMissing": "Enter your work email to post your score.",
-      "emailInvalid": "That does not look like an email address. Check it and try again.",
-      "emailPersonal": "Please use your work email, not a personal one.",
-      "consentMissing": "Tick the box so Cyera may contact you about this research.",
-      "postNeeds": "Add your work email and tick the box to post.",
-      "privacy": "Your name and score go on the public board. Your work email is kept privately, only so Cyera can contact you about this research, and is never shown. No account, no cookies."
     }
   }
 }

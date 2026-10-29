@@ -23,8 +23,8 @@ import { ProblemScreen } from './ui/ProblemScreen';
 import { fill, marqueeText, strings } from './ui/copy';
 import { variants } from './ab';
 import { mountMarquee } from './ui/marquee';
-import { contactMessages, startRun, submit } from './net/leaderboard';
-import type { ContactInput, RunStart } from './net/leaderboard';
+import { startRun, submit } from './net/leaderboard';
+import type { RunStart } from './net/leaderboard';
 import { emit, readResearchClick } from './embed/postMessage';
 // Before panels.css, so hud.css lands first in the cascade, as the HUD's selectors expect.
 import './ui/hud.css';
@@ -273,8 +273,6 @@ async function start(): Promise<void> {
    * server's posting window counts from the token, so a token fetched early and held would close.
    */
   let token: string | null = null;
-  /** Whether this run's post must carry a work email and consent: the start's answer, or false. */
-  let emailRequired = false;
   let pending: Promise<RunStart | null> | null = null;
   let starting = false;
 
@@ -361,7 +359,6 @@ async function start(): Promise<void> {
     const answer = pending ? await pending : null;
     pending = null;
     token = answer?.token ?? null;
-    emailRequired = answer?.emailRequired ?? false;
     // The last run's beats are the last run's: no knock, no ride and no line carries over.
     settleBeats();
     store.dispatch({ type: 'RESET', seed: answer?.seed ?? localSeed() });
@@ -523,19 +520,10 @@ async function start(): Promise<void> {
         },
         onReadResearch: readResearchClick,
         cannotPost: token === null ? (strings['postUnavailable'] ?? '') : null,
-        emailRequired,
         // Results renders no Post button without a token (`cannotPost`), so `token ?? ''` is
-        // never sent; the server would refuse an empty one with a 400 if it ever were. The
-        // contact is passed only when Results asked for one (`emailRequired`, or a server that
-        // answered `email-missing`), and its sentences come from the validated content.
-        onPost: (handle: string, contact?: ContactInput) =>
-          submit(
-            handle,
-            v2.toRunLog(store.getState()),
-            token ?? '',
-            strings,
-            contact ? { ...contact, messages: contactMessages(content.ui.contact) } : null,
-          ).then((outcome) => {
+        // never sent; the server would refuse an empty one with a 400 if it ever were.
+        onPost: (handle: string) =>
+          submit(handle, v2.toRunLog(store.getState()), token ?? '', strings).then((outcome) => {
             // Whether it went on, and nothing about who posted it (P7).
             emit('otp:posted', { ok: outcome.key === 'handleAssigned' });
             return outcome;

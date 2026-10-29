@@ -164,11 +164,11 @@ Three routes are bundled by `vercel-output.mjs`, which reads them off `apps/api/
 `score`, `top`. The service scores **v2** runs only; a v1 log is a 400, and v1 itself is gone from
 the repo.
 
-- `POST /api/start` answers `{ seed, token, emailRequired }`: an HMAC over the seed and the start
+- `POST /api/start` answers `{ seed, token }` (no `emailRequired` since the work email came out,
+  2026-10-29): an HMAC over the seed and the start
   time, nothing stored, its own per-instance budget (120 a minute).
-- `POST /api/score` takes `{ handle, log, token }` (plus `{ email, consent }` when
-  `OTP_WORK_EMAIL=required`; ignored and stored nowhere otherwise). It checks the name first
-  (`v2.checkName`; names are typed), then the contact when the flag is on, then replays the log
+- `POST /api/score` takes `{ handle, log, token }` and nothing else (an `email` or `consent` is a
+  400 since 2026-10-29). It checks the name first (`v2.checkName`; names are typed), then replays the log
   against the token's seed and recomputes the score. **Every ending posts** since the client's floor of
   2026-10-25: a late run and a wolf run are stored at `scoring.played` (25); from 2026-10-22 until
   then they were refused (400, and 422 `reason: 'wolf'`). **Every meeting and the arrival must be stamped no sooner than the

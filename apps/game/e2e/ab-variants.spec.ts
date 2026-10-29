@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
 import type { Page, Route } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { answerAllAndArrive, ready, startGame, toTheReveal } from './helpers';
 
 /*
@@ -9,18 +7,14 @@ import { answerAllAndArrive, ready, startGame, toTheReveal } from './helpers';
  * in a group through the iframe's address (src/ab.ts); with no parameter a visitor gets the first
  * variant of every test, which is what ships. Each test's other half is drawn here.
  */
-const content = JSON.parse(
-  readFileSync(fileURLToPath(new URL('../../../content/game.v2.json', import.meta.url)), 'utf8'),
-) as { ui: { chrome: Record<string, string>; contact: { emailLabel: string } } };
-const say = (key: string): string => content.ui.chrome[key]!;
 const TOKEN = 'dGVzdA.c2lnbmF0dXJl';
 
-async function serve(page: Page, emailRequired: boolean): Promise<void> {
+async function serve(page: Page): Promise<void> {
   await page.route('**/api/start', (route: Route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ seed: 0, token: TOKEN, emailRequired }),
+      body: JSON.stringify({ seed: 0, token: TOKEN }),
     }),
   );
   await page.route('**/api/top**', (route: Route) =>
@@ -124,7 +118,7 @@ test('start=one puts the rules and par on the landing, and its button starts the
 });
 
 test('results=above puts the research band directly under the score', async ({ page }) => {
-  await serve(page, false);
+  await serve(page);
   await page.goto('/?results=above');
   await startGame(page);
   await answerAllAndArrive(page, 'leave');
@@ -137,29 +131,4 @@ test('results=above puts the research band directly under the score', async ({ p
       : 'below';
   });
   expect(order).toBe('above');
-});
-
-test('post=two asks for the name first and the work email as a second step', async ({ page }) => {
-  await serve(page, true);
-  await page.goto('/?post=two');
-  await startGame(page);
-  await answerAllAndArrive(page, 'leave');
-  await toTheReveal(page);
-  const email = page.getByRole('textbox', { name: content.ui.contact.emailLabel });
-  await expect(email).toHaveCount(0);
-  await expect(page.locator('[data-post-next-note]')).toHaveText(say('postNextNote'));
-  await page.locator('[data-action="post-next"]').click();
-  await expect(email).toBeVisible();
-  await expect(email).toBeFocused();
-  await expect(page.getByRole('button', { name: 'Post', exact: true })).toBeVisible();
-});
-
-test('with no parameter every field shows at once, as it ships', async ({ page }) => {
-  await serve(page, true);
-  await page.goto('/');
-  await startGame(page);
-  await answerAllAndArrive(page, 'leave');
-  await toTheReveal(page);
-  await expect(page.getByRole('textbox', { name: content.ui.contact.emailLabel })).toBeVisible();
-  await expect(page.locator('[data-action="post-next"]')).toHaveCount(0);
 });

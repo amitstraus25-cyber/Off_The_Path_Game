@@ -21,6 +21,7 @@
 > `{seed, token, emailRequired}` means the environment is set (the signing key is derived from it); **503** means
 > it is not, and the game will play on its own seed with posting switched off.
 >
+> **Work email: REMOVED 2026-10-29** (see ["Work email"](#work-email-the-clients-decision-2026-10-22)). The history below:
 > **Work email (the client's decision, 2026-10-22): built, OFF by default.** With
 > `OTP_WORK_EMAIL=required` a post must carry a work email and a consent tick, and the address is
 > written beside the score in a table the service cannot read. Off, everything here is exactly as
@@ -34,11 +35,11 @@ posture, the migrations in `supabase/migrations/`, how to rotate a key without d
 happens when the free tier pauses, how to tell whether the board is actually working and what to do
 when it is not. This file is the service; that one is the database.
 
-| Route             | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/start` | Draws a seed and answers `{ seed, token, emailRequired }`: the seed sealed with the issue time in an HMAC-signed token, and whether this run's post needs a work email (`OTP_WORK_EMAIL`). Stores nothing.                                                                                                                                                                                                                                                                                                           |
-| `POST /api/score` | Takes `{ handle, log, token }`, plus `{ email, consent }` when `OTP_WORK_EMAIL=required` (ignored and stored nowhere when it is not). Checks the name, the contact, the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100, time counted), stores it. Answers `{ handle, score, rank, entries? }`: the stored (tidied) name, the score, the rank counted right after the insert (null if the count failed) and the top 10 read from the table, not the edge. |
-| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie, rows from `BOARD_SINCE` on and above 0. Cached at the edge for 10 s plus 20 s stale (`TOP_CACHE`), so never more than 30 s old.                                                                                                                                                                                                                                                                                   |
+| Route             | What it does                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/start` | Draws a seed and answers `{ seed, token }`: the seed sealed with the issue time in an HMAC-signed token. Stores nothing.                                                                                                                                                                                                                                                                                           |
+| `POST /api/score` | Takes `{ handle, log, token }` and nothing else. Checks the name, the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100, time counted), stores it. Answers `{ handle, score, rank, entries? }`: the stored (tidied) name, the score, the rank counted right after the insert (null if the count failed) and the top 10 read from the table, not the edge. |
+| `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie, rows from `BOARD_SINCE` on and above 0. Cached at the edge for 10 s plus 20 s stale (`TOP_CACHE`), so never more than 30 s old.                                                                                                                                                                                 |
 
 ## The run token (Phase E)
 
@@ -150,6 +151,8 @@ project changes nothing; its verification query prints the table's actual column
 indexes, grants and RLS state, which is the first thing to run when the board misbehaves.
 
 ## Work email (the client's decision, 2026-10-22)
+
+**REMOVED 2026-10-29** (the client: "no need for work email"): the game, the routes and core no longer ask for, take or check an address, `OTP_WORK_EMAIL` is read by nothing, and a post carrying `email` or `consent` is a malformed body (400). Migration 0007's table and function stay in the database as history; any addresses already in `public.leaderboard_contact` are the client's to keep or delete by hand. What follows is the design as it was.
 
 The client decided in chat on 2026-10-22: **to post a score a player gives a WORK email and ticks a
 consent line whose only purpose is that Cyera may contact them about this research.** Personal

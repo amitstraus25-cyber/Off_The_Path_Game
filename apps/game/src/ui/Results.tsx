@@ -3,7 +3,7 @@ import { DEFAULT_TOP_LIMIT, v2 } from '@otp/core';
 import { RESEARCH_URL, researchHref } from '../embed/postMessage';
 import { variants } from '../ab';
 import { readBoard as readTheBoard } from '../net/leaderboard';
-import type { BoardRead, ContactInput, PostOutcome } from '../net/leaderboard';
+import type { BoardRead, PostOutcome } from '../net/leaderboard';
 import { CyeraMark, Highlighted, NotationChip, Panel } from './components';
 import { fill, strings } from './copy';
 import { iconUrl, initials } from './Hud';
@@ -117,37 +117,6 @@ export function readName(raw: string): { name: string } | { problem: HandleProbl
   const check = v2.checkName(raw);
   return check.ok ? { name: check.name } : { problem: HANDLE_PROBLEM[check.reason] };
 }
-
-/**
- * THE WORK EMAIL AND THE CONSENT (the client, 2026-10-22), asked only when the server requires
- * them. What is wrong with each, as the `ui.contact` key of the sentence that says so -- the same
- * rule the server applies (core contact.ts `checkContact`), asked first only so the player hears
- * it in words. Pure and exported so the unit tests hold it without a DOM.
- */
-export type ContactProblems = {
-  email: v2.EmailRefusal | null;
-  consent: boolean;
-};
-
-export const CONTACT_PROBLEM: Record<v2.ContactRefusal, keyof v2.Content['ui']['contact']> = {
-  'email-missing': 'emailMissing',
-  'email-invalid': 'emailInvalid',
-  'email-personal': 'emailPersonal',
-  'consent-missing': 'consentMissing',
-};
-
-/** Both problems at once, so a press of Post can mark every field that needs attention. */
-export function readContact(email: string, consent: boolean): ContactProblems {
-  const checked = v2.checkWorkEmail(email);
-  return { email: checked.ok ? null : checked.reason, consent: !consent };
-}
-
-/** True when the form may post: the address is a work address and the box is ticked. */
-export const contactReady = (email: string, consent: boolean): boolean =>
-  v2.checkContact(email, consent).ok;
-
-const isContactRefusal = (reason: string | undefined): reason is v2.ContactRefusal =>
-  v2.CONTACT_REFUSALS.some((known) => known === reason);
 
 /** The friendly sentence for what is wrong with a name, or null when it may be posted. */
 export function validateHandle(raw: string): string | null {
@@ -512,15 +481,10 @@ export interface ResultsProps {
    */
   cannotPost: string | null;
   /**
-   * Posts the run under a name -- with the work email and consent when `askEmail` -- and answers
-   * the sentence to show AND which one it is.
+   * Posts the run under a name and answers the sentence to show AND which one it is. A name and
+   * nothing else: the work email came out on 2026-10-29 (the client: "no need for work email").
    */
-  onPost(handle: string, contact?: ContactInput): Promise<PostOutcome>;
-  /**
-   * The server requires a work email and consent with the post (`POST /api/start` answered
-   * `emailRequired: true`). False shows exactly the form there was before the flag existed.
-   */
-  askEmail?: boolean;
+  onPost(handle: string): Promise<PostOutcome>;
   /** Reads the board. Optional: the default is the adapter itself; specs and tests inject. */
   onTop?(limit: number): Promise<BoardRead>;
 }
@@ -742,10 +706,8 @@ export function Results({
   cannotPost,
   onPost,
   onTop,
-  askEmail = false,
 }: ResultsProps) {
   const r = content.ui.reveal;
-  const words = content.ui.contact;
   const ending = run.ending ? content.endings[run.ending] : null;
 
   /*
@@ -765,30 +727,6 @@ export function Results({
   const [posting, setPosting] = useState(false);
   const inFlight = useRef(false);
   const field = useRef<HTMLInputElement>(null);
-  /*
-   * THE CONTACT FIELDS' STATE. `asking` starts from the start's answer and turns on for good if the
-   * server refuses a post for want of one (a start from before the flag, a flag switched on
-   * mid-run): the player is then shown the fields rather than left with a refusal they cannot
-   * act on. The address lives here and in the one request body, never in storage.
-   */
-  const [asking, setAsking] = useState(askEmail);
-  const [email, setEmail] = useState('');
-  const [consent, setConsent] = useState(false);
-  const [emailProblem, setEmailProblem] = useState<v2.EmailRefusal | null>(null);
-  const [consentProblem, setConsentProblem] = useState(false);
-  const emailField = useRef<HTMLInputElement>(null);
-  /*
-   * THE EMAIL AS A SECOND STEP, the A/B test's other half (P21, `?post=two`, src/ab.ts): the name
-   * first with a line saying a work email comes next, then the address and the consent in exactly
-   * the words Legal approved. With `post=one` -- what ships -- every field shows at once.
-   */
-  const [contactStep, setContactStep] = useState(variants.post === 'one');
-  const toContact = (): void => {
-    setContactStep(true);
-    requestAnimationFrame(() => emailField.current?.focus());
-  };
-  const consentBox = useRef<HTMLInputElement>(null);
-  const ready = !asking || contactReady(email, consent);
   const [board, setBoard] = useState<BoardState>({ state: 'loading' });
   /* Whether this visit has pressed Post. Only ever goes true; see `boardNoteKey`. */
   const [attempted, setAttempted] = useState(false);
@@ -824,45 +762,14 @@ export function Results({
     }
     // The tidied form (spaces collapsed, apostrophes straightened) is what the board stores.
     const name = read.name;
-    // On the two-step form, Enter on the name is Next, never a post without the address.
-    if (asking && !contactStep) {
-      toContact();
-      return;
-    }
-    /*
-     * The contact, when asked for: every problem marked at once, focus to the first, nothing
-     * posted. This is what pressing the aria-disabled Post does -- it stays focusable and
-     * pressable on purpose, so a keyboard or screen-reader user who reaches it learns why.
-     */
-    if (asking) {
-      const problems = readContact(email, consent);
-      if (problems.email !== null || problems.consent) {
-        setEmailProblem(problems.email);
-        setConsentProblem(problems.consent);
-        (problems.email !== null ? emailField : consentBox).current?.focus();
-        return;
-      }
-    }
     inFlight.current = true;
     setNotice(null);
     setPosting(true);
     // At the press, before any notice can exist: see `boardNoteKey`.
     setAttempted(true);
     try {
-      const outcome = asking ? await onPost(name, { email, consent }) : await onPost(name);
+      const outcome = await onPost(name);
       setNotice(outcome);
-      // The server refused the contact (its check is the authority): mark the field it named, and
-      // show the fields at all if this run had not been told to ask for them.
-      if (isContactRefusal(outcome.reason)) {
-        setAsking(true);
-        if (outcome.reason === 'consent-missing') {
-          setConsentProblem(true);
-          consentBox.current?.focus();
-        } else {
-          setEmailProblem(outcome.reason);
-          emailField.current?.focus();
-        }
-      }
       // The board refused the NAME (its rules, or the server's check of them): the field says so
       // too, so the player knows what to change and can post the same run again.
       if (outcome.reason === 'name') {
@@ -1086,134 +993,17 @@ export function Results({
                       {s(problem)}
                     </p>
                   )}
-                  {asking && contactStep && (
-                    /*
-                     * THE WORK EMAIL AND THE CONSENT, between the name and Post so the reading and
-                     * tab order is name, address, consent, Post. Each problem is tied to its
-                     * control by `aria-describedby` and focus moves to it -- the same pattern as
-                     * the name, and for the same reason no second live region.
-                     */
-                    <div class="otp-contact" data-contact="">
-                      <label class="otp-email" for="otp-email-input">
-                        <span class="otp-email__label">{words.emailLabel}</span>
-                        <input
-                          ref={emailField}
-                          id="otp-email-input"
-                          class="otp-email__input"
-                          type="email"
-                          name="email"
-                          value={email}
-                          autocomplete="email"
-                          autocapitalize="off"
-                          spellcheck={false}
-                          inputMode="email"
-                          maxLength={254}
-                          aria-required="true"
-                          aria-invalid={emailProblem !== null ? 'true' : undefined}
-                          aria-describedby={
-                            emailProblem !== null
-                              ? 'otp-email-problem otp-email-hint'
-                              : 'otp-email-hint'
-                          }
-                          onInput={(e) => {
-                            setEmail((e.currentTarget as HTMLInputElement).value);
-                            setEmailProblem(null);
-                          }}
-                          onBlur={() => {
-                            // Said on the way out of the field, never while typing, and never
-                            // about a field nobody has typed in yet.
-                            if (email.trim() === '') return;
-                            const checked = v2.checkWorkEmail(email);
-                            setEmailProblem(checked.ok ? null : checked.reason);
-                          }}
-                        />
-                      </label>
-                      <p class="otp-fine otp-email__hint" id="otp-email-hint">
-                        {words.emailHint}
-                      </p>
-                      {emailProblem !== null && (
-                        <p
-                          class="otp-fine otp-contact__problem"
-                          id="otp-email-problem"
-                          data-problem={emailProblem}
-                        >
-                          {words[CONTACT_PROBLEM[emailProblem]]}
-                        </p>
-                      )}
-                      <label class="otp-consent" for="otp-consent-box">
-                        <input
-                          ref={consentBox}
-                          id="otp-consent-box"
-                          class="otp-consent__box"
-                          type="checkbox"
-                          name="consent"
-                          checked={consent}
-                          aria-required="true"
-                          aria-invalid={consentProblem ? 'true' : undefined}
-                          aria-describedby={consentProblem ? 'otp-consent-problem' : undefined}
-                          onChange={(e) => {
-                            setConsent((e.currentTarget as HTMLInputElement).checked);
-                            setConsentProblem(false);
-                          }}
-                        />
-                        <span class="otp-consent__text" data-consent-version={words.consentVersion}>
-                          {words.consent}
-                        </span>
-                      </label>
-                      {consentProblem && (
-                        <p
-                          class="otp-fine otp-contact__problem"
-                          id="otp-consent-problem"
-                          data-problem="consent-missing"
-                        >
-                          {words.consentMissing}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {asking && !contactStep ? (
-                    <>
-                      <button
-                        type="button"
-                        class="otp-button"
-                        data-action="post-next"
-                        onClick={toContact}
-                      >
-                        {s('postNext')}
-                      </button>
-                      <p class="otp-fine otp-post__needs" data-post-next-note="">
-                        {s('postNextNote')}
-                      </p>
-                    </>
-                  ) : (
-                    <button
-                      type="submit"
-                      class="otp-button"
-                      aria-disabled={posting || !ready ? 'true' : undefined}
-                      aria-describedby={asking && !ready ? 'otp-post-needs' : undefined}
-                    >
-                      {s('post')}
-                    </button>
-                  )}
-                  {/* Why Post is greyed, in words, beside it (P13): it used to say nothing. */}
-                  {asking && contactStep && !ready && !posting && (
-                    <p class="otp-fine otp-post__needs" id="otp-post-needs" data-post-needs="">
-                      {words.postNeeds}
-                    </p>
-                  )}
+                  <button
+                    type="submit"
+                    class="otp-button"
+                    aria-disabled={posting ? 'true' : undefined}
+                  >
+                    {s('post')}
+                  </button>
                 </form>
-                {/*
-                  THE PRIVACY LINE IS TRUE IN BOTH MODES. Without the email it is chrome
-                  `privacyLine` ("handle and score only ... no email"); while the email is asked
-                  for that sentence would be false, so `ui.contact.privacy` replaces it: the name
-                  and score on the public board, the address kept privately and never shown.
-                */}
-                <p
-                  class="otp-fine"
-                  id="otp-handle-hint"
-                  data-privacy={asking ? 'contact' : 'plain'}
-                >
-                  {s('handleHint')} {asking ? words.privacy : s('privacyLine')}
+                {/* `privacyLine`: a handle and a score only, no email, no account, no cookies. */}
+                <p class="otp-fine" id="otp-handle-hint" data-privacy="plain">
+                  {s('handleHint')} {s('privacyLine')}
                 </p>
               </>
             )}

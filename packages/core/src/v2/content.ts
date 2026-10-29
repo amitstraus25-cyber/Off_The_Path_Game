@@ -1,6 +1,5 @@
 import '../zod-config.ts';
 import { z } from 'zod';
-import { CONSENT_VERSION_MAX, CONSENT_VERSION_PATTERN } from './contact.ts';
 
 /*
  * v2 CONTENT: what Phase B writes, and the rules the schema alone cannot say.
@@ -285,12 +284,10 @@ export const CHROME_KEYS = [
   'saidTook',
   'saidLeft',
   /*
-   * The A/B tests' other halves (the client, 2026-10-25, apps/game/src/ab.ts): `postNext` and
-   * `postNextNote` are the two-step post form's first step (P21), `startPar` is the par line on
-   * the one-screen start (P20), carrying {par}.
+   * The A/B test's other half (the client, 2026-10-25, apps/game/src/ab.ts): `startPar` is the
+   * par line on the one-screen start (P20), carrying {par}. The two-step post form's `postNext`
+   * and `postNextNote` (P21) went with the work email (2026-10-29).
    */
-  'postNext',
-  'postNextNote',
   'startPar',
   /*
    * THE PERKS, as the forest says them (the client, 2026-10-22). One line per effect KIND, never per
@@ -456,32 +453,6 @@ const ui = z.strictObject({
    * named in `CHROME_KEYS` above.
    */
   chrome,
-  /**
-   * THE WORK EMAIL AND THE CONSENT (the client, 2026-10-22), shown on Results only when the server
-   * says it is required (`POST /api/start` answers `emailRequired`). Its own object rather than
-   * chrome keys because one field is not a sentence: `consentVersion` names the exact `consent`
-   * wording a player agreed to, the server stores it beside the address (it reads it from ITS copy
-   * of this file, never from the request), and changing `consent` without a new version would make
-   * every stored row claim agreement to words nobody was shown. core's real-content test pins each
-   * version to its wording, so that change fails the suite.
-   *
-   * One sentence per refusal (core contact.ts `ContactRefusal`), and `privacy`, the line that
-   * replaces chrome `privacyLine` while the email is asked for -- that one says "no email", which
-   * would then be false.
-   */
-  contact: z.strictObject({
-    consentVersion: z.string().max(CONSENT_VERSION_MAX).regex(CONSENT_VERSION_PATTERN),
-    emailLabel: text,
-    emailHint: text,
-    consent: text,
-    emailMissing: text,
-    emailInvalid: text,
-    emailPersonal: text,
-    consentMissing: text,
-    /** Beside a greyed Post, what is still missing (the review of 2026-10-25, P13). */
-    postNeeds: text,
-    privacy: text,
-  }),
 });
 
 export const contentSchema = z.strictObject({

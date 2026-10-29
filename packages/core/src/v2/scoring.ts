@@ -134,7 +134,7 @@ export function speedBonus(content: Content, good: number, timeMs: number): numb
  *   - not ended yet:                       0
  *
  * `played` (the client, 2026-10-25): every run that ends scores it, so every player has a score
- * to post, and their work email with it. With the shipped 25 / 15 / 15 / 15: three good at or under
+ * to post. With the shipped 25 / 15 / 15 / 15: three good at or under
  * par is 100, three good just inside the clock is 85, two good at par is 80, one good at par is 60,
  * and leaving everything is 40 at any speed. A wolf run or a late one is 25: every one of them sits
  * below every clean one, because `clean` is at least 1. The weights and the par are content (golden

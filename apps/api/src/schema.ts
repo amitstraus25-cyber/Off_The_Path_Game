@@ -25,15 +25,5 @@ export const submitRunSchema = z.strictObject({
   handle: z.string().max(64),
   log: v2.runLogSchema,
   token: runTokenSchema,
-  /*
-   * THE WORK EMAIL AND THE CONSENT (2026-10-22), optional in the SHAPE whatever the flag says.
-   * With OTP_WORK_EMAIL off they are ignored and stored nowhere, so a game that sends them to a
-   * service with the flag off is not refused; with it on, whether they are good enough is
-   * `v2.checkContact`'s question, asked by the handler so each refusal has its own reason (422).
-   * Bounded here only so a megabyte cannot hide in one: the address's own limit is 254, checked
-   * there. `consent` is a boolean or absent -- a string "true" is a malformed body, not a yes.
-   */
-  email: z.string().max(1024).optional(),
-  consent: z.boolean().optional(),
 });
 export type SubmitRun = z.infer<typeof submitRunSchema>;

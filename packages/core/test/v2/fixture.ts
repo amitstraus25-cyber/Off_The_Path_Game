@@ -201,18 +201,6 @@ export const raw = {
       ChromeKey,
       string
     >,
-    contact: {
-      consentVersion: 'fixture-contact-v1',
-      emailLabel: 'Fixture email label',
-      emailHint: 'Fixture email hint',
-      consent: 'Fixture consent',
-      emailMissing: 'Fixture email missing',
-      emailInvalid: 'Fixture email invalid',
-      emailPersonal: 'Fixture email personal',
-      consentMissing: 'Fixture consent missing',
-      postNeeds: 'Fixture post needs',
-      privacy: 'Fixture privacy',
-    },
   },
 };
 

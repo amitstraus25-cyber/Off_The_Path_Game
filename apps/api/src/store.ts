@@ -16,13 +16,6 @@ import type { StoreConfig } from './env.ts';
  */
 
 const PATH = '/rest/v1/leaderboard';
-/**
- * The ONE way an address is written: migration 0007's function, which inserts the score row and
- * its contact row in one transaction. There is no path here to `leaderboard_contact` itself, and
- * the service role holds no privilege on that table, so nothing in this file could read an
- * address back even by mistake.
- */
-const CONTACT_RPC_PATH = '/rest/v1/rpc/leaderboard_post_with_contact';
 /** Long enough for a cold Postgres, short enough that the game's own timeout is the backstop. */
 const TIMEOUT_MS = 4000;
 /** The most rows one read will ever ask the table for, however the page is filtered down after. */
@@ -89,20 +82,8 @@ export interface LeaderboardRow {
   score: number;
 }
 
-/** The work email that goes with a posted score, and which consent wording it was given under. */
-export interface ContactRow {
-  /** Already normalised by `v2.checkContact`; checked again below before it leaves. */
-  email: string;
-  consentVersion: string;
-}
-
 export interface LeaderboardStore {
   add(row: LeaderboardRow): Promise<void>;
-  /**
-   * The score and its contact, written together or not at all (migration 0007). Throws, with a
-   * message that never holds the address, if both rows are not known to be in.
-   */
-  addWithContact(row: LeaderboardRow, contact: ContactRow): Promise<void>;
   /** Highest score first, then the earliest to get there. */
   top(limit: number): Promise<LeaderboardRow[]>;
   /**
@@ -317,49 +298,6 @@ async function believeInsert(res: Response): Promise<void> {
 }
 
 /**
- * A SQLSTATE or PostgREST error code, and nothing else, out of a failed contact write.
- *
- * The score insert logs `code` and `message` (`reasonFrom`, above) and argues why `message` is
- * safe there. That argument does not carry over: this call's body holds an ADDRESS, and Postgres
- * is free to quote an argument into a message (`invalid input syntax for type ...: "..."` is the
- * known one, and a future check or trigger could add more). So for this call only the code is
- * read -- five characters of SQLSTATE such as `23514`, or PostgREST's own `PGRST202` -- and only
- * when it is shaped like one. That is enough to diagnose every failure this call can have
- * (function missing, permission, a check refusing) and it cannot carry an address.
- */
-const CODE_SHAPE = /^[A-Z0-9]{5,10}$/u;
-const codeFrom = (text: string | null): string => {
-  const body = errorBodySchema.safeParse(parse(text ?? ''));
-  if (!body.success) return 'no PostgREST error body';
-  const code = reasonFieldSchema.safeParse(body.data['code']);
-  return code.success && CODE_SHAPE.test(code.data) ? code.data : 'no error code';
-};
-
-/**
- * Throws unless this response is PostgREST saying the function ran to its end.
- *
- * The function returns the constant `true` (0007), and PostgREST answers a scalar-returning
- * function with `200` and the bare JSON value. So the signature is all three: 200, JSON, and a body
- * of exactly `true` -- the same reasoning as `believeInsert`: whatever is not PostgREST (a paused
- * project, a proxy's page) cannot produce it by accident, and the player is never told "posted"
- * for a row that is not there. A 200 with another body means something answered that is not this
- * function, and is refused.
- */
-async function believeContactWrite(res: Response): Promise<void> {
-  if (res.status !== 200)
-    throw new Error(`contact write refused with ${res.status}: ${codeFrom(await bodyText(res))}`);
-  const type = res.headers.get('content-type');
-  if (type === null || !isJsonType(type))
-    throw new Error('contact write answered 200 without JSON, which PostgREST does not');
-  const text = await bodyText(res);
-  if (text === null)
-    throw new Error('contact write answered 200 with a body that could not be read');
-  // Never the body itself: compared, not quoted.
-  if (text.trim() !== 'true')
-    throw new Error('contact write answered 200 with something other than the function result');
-}
-
-/**
  * The rows that are on the board at all, as PostgREST filters: scored under today's rule, and above
  * zero. Shared by the read and the count so a rank can never be counted over a different board from
  * the one it is shown on.
@@ -398,34 +336,6 @@ export function createStore(config: StoreConfig, fetchImpl: FetchLike): Leaderbo
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       await believeInsert(res);
-    },
-
-    async addWithContact({ handle, score }, { email, consentVersion }) {
-      // The same belt and braces as `add`, and two more: the address and the version must be in
-      // the one form the table's checks accept. The messages name no value.
-      if (!v2.isBoardName(handle)) throw new Error('refusing to store a name the board refuses');
-      if (!Number.isInteger(score) || score < 0)
-        throw new Error('refusing to store a score that is not a whole number of points');
-      const checked = v2.checkWorkEmail(email);
-      if (!checked.ok || checked.email !== email)
-        throw new Error('refusing to store an address that is not a normalised work email');
-      if (!v2.CONSENT_VERSION_PATTERN.test(consentVersion))
-        throw new Error('refusing to store a consent version that is not a slug');
-
-      // The address travels in the BODY of a POST, as every other value here does, and never in
-      // the URL -- a URL is in every access log on the way.
-      const res = await fetchImpl(`${config.url}${CONTACT_RPC_PATH}`, {
-        method: 'POST',
-        headers: { ...headers, 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({
-          p_handle: handle,
-          p_score: score,
-          p_email: email,
-          p_consent_version: consentVersion,
-        }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      await believeContactWrite(res);
     },
 
     async top(limit) {

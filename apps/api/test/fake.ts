@@ -36,31 +36,7 @@ export interface Harness {
   written(): { handle: string; score: number } | undefined;
   /** Only the inserts: a post that writes also counts and reads straight after (handleScore). */
   inserts(): Call[];
-  /** The contact rows handed to the function (migration 0007), parsed back out of each call. */
-  contacts(): ContactArgs[];
 }
-
-/** What `addWithContact` sends to `leaderboard_post_with_contact`: its four named arguments. */
-export interface ContactArgs {
-  p_handle: string;
-  p_score: number;
-  p_email: string;
-  p_consent_version: string;
-}
-
-/** The function's path. Written out, not imported, for the reason `created` gives below. */
-export const CONTACT_RPC = '/rest/v1/rpc/leaderboard_post_with_contact';
-
-/** The calls that went to the contact function. */
-export const contactCallsOf = (calls: readonly Call[]): Call[] =>
-  calls.filter((c) => new URL(c.url).pathname === CONTACT_RPC);
-
-/**
- * What PostgREST answers a function returning `boolean` that returned true: 200, JSON, and the
- * bare scalar as the body. Written as a literal for the same reason `created` is.
- */
-export const functionTrue = (): Response =>
-  new Response('true', { status: 200, headers: { 'content-type': 'application/json' } });
 
 /** The server's clock, as a box a test can move. */
 export interface Clock {
@@ -79,8 +55,6 @@ export interface Instance {
   starts?: WriteBudget;
   recent?: RecentRuns;
   clock?: Clock;
-  /** OTP_WORK_EMAIL as the deps see it. Off unless a test turns it on. */
-  emailRequired?: boolean;
 }
 
 /**
@@ -106,19 +80,9 @@ export const insertsOf = (calls: readonly Call[]): Call[] =>
  * oldest first. It reads the query the store built, so a filter the store forgot is a filter this
  * forgets too -- the store's own tests assert the query text itself.
  */
-export function table(
-  rows: { handle: string; score: number }[] = [],
-  contacts: ContactArgs[] = [],
-): (call: Call) => Response {
+export function table(rows: { handle: string; score: number }[] = []): (call: Call) => Response {
   return ({ url, init }) => {
     const q = new URL(url).searchParams;
-    // The function writes both rows or neither, and answers `true` (migration 0007).
-    if (new URL(url).pathname === CONTACT_RPC) {
-      const args = JSON.parse(String(init.body)) as ContactArgs;
-      rows.push({ handle: args.p_handle, score: args.p_score });
-      contacts.push(args);
-      return functionTrue();
-    }
     if (init.method === 'POST') {
       rows.push(...(JSON.parse(String(init.body)) as { handle: string; score: number }[]));
       return created();
@@ -173,19 +137,14 @@ export function harness(
       budget: instance.budget ?? createWriteBudget(),
       starts: instance.starts ?? createWriteBudget(120),
       recent: instance.recent ?? createRecentRuns(),
-      emailRequired: instance.emailRequired ?? false,
       now: () => clock.now,
     },
     written() {
       const body = insertsOf(calls)[0]?.init.body;
       if (typeof body !== 'string') return undefined;
-      const parsed = JSON.parse(body) as { handle: string; score: number }[] | ContactArgs;
-      // The function's body is its named arguments; the score row is two of them.
-      return Array.isArray(parsed) ? parsed[0] : { handle: parsed.p_handle, score: parsed.p_score };
+      return (JSON.parse(body) as { handle: string; score: number }[])[0];
     },
     inserts: () => insertsOf(calls),
-    contacts: () =>
-      contactCallsOf(calls).map((c) => JSON.parse(String(c.init.body)) as ContactArgs),
   };
 }
 
@@ -197,7 +156,6 @@ export const noStore: Deps = {
   budget: createWriteBudget(),
   starts: createWriteBudget(120),
   recent: createRecentRuns(),
-  emailRequired: false,
   now: () => T0,
 };
 

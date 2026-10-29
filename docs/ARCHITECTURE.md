@@ -225,7 +225,7 @@ untouched, and the player is told no reply came back for the post (`ui.chrome.le
 No cookies, no accounts, no email, no run id and no IP address in the table. A handle and a score,
 which is D10's decision expressed as the schema.
 
-**The work email (the client's decision, 2026-10-22), behind `OTP_WORK_EMAIL`.** Off by default,
+**The work email (the client's decision, 2026-10-22), behind `OTP_WORK_EMAIL`.** **REMOVED 2026-10-29** (the client: "no need for work email"): the game, the routes and core no longer ask for, take or check an address, `OTP_WORK_EMAIL` is read by nothing, and a post carrying `email` or `consent` is a malformed body (400). Migration 0007's table and function stay in the database as history; any addresses already in `public.leaderboard_contact` are the client's to keep or delete by hand. What follows is the design as it was. Off by default,
 and off is the paragraph above exactly. On (the value exactly `required`, set in Vercel after
 migration 0007 and Legal's sign-off), `POST /api/start` answers `emailRequired: true`, Results asks
 for a work email and a consent tick, and `POST /api/score` refuses a post without them (422,

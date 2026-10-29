@@ -59,37 +59,11 @@ export type NoticeKey =
 
 /**
  * Why a post was refused when the answer is not "the run could not be verified": the NAME (the
- * board's rules, core board.ts -- `nameRefusal` says which), or -- when the server requires one --
- * the WORK EMAIL or its CONSENT (core contact.ts). A WOLF run was one from 2026-10-22 until the
- * client's floor of 2026-10-25, when every ended run became one the board takes. All travel under `leaderboardRefused`, because all make exactly the claim
- * that key declares (the run did not go up); only the sentence differs.
+ * board's rules, core board.ts -- `nameRefusal` says which). It travels under
+ * `leaderboardRefused`, because it makes exactly the claim that key declares (the run did not go
+ * up). The work email's three refusals went with the work email (the client, 2026-10-29).
  */
-export type RefusalReason = 'name' | v2.ContactRefusal;
-
-/** What the player typed and ticked, when the server requires a work email (`RunStart`). */
-export interface ContactInput {
-  email: string;
-  consent: boolean;
-}
-
-/**
- * The contact to post, and the content's sentence for each way it can be refused
- * (`ui.contact`, keyed by `v2.ContactRefusal`). The sentences travel with it so this module reads
- * no content file of its own.
- */
-export interface ContactPost extends ContactInput {
-  messages: Readonly<Record<v2.ContactRefusal, string>>;
-}
-
-/** The content's sentences for the four contact refusals, keyed as the server keys them. */
-export const contactMessages = (
-  words: v2.Content['ui']['contact'],
-): Readonly<Record<v2.ContactRefusal, string>> => ({
-  'email-missing': words.emailMissing,
-  'email-invalid': words.emailInvalid,
-  'email-personal': words.emailPersonal,
-  'consent-missing': words.consentMissing,
-});
+export type RefusalReason = 'name';
 
 /** Where a posted run landed: what the server stored and the rank it counted, or null. */
 export interface PostedRun {
@@ -425,13 +399,6 @@ export function withYourRow(
 export interface RunStart {
   seed: number;
   token: string;
-  /**
-   * Whether this run's post must carry a work email and the consent (OTP_WORK_EMAIL on the
-   * server). True only when the server said exactly `true`: a missing or odd value is a server
-   * from before the flag, and the score route is the authority either way -- a game that guessed
-   * wrong meets a 422 `email-missing` with nothing spent, not a lost run.
-   */
-  emailRequired: boolean;
 }
 
 /** The token's shape, as apps/api/src/schema.ts checks it: two base64url segments, short. */
@@ -465,8 +432,7 @@ export async function startRun(): Promise<RunStart | null> {
     START_TIMEOUT_MS,
   );
   if (!reply?.ok || !isRunStart(reply.body)) return null;
-  const { emailRequired } = reply.body as { emailRequired?: unknown };
-  return { seed: reply.body.seed, token: reply.body.token, emailRequired: emailRequired === true };
+  return { seed: reply.body.seed, token: reply.body.token };
 }
 
 /** What a player reads when the content file does not carry the key. Backstops, not copy. */
@@ -484,17 +450,12 @@ const BACKSTOPS: Record<NoticeKey, string> = {
  * it, else this.
  */
 const NAME_BACKSTOP = 'That name cannot go on the board. Try another.';
-/** The contact refusals' backstop, for a caller that passed no sentences. Never the address. */
-const CONTACT_BACKSTOP = 'A work email and consent are needed to post this score.';
 
 /** The server's 422 body, read only for its `reason`, and only one this game knows. */
 const reasonOf = (body: unknown): RefusalReason | null => {
   const reason = (body as { reason?: unknown } | null)?.reason;
-  if (reason === 'name') return reason;
-  return v2.CONTACT_REFUSALS.find((known) => known === reason) ?? null;
+  return reason === 'name' ? reason : null;
 };
-
-const isContactReason = (reason: RefusalReason): reason is v2.ContactRefusal => reason !== 'name';
 
 /**
  * Posts a finished v2 run under the name the player typed. Always answers an outcome: never throws,
@@ -506,7 +467,7 @@ const isContactReason = (reason: RefusalReason): reason is v2.ContactRefusal => 
  * passes is posted in its tidied form. The server checks it again and is the authority.
  *
  * The statuses: 400 is a run the server refused, 409 a token already on the board (the second press
- * of Post), 410 a run whose posting window shut, 422 a refusal with a reason (`name`, or the work email's);
+ * of Post), 410 a run whose posting window shut, 422 a refusal with a reason (`name`);
  * everything else -- 404 undeployed, 503 unconfigured, 429 shedding, 500, a timeout -- is no board
  * right now.
  *
@@ -518,7 +479,6 @@ export async function submit(
   log: v2.RunLog,
   token: string,
   strings: Readonly<Record<string, string>> = {},
-  contact: ContactPost | null = null,
 ): Promise<PostOutcome> {
   const say = (key: NoticeKey): PostOutcome => ({
     key,
@@ -526,33 +486,16 @@ export async function submit(
   });
   const refused = (reason: RefusalReason): PostOutcome => ({
     key: 'leaderboardRefused',
-    text: isContactReason(reason)
-      ? contact?.messages[reason]?.trim() || CONTACT_BACKSTOP
-      : strings['handleBlocked']?.trim() || NAME_BACKSTOP,
+    text: strings['handleBlocked']?.trim() || NAME_BACKSTOP,
     reason,
   });
   const name = checkName(handle);
   if (!name.ok) return { ...refused('name'), nameRefusal: name.reason };
 
-  /*
-   * THE WORK EMAIL, when the server asked for one: checked here by the same function the server
-   * applies (core contact.ts) so a refusal is said without a round trip, then posted in the
-   * normalised form. Without `contact` the body is exactly `{ handle, log, token }`, as before the
-   * flag existed -- no empty email field, nothing for a service with the flag off to ignore.
-   * The address is never logged here and never stored by this page: it lives in the form's state
-   * and in this one request body.
-   */
-  let extra = {};
-  if (contact) {
-    const checked = v2.checkContact(contact.email, contact.consent);
-    if (!checked.ok) return refused(checked.reason);
-    extra = { email: checked.email, consent: true };
-  }
-
   const reply = await ask(SCORE_PATH, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ handle: name.name, log, token, ...extra }),
+    body: JSON.stringify({ handle: name.name, log, token }),
   });
   if (!reply) return say('leaderboardDown');
   if (!reply.ok) {

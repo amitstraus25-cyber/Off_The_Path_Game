@@ -184,36 +184,23 @@ describe('the routes as Vercel invokes them', () => {
       expect(seen).not.toContain(value);
   });
 
-  it('reads OTP_WORK_EMAIL once, and only "required" turns it on', async () => {
+  it('turns nothing on from an OTP_WORK_EMAIL left in the environment', async () => {
+    // The work email came out on 2026-10-29 ("no need for work email"). A deployment that still
+    // carries the old flag must start a run exactly as one without it: a seed and a token.
     const { startRoute } = await load(
       { ...CONFIGURED, OTP_WORK_EMAIL: 'required' },
       () => new Response(null),
     );
-    const on = (await (await startRoute(post('/api/start', {}))).json()) as {
-      emailRequired: boolean;
-    };
-    expect(on.emailRequired).toBe(true);
-
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const typo = await load(
-      { ...CONFIGURED, OTP_WORK_EMAIL: 'Required' },
-      () => new Response(null),
-    );
-    const off = (await (await typo.startRoute(post('/api/start', {}))).json()) as {
-      emailRequired: boolean;
-    };
-    expect(off.emailRequired).toBe(false);
-    // Said by name, so a deploy with a typo can be found from the Vercel log.
-    expect(warn.mock.calls.flat().join(' ')).toContain('OTP_WORK_EMAIL is set but is not exactly');
-    warn.mockRestore();
+    const body = (await (await startRoute(post('/api/start', {}))).json()) as object;
+    expect(Object.keys(body).sort()).toEqual(['seed', 'token']);
   });
 
-  it('with the flag on, posts through the contact function, end to end through the route', async () => {
+  it('takes no address: a post carrying one is a malformed body, and nothing is written', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(1_761_100_000_000);
     const { calls, startRoute, scoreRoute } = await load(
       { ...CONFIGURED, OTP_WORK_EMAIL: 'required' },
-      () => new Response('true', { status: 200, headers: { 'content-type': 'application/json' } }),
+      () => new Response(null, { status: 201 }),
     );
     const { seed, token } = (await (await startRoute(post('/api/start', {}))).json()) as {
       seed: number;
@@ -226,10 +213,8 @@ describe('the routes as Vercel invokes them', () => {
       post('/api/score', { handle: HANDLE, log, token, email: 'ops@acme.com', consent: true }),
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
     expect(await res.text()).not.toContain('ops@acme.com');
-    expect(calls[0]!.url).toBe(
-      'https://project-ref.supabase.co/rest/v1/rpc/leaderboard_post_with_contact',
-    );
+    expect(calls).toHaveLength(0);
   });
 });

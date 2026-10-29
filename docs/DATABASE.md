@@ -22,7 +22,7 @@ and no migration was written. Scores are now 0 to 100 (v1's were out of 1,000), 
 left in the table outranks every v2 run; **whether old rows are cleared is the client's data
 decision**, made by hand through Decision 3's delete path. No deploy deletes anything.
 
-**The client's decision of 2026-10-22: a WORK EMAIL to post a score. Built, not switched on.**
+**The client's decision of 2026-10-22: a WORK EMAIL to post a score.** **REMOVED 2026-10-29** (the client: "no need for work email"): the game, the routes and core no longer ask for, take or check an address, `OTP_WORK_EMAIL` is read by nothing, and a post carrying `email` or `consent` is a malformed body (400). Migration 0007's table and function stay in the database as history; any addresses already in `public.leaderboard_contact` are the client's to keep or delete by hand. What follows is the design as it was.
 To post, a player gives a work email and ticks a consent line whose only purpose is that Cyera may
 contact them about this research. That reopens D10, so it lives in a NEW table,
 `public.leaderboard_contact`, written by migration `0007` -- **not run; the client runs it** -- and
@@ -613,6 +613,8 @@ returns fewer rows with a `200`, and our code reads that as a short board rather
 ---
 
 ## Decision 5 — the work email
+
+**REMOVED 2026-10-29** (the client: "no need for work email"): the game, the routes and core no longer ask for, take or check an address, `OTP_WORK_EMAIL` is read by nothing, and a post carrying `email` or `consent` is a malformed body (400). Migration 0007's table and function stay in the database as history; any addresses already in `public.leaderboard_contact` are the client's to keep or delete by hand. What follows is the design as it was.
 
 **The question, decided by the client in chat on 2026-10-22:** to post a score, a player must give a
 **work** email and tick a consent line whose only purpose is that Cyera may contact them about this

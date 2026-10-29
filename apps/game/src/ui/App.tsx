@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { v2 } from '@otp/core';
-import type { ContactInput, PostOutcome } from '../net/leaderboard';
+import type { PostOutcome } from '../net/leaderboard';
 import type { Store } from '../store';
 import { hudBasket, remainingMs, walkOn } from '../world/run';
 import { Conversation, Dialogue } from './Dialogue';
@@ -30,11 +30,9 @@ export interface AppProps {
   starting: boolean;
   onReplay(): void;
   onReadResearch(event: MouseEvent): void;
-  onPost(handle: string, contact?: ContactInput): Promise<PostOutcome>;
+  onPost(handle: string): Promise<PostOutcome>;
   /** Why this run cannot be posted, or null; see `ResultsProps.cannotPost`. */
   cannotPost: string | null;
-  /** The server asks a work email and consent with this run's post; see `ResultsProps.askEmail`. */
-  emailRequired?: boolean;
   /** Whether the bed is playing, and the control that changes it. */
   music: { on: boolean; onToggle(): void };
   /**
@@ -252,7 +250,6 @@ export function App({
   onReadResearch,
   onPost,
   cannotPost,
-  emailRequired = false,
   music,
   loadFailed,
   onRetryLoad,
@@ -595,7 +592,6 @@ export function App({
              */
             cannotPost={cannotPost}
             onPost={onPost}
-            askEmail={emailRequired}
           />
         );
       }
