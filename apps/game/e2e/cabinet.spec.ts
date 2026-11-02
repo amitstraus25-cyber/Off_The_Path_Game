@@ -224,8 +224,22 @@ test('the deck spends the one Lime while you play, and only then', async ({ page
   await page.setViewportSize(REFERENCE_VIEWPORTS.desktop);
   await page.goto('/');
   await page.waitForSelector('#game[data-ready="true"]');
-  // Title: the way in is the Lime, and A is Lilac.
-  expect(await limes(page)).toEqual(['otp-cta']);
+  // Title: no Lime at all. The way in is cyera.com's white button (the designer, 2026-11-02), and A
+  // is Lilac.
+  expect(await limes(page)).toEqual([]);
+  const way = await page
+    .locator('.otp-title-panel .otp-cta')
+    .evaluate((el) => [getComputedStyle(el).backgroundColor, getComputedStyle(el).borderRadius]);
+  const offwhite = await page.evaluate(() => {
+    const probe = document.createElement('div');
+    probe.style.background = 'var(--cyera-offwhite)';
+    document.body.append(probe);
+    const c = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return c;
+  });
+  expect(way[0]).toBe(offwhite);
+  expect(way[1]).not.toBe('9999px');
 
   await startGame(page);
   expect(await limes(page)).toEqual(['otp-a-button']);

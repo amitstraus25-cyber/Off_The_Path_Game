@@ -77,7 +77,7 @@ describe('the page a visitor downloads', () => {
  * landing page to show up"). LinkedIn, Slack, X and iMessage draw their preview from these tags in
  * the static HTML; none of them runs the script, so nothing rendered later can stand in for them.
  *
- * `public/og-landing.png` is the landing itself, not drawn for the purpose: the real page in its
+ * `public/og-landing-2.png` is the landing itself, not drawn for the purpose: the real page in its
  * wide layout (the client, 2026-10-26: "the landing picture of a web page like this"), captured at
  * 1716x940 with the deck's stick and T hidden, cut to the header and the framed scene and scaled to
  * LinkedIn's own 1200x627. A capture at 1200x627 itself is the narrow cabinet, controls at the
@@ -93,7 +93,7 @@ describe('a link to the game, shared', () => {
 
   it('previews as the landing, large', () => {
     expect(tag('og:title')).toBe("Off the Path: That's Not My Grandma");
-    expect(tag('og:image')).toMatch(/^https:\/\/[^/]+\/og-landing\.png$/);
+    expect(tag('og:image')).toMatch(/^https:\/\/[^/]+\/og-landing-2\.png$/);
     expect(tag('og:image:width')).toBe('1200');
     expect(tag('og:image:height')).toBe('627');
     expect(tag('twitter:card')).toBe('summary_large_image');
@@ -101,7 +101,7 @@ describe('a link to the game, shared', () => {
   });
 
   it('points at an image that ships, at the size it claims', () => {
-    const png = readFileSync(fileURLToPath(new URL('public/og-landing.png', APP)));
+    const png = readFileSync(fileURLToPath(new URL('public/og-landing-2.png', APP)));
     // The IHDR chunk: width and height, big-endian, at bytes 16 and 20.
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 627]);
   });

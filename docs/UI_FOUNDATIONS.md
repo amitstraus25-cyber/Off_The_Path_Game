@@ -34,9 +34,15 @@ needed.
 
 | Screen      | Lime                  |
 | ----------- | --------------------- |
-| Title       | **Play**              |
+| Title       | **None** (see below)  |
 | Results     | **Read the Research** |
 | **Inspect** | **None at all**       |
+
+**Title, since 2026-11-02:** the designer asked for the landing's button to be cyera.com's
+"Book a demo" button, and the client chose it: an Offwhite rounded rectangle, Black words, the
+arrow on a Black square tile. The landing and the how-to sign therefore carry no Lime. Results
+keeps its Lime pill. The same round took the icons, the dashed ring, the houses and four sky
+clouds out of the landing picture.
 
 The deck gives the reason, and it is a game-design argument, not a styling one:
 

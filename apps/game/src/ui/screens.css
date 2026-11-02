@@ -1458,10 +1458,34 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-panel {
   padding-block: calc(4px * var(--otp-ui));
 }
 
-/* The title's one Lime never breaks over two lines (the 2026-10-22 review: "Begin the walk" wrapped
-   in the narrow card at 844x390 and was the only wrapped button in the game). */
+/* The title's call to action never breaks over two lines (the 2026-10-22 review: "Begin the walk"
+   wrapped in the narrow card at 844x390 and was the only wrapped button in the game). */
 .otp-title-panel .otp-cta {
   white-space: nowrap;
+}
+
+/* The landing's button is cyera.com's "Book a demo" (the designer, 2026-11-02, chosen by the client
+   the same day): an Offwhite rounded rectangle, Black words, and the arrow on a Black square tile
+   at its right end. It replaces the Lime pill on the landing and the how-to sign only, so those two
+   screens carry no Lime; Results keeps its Lime pill. */
+.otp-title-panel .otp-cta {
+  background: var(--cyera-offwhite);
+  color: var(--cyera-black);
+  border: 0;
+  border-radius: calc(14px * var(--otp-ui));
+  padding: calc(8px * var(--otp-ui)) calc(8px * var(--otp-ui)) calc(8px * var(--otp-ui))
+    calc(26px * var(--otp-ui));
+  gap: calc(22px * var(--otp-ui));
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.otp-title-panel .otp-cta__disc {
+  width: calc(44px * var(--otp-ui));
+  height: calc(44px * var(--otp-ui));
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: calc(10px * var(--otp-ui));
+  font-size: calc(20px * var(--otp-ui));
 }
 .otp-title-panel:is([data-fit='2'], [data-fit='3'], [data-fit='4']) .otp-cta__disc {
   width: 26px;
@@ -2619,10 +2643,12 @@ html:is([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-art__img {
     color: var(--cyera-offwhite);
   }
 
-  /* The pill grows with the title, as the designer drew it: about a third of the title's width. */
+  /* The button grows with the title, as the designer drew it: about a third of the title's width. */
   html:not([data-cabinet='sides'], [data-cabinet='overlay']) .otp-title-dock[data-open] .otp-cta {
     font-size: max(16px, calc(var(--otp-canvas-h, 0px) * 0.036));
-    padding: calc(var(--otp-canvas-h, 0px) * 0.024) calc(var(--otp-canvas-h, 0px) * 0.042);
+    /* Tight round the arrow tile on three sides, the words' room on the left. */
+    padding: calc(var(--otp-canvas-h, 0px) * 0.012) calc(var(--otp-canvas-h, 0px) * 0.012)
+      calc(var(--otp-canvas-h, 0px) * 0.012) calc(var(--otp-canvas-h, 0px) * 0.04);
     margin-top: calc(var(--otp-canvas-h, 0px) * 0.02);
   }
 }
