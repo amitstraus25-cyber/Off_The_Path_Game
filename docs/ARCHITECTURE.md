@@ -305,7 +305,7 @@ window.parent.postMessage({ type: 'OFF_THE_PATH_READ_RESEARCH' }, <the parent's 
 - **Standalone:** opened directly (not in a frame), or framed by a page that is not on the list,
   or by a parent the browser will not name (for example a parent sending `Referrer-Policy:
 no-referrer` to a browser without `ancestorOrigins`): nothing is posted and the link behaves as
-  a link, opening `https://www.cyera.com/research` (`DEFAULT_RESEARCH_URL`, overridable at build
+  a link, opening `https://www.cyera.com/malicious-skills` (`DEFAULT_RESEARCH_URL`, overridable at build
   time with `VITE_RESEARCH_URL`) in a new tab.
 - **The link stays a link:** it keeps its `href`, so no-JS, middle-click and assistive technology
   work. Ctrl/Cmd/Shift/Alt-clicks and non-primary buttons are left to the browser (a new tab) and

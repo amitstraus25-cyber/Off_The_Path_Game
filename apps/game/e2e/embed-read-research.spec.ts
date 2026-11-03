@@ -24,7 +24,7 @@ const MESSAGE = 'OFF_THE_PATH_READ_RESEARCH';
  * DEFAULT_RESEARCH_URL, written out: the module reads `import.meta.env`, which Vite supplies and
  * Playwright's node process does not, and the URL is part of the agency's contract anyway.
  */
-const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/research';
+const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/malicious-skills';
 /** What the link carries since 2026-10-25 (P7): the same page, tagged as coming from the game. */
 const RESEARCH_HREF = `${DEFAULT_RESEARCH_URL}?utm_source=off-the-path`;
 

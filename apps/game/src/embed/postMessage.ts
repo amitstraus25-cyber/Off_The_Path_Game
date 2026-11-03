@@ -73,12 +73,13 @@ const RESEARCH_URL_RAW = (import.meta.env.VITE_RESEARCH_URL as string | undefine
 /**
  * The research page the one call to action points at.
  *
- * A build-time default, overridden by VITE_RESEARCH_URL. The client set it on 2026-10-23 to Cyera's
- * research hub, "in the mean time": the game's own page will be cyera.com/research/malicious-skills
- * (not live yet), and whether the call to action then links there or scrolls the page it is embedded
- * in is a question out with the web agency. The old default, /off-the-path, was a 404.
+ * A build-time default, overridden by VITE_RESEARCH_URL. Since 2026-11-03 it is the research page the
+ * game is embedded in, cyera.com/malicious-skills (the client: the link went to the research hub, not
+ * "the correct place"). Embedded there, the click scrolls that page instead (below); this is where it
+ * goes when the game is opened on its own. Before: the hub, /research, the interim choice of
+ * 2026-10-23; before that /off-the-path, a 404.
  */
-export const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/research';
+export const DEFAULT_RESEARCH_URL = 'https://www.cyera.com/malicious-skills';
 
 /**
  * The research link as the player follows it outside an embed, tagged so the research page's
