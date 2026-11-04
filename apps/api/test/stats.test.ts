@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createStatsReader, handleStats, readStatsKey } from '../src/stats.ts';
+import { HOURS, createStatsReader, handleStats, perHour, readStatsKey } from '../src/stats.ts';
 import type { StatsDeps } from '../src/stats.ts';
 import type { FetchLike } from '../src/store.ts';
 import { CONFIG } from './fake.ts';
@@ -13,6 +13,13 @@ const KEY = 'k'.repeat(40);
 const TOTALS = [{ plays_started: 12, plays_finished: 9, avg_score: 71.5, last_hour: null }];
 const DAILY = [{ day: '2026-11-04', started: 12, finished: 9 }];
 const FOOLED = [{ skill: 'courier', times_taken: 4 }];
+const NOW = Date.parse('2026-11-04T16:20:00Z');
+const ROWS = [
+  { created_at: '2026-11-04T16:00:00+00:00', stage: 'start' },
+  { created_at: '2026-11-04T16:00:00+00:00', stage: 'end' },
+  { created_at: '2026-11-04T15:00:00+00:00', stage: 'start' },
+  { created_at: '2026-11-04T15:00:00+00:00', stage: 'quit' },
+];
 
 interface Call {
   url: string;
@@ -25,14 +32,22 @@ function views(reply: (url: string) => Response = (url) => answer(url)) {
     calls.push({ url, init });
     return Promise.resolve(reply(url));
   };
-  const deps: StatsDeps = { key: KEY, reader: createStatsReader(CONFIG, fetchImpl) };
+  const deps: StatsDeps = { key: KEY, reader: createStatsReader(CONFIG, fetchImpl, () => NOW) };
   return { calls, deps };
 }
 
 const body = (rows: unknown) =>
   new Response(JSON.stringify(rows), { headers: { 'content-type': 'application/json' } });
 const answer = (url: string): Response =>
-  body(url.includes('totals') ? TOTALS : url.includes('daily') ? DAILY : FOOLED);
+  body(
+    url.includes('totals')
+      ? TOTALS
+      : url.includes('daily')
+        ? DAILY
+        : url.includes('fooled')
+          ? FOOLED
+          : ROWS,
+  );
 
 const get = (auth?: string, method = 'GET'): Request =>
   new Request('https://off-the-path.test/api/stats', {
@@ -46,13 +61,29 @@ describe('GET /api/stats', () => {
     const res = await handleStats(get(`Bearer ${KEY}`), v.deps);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(await res.json()).toEqual({ totals: TOTALS[0], daily: DAILY, fooled: FOOLED });
-    // The views only, never the table, and the database key in headers only.
+    const got = (await res.json()) as { hourly: { hour: string; started: number }[] };
+    expect(got).toMatchObject({ totals: TOTALS[0], daily: DAILY, fooled: FOOLED });
+    expect(got.hourly).toHaveLength(HOURS);
+    expect(got.hourly.at(-1)).toEqual({
+      hour: '2026-11-04T16:00:00.000Z',
+      started: 1,
+      finished: 1,
+    });
+    expect(got.hourly.at(-2)).toEqual({
+      hour: '2026-11-04T15:00:00.000Z',
+      started: 1,
+      finished: 0,
+    });
+    // The three views, and of the table only each row's stage and hour, for twelve hours.
     expect(v.calls.map((c) => new URL(c.url).pathname).sort()).toEqual([
+      '/rest/v1/play_stats',
       '/rest/v1/play_stats_daily',
       '/rest/v1/play_stats_fooled',
       '/rest/v1/play_stats_totals',
     ]);
+    const table = new URL(v.calls.find((c) => c.url.includes('play_stats?'))!.url).searchParams;
+    expect(table.get('select')).toBe('created_at,stage');
+    expect(table.get('created_at')).toBe('gte.2026-11-04T05:00:00.000Z');
     for (const c of v.calls) expect(c.url).not.toContain(CONFIG.serviceRoleKey);
   });
 
@@ -79,8 +110,20 @@ describe('GET /api/stats', () => {
     expect((await handleStats(get(`Bearer ${KEY}`), refused.deps)).status).toBe(503);
     const odd = views((url) => (url.includes('daily') ? body([{ day: 3 }]) : answer(url)));
     expect((await handleStats(get(`Bearer ${KEY}`), odd.deps)).status).toBe(503);
+    const rows = views((url) => (url.includes('play_stats?') ? body([{ hour: 1 }]) : answer(url)));
+    expect((await handleStats(get(`Bearer ${KEY}`), rows.deps)).status).toBe(503);
     const gone: StatsDeps = { key: KEY, reader: { read: () => Promise.reject('gone') } };
     expect((await handleStats(get(`Bearer ${KEY}`), gone)).status).toBe(503);
+  });
+
+  it('counts per hour only the twelve hours it shows, and only starts and ends', () => {
+    const hours = perHour(
+      [...ROWS, { created_at: '2026-11-03T16:00:00+00:00', stage: 'start' }],
+      NOW,
+    );
+    expect(hours.reduce((n, h) => n + h.started, 0)).toBe(2);
+    expect(hours.reduce((n, h) => n + h.finished, 0)).toBe(1);
+    expect(hours[0]!.hour).toBe('2026-11-04T05:00:00.000Z');
   });
 
   it('reads its key from OTP_STATS_KEY, and only one long enough to be a key', () => {

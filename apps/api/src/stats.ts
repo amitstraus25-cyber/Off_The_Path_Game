@@ -7,7 +7,8 @@ import type { FetchLike } from './store.ts';
 /*
  * GET /api/stats -- THE DASHBOARD'S READ (the client, 2026-11-04). The play stats in aggregate,
  * read from the three views migration 0009 makes: the totals, plays per day, and which malicious
- * skills were taken most. Never a row of `public.play_stats`.
+ * skills were taken most; and the last twelve hours per hour, counted here from each row's stage and
+ * hour alone. No row of `public.play_stats` is ever answered.
  *
  * PRIVATE. It answers only a caller holding `OTP_STATS_KEY` (a Vercel variable, 32+ characters,
  * separate from the database key): `authorization: Bearer <key>`. That key reads these totals and
@@ -36,18 +37,54 @@ const dailySchema = z.array(
   z.object({ day: z.string(), started: z.number(), finished: z.number() }),
 );
 const fooledSchema = z.array(z.object({ skill: z.string(), times_taken: z.number() }));
+const hourRowsSchema = z.array(z.object({ created_at: z.string(), stage: z.string() }));
+
+/** The last twelve hours, counted per hour. Rows are stamped to the hour (migration 0009). */
+export const HOURS = 12;
+const HOUR_MS = 3_600_000;
+/** A bound on the read: twelve hours of rows, far past any honest rate. */
+const MAX_HOUR_ROWS = 20_000;
+
+export interface Hour {
+  hour: string;
+  started: number;
+  finished: number;
+}
+
+/** Counts rows into the twelve hours ending with the current one, oldest first, empty hours kept. */
+export function perHour(rows: { created_at: string; stage: string }[], now: number): Hour[] {
+  const last = Math.floor(now / HOUR_MS) * HOUR_MS;
+  const hours = Array.from({ length: HOURS }, (_, i) => ({
+    hour: new Date(last - (HOURS - 1 - i) * HOUR_MS).toISOString(),
+    started: 0,
+    finished: 0,
+  }));
+  for (const row of rows) {
+    const at = Math.floor(Date.parse(row.created_at) / HOUR_MS) * HOUR_MS;
+    const slot = hours[HOURS - 1 - (last - at) / HOUR_MS];
+    if (!slot) continue;
+    if (row.stage === 'start') slot.started += 1;
+    if (row.stage === 'end') slot.finished += 1;
+  }
+  return hours;
+}
 
 export interface Stats {
   totals: Record<string, number | string | null>;
   daily: z.infer<typeof dailySchema>;
   fooled: z.infer<typeof fooledSchema>;
+  hourly: Hour[];
 }
 
 export interface StatsReader {
   read(): Promise<Stats>;
 }
 
-export function createStatsReader(config: StoreConfig, fetchImpl: FetchLike): StatsReader {
+export function createStatsReader(
+  config: StoreConfig,
+  fetchImpl: FetchLike,
+  now: () => number = Date.now,
+): StatsReader {
   const get = async (path: string): Promise<unknown> => {
     const res = await fetchImpl(`${config.url}${path}`, {
       method: 'GET',
@@ -63,17 +100,23 @@ export function createStatsReader(config: StoreConfig, fetchImpl: FetchLike): St
   };
   return {
     async read() {
-      const [totals, daily, fooled] = await Promise.all([
+      const at = now();
+      // Only the stage and the hour of each row, and only these twelve hours: what `perHour` counts.
+      const since = new Date(Math.floor(at / HOUR_MS) * HOUR_MS - (HOURS - 1) * HOUR_MS);
+      const recent = `/rest/v1/play_stats?select=created_at,stage&created_at=gte.${since.toISOString()}&limit=${MAX_HOUR_ROWS}`;
+      const [totals, daily, fooled, rows] = await Promise.all([
         get(VIEWS.totals),
         get(VIEWS.daily),
         get(VIEWS.fooled),
+        get(recent),
       ]);
       const t = totalsSchema.safeParse(totals);
       const d = dailySchema.safeParse(daily);
       const f = fooledSchema.safeParse(fooled);
-      if (!t.success || !d.success || !f.success)
+      const h = hourRowsSchema.safeParse(rows);
+      if (!t.success || !d.success || !f.success || !h.success)
         throw new Error('the stats came back in a shape they have never had');
-      return { totals: t.data[0]!, daily: d.data, fooled: f.data };
+      return { totals: t.data[0]!, daily: d.data, fooled: f.data, hourly: perHour(h.data, at) };
     },
   };
 }
