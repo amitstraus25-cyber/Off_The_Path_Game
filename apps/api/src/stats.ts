@@ -7,7 +7,7 @@ import type { FetchLike } from './store.ts';
 /*
  * GET /api/stats -- THE DASHBOARD'S READ (the client, 2026-11-04). The play stats in aggregate,
  * read from the three views migration 0009 makes: the totals, plays per day, and which malicious
- * skills were taken most; and the last twelve hours per hour, counted here from each row's stage and
+ * skills were taken most; and the last two weeks per hour, counted here from each row's stage and
  * hour alone. No row of `public.play_stats` is ever answered.
  *
  * PRIVATE. It answers only a caller holding `OTP_STATS_KEY` (a Vercel variable, 32+ characters,
@@ -39,11 +39,14 @@ const dailySchema = z.array(
 const fooledSchema = z.array(z.object({ skill: z.string(), times_taken: z.number() }));
 const hourRowsSchema = z.array(z.object({ created_at: z.string(), stage: z.string() }));
 
-/** The last twelve hours, counted per hour. Rows are stamped to the hour (migration 0009). */
-export const HOURS = 12;
+/**
+ * The last two weeks, counted per hour (the dashboard groups them into 12 hours, 72 hours, a week
+ * and two weeks). Rows are stamped to the hour (migration 0009).
+ */
+export const HOURS = 14 * 24;
 const HOUR_MS = 3_600_000;
-/** A bound on the read: twelve hours of rows, far past any honest rate. */
-const MAX_HOUR_ROWS = 20_000;
+/** A bound on the read: two weeks of rows, far past any honest rate. */
+const MAX_HOUR_ROWS = 100_000;
 
 export interface Hour {
   hour: string;
@@ -51,7 +54,7 @@ export interface Hour {
   finished: number;
 }
 
-/** Counts rows into the twelve hours ending with the current one, oldest first, empty hours kept. */
+/** Counts rows into the `HOURS` hours ending with the current one, oldest first, empty hours kept. */
 export function perHour(rows: { created_at: string; stage: string }[], now: number): Hour[] {
   const last = Math.floor(now / HOUR_MS) * HOUR_MS;
   const hours = Array.from({ length: HOURS }, (_, i) => ({
@@ -101,7 +104,7 @@ export function createStatsReader(
   return {
     async read() {
       const at = now();
-      // Only the stage and the hour of each row, and only these twelve hours: what `perHour` counts.
+      // Only the stage and the hour of each row, and only these two weeks: what `perHour` counts.
       const since = new Date(Math.floor(at / HOUR_MS) * HOUR_MS - (HOURS - 1) * HOUR_MS);
       const recent = `/rest/v1/play_stats?select=created_at,stage&created_at=gte.${since.toISOString()}&limit=${MAX_HOUR_ROWS}`;
       const [totals, daily, fooled, rows] = await Promise.all([

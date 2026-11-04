@@ -83,7 +83,9 @@ describe('GET /api/stats', () => {
     ]);
     const table = new URL(v.calls.find((c) => c.url.includes('play_stats?'))!.url).searchParams;
     expect(table.get('select')).toBe('created_at,stage');
-    expect(table.get('created_at')).toBe('gte.2026-11-04T05:00:00.000Z');
+    expect(table.get('created_at')).toBe(
+      `gte.${new Date(Date.parse('2026-11-04T16:00:00Z') - (HOURS - 1) * 3_600_000).toISOString()}`,
+    );
     for (const c of v.calls) expect(c.url).not.toContain(CONFIG.serviceRoleKey);
   });
 
@@ -118,12 +120,14 @@ describe('GET /api/stats', () => {
 
   it('counts per hour only the twelve hours it shows, and only starts and ends', () => {
     const hours = perHour(
-      [...ROWS, { created_at: '2026-11-03T16:00:00+00:00', stage: 'start' }],
+      [...ROWS, { created_at: '2026-10-03T16:00:00+00:00', stage: 'start' }],
       NOW,
     );
     expect(hours.reduce((n, h) => n + h.started, 0)).toBe(2);
     expect(hours.reduce((n, h) => n + h.finished, 0)).toBe(1);
-    expect(hours[0]!.hour).toBe('2026-11-04T05:00:00.000Z');
+    expect(hours[0]!.hour).toBe(
+      new Date(Date.parse('2026-11-04T16:00:00Z') - (HOURS - 1) * 3_600_000).toISOString(),
+    );
   });
 
   it('reads its key from OTP_STATS_KEY, and only one long enough to be a key', () => {

@@ -722,7 +722,7 @@ seconds, so no row can be matched to another or to a board post; rows older than
 deleted nightly (`play-stats-retention`, pg_cron, as 0003 does for the board).
 
 **The dashboard reads `GET /api/stats`** (apps/api/src/stats.ts): the three views 0009 makes
-(`play_stats_totals`, `_daily`, `_fooled`) and the last twelve hours per hour (counted from each
+(`play_stats_totals`, `_daily`, `_fooled`) and the last two weeks per hour (counted from each
 row's stage and hour alone), aggregates only, behind `OTP_STATS_KEY` -- a Vercel
 variable of its own, 32+ characters, that reads these totals and nothing else.
 
