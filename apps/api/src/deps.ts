@@ -2,6 +2,10 @@ import { content } from './content.ts';
 import { readStoreConfig } from './env.ts';
 import { note } from './http.ts';
 import { createRecentRuns, createWriteBudget } from './limit.ts';
+import { createPlayStore } from './plays.ts';
+import type { PlayDeps } from './plays.ts';
+import { createStatsReader, readStatsKey } from './stats.ts';
+import type { StatsDeps } from './stats.ts';
 import { createStore } from './store.ts';
 import { createRunTokens, signingKey } from './token.ts';
 import type { Deps } from './handlers.ts';
@@ -31,4 +35,21 @@ export const deps: Deps = {
   recent: createRecentRuns(),
   // Called, not captured, so a test's fake clock reaches it.
   now: () => Date.now(),
+};
+
+/** The play stats' own wiring (src/plays.ts): the same key and signer, its own budget and memory. */
+export const playDeps: PlayDeps = {
+  content,
+  plays: configured.ok ? createPlayStore(configured.config, fetch) : null,
+  tokens: deps.tokens,
+  // Up to three notes a run (start, then end or quit), so three times the start budget.
+  budget: createWriteBudget(360),
+  recent: createRecentRuns(1500),
+  now: deps.now,
+};
+
+/** The dashboard's read (src/stats.ts): its own key, and the store's config to read the views. */
+export const statsDeps: StatsDeps = {
+  key: readStatsKey(process.env),
+  reader: configured.ok ? createStatsReader(configured.config, fetch) : null,
 };

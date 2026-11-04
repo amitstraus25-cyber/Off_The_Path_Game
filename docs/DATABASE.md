@@ -269,6 +269,7 @@ of a marketing asset do not earn a tool.
 | `0006_clear_v1_rows.sql`             | —        | **Client's call.** Deletes the v1 rows for good.                                                                               |
 | `0007_leaderboard_work_email.sql`    | 5        | **Only after Legal signs off.** Then set the flag.                                                                             |
 | `0008_clear_pre_rules3_rows.sql`     | —        | **Client's call (made 2026-10-26).** Deletes the rows before rules 3 for good, keeping any with a work email. Supersedes 0006. |
+| `0009_play_stats.sql`                | —        | **Yes (the client, 2026-11-04).** Creates `public.play_stats` and its three views; nothing is counted until it runs.           |
 
 Run them in order. `0001` first, always — it is also the drift check.
 
@@ -696,6 +697,73 @@ included; whoever exports owns that.
 
 Step 3 before step 1 makes every post answer 503 (`PGRST202`, function not found, in the log); unset
 the variable and redeploy to undo. Nothing is stored in that state.
+
+---
+
+## The play stats
+
+**Added 2026-11-04 (the client: how many played, for how long, with how many interactions).**
+`POST /api/play` (apps/api/src/plays.ts) writes `public.play_stats` (migration 0009). Until 0009
+has run the route answers 503 and the game plays on unchanged.
+
+Each run sends up to two notes: a `start` when the walk begins, and one summary, `end` (the
+cottage or the clock) or `quit` (a closed tab, or Walk it again mid-run). An `end` must also pass the walk floor the score route checks, so no
+scripted log can claim a three-second run. A summary's counts are
+the server's replay of the run log, never numbers the browser offers. A row holds the stage, the
+device class (`phone` or `desktop`), whether the game was embedded, and for a summary the ending,
+the run time, characters met, cards opened, offers left, skills taken (good and malicious) and the
+score. **No name, email, address, cookie, token or run id**, so a start cannot be joined to its
+summary and the numbers are read in aggregate only. Rows are `service_role` only, like the board.
+
+**The client's decisions of 2026-11-04:** anonymous, so no consent prompt, no Legal review and no
+change to anything a player sees; the Results privacy line ("handle and score only") stays as it
+is, read as a statement about the board. Rows are stamped to the HOUR and run times stored to five
+seconds, so no row can be matched to another or to a board post; rows older than twelve months are
+deleted nightly (`play-stats-retention`, pg_cron, as 0003 does for the board).
+
+**The dashboard reads `GET /api/stats`** (apps/api/src/stats.ts): the three views 0009 makes
+(`play_stats_totals`, `_daily`, `_fooled`), aggregates only, behind `OTP_STATS_KEY` -- a Vercel
+variable of its own, 32+ characters, that reads these totals and nothing else.
+
+What it cannot tell: unique people (two runs by one person are two plays), and runs on a token the
+game never got (offline, or `/api/start` down) are not counted at all.
+
+**The dashboard query.** Paste into the SQL editor; change the date to read a window.
+
+```sql
+select
+  count(*) filter (where stage = 'start')                                        as plays_started,
+  count(*) filter (where stage = 'end')                                          as plays_finished,
+  count(*) filter (where stage = 'quit')                                         as plays_quit,
+  round(100.0 * count(*) filter (where stage = 'end')
+        / nullif(count(*) filter (where stage = 'start'), 0), 1)                 as finish_rate_pct,
+  round(avg(duration_ms) filter (where stage = 'end') / 1000.0, 1)               as avg_seconds_finished,
+  round(avg(met + opened + left_count + cardinality(taken_good) + cardinality(taken_bad))
+        filter (where stage <> 'start'), 1)                                      as avg_interactions,
+  round(avg(score) filter (where stage = 'end'), 1)                              as avg_score,
+  count(*) filter (where ending = 'grandma')                                     as reached_grandma,
+  count(*) filter (where ending = 'wolf')                                        as let_the_wolf_in,
+  count(*) filter (where ending = 'late')                                        as ran_out_of_time,
+  count(*) filter (where stage = 'start' and device = 'phone')                   as phone_starts,
+  count(*) filter (where stage = 'start' and embedded)                           as embedded_starts
+from public.play_stats
+where created_at >= '2026-11-04';
+```
+
+An interaction is a character met, a card opened, or an offer taken or left.
+
+**Plays per day**, and **which malicious skill fools people most**:
+
+```sql
+select created_at::date as day,
+       count(*) filter (where stage = 'start') as started,
+       count(*) filter (where stage = 'end')   as finished
+from public.play_stats group by 1 order by 1;
+
+select skill, count(*) as times_taken
+from public.play_stats, unnest(taken_bad) as skill
+group by skill order by times_taken desc;
+```
 
 ---
 

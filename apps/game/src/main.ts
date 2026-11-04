@@ -24,6 +24,7 @@ import { fill, marqueeText, strings } from './ui/copy';
 import { variants } from './ab';
 import { mountMarquee } from './ui/marquee';
 import { startRun, submit } from './net/leaderboard';
+import { notePlay } from './net/plays';
 import type { RunStart } from './net/leaderboard';
 import { emit, readResearchClick } from './embed/postMessage';
 // Before panels.css, so hud.css lands first in the cascade, as the HUD's selectors expect.
@@ -273,6 +274,16 @@ async function start(): Promise<void> {
    * server's posting window counts from the token, so a token fetched early and held would close.
    */
   let token: string | null = null;
+  /*
+   * THE PLAY STATS (net/plays.ts): the token whose run has been summed up, `end` or `quit`, so a
+   * run is summed up once however it finishes -- the cottage, the clock, a replay or a closed tab.
+   */
+  let counted: string | null = null;
+  const sumUp = (stage: 'end' | 'quit'): void => {
+    if (token === null || counted === token) return;
+    counted = token;
+    notePlay({ stage, token, log: v2.toRunLog(store.getState()) });
+  };
   let pending: Promise<RunStart | null> | null = null;
   let starting = false;
 
@@ -358,6 +369,8 @@ async function start(): Promise<void> {
     draw();
     const answer = pending ? await pending : null;
     pending = null;
+    // A run walked again before it ended was left: it is a quit, before its token is replaced.
+    if (v2.RUNNING.has(store.getState().phase)) sumUp('quit');
     token = answer?.token ?? null;
     // The last run's beats are the last run's: no knock, no ride and no line carries over.
     settleBeats();
@@ -372,6 +385,7 @@ async function start(): Promise<void> {
      */
     if (replay) bus.emit('restartRun', undefined);
     starting = false;
+    if (token !== null) notePlay({ stage: 'start', token });
     emit('otp:started', { runId: store.getState().runId, replay });
     draw();
   };
@@ -620,6 +634,7 @@ async function start(): Promise<void> {
     if (ended && lastPhase !== state.phase) {
       const run = v2.result(state, content);
       emit('otp:completed', { score: run.total, ending: run.ending ?? 'late' });
+      sumUp('end');
     }
     lastPhase = state.phase;
     draw();
@@ -634,6 +649,12 @@ async function start(): Promise<void> {
     if (outOfTime(store.getState(), store.elapsed())) store.dispatch({ type: 'TIME_UP' });
     else draw();
   }, TICK_MS);
+
+  // A tab closed mid-walk is a quit. `pagehide`, not `beforeunload`: it fires on a phone too.
+  // Not when the page is only being kept for Back (`persisted`): that player may come back and finish.
+  window.addEventListener('pagehide', (event) => {
+    if (!event.persisted && v2.RUNNING.has(store.getState().phase)) sumUp('quit');
+  });
 
   // The subscriber only runs on a CHANGE, and the first phase is never one.
   syncWorldChrome();

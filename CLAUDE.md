@@ -65,7 +65,7 @@ Workspaces, five: `packages/core` (pure TS rules), `apps/game` (Vite + Phaser + 
 `installCommand`, `buildCommand` and the security headers, nothing else. The build ends with
 `apps/game/scripts/vercel-output.mjs`, which writes `.vercel/output`: the static game, the three
 routes bundled into self-contained CommonJS, and the headers copied from `vercel.json`. **Vercel
-compiles none of our TypeScript.** The routes are `apps/api/api/start.ts`, `score.ts` and `top.ts` —
+compiles none of our TypeScript.** The routes are `apps/api/api/start.ts`, `score.ts`, `top.ts`, `play.ts` (the anonymous play stats) and `stats.ts` (their private totals) —
 the single copy; there used to be three. `test/docs-truth.test.ts` fails if the build stops running
 that script, because nothing else would notice.
 
@@ -140,6 +140,10 @@ while `pnpm audit` held CI red, rather than waiving the rule.
   **skip versions published in the last 14 days**. Commit the lockfile. Run `pnpm audit` in CI.
 - Strict CSP (see ARCHITECTURE). No `eval`, no inline scripts, no `innerHTML` with data. Escape handles on render.
 - The leaderboard shows a handle and a score only. No accounts, no cookies, no raw IPs, no email.
+- **The play stats (2026-11-04)** are the one other thing stored: anonymous per-run counts in
+  `public.play_stats`, replayed by the server, stamped to the hour, no name, id, IP or cookie, and
+  read only in aggregate behind `OTP_STATS_KEY` (docs/DATABASE.md "The play stats"). First-party,
+  so not the third-party analytics the rule above bars; nothing a player sees changed for it.
   **The work email of 2026-10-22 was taken out on 2026-10-29** (the client: "no need for work
   email"): nothing in the game, the routes or core asks for, takes or checks an address, a post
   carrying `email` or `consent` is a 400, and `OTP_WORK_EMAIL` is read by nothing. Migration 0007's

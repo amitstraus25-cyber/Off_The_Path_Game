@@ -14,3 +14,4 @@ export * from './load.ts';
 export * from './floor.ts';
 export * from './perks.ts';
 export * from './board.ts';
+export * from './stats.ts';

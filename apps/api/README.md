@@ -40,6 +40,8 @@ when it is not. This file is the service; that one is the database.
 | `POST /api/start` | Draws a seed and answers `{ seed, token }`: the seed sealed with the issue time in an HMAC-signed token. Stores nothing.                                                                                                                                                                                                                                                                                           |
 | `POST /api/score` | Takes `{ handle, log, token }` and nothing else. Checks the name, the token, the seed and the clock, replays the v2 log through `packages/core`, **recomputes the score** (0–100, time counted), stores it. Answers `{ handle, score, rank, entries? }`: the stored (tidied) name, the score, the rank counted right after the insert (null if the count failed) and the top 10 read from the table, not the edge. |
 | `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest score first and earliest first on a tie, rows from `BOARD_SINCE` on and above 0. Cached at the edge for 10 s plus 20 s stale (`TOP_CACHE`), so never more than 30 s old.                                                                                                                                                                                 |
+| `POST /api/play`  | The anonymous play stats (2026-11-04, `src/plays.ts`). Takes `{ stage, token, device, embedded }`, plus `log` for `end` and `quit`; replays the log and stores the replay's counts in `public.play_stats` (migration 0009). One start and one summary per token. No name, address, cookie or id stored. 503 until 0009 has run.                                                                                    |
+| `GET /api/stats`  | The play stats in aggregate for the dashboard: `{ totals, daily, fooled }` from migration 0009's views, never a row. Only to `authorization: Bearer <OTP_STATS_KEY>` (a Vercel variable, 32+ characters); 401 otherwise, 503 while unset.                                                                                                                                                                          |
 
 ## The run token (Phase E)
 
@@ -270,6 +272,8 @@ apps/game/scripts/vercel-output.mjs`. The typecheck at its head is the guard on 
 api/score.ts     POST /api/score   -- thin: reads the environment once, calls the handler
 api/top.ts       GET  /api/top
 api/start.ts     POST /api/start
+api/play.ts      POST /api/play    -- the anonymous play stats (src/plays.ts)
+api/stats.ts     GET  /api/stats   -- their totals for the dashboard, behind OTP_STATS_KEY (src/stats.ts)
 src/handlers.ts  the three routes as pure functions of (Request, Deps)
 src/token.ts     the run token: HKDF key, HMAC seal, open
 src/schema.ts    the v2 submit body; no node: imports, so the game's tests can hold it

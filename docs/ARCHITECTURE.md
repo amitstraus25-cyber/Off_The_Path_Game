@@ -195,6 +195,7 @@ exists. Two routes shipped instead:
 | `POST /api/start` | Draws a seed on the server and answers `{ seed, token }`: the token is the seed and the start time sealed with an HMAC, nothing about the visitor, nothing stored. The run is dealt from that seed.                                                                                  |
 | `POST /api/score` | Body `{ handle, log, token }` — **and nothing else**; the schema is strict, so a claimed `score` is a 400. Checks the token, replays the v2 log through `packages/core`, **recomputes the score**, stores the recomputed number. A late run is refused. Answers `{ handle, score }`. |
 | `GET /api/top`    | Answers `{ entries: [{ rank, handle, score }] }`, highest first, earliest first on a tie. Drops any row whose handle the game could not have minted.                                                                                                                                 |
+| `POST /api/play`  | The anonymous play stats: a `start` note, then an `end` or `quit` carrying the run log and token. The server replays the log and stores only the replay's counts (`public.play_stats`, docs/DATABASE.md "The play stats").                                                           |
 
 Why the shape changed, so it is not "restored" as a fix:
 

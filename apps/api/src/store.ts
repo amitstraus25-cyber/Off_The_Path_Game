@@ -275,7 +275,7 @@ const isJsonType = (value: string): boolean => {
  * request, and a guard that fails on a header the server is free to drop takes the board down for
  * a reason nobody will find at three in the morning.
  */
-async function believeInsert(res: Response): Promise<void> {
+export async function believeInsert(res: Response): Promise<void> {
   if (res.status !== CREATED) {
     const reason = reasonFrom(await bodyText(res));
     throw new Error(

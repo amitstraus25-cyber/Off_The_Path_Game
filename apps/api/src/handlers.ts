@@ -67,7 +67,7 @@ export const CLOCK_SKEW_MS = 2_000;
  * and no origin check could stop it anyway -- the edge rate limit is what bounds those. The game in
  * an iframe on cyera.com is still same-origin here: its document is served from this origin.
  */
-const crossSite = (request: Request): boolean => {
+export const crossSite = (request: Request): boolean => {
   const site = request.headers.get('sec-fetch-site');
   return site !== null && site !== 'same-origin';
 };
@@ -77,7 +77,7 @@ const crossSite = (request: Request): boolean => {
  * MEDIA TYPE is compared exactly, parameters aside: a substring match let `text/plain;x=application/json`
  * through -- a type a browser sends cross-origin with no preflight -- and `application/jsonx` too.
  */
-const isJson = (request: Request): boolean =>
+export const isJson = (request: Request): boolean =>
   (request.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase() ===
   'application/json';
 
@@ -100,7 +100,7 @@ const UNAVAILABLE = 'the leaderboard is unavailable';
  * as the body arrives, which is why nothing here ever holds more than 32 KB of someone else's JSON.
  * (src/node-adapter.ts applies the same cap before a request reaches this file at all.)
  */
-async function readCapped(request: Request, max: number): Promise<string | null> {
+export async function readCapped(request: Request, max: number): Promise<string | null> {
   const stream = request.body;
   if (stream === null) {
     // No stream to meter (a runtime that buffers for us, or a test's Request). Count the bytes.
