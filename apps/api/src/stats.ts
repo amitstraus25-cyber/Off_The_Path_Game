@@ -38,6 +38,14 @@ const dailySchema = z.array(
 );
 const fooledSchema = z.array(z.object({ skill: z.string(), times_taken: z.number() }));
 const hourRowsSchema = z.array(z.object({ created_at: z.string(), stage: z.string() }));
+const scoresSchema = z.array(z.object({ score: z.number() }));
+
+/**
+ * THE LEADERBOARD SINCE LAUNCH (the game's post went live on 2026-11-03, Israel time): how many runs
+ * were posted with a name, and the best score. Scores only are read, never a name.
+ */
+export const LAUNCH = '2026-11-02T22:00:00Z';
+const MAX_SCORES = 100_000;
 
 /**
  * The last two weeks, counted per hour (the dashboard groups them into 12 hours, 72 hours, a week
@@ -77,6 +85,7 @@ export interface Stats {
   daily: z.infer<typeof dailySchema>;
   fooled: z.infer<typeof fooledSchema>;
   hourly: Hour[];
+  board: { posted: number; best: number | null };
 }
 
 export interface StatsReader {
@@ -107,19 +116,28 @@ export function createStatsReader(
       // Only the stage and the hour of each row, and only these two weeks: what `perHour` counts.
       const since = new Date(Math.floor(at / HOUR_MS) * HOUR_MS - (HOURS - 1) * HOUR_MS);
       const recent = `/rest/v1/play_stats?select=created_at,stage&created_at=gte.${since.toISOString()}&limit=${MAX_HOUR_ROWS}`;
-      const [totals, daily, fooled, rows] = await Promise.all([
+      const posted = `/rest/v1/leaderboard?select=score&created_at=gte.${LAUNCH}&score=gt.0&order=score.desc&limit=${MAX_SCORES}`;
+      const [totals, daily, fooled, rows, scores] = await Promise.all([
         get(VIEWS.totals),
         get(VIEWS.daily),
         get(VIEWS.fooled),
         get(recent),
+        get(posted),
       ]);
       const t = totalsSchema.safeParse(totals);
       const d = dailySchema.safeParse(daily);
       const f = fooledSchema.safeParse(fooled);
       const h = hourRowsSchema.safeParse(rows);
-      if (!t.success || !d.success || !f.success || !h.success)
+      const b = scoresSchema.safeParse(scores);
+      if (!t.success || !d.success || !f.success || !h.success || !b.success)
         throw new Error('the stats came back in a shape they have never had');
-      return { totals: t.data[0]!, daily: d.data, fooled: f.data, hourly: perHour(h.data, at) };
+      return {
+        totals: t.data[0]!,
+        daily: d.data,
+        fooled: f.data,
+        hourly: perHour(h.data, at),
+        board: { posted: b.data.length, best: b.data[0]?.score ?? null },
+      };
     },
   };
 }

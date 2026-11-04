@@ -46,7 +46,9 @@ const answer = (url: string): Response =>
         ? DAILY
         : url.includes('fooled')
           ? FOOLED
-          : ROWS,
+          : url.includes('leaderboard')
+            ? [{ score: 100 }, { score: 61 }]
+            : ROWS,
   );
 
 const get = (auth?: string, method = 'GET'): Request =>
@@ -64,6 +66,7 @@ describe('GET /api/stats', () => {
     const got = (await res.json()) as { hourly: { hour: string; started: number }[] };
     expect(got).toMatchObject({ totals: TOTALS[0], daily: DAILY, fooled: FOOLED });
     expect(got.hourly).toHaveLength(HOURS);
+    expect((got as unknown as { board: unknown }).board).toEqual({ posted: 2, best: 100 });
     expect(got.hourly.at(-1)).toEqual({
       hour: '2026-11-04T16:00:00.000Z',
       started: 1,
@@ -76,6 +79,7 @@ describe('GET /api/stats', () => {
     });
     // The three views, and of the table only each row's stage and hour, for twelve hours.
     expect(v.calls.map((c) => new URL(c.url).pathname).sort()).toEqual([
+      '/rest/v1/leaderboard',
       '/rest/v1/play_stats',
       '/rest/v1/play_stats_daily',
       '/rest/v1/play_stats_fooled',
@@ -83,6 +87,9 @@ describe('GET /api/stats', () => {
     ]);
     const table = new URL(v.calls.find((c) => c.url.includes('play_stats?'))!.url).searchParams;
     expect(table.get('select')).toBe('created_at,stage');
+    // Of the board, scores only: never a name.
+    const board = new URL(v.calls.find((c) => c.url.includes('leaderboard'))!.url).searchParams;
+    expect(board.get('select')).toBe('score');
     expect(table.get('created_at')).toBe(
       `gte.${new Date(Date.parse('2026-11-04T16:00:00Z') - (HOURS - 1) * 3_600_000).toISOString()}`,
     );
@@ -114,6 +121,15 @@ describe('GET /api/stats', () => {
     expect((await handleStats(get(`Bearer ${KEY}`), odd.deps)).status).toBe(503);
     const rows = views((url) => (url.includes('play_stats?') ? body([{ hour: 1 }]) : answer(url)));
     expect((await handleStats(get(`Bearer ${KEY}`), rows.deps)).status).toBe(503);
+    const noBoard = views((url) =>
+      url.includes('leaderboard') ? body([{ handle: 'x' }]) : answer(url),
+    );
+    expect((await handleStats(get(`Bearer ${KEY}`), noBoard.deps)).status).toBe(503);
+    const empty = views((url) => (url.includes('leaderboard') ? body([]) : answer(url)));
+    const none = (await (await handleStats(get(`Bearer ${KEY}`), empty.deps)).json()) as {
+      board: unknown;
+    };
+    expect(none.board).toEqual({ posted: 0, best: null });
     const gone: StatsDeps = { key: KEY, reader: { read: () => Promise.reject('gone') } };
     expect((await handleStats(get(`Bearer ${KEY}`), gone)).status).toBe(503);
   });
